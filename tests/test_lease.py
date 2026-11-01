@@ -1,14 +1,14 @@
-"""Kontrak lease: acquire, renew, TTL, takeover, dan freeze."""
+"""Lease contract: acquire, renew, TTL, takeover, and freeze."""
 
 from __future__ import annotations
 
 import time
 
 from sqlalchemy import update
-
-from sanka.engine.lease import Lease
-from sanka.engine.schema import engine_lease
 from support import database
+
+from eidesoul.engine.lease import Lease
+from eidesoul.engine.schema import engine_lease
 
 
 def lease(db, name: str, host: str = "host-a", pid: int = 1) -> Lease:

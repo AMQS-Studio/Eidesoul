@@ -1,196 +1,64 @@
 # LOG
 
-## 2026-10-31 — batas workspace, sandbox, dan Google per identitas
+## 2026-11-01 — v1: rebrand, soul.yaml, character library, sandbox guard
 
-Goal: member tidak lagi membaca seluruh workspace, menjalankan sandbox dengan network bebas, atau
-memakai setiap tool Google terhadap setiap file yang dilihat service account.
+**Brand** — the project is Eidesoul everywhere: package `eidesoul`, CLI `eidesoul`, default
+workspace `.eidesoul/workspace`, lock file `.eidesoul.lock`, LLM session names `eidesoul-*`, the
+GitHub repository renamed to `Eidesoul`, and the remote points at
+`https://github.com/inimuqsith/Eidesoul.git`. The external SonarCloud project key stays
+`sanka-agent` so the existing quality-gate history is preserved.
 
-**Workspace** — `sanka/engine/tools/__init__.py` sekarang punya `workspace_roots`, `safe_chat`,
-`trusted_roles`, `resolve_for`, dan `_resolve_write`. Member (tanpa `*` di `tools`) hanya mendapat
-`public/` read-only dan `scratch/<chat>/`; path polos dipetakan ke scratch, `private/` ditolak, dan
-path absolut di luar root ditolak. `read`, `write`, `send`, `send_to`, `/kirim`, dan sandbox memakai
-resolver yang sama. `public/` hanya read-only untuk non-trusted; owner menulis lewat `write` atau
-sandbox tepercaya. Aset kurasi dipindah ke `.sanka/workspace/public/stickers` dan
-`humanize.reaction_stickers` diperbarui; `config import` dijalankan.
+**Clean cutover** — deleted the compatibility layer instead of carrying it: the config migrator,
+the memory_legacy migrator and table, the SQLite importer, the missing-column schema upgrade
+(`SCHEMA_VERSION` is now 1), the legacy key/path rejection, and `infer_language`. Existing
+databases are not migrated; a v1 deployment starts from a fresh database or an explicit manual
+export.
 
-**Lintas ruang** — `chat_history` cross-room mengisi `ctx.cross_reads` (600 char per body, 300 per
-quote, maksimal 50 entri); `guard.cross_chat_leak` menolak balasan yang memuat span verbatim 8 kata
-atau >=40 karakter, lalu balasan diganti `agent.cross_chat_blocked`. Parafrase tidak terdeteksi;
-tradeoff ini disengaja.
+**soul.yaml** — replaced `SOUL.md` with one host file per database. `Soul` now carries `name`,
+`description`, `language`, `pronouns`, `gender`, `role`, `roles`, `locale`, `background`,
+`persona`, `style`, and `examples`; the loader validates genders, prepends the active role,
+validates pack ids, clamps the per-turn counts, and renders the persona in a fixed order. The
+`soul` document is authoritative and `soul.yaml` is seed plus mirror; the `persona` document is
+gone. `config.yaml` gained the `soul_file` host key and lost its `soul` section.
 
-**Sandbox** — `SandboxConfig` menambah `proxy`, `pids_limit`, `memory`, `cpus`. Argv sekarang selalu
-memakai `--read-only`, tmpfs `/tmp`, `--cap-drop ALL`, `no-new-privileges`, limit pids/memori/CPU,
-network internal, dan env proxy; Podman mendapat suffix `ro,Z`. Member memasang `public` read-only di
-`/work/public` dan `scratch` writable di `/work/scratch`; trusted mendapat `/work`. Tool gagal
-tertutup bila proxy kosong atau network `none`/`bridge`/`host`/`default`. `compose.example.yaml`
-menambah `sandbox-proxy` (Squid) dan network internal `sanka-sandbox`;
-`deploy/sandbox-proxy/squid.conf` memblokir tujuan privat.
+**Character library** — `eidesoul/data/` became `eidesoul/library/`: the pattern pack is
+`library/patterns/jawatimur.json` (+ `_vectors.json`) with `version`, `model`, `language`,
+`lexicon`, and `patterns`, and the fact pack is `library/facts/indonesia.json` (+ `_vectors.json`).
+Nothing is loaded unless `soul.style` selects a pack, so a fresh install carries no character data.
+The register lexicon moved out of the engine into the pack, `select_patterns` filters by an optional
+register allow-list, and every `say` line carrying brand text was replaced by a generic line.
+`scripts/patterns.py`, `scripts/fakta.py`, and `scripts/grow.py` take `--pack` and keep every write
+inside the library.
 
-**Google** — Node MCP dan `mcp.servers.gworkspace` dihapus. Plugin in-process
-`sanka/vendor/google_workspace/service.py` memakai satu service account, device flow
-(`openid email profile`) per pengirim, tabel `google_identity`/`google_device` (schema v5), dan
-pengecekan izin user eksplisit per file; `anyone`/`domain` ditolak. Tool `google` (family `mcp`)
-menggantikan `mcp__*` di role member; Docs read + Sheets read/write.
+**Sandbox guard** — `eidesoul/engine/sandbox_guard.py` runs before any sandbox command reaches the
+container. Layer 1 is deterministic: host-escape and destructive patterns deny, over-long or
+sensitive commands ask for approval, plain read-only commands allow, everything else falls through.
+Layer 2 is one small fast classifier call with a timeout; an unusable answer, a timeout, and a
+missing model all fail closed. A non-approver role is denied instead of being parked in a pending
+approval, `approved=True` (`/approve`) skips both layers, and `engine.guard.enabled: false` allows
+everything (documented risk). Only the tool name, chat id, verdict, and reason are logged, never the
+command body.
 
-**Sonar** — `scripts/_paths.py` `safe_path` dipakai di `grow`, `research`, `patterns`, dan `replay`;
-`sonar.python.version` 3.12 dan exclusion vendor dipindah ke `sonar-project.properties`.
+**Optional extras** — `google-api-python-client`, `google-auth`, and `httpx` left the core
+dependencies; Google is now the `google` extra with lazy imports, so the tool stays discoverable and
+returns `error: Google extra is not installed; run 'uv sync --extra google'.` without it. WhatsApp
+stays an optional `whatsapp` extra, is absent from the default and example config, and the default
+member role no longer receives the WhatsApp-only `send` tool. The Dockerfile takes `EXTRAS` as a
+build argument.
 
-**Verifikasi** — `pytest -q` 438 passed; `python -m sanka selftest` OK; smoke Podman nyata: scratch
-writable, `public` read-only, private tidak ter-mount, flag hardening terlihat di argv; `uv lock`
-regenerasi. Smoke Google live tidak dijalankan karena tidak ada service account/OAuth client/Sheet di
-mesin ini.
+**Prompts and voice** — the engine keeps generic behavior: `VOICE_STYLE` and `CONTINUITY_STYLE` were
+removed, `DAILY_STYLE` now asks for the room's register without forcing slang, `PRO_STYLE` closes
+with the soul's name, the decision prompt is built from the soul's name/gender/role(s), the
+character polish and downgrade prompts take the soul's name, the avatar prompt depends on
+`soul.locale`, and the "still <name>" honesty line uses `config.soul.name`. Model-facing payload
+markers (deleted, view-once, undecryptable, attachments) are English, and the affect character id is
+`soul`.
 
-## 2026-11-01 — pattern character sheet, clean tree, Sonar-ready
+**Docs** — `README.md` is the English technology-first document, `README.id.md` its Indonesian
+translation with explicit anchors, `AGENTS.md` states the English default and the removability
+rules, `TASK.md` is the v1 checklist, and this entry replaces the earlier history.
 
-Goal: stop carrying a dirty training corpus, make the character data conditional ("if this, then
-that"), and leave the repo small enough to audit.
-
-**Character data**
-- `sanka/data/patterns.json` v2: 43 patterns, 36 required seeds + 7 from owner-corrected lines
-  (dead_air_exit, sticker_saved, honest_unknown, callback_detail, meme_unknown, group_protective,
-  flirt_receptive); every row is reachable from `room_register`.
-- Only six invariants are `always` (language_lock, length, question_limit, grounding, floor,
-  curse_trigger); they need no keyword hit and sit at priority 2-3 so they never displace a register
-  move in the sort.
-- `say` lines are verbatim owner-approved corrections; `avoid` lists the rejected phrases ("bukan
-  drama", "bidadari dari surga"). `sanka/data/pattern_vectors.json`: 43 × 384 dims.
-
-**Selector**
-- `sanka/engine/patterns.py` replaces `examples.py`: gate filter, keyword hits over the last 8
-  messages, cosine against the shipped vectors, sort by `(-score, -priority, id)`, render ≤180 chars.
-  `encoder=None` forces the keyword path; the default lazily loads MiniLM on CPU; vectors with a
-  different model/dim or <80% coverage are ignored; keys of ≤3 characters match whole words only.
-  Measured: 9.1 s first call (model load), 12.9 ms warm CPU per turn. Cutover:
-  `config.character.patterns` (0..6, default 0; host config 4), prompt header `## Room patterns
-  (apply the move, never copy the wording)`, `agent.py` passes the lines to `character_block`;
-  `examples` is gone from config, template, and example YAML.
-
-**Tooling**
-- `scripts/patterns.py`: `--check` (schema, gates, duplicates, register reachability), `--embed`
-  (atomic, model missing = exit 2), `--stats`, `--build-xlsx`, `--apply-xlsx` (konten/contoh/hindari/
-  keys/komentar 1:1 by id, unknown ids reported).
-- `scripts/replay.py`: replays `tests/data/scenarios.json` through the live prompt with
-  `character_block(patterns=...)` + `regulate`, deterministic hard-fail metrics, and a rubric judge
-  whose verdict comes from its scores and the rubric thresholds. Writes `workspace/replay-<id>.json`.
-
-**Deleted**
-- Corpus pipeline: `fetch_conversations`, `browser`, `firefox_cookies`, `fetch_datasets`,
-  `ingest_conversations`, `excel_review`, `chat_review`, `train_conversation`, plus their two tests
-  (the XLSX contract moved to `tests/test_patterns_cli.py`).
-- Data: `conversation_datasheet.json`, `long_dialogues.json`, `sanka/data/examples.json`,
-  `tests/data/fixtures/`, `references/inbox/`; scenarios/rubric/bad examples survive in
-  `tests/data/scenarios.json`. Owner chat exports in `references/` untouched.
-- `workspace/`: 36 artifacts (~3.5 MB incl. media, raw captures, workbooks) → only
-  `review-patterns.xlsx` (43 patterns × 12 columns).
-
-**Docs**
-- `SOUL.md`: 11 468 → 2 948 chars, 71 lines, character-card sections. Removed the trainer/coach
-  framing, the "don't admit you're an AI" line, and the duplicated level table; the nuanced moves now
-  live in the catalogue.
-- `README.md`: 1 128 → 413 lines (EN 207 / ID 205) with the pattern lifecycle, SOUL boundary, replay,
-  and a plain statement that the corpus pipeline is gone. `TASK.md`: deliverables + data contract.
-  `AGENTS.md`: one pattern rule. `pyproject.toml`: ruff/pytest-cov, ruff + branch coverage config.
-  New `sonar-project.properties`.
-
-**Verification**
-- `pytest -q`: 391 passed (414 − 41 pipeline/examples tests + 18 pattern tests); `--cov=sanka` 57%
-  total (vendor engine 26% drags it down), `selftest OK`.
-- `scripts/patterns.py --check` → `patterns=43 ok`; `--stats` → banter 25, neutral 30, serious 21;
-  `always=6`, male-only 3, tox≥3 3, adult≥1 2.
-- Selector: comfort first for "capek banget, gak kuat" at (1,0); count 0 → `[]`; banter male (3,2) →
-  roast_return first; unknown target yields no roast or adult pattern.
-- Workbook roundtrip: build → edit one `konten` → apply → check clean, other rows untouched.
-- `config import` → `engine.character.patterns = 4` in both `config.yaml` and the DB document.
-- Replay `roast_group --limit 4` with a real key: `hard_fail=0`, judge averages 4.7-5.0, no curse for
-  the female turn (`limits [1, 0]`). An `Agent.handle` turn with `patterns=4` carries the selected
-  lines into the system prompt (`## Room patterns`), now covered by `test_agent.py`.
-- Schema unchanged (no migration): `engine_lease`, privacy, document, and gateway tests stay green.
-
-**Static analysis (Sonar not run)**
-- `sonar-scanner` and Docker are not installed here, so the SonarCloud gate is **unverified**; the
-  properties file and `coverage.xml` are ready for CI.
-- `ruff check .` (line 100, complexity 12, vendor excluded): 346 pre-existing findings — 229 E501,
-  36 I001, 21 C901, 15 PLR0912, 13 E402, 12 PLR0915, plus small F/SIM/UP. New and touched files
-  (`engine/patterns.py`, `scripts/patterns.py`, `scripts/replay.py`, pattern tests) are clean.
-- Fixed one real portability bug found this way: `reply._heading` used a backslash inside an f-string
-  expression, which is a syntax error on Python 3.11 while `requires-python >= 3.11`; now 3.11-safe.
-- Known hot spots left alone on purpose: `Agent.handle` (complexity 56, 218 statements),
-  `config.load_config` (51 statements), `prompts.character_block` (long prose lines).
-
-**Open** — real WhatsApp end-to-end needs production credentials/QR; SonarCloud gate needs a run.
-
-## 2026-10-31 — riset korpus 1000 item: 15 pola baru + lapisan fakta
-
-**Riset** (`scripts/research.py`, 24 area, 3 run)
-- 1000 item unik dari Muse (`muse-spark-1.3-contributor`): 854 sintetis, 146 kutipan asli; 138 klaim
-  muncul di ≥2 domain, 59 di antaranya berjenis fakta.
-- Artefak: `workspace/research/<stamp>/` (balasan mentah Muse, `filtered.json`, `sources.json`,
-  workbook 8 sheet), `study.json`/`study.xlsx` (27 konstruksi berulang, leksikon, konteks 24 area),
-  `corpus_vectors.json` (1000 × 384), `fakta.json` (klaim + domain + URL). Salinan luar repo:
-  `~/sanka-research/20261031-korpus/` dengan `manifest.json` berisi sha256.
-
-**Pola** (`sanka/data/patterns.json`, 43 → 58)
-- 15 baris `riset_*`: curhat, kasar-akrab, Jawa Timuran, Sunda, konflik, menolak, kerja, bola, meme,
-  sindiran, singkatan chat, kampus UIN, grup campuran, ajak kumpul, sapa harian. 24 `say` dari
-  korpus; `source: derived`; `komentar` menunjuk run + topik.
-- Gate sindiran politik `min_toxicity` 1 → 0: sindiran bukan soal kekasaran ruangan. Diuji muncul di
-  ruangan toxicity 0 dan tetap muncul di 1-2.
-- `--check` → `patterns=58 ok`; `--embed` → `vectors=58 dim=384`.
-
-**Fakta** (`sanka/data/fakta.json`, lapisan baru)
-- 59 fakta publik, 129 domain sumber, tiap baris wajib ≥2 domain; `--check` ok, `--embed` 59 × 384.
-- `sanka/engine/knowledge.py`: `load_facts` (cache, rusak = kosong) + `select_facts` (kata kunci khas
-  atau cosine ≥0.55, sort deterministik skor lalu id, render ≤220). `agent.py` memilih
-  `character.facts` per turn dan `character_block` merender `## Known facts`.
-- `CharacterConfig.facts` 0..6; host `config.yaml` 3, `config.example.yaml` dan template admin 0.
-- Smoke: "uin malang maba mahad" → fakta mahad peringkat 1; "sekaten apa?" → 2 fakta Sekaten;
-  "orang bandung ke orang tua pakai bahasa apa?" → fakta lemes/loma peringkat 1; "wkwk" → kosong.
-
-**Verifikasi** — `pytest -q` 403 passed; `sanka selftest` OK; `scripts/patterns.py --check` dan
-`scripts/fakta.py --check` bersih.
-
-**Koreksi pemilik (ejaan + gaya)** — `nguyu` → `ngguyu` di `riset_konflik_netral` (korpus: 5×
-"ngguyu", 1× "nguyu"); 4 `say` yang dipakai di dua pola diganti baris korpus lain; semua 55 `say` dan
-59 `fakta.text` kini diawali huruf besar. Validator menolak `say`/fakta berhuruf kecil dan `say` ganda
-lintas baris (2 tes baru). Vektor pola tidak berubah (embed = `content + keys`); vektor fakta
-di-embed ulang. `pytest -q` 406 passed.
-
-## 2026-11-01 — tumbuh dari korpus: 306 fakta, 72 pola
-
-Goal: stop losing true material from the 1000-item corpus; every uncovered fact lands in
-`fakta.json` and every uncovered style cluster becomes a pattern.
-
-**Aturan bukti** — `scripts/fakta.py` `MIN_DOMAINS` 2 → 1: satu URL sudah cukup, `confidence` 3 hanya
-saat ≥2 domain itu juga `size >= 2`. `AGENTS.md`/`TASK.md` mengikuti (≥1 URL sumber, dua domain
-menaikkan keyakinan). Cap pola 30-60 dihapus (`>= 30` di dua tes, TASK/README).
-
-**Pola kurasi (7)** — `riset_oprec`, `riset_organisasi_pilih`, `riset_panitia_divisi`,
-`riset_mubes_demisioner`, `riset_ospek`, `riset_proker_dana`, `riset_ukt_jalur`: kosakata organisasi
-kampus (UKM/BEM/HIMA, open recruitment, mubes, demisioner, panitia, ospek, proker, danus, UKT,
-SPAN-PTKIN, KIP Kuliah) yang belum punya baris. 60 → 67 pola.
-
-**`scripts/grow.py`** (baru) — korpus JSONL → fakta/pola: embed MiniLM, gugus greedy (0.82 cosine + ≥2
-kata isi), lewati gugus yang sudah tertutup fakta (0.60) atau pola (0.80) sehingga rerun idempoten.
-`context`/`description`/`idiom` masuk apa adanya; `line`/`comment`/`meme` ditulis ulang lewat
-`research.client` (Muse) — Muse `muse-spark-1.3-contributor` selalu balas kosong untuk prompt JSON ini
-(reasoning menghabiskan budget, `finish=length`), jadi setelah balasan kosong pertama panggilan pindah
-ke model default repo pada budget 1500 token; panggilan diparalelkan 4 dan hasilnya dirakit berurutan
-supaya id/urutan tetap deterministik. Kunci: kata ≥4 huruf + akronim (UKM/BEM/UKT) dengan prioritas
-tertinggi, karena `[a-z]{4,}` lama membuang kosakata kampus yang justru jadi tujuan tugas ini.
-
-**Hasil** — `--facts --dry-run` `clusters=976 added=252 skipped=724` (tanpa tulis); run nyata
-`added=247` → `fakta=306`, `vectors=306 dim=384`, `--check` bersih. `--patterns` `added=5` →
-`patterns=72`, `vectors=72 dim=384`, `--check` bersih. Satu baris dibuang validator: `t3-tombok` (teks
-<10 karakter).
-
-**Verifikasi** — `pytest -q` 406 passed; `sanka selftest` OK. Smoke seleksi: query kampus natural
-("rek aku arep melu ukm teater komedi opo mapala nang uin malang") → fakta UKM peringkat 1; "bem hima
-ukm bedane opo rek nang kampus" → fakta BEM/HIMA peringkat 1; "mubes kemarin gimana hasil lpj
-pengurus lama demisioner" → `riset_mubes_demisioner` peringkat 1 (neutral dan serious); "oprec bem
-kapan dibuka" (soal) → `riset_oprec` peringkat 3.
-
-**Batas yang tersisa** — dua smoke 4-kata dari rencana tidak lolos ambang: "ukm uin malang apa aja
-rek" dan "mubes kemarin gimana" hanya menyumbang 1-2 keyword hit (bobot 0,3 di `knowledge._score`,
-0,1 di `patterns._score`), sedangkan cosine MiniLM untuk query pendek naik-turun — baris UKM jatuh ke
-peringkat 9, `riset_mubes_demisioner` ke peringkat 9 di register neutral. Perbaikannya ada di bobot
-selector (`KEY_WEIGHT`/`HIT_WEIGHT`), bukan di data, dan sengaja tidak diubah di sini.
+**Verification** — `pytest -q` 447 passed; `python -m eidesoul selftest` OK; `eidesoul init` writes
+`soul.yaml` and no `SOUL.md`; `db upgrade` + `config import` + `config export` round-trip the soul
+document into `soul.yaml`; `/language en` writes the document and its mirror; `scripts/patterns.py
+--check` and `scripts/fakta.py --check` pass on the shipped packs; `uv lock --check` passes.

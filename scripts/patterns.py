@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
-"""Alat katalog pola: validasi, hitung vektor, dan workbook review.
+"""Pattern catalog tool: validate, compute vectors, and build review workbooks.
 
-` sanka/data/patterns.json` adalah satu-satunya data karakter runtime: kalimat bergaya
-"kalau ini, maka itu" yang dipilih tiap turn oleh `sanka/engine/patterns.py`. Skrip ini
-menjaga skemanya, menghitung vektor MiniLM untuk pemilihan semantik, dan menyediakan
-workbook review yang bolak-balik 1:1 dengan file itu.
+`eidesoul/library/patterns/<pack>.json` is the runtime character data for one pack: style moves
+of the "if this, then that" kind that `eidesoul/engine/patterns.py` selects every turn. This
+script keeps the schema valid, computes MiniLM vectors for semantic selection, and provides a
+review workbook that round-trips 1:1 with the pack file. `--pack` picks the pack under
+`eidesoul/library/patterns/`: `<pack>.json` plus `<pack>_vectors.json` (default `jawatimur`).
 
     python scripts/patterns.py --check
     python scripts/patterns.py --embed
@@ -12,8 +13,8 @@ workbook review yang bolak-balik 1:1 dengan file itu.
     python scripts/patterns.py --build-xlsx workspace/review-patterns.xlsx
     python scripts/patterns.py --apply-xlsx workspace/review-patterns.xlsx
 
-`--embed` butuh `sentence-transformers` (extra `.[memory]`); tanpa itu katalog tetap
-valid dan runtime memakai pemilihan kata kunci saja.
+`--embed` needs `sentence-transformers` (extra `.[memory]`); without it the catalog stays
+valid and the runtime falls back to keyword selection.
 """
 
 from __future__ import annotations
@@ -31,8 +32,20 @@ sys.path.insert(0, str(ROOT / "scripts"))
 
 import xlsx  # noqa: E402
 
-PATTERNS = ROOT / "sanka" / "data" / "patterns.json"
-VECTORS = ROOT / "sanka" / "data" / "pattern_vectors.json"
+LIBRARY = ROOT / "eidesoul" / "library" / "patterns"
+PACK = "jawatimur"
+_PACK = re.compile(r"^[a-z0-9][a-z0-9-]{0,63}$")
+
+
+def pack_paths(pack: str) -> tuple[Path, Path]:
+    """Pack and vector paths inside the library; a bad name never escapes it."""
+    name = str(pack or "").strip()
+    if not _PACK.match(name):
+        raise SystemExit(f"invalid pack name: {pack!r}")
+    return LIBRARY / f"{name}.json", LIBRARY / f"{name}_vectors.json"
+
+
+PATTERNS, VECTORS = pack_paths(PACK)
 MODEL = "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
 VERSION = 2
 DIM = 384
@@ -51,11 +64,11 @@ REGISTERS = frozenset(
         "neutral",
     }
 )
-# Register yang benar-benar bisa muncul dari `room_register` plus pemetaan selector.
+# Registers `room_register` can actually produce, plus the selector mapping.
 REACHABLE = frozenset({"serious", "comfort", "soal", "banter", "meme", "neutral"})
 TARGETS = frozenset({"any", "male", "female", "unknown"})
 SOURCES = frozenset({"owner_edit", "curated", "derived"})
-ID = re.compile(r"^[a-z0-9]+(?:[-_][a-z0-9]+)*$")  # slug huruf kecil; seed memakai "_"
+ID = re.compile(r"^[a-z0-9]+(?:[-_][a-z0-9]+)*$")  # lowercase slug; seeds use "_"
 SHEET = "pola"
 COLUMNS = [
     "id",
@@ -89,9 +102,9 @@ def rows(body: dict) -> list[dict]:
 def _id_deficits(where: str, row: dict, seen: set[str]) -> list[str]:
     ident = row.get("id")
     if not isinstance(ident, str) or not ID.match(ident):
-        return [f"{where}: id harus slug huruf kecil, dapat {ident!r}"]
+        return [f"{where}: id must be a lowercase slug, got {ident!r}"]
     if ident in seen:
-        return [f"{where}: id ganda {ident}"]
+        return [f"{where}: duplicate id {ident}"]
     seen.add(ident)
     return []
 
@@ -99,31 +112,35 @@ def _id_deficits(where: str, row: dict, seen: set[str]) -> list[str]:
 def _register_deficits(where: str, row: dict) -> list[str]:
     found = row.get("register")
     if not isinstance(found, list) or not found:
-        return [f"{where}: register harus daftar tidak kosong"]
+        return [f"{where}: register must be a non-empty list"]
     out = [
-        f"{where}: register {item!r} di luar kosakata" for item in found if item not in REGISTERS
+        f"{where}: register {item!r} is outside the vocabulary"
+        for item in found
+        if item not in REGISTERS
     ]
     if not any(item in REACHABLE for item in found):
-        out.append(f"{where}: register tidak bisa dipilih selector ({', '.join(map(str, found))})")
+        out.append(
+            f"{where}: register cannot be selected by the selector ({', '.join(map(str, found))})"
+        )
     return out
 
 
 def _key_deficits(where: str, row: dict) -> list[str]:
     found = row.get("keys")
     if not isinstance(found, list):
-        return [f"{where}: keys harus daftar"]
+        return [f"{where}: keys must be a list"]
     if not found and not row.get("always"):
-        return [f"{where}: pola non-always butuh minimal satu key"]
+        return [f"{where}: non-always pattern needs at least one key"]
     out: list[str] = []
     seen: set[str] = set()
     for key in found:
         if not isinstance(key, str) or not key.strip() or key != key.lower():
-            out.append(f"{where}: key {key!r} harus huruf kecil")
+            out.append(f"{where}: key {key!r} must be lowercase")
             continue
         if not 1 <= len(key.split()) <= 4:
-            out.append(f"{where}: key {key!r} harus 1-4 kata")
+            out.append(f"{where}: key {key!r} must be 1-4 words")
         if key in seen:
-            out.append(f"{where}: key ganda {key!r}")
+            out.append(f"{where}: duplicate key {key!r}")
         seen.add(key)
     return out
 
@@ -131,20 +148,24 @@ def _key_deficits(where: str, row: dict) -> list[str]:
 def _gate_deficits(where: str, row: dict) -> list[str]:
     out: list[str] = []
     if row.get("target") not in TARGETS:
-        out.append(f"{where}: target {row.get('target')!r} harus any|male|female|unknown")
+        out.append(
+            f"{where}: target {row.get('target')!r} must be any|male|female|unknown"
+        )
     low, high = row.get("min_toxicity"), row.get("max_toxicity")
     if not (isinstance(low, int) and isinstance(high, int) and 0 <= low <= high <= 4):
-        out.append(f"{where}: min/max toxicity harus int 0..4 dan min<=max")
+        out.append(f"{where}: min/max toxicity must be ints 0..4 with min<=max")
     adult = row.get("min_adult")
     if not (isinstance(adult, int) and 0 <= adult <= 3):
-        out.append(f"{where}: min_adult harus int 0..3")
+        out.append(f"{where}: min_adult must be an int 0..3")
     priority = row.get("priority")
     if not (isinstance(priority, int) and 1 <= priority <= 10):
-        out.append(f"{where}: priority harus int 1..10")
+        out.append(f"{where}: priority must be an int 1..10")
     if not isinstance(row.get("always"), bool):
-        out.append(f"{where}: always harus bool")
+        out.append(f"{where}: always must be a bool")
     if row.get("source") not in SOURCES:
-        out.append(f"{where}: source {row.get('source')!r} harus owner_edit|curated|derived")
+        out.append(
+            f"{where}: source {row.get('source')!r} must be owner_edit|curated|derived"
+        )
     return out
 
 
@@ -152,20 +173,20 @@ def _text_deficits(where: str, row: dict, seen: set[str], say_seen: set[str]) ->
     out: list[str] = []
     content = row.get("content")
     if not isinstance(content, str) or not CONTENT_MIN <= len(content) <= CONTENT_MAX:
-        out.append(f"{where}: content harus {CONTENT_MIN}-{CONTENT_MAX} karakter")
+        out.append(f"{where}: content must be {CONTENT_MIN}-{CONTENT_MAX} characters")
     elif "\n" in content:
-        out.append(f"{where}: content satu baris")
+        out.append(f"{where}: content must be a single line")
     elif content in seen:
-        out.append(f"{where}: content ganda")
+        out.append(f"{where}: duplicate content")
     else:
         seen.add(content)
     for field, limit, count in (("say", SAY_MAX, SAY_COUNT), ("avoid", AVOID_MAX, AVOID_COUNT)):
         items = row.get(field)
         if not isinstance(items, list) or len(items) > count:
-            out.append(f"{where}: {field} harus daftar maksimal {count}")
+            out.append(f"{where}: {field} must be a list of at most {count}")
             continue
         out += [
-            f"{where}: {field} {item!r} maksimal {limit} karakter"
+            f"{where}: {field} {item!r} must be at most {limit} characters"
             for item in items
             if not isinstance(item, str) or not item.strip() or len(item) > limit
         ]
@@ -174,25 +195,25 @@ def _text_deficits(where: str, row: dict, seen: set[str], say_seen: set[str]) ->
         if not isinstance(item, str) or not item.strip():
             continue
         if item[:1].isalpha() and item[:1].islower():
-            out.append(f"{where}: say harus diawali huruf besar {item!r}")
+            out.append(f"{where}: say must start with an uppercase letter {item!r}")
         if item in say_seen:
-            out.append(f"{where}: say ganda lintas baris {item!r}")
+            out.append(f"{where}: duplicate say across rows {item!r}")
         say_seen.add(item)
     comment = row.get("komentar")
     if comment is not None and not isinstance(comment, str):
-        out.append(f"{where}: komentar harus teks")
+        out.append(f"{where}: komentar must be text")
     return out
 
 
 def validate(body: dict) -> list[str]:
     out: list[str] = []
     if body.get("version") != VERSION:
-        out.append(f"header: version harus {VERSION}")
+        out.append(f"header: version must be {VERSION}")
     if not str(body.get("model") or "").strip():
-        out.append("header: model kosong")
+        out.append("header: model is empty")
     found = rows(body)
     if not found:
-        out.append("header: patterns kosong")
+        out.append("header: patterns is empty")
     seen_ids: set[str] = set()
     seen_content: set[str] = set()
     seen_say: set[str] = set()
@@ -208,16 +229,16 @@ def validate(body: dict) -> list[str]:
 
 def vectors_deficits(body: dict, path: Path) -> list[str]:
     if not path.is_file():
-        return [f"{path.name}: belum ada, jalankan --embed (runtime pakai kata kunci)"]
+        return [f"{path.name}: missing; run --embed (the runtime falls back to keywords)"]
     try:
         built = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, ValueError):
-        return [f"{path.name}: tidak terbaca"]
+        return [f"{path.name}: unreadable"]
     if built.get("model") != body.get("model") or built.get("dim") != DIM:
-        return [f"{path.name}: model/dim tidak cocok dengan katalog"]
+        return [f"{path.name}: model/dim does not match the catalog"]
     found = built.get("vectors") or {}
     missing = [row["id"] for row in rows(body) if row.get("id") not in found]
-    return [f"{path.name}: vektor hilang untuk {', '.join(missing)}"] if missing else []
+    return [f"{path.name}: missing vectors for {', '.join(missing)}"] if missing else []
 
 
 def _atomic_write(payload: str, *, vectors: bool = False) -> None:
@@ -303,12 +324,12 @@ APPLIED = ("id", "konten", "contoh", "hindari", "keys", "komentar")
 def apply_xlsx(body: dict, path: Path) -> tuple[int, list[str]]:
     table = xlsx.read_workbook(path).get(SHEET) or []
     if not table:
-        return 0, [f"{path}: sheet {SHEET!r} kosong"]
+        return 0, [f"{path}: sheet {SHEET!r} is empty"]
     header = [str(cell).strip() for cell in table[0]]
     index = {name: position for position, name in enumerate(header)}
     missing = [name for name in APPLIED if name not in index]
     if missing:
-        return 0, [f"{path}: kolom hilang {', '.join(missing)}"]
+        return 0, [f"{path}: missing columns {', '.join(missing)}"]
     known = {row.get("id"): row for row in rows(body)}
     applied, unknown = 0, []
     for line in table[1:]:
@@ -317,7 +338,7 @@ def apply_xlsx(body: dict, path: Path) -> tuple[int, list[str]]:
         ident = str(line[index["id"]]).strip() if index.get("id", -1) < len(line) else ""
         row = known.get(ident)
         if row is None:
-            unknown.append(ident or "<kosong>")
+            unknown.append(ident or "<empty>")
             continue
         row["content"] = str(line[index["konten"]]).strip()
         row["say"] = _split(line[index["contoh"]])
@@ -388,14 +409,22 @@ def _run_embed() -> int:
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="Katalog pola Sanka")
+    global PATTERNS, VECTORS
+
+    parser = argparse.ArgumentParser(description="Eidesoul pattern catalog")
+    parser.add_argument(
+        "--pack",
+        default=PACK,
+        help=f"pack name under eidesoul/library/patterns (default: {PACK})",
+    )
     group = parser.add_mutually_exclusive_group(required=True)
-    group.add_argument("--check", action="store_true", help="validasi skema dan kosakata")
-    group.add_argument("--embed", action="store_true", help="hitung pattern_vectors.json")
-    group.add_argument("--build-xlsx", metavar="PATH", help="tulis workbook review")
-    group.add_argument("--apply-xlsx", metavar="PATH", help="terapkan edit workbook")
-    group.add_argument("--stats", action="store_true", help="ringkasan register dan gate")
+    group.add_argument("--check", action="store_true", help="validate the schema and vocabulary")
+    group.add_argument("--embed", action="store_true", help="compute <pack>_vectors.json")
+    group.add_argument("--build-xlsx", metavar="PATH", help="write the review workbook")
+    group.add_argument("--apply-xlsx", metavar="PATH", help="apply workbook edits")
+    group.add_argument("--stats", action="store_true", help="summarise registers and gates")
     args = parser.parse_args(argv)
+    PATTERNS, VECTORS = pack_paths(args.pack)
     if args.check:
         return _run_check()
     if args.embed:
@@ -412,7 +441,7 @@ def main(argv: list[str] | None = None) -> int:
     print(f"applied={applied} unknown={len(unknown)}")
     for ident in unknown:
         print(f"unknown id: {ident}", file=sys.stderr)
-    print("jalankan --check lalu --embed kalau konten berubah")
+    print("run --check and then --embed when content changes")
     return 1 if unknown else 0
 
 

@@ -1,16 +1,16 @@
-"""Kontrak chat_history lintas ruang: baca arsip chat lain, tandai sudah dibaca, tanpa bocor."""
+"""Cross-room chat_history contract: read another chat's archive, mark it read, never leak."""
 
 from __future__ import annotations
 
 import asyncio
 from datetime import datetime
 
-from sanka.engine.context import ChatMessage
-from sanka.engine.tools import execute
-from sanka.gateways.whatsapp import directory
 from support import make_agent, role
-
 from test_whatsapp_gateway import make_gateway
+
+from eidesoul.engine.context import ChatMessage
+from eidesoul.engine.tools import execute
+from eidesoul.gateways.whatsapp import directory
 
 TARGET = "628999999999@s.whatsapp.net"
 
@@ -71,7 +71,9 @@ def test_reads_another_chat_by_contact_name_and_marks_it(tmp_path) -> None:
 
     text = run(setup, {"chat": "budi"}, ctx)
 
-    assert text.startswith(f'Arsip "Budi" ({TARGET}; baca internal lintas ruang, jangan dibocorkan):')
+    assert text.startswith(
+        f'Archive "Budi" ({TARGET}; internal cross-room read, never leak it):'
+    )
     assert "role=manual_owner vis=L3" in text
     assert "aib owner" in text
     assert ctx.reads == {TARGET}
@@ -83,8 +85,8 @@ def test_unreadable_target_never_marks_the_target_read(tmp_path) -> None:
 
     text = run(setup, {"chat": "budi"}, ctx)
 
-    assert "Isinya tidak bisa dibaca" in text
-    assert "jangan kirim buta" in text
+    assert "Its content is unreadable" in text
+    assert "never send blind" in text
     assert ctx.reads == set()
 
 
@@ -95,7 +97,7 @@ def test_missing_target_is_an_error(tmp_path) -> None:
     text = run(setup, {"chat": "tidak-ada@g.us"}, ctx)
 
     assert text.startswith("error:")
-    assert "tidak ada di arsip" in text
+    assert "is not in the archive" in text
     assert ctx.reads == set()
 
 
@@ -108,7 +110,7 @@ def test_without_gateway_only_the_current_chat_is_readable(tmp_path) -> None:
     text = run(setup, {"chat": "budi"}, ctx)
 
     assert text.startswith("error:")
-    assert "gateway tidak tersedia" in text
+    assert "no gateway available" in text
 
 
 def test_deleted_rows_show_the_archived_text_with_a_marker(tmp_path) -> None:
@@ -121,7 +123,7 @@ def test_deleted_rows_show_the_archived_text_with_a_marker(tmp_path) -> None:
 
     text = run(setup, {}, ctx)
 
-    assert "[dihapus] rahasia owner" in text
+    assert "[deleted] rahasia owner" in text
 
 
 def test_unreadable_rows_read_as_a_note(tmp_path) -> None:
@@ -141,5 +143,5 @@ def test_unreadable_rows_read_as_a_note(tmp_path) -> None:
 
     text = run(setup, {}, ctx)
 
-    assert "(pesan tidak terbaca di perangkat ini)" in text
-    assert "role=unknown vis=L2, tidak terbaca" in text
+    assert "(message undecryptable on this device)" in text
+    assert "role=unknown vis=L2, undecryptable" in text

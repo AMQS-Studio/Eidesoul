@@ -1,18 +1,20 @@
 #!/usr/bin/env python3
-"""Penumbuh katalog: korpus riset -> fakta baru (`fakta.json`) atau pola baru (`patterns.json`).
+"""Catalog grower: research corpus -> new facts or new patterns.
 
-Korpus JSONL dari `scripts/research.py` (satu item per baris: `text`, `kind`, `topic`,
-`evidence.sources`) dikelompokkan secara semantik, lalu tiap gugus yang belum terwakili
-menjadi satu fakta deklaratif atau satu gerakan bicara.
+The JSONL corpus from `scripts/research.py` (one item per line: `text`, `kind`, `topic`,
+`evidence.sources`) is grouped semantically, and every cluster that is not yet represented
+becomes one declarative fact or one style move. Rows are written to the library packs picked
+with `--pack`: `eidesoul/library/facts/<pack>.json` plus `<pack>_vectors.json`, or
+`eidesoul/library/patterns/<pack>.json` plus `<pack>_vectors.json`.
 
     python scripts/grow.py --facts --dry-run
     python scripts/grow.py --facts
     python scripts/grow.py --patterns --dry-run
     python scripts/grow.py --patterns
 
-Gugus yang sudah tertutup katalog lama dilewati, jadi perintah ini idempoten: menjalankannya
-dua kali tidak menggandakan baris. Tanpa Muse (`.env`/kunci hilang, 429, 5xx) fakta bergaya
-`context`/`description`/`idiom` tetap masuk apa adanya, sedangkan gugus murni gaya dilewati.
+Clusters already covered by the current catalog are skipped, so the command is idempotent:
+running it twice does not duplicate rows. Without Muse (`.env`/missing key, 429, 5xx) facts of the
+`context`/`description`/`idiom` kind still land as they are, while pure style clusters are skipped.
 """
 
 from __future__ import annotations
@@ -37,9 +39,9 @@ import patterns as cli  # noqa: E402
 import research  # noqa: E402
 from _paths import safe_path  # noqa: E402
 
-from sanka.engine.config import load_config  # noqa: E402
+from eidesoul.engine.config import load_config  # noqa: E402
 
-CORPUS = Path.home() / "sanka-research" / "20261031-korpus" / "items.jsonl"
+CORPUS = Path.home() / "eidesoul-research" / "20261031-korpus" / "items.jsonl"
 CORPUS_ROOT = CORPUS.parent.parent
 MODEL = fakta.MODEL
 GROW_SIMILARITY = 0.82
@@ -48,8 +50,8 @@ COVERED_FACT = 0.60
 COVERED_PATTERN = 0.80
 TEXT_MAX, KEYS_MAX, SOURCES_MAX = 220, 4, 3
 DF_MAX = 80
-MUSE_CALLS = 4  # panggilan model paralel
-ESCALATION = 1500  # model planning butuh budget ini sebelum menulis JSON
+MUSE_CALLS = 4  # parallel model calls
+ESCALATION = 1500  # planning models need this budget before they write JSON
 FACT_KINDS = frozenset({"context", "description", "idiom"})
 STYLE_KINDS = frozenset({"line", "comment", "meme"})
 REACHABLE = frozenset({"serious", "comfort", "soal", "banter", "meme", "neutral"})
@@ -101,29 +103,30 @@ FACTIVE = re.compile(
 )
 WORD = re.compile(r"[a-z]{4,}")
 CAPITALISED = re.compile(r"\b[A-Z][a-z]{3,}\b")
-ACRONYM = re.compile(r"\b[A-Z][A-Z0-9]{1,4}\b")  # UKM, BEM, UKT: topik kampus sering akronim
+ACRONYM = re.compile(r"\b[A-Z][A-Z0-9]{1,4}\b")  # UKM, BEM, UKT: campus topics often use acronyms
 MID_CAPITAL = re.compile(r"(?<=\s)[A-Z][a-z]{2,}")
 OBJECT = re.compile(r"\{.*\}", re.DOTALL)
-RETRY = "\n\nBalas hanya JSON."
+RETRY = "\n\nReply with JSON only."
 
-FACT_PROMPT = """Kamu penulis catatan pengetahuan, bukan penulis kode.
-Ubah potongan percakapan berikut menjadi SATU kalimat fakta bahasa Indonesia yang ringkas dan netral.
-Aturan: maksimal 180 karakter, satu baris, diawali huruf besar, tanpa nama orang, tanpa nomor telepon,
-tanpa URL, tanpa opini baru, tanpa menambah fakta yang tidak ada di potongan.
-Balas HANYA JSON: {"fact": "..."}"""
+FACT_PROMPT = """You are a knowledge-note writer, not a code writer.
+Turn the conversation snippet below into ONE concise, neutral fact sentence written in Indonesian.
+Rules: at most 180 characters, one line, starts with a capital letter, no person names, no phone
+numbers, no URLs, no new opinions, and do not add facts that are not in the snippet.
+Reply with ONLY JSON: {"fact": "..."}"""
 
-MOVE_PROMPT = """Kamu penulis panduan gaya bicara karakter chat Indonesia.
-Dari contoh percakapan berikut, tulis SATU gerakan bicara imperatif (bukan kalimat contoh) yang
-menjelaskan cara membalas pada situasi itu: maksimal 160 karakter, satu baris, diawali huruf besar,
-tanpa menyebut nama orang, tanpa URL, tanpa menambah fakta.
-Balas HANYA JSON: {"move": "...", "keys": ["...", "..."], "register": "..."}
-register hanya salah satu: serious, comfort, soal, banter, meme, neutral. keys 2-4 kata kunci huruf kecil."""
+MOVE_PROMPT = """You are the style-guide writer for an Indonesian chat character's way of speaking.
+From the conversation examples below, write ONE imperative style move (not an example sentence)
+that explains how to reply in that situation: at most 160 characters, one line, starts with a
+capital letter, no person names, no URLs, no added facts.
+Reply with ONLY JSON: {"move": "...", "keys": ["...", "..."], "register": "..."}
+register must be one of: serious, comfort, soal, banter, meme, neutral.
+keys are 2-4 lowercase keywords."""
 
 
 def _read(path: Path) -> list[dict]:
     path = safe_path(CORPUS_ROOT, path)
     if not path.is_file():
-        raise SystemExit(f"korpus tidak ada: {path}")
+        raise SystemExit(f"corpus not found: {path}")
     out: list[dict] = []
     for line in path.read_text(encoding="utf-8").splitlines():
         if not line.strip():
@@ -135,7 +138,7 @@ def _read(path: Path) -> list[dict]:
         if isinstance(item, dict) and str(item.get("text") or "").strip():
             out.append(item)
     if not out:
-        raise SystemExit(f"korpus kosong: {path}")
+        raise SystemExit(f"corpus is empty: {path}")
     return out
 
 
@@ -148,7 +151,7 @@ def _words(text) -> set[str]:
 
 
 def _cut(text, limit: int = TEXT_MAX) -> str:
-    """Satu baris, spasi dirapikan, dipotong di batas kata."""
+    """One line, spaces collapsed, cut at a word boundary."""
     body = " ".join(str(text or "").split())
     if len(body) <= limit:
         return body
@@ -217,7 +220,7 @@ def _extend(encoder, matrix: np.ndarray | None, texts: list[str]) -> np.ndarray 
 
 
 def _covered(encoder, matrix: np.ndarray | None, texts: list[str], threshold: float) -> list[bool]:
-    """True bila tiap teks punya padanan di `matrix` dengan cosine >= ambang."""
+    """True when every text has a match in `matrix` with cosine >= the threshold."""
     if matrix is None or not len(matrix):
         return [False] * len(texts)
     found = _embed(encoder, texts) @ matrix.T
@@ -225,7 +228,7 @@ def _covered(encoder, matrix: np.ndarray | None, texts: list[str], threshold: fl
 
 
 def _clusters(items: list[dict], vectors: np.ndarray) -> list[dict]:
-    """Greedy, urut berkas: gabung ke gugus pertama yang mirip wakilnya, selain itu gugus baru."""
+    """Greedy, file order: join the first cluster whose anchor is similar, otherwise start one."""
     found: list[dict] = []
     for index, item in enumerate(items):
         words = _words(item["text"])
@@ -260,14 +263,14 @@ def _summary(items: list[dict], cluster: dict) -> dict:
 
 
 def _boost(token: str, caps: set[str], acronyms: list[str]) -> int:
-    """Akronim (UKM/BEM/UKT) paling kuat, lalu nama diri; sisanya df rendah."""
+    """Acronyms (UKM/BEM/UKT) rank highest, then proper names; the rest by low df."""
     if token in acronyms:
         return 4
     return 3 if token in caps else 0
 
 
 def _keys(text: str, df: dict[str, int]) -> list[str]:
-    """Kunci: kata isi 4+ huruf plus akronim, diurutkan huruf besar/nama diri lalu df rendah."""
+    """Keys: content words of 4+ letters plus acronyms, ordered by capitals/proper names then df."""
     body = str(text or "")
     found: list[str] = []
     for token in _tokens(body):
@@ -275,11 +278,11 @@ def _keys(text: str, df: dict[str, int]) -> list[str]:
             found.append(token)
     acronyms = [word.lower() for word in ACRONYM.findall(body)]
     for token in acronyms:
-        if token not in found:  # akronim selalu lolos: UKM/BEM/UKT penanda topik
+        if token not in found:  # acronyms always pass: UKM/BEM/UKT mark the topic
             found.append(token)
     caps = {word.lower() for word in CAPITALISED.findall(body)}
     head = CAPITALISED.match(body)
-    if head:  # huruf besar di awal kalimat bukan nama diri
+    if head:  # a capital at the start of the sentence is not a proper name
         caps.discard(head.group(0).lower())
     scored = [
         (-(_boost(token, caps, acronyms) + 1 / (1 + df.get(token, 0))), index)
@@ -309,11 +312,12 @@ def _json(raw: str) -> dict:
 
 
 def _snippets(texts: list[str]) -> str:
-    return "Potongan:\n" + "\n".join(f"- {text}" for text in _shortest(texts))
+    return "Snippets:\n" + "\n".join(f"- {text}" for text in _shortest(texts))
 
 
 class Muse:
-    """Pembungkus Muse `LLM`: balasan kosong -> model default repo; galat -> mode gaya berhenti."""
+    """Muse `LLM` wrapper: an empty reply falls back to the repo default model; an error stops
+    the style mode."""
 
     def __init__(self) -> None:
         self.llm = None
@@ -352,15 +356,16 @@ class Muse:
                     self.misses = 0
                     return text
                 if self.llm is self.primary:
-                    print(f"muse kosong, lanjut model default {self.fallback.config.llm.model}")
+                    fallback_model = self.fallback.config.llm.model
+                    print(f"muse reply empty, switching to the default model {fallback_model}")
                     self.llm = self.fallback
-        except Exception as exc:  # kunci hilang, 429/5xx, timeout: mode gaya berhenti
-            print(f"muse tidak tersedia: {type(exc).__name__}: {exc}")
+        except Exception as exc:  # missing key, 429/5xx, timeout: stop the style mode
+            print(f"muse unavailable: {type(exc).__name__}: {exc}")
             self.dead = True
             return ""
         self.misses += 1
         if self.misses >= 3:
-            print("muse tidak tersedia: balasan kosong berulang")
+            print("muse unavailable: repeated empty replies")
             self.dead = True
         return ""
 
@@ -374,7 +379,7 @@ class Muse:
 async def _answers(
     muse: Muse, summaries: list[dict], indexes: list[int], prompt: str, session: str, budget: int
 ) -> dict[int, dict]:
-    """Balasan JSON Muse untuk `indexes`, diparalelkan; urutan hasil tetap mengikuti `indexes`."""
+    """Muse JSON answers for `indexes`, run in parallel; result order still follows `indexes`."""
     gate = asyncio.Semaphore(MUSE_CALLS)
 
     async def one(index: int) -> dict:
@@ -409,7 +414,7 @@ def _fact_row(
     }
     problems = fakta.validate({"facts": [row]})
     if problems:
-        print(f"tolak {row['id']}: {problems[0]}")
+        print(f"rejected {row['id']}: {problems[0]}")
         return None
     return row
 
@@ -430,7 +435,7 @@ async def grow_facts(items: list[dict], *, dry_run: bool, rewrite: bool) -> int:
         and rewrite
         and not _covered(encoder, matrix, [summary["text"]], COVERED_FACT)[0]
     ]
-    answers = await _answers(Muse(), summaries, wanted, FACT_PROMPT, "sanka-grow-facts", 200)
+    answers = await _answers(Muse(), summaries, wanted, FACT_PROMPT, "eidesoul-grow-facts", 200)
     taken = {str(row.get("id") or "") for row in known}
     fresh: list[dict] = []
     skipped = 0
@@ -523,11 +528,11 @@ def _pattern_row(
         "priority": 3,
         "always": False,
         "source": "derived",
-        "komentar": f"grow korpus {summary['topics'][0]}",
+        "komentar": f"grow corpus {summary['topics'][0]}",
     }
     problems = cli.validate({**body, "patterns": [row]})
     if problems:
-        print(f"tolak {row['id']}: {problems[0]}")
+        print(f"rejected {row['id']}: {problems[0]}")
         return None
     return row
 
@@ -554,7 +559,7 @@ async def grow_patterns(items: list[dict], *, dry_run: bool) -> int:
         and summary["size"] >= 2
         and not _covered(encoder, matrix, _shortest(summary["texts"]), COVERED_PATTERN)[0]
     ]
-    answers = await _answers(Muse(), summaries, free, MOVE_PROMPT, "sanka-grow-patterns", 300)
+    answers = await _answers(Muse(), summaries, free, MOVE_PROMPT, "eidesoul-grow-patterns", 300)
     taken = {str(row.get("id") or "") for row in known}
     fresh: list[dict] = []
     for index in free:
@@ -572,7 +577,7 @@ async def grow_patterns(items: list[dict], *, dry_run: bool) -> int:
         matrix = _extend(encoder, matrix, [row["content"], *row["say"]])
     print(f"clusters={len(summaries)} added={len(fresh)} skipped={len(summaries) - len(fresh)}")
     if free and not fresh and not answers:
-        print("muse tidak tersedia")
+        print("muse unavailable")
     if dry_run or not fresh:
         return 0
     merged = {**body, "patterns": [*known, *fresh]}
@@ -585,18 +590,25 @@ async def grow_patterns(items: list[dict], *, dry_run: bool) -> int:
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="Tumbuhkan fakta/pola dari korpus riset")
+    parser = argparse.ArgumentParser(description="Grow facts/patterns from the research corpus")
     mode = parser.add_mutually_exclusive_group(required=True)
-    mode.add_argument("--facts", action="store_true", help="tambah fakta dari gugus baru")
-    mode.add_argument("--patterns", action="store_true", help="tambah pola dari gugus gaya")
-    parser.add_argument("--corpus", type=Path, default=CORPUS, help="berkas JSONL korpus")
-    parser.add_argument("--dry-run", action="store_true", help="hitung saja, jangan tulis")
-    parser.add_argument("--no-rewrite", action="store_true", help="lewati gugus yang butuh Muse")
+    mode.add_argument("--facts", action="store_true", help="add facts from new clusters")
+    mode.add_argument("--patterns", action="store_true", help="add patterns from style clusters")
+    parser.add_argument("--corpus", type=Path, default=CORPUS, help="corpus JSONL file")
+    parser.add_argument(
+        "--pack",
+        default="",
+        help=f"target pack (default: {cli.PACK} for patterns, {fakta.PACK} for facts)",
+    )
+    parser.add_argument("--dry-run", action="store_true", help="count only, write nothing")
+    parser.add_argument("--no-rewrite", action="store_true", help="skip clusters that need Muse")
     args = parser.parse_args(argv)
 
     items = _read(safe_path(CORPUS_ROOT, args.corpus))
     if args.facts:
+        fakta.DATA, fakta.VECTORS = fakta.pack_paths(args.pack or fakta.PACK)
         return asyncio.run(grow_facts(items, dry_run=args.dry_run, rewrite=not args.no_rewrite))
+    cli.PATTERNS, cli.VECTORS = cli.pack_paths(args.pack or cli.PACK)
     return asyncio.run(grow_patterns(items, dry_run=args.dry_run))
 
 

@@ -1,4 +1,4 @@
-"""Kontrak katalog pola: gate level/target/register, urutan deterministik, fallback."""
+"""Pattern catalog contract: level/target/register gates, deterministic order, fallback."""
 
 from __future__ import annotations
 
@@ -7,13 +7,14 @@ from pathlib import Path
 
 import pytest
 
-from sanka.engine import patterns
-from sanka.engine.patterns import load_patterns, room_register, select_patterns
+from eidesoul.engine import patterns
+from eidesoul.engine.patterns import load_lexicon, load_patterns, room_register, select_patterns
 
 ROOT = Path(__file__).resolve().parents[1]
 DIM = patterns.DIM
 UNIT = [1.0] + [0.0] * (DIM - 1)
 ZERO = [0.0] * DIM
+PACK = "trial"
 
 
 def _row(ident: str, **overrides) -> dict:
@@ -39,6 +40,13 @@ def _row(ident: str, **overrides) -> dict:
 BOOK = {
     "version": 2,
     "model": patterns.MODEL,
+    "language": "id",
+    "lexicon": {
+        "serious": ["capek", "sedih", "takut"],
+        "laughter": ["wkwk", "😂"],
+        "roast": ["goblok", "ngeselin"],
+        "meme": ["jomok", "gemoy"],
+    },
     "patterns": [
         _row(
             "comfort_validate",
@@ -98,7 +106,7 @@ VECTORS = {
 
 
 class Stub:
-    """Encoder tiruan: vektor kueri konstan, tidak pernah memuat model asli."""
+    """Fake encoder: a constant query vector, never loads the real model."""
 
     def __init__(self, vector: list[float]) -> None:
         self.vector = vector
@@ -111,26 +119,38 @@ class Stub:
 
 @pytest.fixture(autouse=True)
 def clean_cache():
+    patterns.load_pack.cache_clear()
     patterns.load_patterns.cache_clear()
+    patterns.load_lexicon.cache_clear()
     patterns._load_vectors.cache_clear()
     yield
+    patterns.load_pack.cache_clear()
     patterns.load_patterns.cache_clear()
+    patterns.load_lexicon.cache_clear()
     patterns._load_vectors.cache_clear()
 
 
-def use(tmp_path, monkeypatch, book: dict | str = BOOK, vectors: dict | None = None) -> None:
-    data = tmp_path / "patterns.json"
-    data.write_text(book if isinstance(book, str) else json.dumps(book), encoding="utf-8")
-    monkeypatch.setattr(patterns, "DATA", data)
-    built = tmp_path / "vectors.json"
+def use(tmp_path, monkeypatch, book: dict | str = BOOK, vectors: dict | None = None) -> str:
+    library = tmp_path / "library"
+    library.mkdir(parents=True, exist_ok=True)
+    text = book if isinstance(book, str) else json.dumps(book)
+    (library / f"{PACK}.json").write_text(text, encoding="utf-8")
     if vectors is not None:
-        built.write_text(json.dumps(vectors), encoding="utf-8")
-    monkeypatch.setattr(patterns, "VECTORS", built)
+        (library / f"{PACK}_vectors.json").write_text(json.dumps(vectors), encoding="utf-8")
+    monkeypatch.setattr(patterns, "LIBRARY", library)
+    return PACK
 
 
 def test_missing_or_broken_catalogue_returns_no_patterns(tmp_path, monkeypatch) -> None:
-    use(tmp_path, monkeypatch, "{bukan json")
-    assert load_patterns() == []
+    pack = use(tmp_path, monkeypatch, "{bukan json")
+    assert load_patterns((pack,)) == []
+
+
+def test_missing_pack_is_empty(tmp_path, monkeypatch) -> None:
+    pack = use(tmp_path, monkeypatch)
+    assert load_patterns(("absent",)) == []
+    assert load_patterns(()) == []
+    assert load_patterns((pack,)) != []
 
 
 def test_malformed_rows_are_dropped_not_crashing(tmp_path, monkeypatch) -> None:
@@ -145,22 +165,41 @@ def test_malformed_rows_are_dropped_not_crashing(tmp_path, monkeypatch) -> None:
             "bukan objek",
         ],
     }
-    use(tmp_path, monkeypatch, book)
-    kept = load_patterns()
+    pack = use(tmp_path, monkeypatch, book)
+    kept = load_patterns((pack,))
     assert [row["id"] for row in kept] == ["obsolete", "gate_rusak"]
     assert (kept[1]["min_toxicity"], kept[1]["priority"]) == (0, 1)
 
 
-def test_room_register_prefers_serious_then_banter_then_meme() -> None:
-    assert room_register(["capek banget hari ini", "wkwk"]) == "serious"
-    assert room_register(["wkwk parah", "goblok"]) == "banter"
-    assert room_register(["jomok lagi", "gemoy"]) == "meme"
-    assert room_register(["besok rapat jam sembilan"]) == "neutral"
-    assert room_register([]) == "neutral"
+def test_room_register_prefers_serious_then_banter_then_meme(tmp_path, monkeypatch) -> None:
+    pack = use(tmp_path, monkeypatch)
+    lexicon = load_lexicon((pack,))
+    assert room_register(["capek banget hari ini", "wkwk"], lexicon) == "serious"
+    assert room_register(["wkwk parah", "goblok"], lexicon) == "banter"
+    assert room_register(["jomok lagi", "gemoy"], lexicon) == "meme"
+    assert room_register(["besok rapat jam sembilan"], lexicon) == "neutral"
+    assert room_register([], lexicon) == "neutral"
+    assert room_register(["wkwk parah", "goblok"]) == "neutral"
+
+
+def test_register_allow_list_filters_rows(tmp_path, monkeypatch) -> None:
+    pack = use(tmp_path, monkeypatch)
+    got = select_patterns(
+        6,
+        register="banter",
+        target="male",
+        limits=(3, 1),
+        messages=["goblok wkwk"],
+        packs=(pack,),
+        registers=("meme",),
+        encoder=None,
+    )
+    assert all("Balas sekali" not in line for line in got)
+    assert any("Mirror hanya" in line for line in got)
 
 
 def test_keyword_path_ranks_by_hits_and_respects_gates(tmp_path, monkeypatch) -> None:
-    use(tmp_path, monkeypatch)
+    pack = use(tmp_path, monkeypatch)
 
     got = select_patterns(
         3,
@@ -168,52 +207,89 @@ def test_keyword_path_ranks_by_hits_and_respects_gates(tmp_path, monkeypatch) ->
         target="female",
         limits=(1, 0),
         messages=["aku capek banget, gak kuat"],
+        packs=(pack,),
         encoder=None,
     )
     assert got[0].startswith("Validasi dulu"), got
-    assert '(contoh: "boleehhh")' in got[0]
+    assert '(examples: "boleehhh")' in got[0]
     assert all("Balas sekali" not in line for line in got)
     assert (
         select_patterns(
-            0, register="banter", target="male", limits=(4, 3), messages=["ayoo"], encoder=None
+            0,
+            register="banter",
+            target="male",
+            limits=(4, 3),
+            messages=["ayoo"],
+            packs=(pack,),
+            encoder=None,
         )
         == []
     )
 
 
 def test_target_and_level_gates(tmp_path, monkeypatch) -> None:
-    use(tmp_path, monkeypatch)
+    pack = use(tmp_path, monkeypatch)
 
     male = select_patterns(
-        6, register="banter", target="male", limits=(3, 1), messages=["ayo"], encoder=None
+        6,
+        register="banter",
+        target="male",
+        limits=(3, 1),
+        messages=["ayo"],
+        packs=(pack,),
+        encoder=None,
     )
     assert any(line.startswith("Balas sekali") for line in male)
     for target in ("female", "unknown", ""):
         quiet = select_patterns(
-            6, register="banter", target=target, limits=(3, 1), messages=["ayo"], encoder=None
+            6,
+            register="banter",
+            target=target,
+            limits=(3, 1),
+            messages=["ayo"],
+            packs=(pack,),
+            encoder=None,
         )
         assert all("Balas sekali" not in line for line in quiet), (target, quiet)
     low = select_patterns(
-        6, register="banter", target="male", limits=(2, 1), messages=["ayo"], encoder=None
+        6,
+        register="banter",
+        target="male",
+        limits=(2, 1),
+        messages=["ayo"],
+        packs=(pack,),
+        encoder=None,
     )
     assert all("Balas sekali" not in line for line in low)
     adult_off = select_patterns(
-        6, register="meme", target="male", limits=(3, 0), messages=["ayo"], encoder=None
+        6,
+        register="meme",
+        target="male",
+        limits=(3, 0),
+        messages=["ayo"],
+        packs=(pack,),
+        encoder=None,
     )
     assert all("Mirror hanya" not in line for line in adult_off)
 
 
 def test_always_pattern_is_eligible_without_keyword_hits(tmp_path, monkeypatch) -> None:
-    use(tmp_path, monkeypatch)
+    pack = use(tmp_path, monkeypatch)
 
     got = select_patterns(
-        2, register="neutral", target="unknown", limits=(0, 0), messages=["apa kabar"], encoder=None
+        2,
+        register="neutral",
+        target="unknown",
+        limits=(0, 0),
+        messages=["apa kabar"],
+        packs=(pack,),
+        encoder=None,
     )
     assert got == ["Satu bahasa per balasan dan tetap pendek."]
 
 
 def test_cosine_path_ranks_by_similarity_and_drops_far_patterns(tmp_path, monkeypatch) -> None:
-    use(tmp_path, monkeypatch, vectors=VECTORS)
+    pack = use(tmp_path, monkeypatch, vectors=VECTORS)
     stub = Stub(UNIT)
 
     got = select_patterns(
@@ -222,6 +298,7 @@ def test_cosine_path_ranks_by_similarity_and_drops_far_patterns(tmp_path, monkey
         target="female",
         limits=(0, 0),
         messages=["aku capek banget"],
+        packs=(pack,),
         encoder=stub,
     )
 
@@ -232,7 +309,7 @@ def test_cosine_path_ranks_by_similarity_and_drops_far_patterns(tmp_path, monkey
 
 def test_vector_model_mismatch_falls_back_to_keywords(tmp_path, monkeypatch) -> None:
     stale = {**VECTORS, "model": "model/lain"}
-    use(tmp_path, monkeypatch, vectors=stale)
+    pack = use(tmp_path, monkeypatch, vectors=stale)
     stub = Stub(UNIT)
 
     got = select_patterns(
@@ -241,6 +318,7 @@ def test_vector_model_mismatch_falls_back_to_keywords(tmp_path, monkeypatch) -> 
         target="female",
         limits=(0, 0),
         messages=["aku sedih"],
+        packs=(pack,),
         encoder=stub,
     )
 
@@ -248,10 +326,14 @@ def test_vector_model_mismatch_falls_back_to_keywords(tmp_path, monkeypatch) -> 
     assert got[0].startswith("Temani dulu"), got
 
 
-def test_shipped_catalogue_loads_whole_with_vectors() -> None:
-    body = json.loads((ROOT / "sanka" / "data" / "patterns.json").read_text(encoding="utf-8"))
+def test_shipped_pack_loads_whole_with_vectors() -> None:
+    body = json.loads(
+        (ROOT / "eidesoul" / "library" / "patterns" / "jawatimur.json").read_text(encoding="utf-8")
+    )
 
     assert len(body["patterns"]) >= 30
+    assert body["language"] == "id"
+    assert set(body["lexicon"]) == {"serious", "laughter", "roast", "meme"}
     invariants = {row["id"] for row in body["patterns"] if row["always"]}
     assert invariants == {
         "language_lock",
@@ -261,5 +343,17 @@ def test_shipped_catalogue_loads_whole_with_vectors() -> None:
         "floor",
         "curse_trigger",
     }
-    assert len(load_patterns()) == len(body["patterns"])
-    assert patterns._vectors([row["id"] for row in body["patterns"]]), "vektor katalog hilang"
+    loaded = load_patterns(("jawatimur",))
+    assert len(loaded) == len(body["patterns"])
+    assert patterns._vectors([row["id"] for row in body["patterns"]], ("jawatimur",)), (
+        "catalog vectors are missing"
+    )
+    assert load_lexicon(("jawatimur",))["serious"] == (
+        "capek",
+        "sedih",
+        "takut",
+        "maaf",
+        "sakit",
+        "meninggal",
+        "putus",
+    )

@@ -4,10 +4,10 @@ from __future__ import annotations
 
 import pytest
 
-from sanka.engine.commands import REGISTRY as COMMANDS
-from sanka.engine.permissions import command_patterns, tool_patterns, tools_for
-from sanka.engine.roles import Role, RoleError, load_roles
-from sanka.engine.tools import REGISTRY as TOOLS
+from eidesoul.engine.commands import REGISTRY as COMMANDS
+from eidesoul.engine.permissions import command_patterns, tool_patterns, tools_for
+from eidesoul.engine.roles import Role, RoleError, load_roles
+from eidesoul.engine.tools import REGISTRY as TOOLS
 
 
 def test_load_role_mapping_and_union() -> None:

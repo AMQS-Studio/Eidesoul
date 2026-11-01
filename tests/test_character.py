@@ -1,4 +1,4 @@
-"""Kontrak lapisan karakter: pemicu ramping, dan draf asli menang saat ragu."""
+"""Character layer contract: lean triggers, and the original draft wins when unsure."""
 
 from __future__ import annotations
 
@@ -7,14 +7,14 @@ from dataclasses import replace
 
 from support import build_config
 
-from sanka.engine.character import (
+from eidesoul.engine.character import (
     effective_limits,
     needs_polish,
     over_level,
     polish,
     regulate,
 )
-from sanka.engine.config import CharacterConfig
+from eidesoul.engine.config import CharacterConfig
 
 NATURAL = "capeknya di bagian mana?"
 
@@ -77,7 +77,10 @@ def test_natural_draft_is_returned_without_calling_the_model(tmp_path) -> None:
 def test_model_answer_replaces_a_robotic_draft(tmp_path) -> None:
     llm = StubLLM('FINAL: "rundown dulu, konsumsi belakangan"')
 
-    assert run_polish(config_with(tmp_path), llm, long_draft()) == "rundown dulu, konsumsi belakangan"
+    assert (
+        run_polish(config_with(tmp_path), llm, long_draft())
+        == "rundown dulu, konsumsi belakangan"
+    )
     assert llm.calls == 1
     assert llm.kwargs["max_tokens"] == 500
 
@@ -144,7 +147,7 @@ def test_over_level_lists_markers_by_appearance() -> None:
     assert over_level("dasar goblok", toxicity=1, adult_memes=0) == ["goblok"]
     assert over_level("dasar goblok", toxicity=2, adult_memes=0) == []
     assert over_level("ngokang linggis", toxicity=4, adult_memes=2) == ["ngokang linggis"]
-    assert over_level("jomok", toxicity=4, adult_memes=1) == []  # meme biasa, bukan dewasa
+    assert over_level("jomok", toxicity=4, adult_memes=1) == []  # ordinary meme, not adult
     assert over_level("jomok dulu, baru goblok", toxicity=0, adult_memes=3) == ["goblok"]
     assert over_level("", toxicity=0, adult_memes=0) == []
 
@@ -203,7 +206,7 @@ def test_regulate_collapses_extra_questions_except_in_professional_mode(tmp_path
 def test_unsure_target_gets_no_curse_even_a_mild_one(tmp_path) -> None:
     settings = CharacterConfig(enabled=True, toxicity=3, adult_memes=0)
 
-    # seruan seperti anjir/anjay bukan misuh: tetap boleh walau target belum pasti
+    # exclamations like anjir/anjay are not swearing: still allowed even when the target is unsure
     assert over_level("anjir, capek banget", toxicity=3, adult_memes=0, curses=False) == []
     assert over_level("anjay, gila", toxicity=3, adult_memes=0, curses=False) == []
     assert over_level("ngeselin banget", toxicity=3, adult_memes=0, curses=False) == []

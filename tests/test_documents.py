@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import yaml
-
-from sanka.engine.stores.documents import DocumentStore
 from support import build_config, database
+
+from eidesoul.engine.stores.documents import DocumentStore
+
+SOUL = "name: Eidesoul\nlanguage: en\npronouns: aku\n"
 
 
 def make_docs(tmp_path, *, sync=True):
@@ -26,55 +28,73 @@ def test_seed_only_missing_documents(tmp_path) -> None:
     write_config(
         paths,
         {
-            "workspace": ".sanka/workspace",
+            "workspace": ".eidesoul/workspace",
             "engine": {"default_role": "guest"},
-            "soul": {"name": "sanka", "language": "id"},
+            "soul": {"name": "Eidesoul", "language": "id"},
         },
     )
-    paths.soul_md.write_text("Kamu Sanka.", encoding="utf-8")
+    paths.soul_yaml.write_text(SOUL, encoding="utf-8")
     paths.roles.write_text("roles:\n  guest:\n    name: guest\n", encoding="utf-8")
 
-    assert docs.seed() == 4
+    assert docs.seed() == 3
     assert "default_role: guest" in docs.get("engine")
+    assert docs.get("soul") == SOUL
     assert docs.names("role:") == ["role:guest"]
     assert docs.seed() == 0
 
-    docs.put("soul", "name: sanka\nlanguage: en\n")
+    docs.put("soul", "name: Eidesoul\nlanguage: id\n")
     assert docs.seed() == 0
-    assert "language: en" in docs.get("soul")
+    assert "language: id" in docs.get("soul")
+    assert "persona" not in docs.names()
 
 
 def test_export_and_import_roundtrip(tmp_path) -> None:
     docs, paths = make_docs(tmp_path)
-    write_config(paths, {"workspace": ".sanka/workspace", "gateways": {"cli": {"enabled": True}}})
+    write_config(
+        paths,
+        {"workspace": ".eidesoul/workspace", "gateways": {"cli": {"enabled": True}}},
+    )
     docs.put("engine", "default_role: guest\n")
-    docs.put("soul", "name: sanka\nlanguage: en\n")
+    docs.put("soul", SOUL)
     docs.put("persona", "Persona baru.\n")
     docs.put("role:guest", "name: guest\ntools: []\n")
 
     assert docs.export_to_files() == 3
 
     raw = read_config(paths)
-    assert raw["workspace"] == ".sanka/workspace"
+    assert raw["workspace"] == ".eidesoul/workspace"
     assert raw["gateways"] == {"cli": {"enabled": True}}
     assert raw["engine"] == {"default_role": "guest"}
-    assert raw["soul"] == {"name": "sanka", "language": "en"}
-    assert paths.soul_md.read_text(encoding="utf-8") == "Persona baru.\n"
+    assert "soul" not in raw
+    assert paths.soul_yaml.read_text(encoding="utf-8") == SOUL
     roles = yaml.safe_load(paths.roles.read_text(encoding="utf-8"))
     assert roles["roles"]["guest"] == {"name": "guest", "tools": []}
 
     write_config(
         paths,
-        {"workspace": ".sanka/workspace", "engine": {"default_role": "owner"}},
+        {"workspace": ".eidesoul/workspace", "engine": {"default_role": "owner"}},
     )
     docs.put("engine", "default_role: guest\n")
     assert docs.import_from_files() == 3
     assert "default_role: owner" in docs.get("engine")
+    assert "persona" not in docs.names()
+
+
+def test_import_drops_the_persona_document(tmp_path) -> None:
+    docs, paths = make_docs(tmp_path)
+    write_config(paths, {"workspace": ".eidesoul/workspace", "engine": {"default_role": "guest"}})
+    paths.soul_yaml.write_text(SOUL, encoding="utf-8")
+    docs.put("persona", "Persona lama.\n")
+
+    docs.import_from_files()
+
+    assert docs.get("persona") is None
+    assert docs.get("soul") == SOUL
 
 
 def test_sync_false_never_touches_files(tmp_path) -> None:
     docs, paths = make_docs(tmp_path, sync=False)
-    write_config(paths, {"workspace": ".sanka/workspace", "engine": {"default_role": "guest"}})
+    write_config(paths, {"workspace": ".eidesoul/workspace", "engine": {"default_role": "guest"}})
     assert docs.seed() == 0
     assert docs.get("engine") is None
     docs.put("engine", "x")

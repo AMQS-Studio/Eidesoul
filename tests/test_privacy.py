@@ -6,13 +6,14 @@ import asyncio
 import json
 from types import SimpleNamespace
 
-from sanka.engine.config import DatabaseConfig, PrivacyConfig
-from sanka.engine.memory import MemoryHit
-from sanka.engine.memory.mem0 import Mem0Backend
-from sanka.engine.memory.privacy import PrivacyPolicy
-from sanka.engine.privacy import assess_budget
-from sanka.engine.roles import Role
 from support import FakeLLM, FakeMem0, build_config, inbound_message, make_agent
+
+from eidesoul.engine.config import DatabaseConfig, PrivacyConfig
+from eidesoul.engine.memory import MemoryHit
+from eidesoul.engine.memory.mem0 import Mem0Backend
+from eidesoul.engine.memory.privacy import PrivacyPolicy
+from eidesoul.engine.privacy import assess_budget
+from eidesoul.engine.roles import Role
 
 
 def policy() -> PrivacyPolicy:
@@ -72,7 +73,7 @@ class ScriptLLM(FakeLLM):
 
 
 class SequencedLLM(FakeLLM):
-    """Jawaban assess berurutan; "" berarti model kehabisan budget."""
+    """Sequential assess answers; "" means the model ran out of budget."""
 
     def __init__(self, replies: list[str]):
         super().__init__()
@@ -168,7 +169,9 @@ def test_other_sender_cannot_confirm(tmp_path) -> None:
 
     handled = asyncio.run(
         env.agent.privacy.handle_pending(
-            inbound_message("ya", chat_id="111@g.us", is_dm=False, sender="628999", person_id="628999"),
+            inbound_message(
+                "ya", chat_id="111@g.us", is_dm=False, sender="628999", person_id="628999"
+            ),
             env.gateway,
             "628999",
         )
@@ -306,7 +309,7 @@ def test_unclear_answer_keeps_pending(tmp_path) -> None:
 
 
 def test_memory_tool_requires_admin_for_global_and_subject_for_veto(tmp_path) -> None:
-    from sanka.engine.tools.memory import _memory
+    from eidesoul.engine.tools.memory import _memory
 
     env = make_agent(tmp_path)
     member = env.config.roles.default_role()
@@ -355,12 +358,14 @@ def test_agent_turn_asks_then_sends_after_confirmation(tmp_path) -> None:
         confirmed=True,
     )
     group = inbound_message(
-        "halo sanka", chat_id="111@g.us", is_dm=False, is_mention=True
+        "halo eidesoul", chat_id="111@g.us", is_dm=False, is_mention=True
     )
 
     asyncio.run(env.agent.handle(group, env.gateway))
 
-    assert env.gateway.sent[-1][1] == "Itu menyentuh hal privat. Boleh aku sebutkan di sini? Balas ya atau tidak."
+    assert env.gateway.sent[-1][1] == (
+        "Itu menyentuh hal privat. Boleh aku sebutkan di sini? Balas ya atau tidak."
+    )
     approval = env.agent.approvals.latest("111@g.us", "628111")
     assert approval.kind == "disclosure"
 
@@ -375,7 +380,7 @@ def test_agent_turn_asks_then_sends_after_confirmation(tmp_path) -> None:
 def test_vetoed_memory_is_excluded_from_context(tmp_path) -> None:
     config = build_config(
         tmp_path,
-        database_config=DatabaseConfig(url="postgresql+psycopg://u:p@db:5432/sanka", url_env=""),
+        database_config=DatabaseConfig(url="postgresql+psycopg://u:p@db:5432/eidesoul", url_env=""),
     )
     memory = Mem0Backend(config=config, db=None)
     memory._memory = FakeMem0()
@@ -393,7 +398,7 @@ def test_vetoed_memory_is_excluded_from_context(tmp_path) -> None:
 def test_capture_raises_visibility_of_the_turn_and_delivered_reply(tmp_path) -> None:
     from datetime import datetime
 
-    from sanka.engine.context import ChatMessage
+    from eidesoul.engine.context import ChatMessage
 
     env = make_agent(tmp_path)
     env.agent.llm = ScriptLLM(assess={"level": 3, "subject": "", "ask": False})
@@ -405,7 +410,7 @@ def test_capture_raises_visibility_of_the_turn_and_delivered_reply(tmp_path) -> 
         inbound.chat_id,
         ChatMessage(
             id="r1",
-            sender_name="sanka",
+            sender_name="eidesoul",
             sender_id="628567770837",
             when=datetime.now(),
             text="oke",

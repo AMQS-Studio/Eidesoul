@@ -1,4 +1,4 @@
-"""Kontrak gateway: tools/commands digabung, duplikat ditolak, dan isolasi core."""
+"""Gateway contract: tools/commands merged, duplicates rejected, and core isolation."""
 
 from __future__ import annotations
 
@@ -7,16 +7,22 @@ import sys
 from pathlib import Path
 
 import pytest
-
-from sanka.engine.registry import Handler, RegistryError
 from support import FakeGateway, make_agent
+
+from eidesoul.engine.registry import Handler, RegistryError
 
 
 def handler(name: str) -> Handler:
     async def fn(args, ctx):
         return "ok"
 
-    return Handler(name=name, description="test", fn=fn, family="read", parameters={"type": "object", "properties": {}})
+    return Handler(
+        name=name,
+        description="test",
+        fn=fn,
+        family="read",
+        parameters={"type": "object", "properties": {}},
+    )
 
 
 def test_gateway_tools_and_commands_are_merged(tmp_path) -> None:
@@ -35,7 +41,7 @@ def test_duplicate_handler_names_raise(tmp_path) -> None:
 
 def test_core_imports_without_neonize() -> None:
     root = Path(__file__).resolve().parents[1]
-    code = "import sys; sys.modules['neonize']=None; import sanka.engine; print('ok')"
+    code = "import sys; sys.modules['neonize']=None; import eidesoul.engine; print('ok')"
     result = subprocess.run(
         [sys.executable, "-c", code], cwd=root, capture_output=True, text=True, timeout=60
     )

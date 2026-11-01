@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Ablasi perilaku Sanka dari arsip di database: replay gerbang, anggaran prompt, keputusan.
+"""Ablate Eidesoul behavior from the database archive: gate replay, prompt budget, decisions.
 
-Harness read-only: tidak mengirim pesan, tidak memanggil `handle`, dan tidak menulis state.
-Jalankan dari root repo: `.venv/bin/python scripts/ablate.py --last 100`.
+Read-only harness: it sends no messages, never calls `handle`, and writes no state.
+Run from the repo root: `.venv/bin/python scripts/ablate.py --last 100`.
 """
 
 from __future__ import annotations
@@ -18,16 +18,16 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from sanka.engine import ablate
-from sanka.engine.config import load_config, load_env, load_host, resolve_database_url
-from sanka.engine.db import Database
-from sanka.engine.llm import LLM
-from sanka.engine.memory import build_memory
-from sanka.engine.stores.affect import AffectStore
-from sanka.engine.stores.documents import DocumentStore
-from sanka.engine.stores.history import HistoryStore
-from sanka.engine.stores.skills import SkillStore
-from sanka.engine.stores.style import StyleStore
+from eidesoul.engine import ablate
+from eidesoul.engine.config import load_config, load_env, load_host, resolve_database_url
+from eidesoul.engine.db import Database
+from eidesoul.engine.llm import LLM
+from eidesoul.engine.memory import build_memory
+from eidesoul.engine.stores.affect import AffectStore
+from eidesoul.engine.stores.documents import DocumentStore
+from eidesoul.engine.stores.history import HistoryStore
+from eidesoul.engine.stores.skills import SkillStore
+from eidesoul.engine.stores.style import StyleStore
 
 
 def open_stores(config, db, memory) -> dict:
@@ -61,7 +61,7 @@ def blocks_for(chat: str, stores: dict):
                     )
                 )
             with suppress(Exception):
-                blocks["actions"] = ""  # ledger dipisah; ablasi ini fokus blok prompt
+                blocks["actions"] = ""  # ledger is separate; this ablation targets prompt blocks
         if skills is not None:
             with suppress(Exception):
                 blocks["skills"] = skills.index()
@@ -93,7 +93,7 @@ def report(chat: str, replay: dict, budget: dict, shift: dict | None) -> str:
             f"samples={budget['samples']} before_mean={budget['before_mean']:.0f} "
             f"after_mean={budget['after_mean']:.0f} saved_mean={budget['saved_mean']:.0f}"
         ),
-        "dibuang : "
+        "dropped : "
         + (", ".join(f"{name}={count}" for name, count in budget["dropped"].items()) or "-"),
     ]
     if shift is not None:
@@ -108,31 +108,37 @@ def report(chat: str, replay: dict, budget: dict, shift: dict | None) -> str:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Ablasi perilaku Sanka dari arsip database.")
-    parser.add_argument("--config", default=None, help="path config.yaml")
-    parser.add_argument("--chat", default=None, help="JID chat (default: chat terbaru)")
-    parser.add_argument("--last", type=int, default=200, help="jumlah pesan arsip (default 200)")
+    parser = argparse.ArgumentParser(
+        description="Ablate Eidesoul behavior from the database archive."
+    )
+    parser.add_argument("--config", default=None, help="path to config.yaml")
+    parser.add_argument("--chat", default=None, help="chat JID (default: the latest chat)")
     parser.add_argument(
-        "--llm-sample", type=int, default=0, help="jumlah pesan untuk replay keputusan LLM"
+        "--last", type=int, default=200, help="number of archived messages (default 200)"
     )
     parser.add_argument(
-        "--ablate", default="emotion,vibe,away", help="blok gate yang diabsi (emotion,vibe,away)"
+        "--llm-sample", type=int, default=0, help="number of messages to replay the LLM decision"
     )
-    parser.add_argument("--json", type=Path, default=None, help="tulis hasil lengkap ke path JSON")
+    parser.add_argument(
+        "--ablate", default="emotion,vibe,away", help="gate blocks to ablate (emotion,vibe,away)"
+    )
+    parser.add_argument(
+        "--json", type=Path, default=None, help="write the full result to a JSON path"
+    )
     args = parser.parse_args()
 
     names = tuple(name.strip() for name in args.ablate.split(",") if name.strip())
     unknown = [name for name in names if name not in ablate.ABLATABLE]
     if unknown:
-        raise SystemExit(f"blok tidak bisa diabsi: {', '.join(unknown)}")
+        raise SystemExit(f"blocks cannot be ablated: {', '.join(unknown)}")
     if args.llm_sample < 0 or args.last <= 0:
-        raise SystemExit("--last harus > 0 dan --llm-sample tidak boleh negatif")
+        raise SystemExit("--last must be > 0 and --llm-sample must not be negative")
 
     load_env()
     host, paths = load_host(args.config)
     url = resolve_database_url(host.database)
     if not url:
-        raise SystemExit("database URL kosong")
+        raise SystemExit("database URL is empty")
     config = load_config(args.config, require_key=False)
     db = Database(url, pool_size=host.database.pool_size, pool_timeout=host.database.pool_timeout)
     documents = DocumentStore(db, paths, sync=host.sync_documents)
@@ -141,11 +147,11 @@ def main() -> int:
     chat = args.chat or next(iter(history.recent_chats(1)), "")
     if not chat:
         db.dispose()
-        raise SystemExit("arsip kosong: belum ada chat untuk diabsi")
+        raise SystemExit("empty archive: there is no chat to ablate")
     messages = history.recent(chat, args.last)
     if not messages:
         db.dispose()
-        raise SystemExit(f"chat {chat} tidak punya pesan di arsip")
+        raise SystemExit(f"chat {chat} has no messages in the archive")
     rows = ablate.classify(messages, bot_name=config.soul.name)
     memory = asyncio.run(build_memory(config, db=db))
     stores = open_stores(config, db, memory)
@@ -160,7 +166,7 @@ def main() -> int:
         if args.llm_sample > 0:
             if not os.environ.get(config.llm.api_key_env):
                 print(
-                    f"lewati decision_shift: env {config.llm.api_key_env} belum diisi",
+                    f"skipping decision_shift: env {config.llm.api_key_env} is not set",
                     flush=True,
                 )
             else:

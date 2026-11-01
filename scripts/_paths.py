@@ -8,5 +8,5 @@ def safe_path(root: Path, raw: object) -> Path:
     path = Path(str(raw)).expanduser()
     path = (path if path.is_absolute() else base / path).resolve()
     if not path.is_relative_to(base):
-        raise SystemExit(f"path di luar {base}: {raw}")
+        raise SystemExit(f"path outside {base}: {raw}")
     return path

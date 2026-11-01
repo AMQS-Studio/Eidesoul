@@ -1,13 +1,16 @@
-"""Kontrak gaya: profil acuan, agregat belajar, bubble pendek, dan batas balasan."""
+"""Style contract: reference profile, learned aggregate, short bubbles, and reply limits."""
 
 from __future__ import annotations
 
 from pathlib import Path
 
 from sqlalchemy import select
+from support import database
 
-from sanka.engine.config import StyleConfig
-from sanka.engine.reply import FENCE, clean_prose, human_chunks
+from eidesoul.engine.config import StyleConfig
+from eidesoul.engine.reply import FENCE, clean_prose, human_chunks
+from eidesoul.engine.schema import state
+from eidesoul.engine.stores.style import StyleStore
 
 
 def humanize_reply(text: str, *, max_parts: int) -> list[str]:
@@ -16,9 +19,6 @@ def humanize_reply(text: str, *, max_parts: int) -> list[str]:
         for piece in FENCE.split(str(text or ""))
     ]
     return human_chunks("".join(pieces), max_parts=max_parts)
-from sanka.engine.schema import state
-from sanka.engine.stores.style import StyleStore
-from support import database
 
 
 def make_store(tmp_path: Path) -> StyleStore:
@@ -31,7 +31,7 @@ def test_seed_profile_mentions_short_style(tmp_path) -> None:
     text = store.profile()
 
     assert "median 34" in text
-    assert "1-2 kalimat" in text
+    assert "1-2 short sentences" in text
     store.close()
 
 
@@ -70,7 +70,7 @@ def test_human_chunks_never_cuts_content() -> None:
 
     parts = human_chunks(body, max_parts=3)
 
-    assert parts == [body]  # tanpa baris kosong: satu bubble, tanpa elipsis
+    assert parts == [body]  # no blank line: one bubble, no ellipsis
     assert "…" not in "".join(parts)
 
 
@@ -92,7 +92,7 @@ def test_bubbles_follow_explicit_marker_from_model() -> None:
 
 
 def test_blank_lines_do_not_split_messages() -> None:
-    # Model suka memberi baris kosong sebelum daftar; itu bukan perintah memecah pesan.
+    # The model likes a blank line before a list; that is not a split instruction.
     text = "Alur kurasi foto\n\n1. Kumpulkan\n2. Sortir\n\nHafal: kumpul -> pilih -> setor"
 
     assert humanize_reply(text, max_parts=3) == [text]
@@ -140,7 +140,7 @@ def test_extra_bubbles_are_merged_not_dropped() -> None:
     parts = humanize_reply(text, max_parts=2)
 
     assert parts[0] == "satu"
-    assert parts[1] == "dua\n\ntiga\n\nempat"  # digabung, bukan dipotong
+    assert parts[1] == "dua\n\ntiga\n\nempat"  # merged, not truncated
 
 
 def test_person_profile_learns_individual_style(tmp_path) -> None:
@@ -153,7 +153,7 @@ def test_person_profile_learns_individual_style(tmp_path) -> None:
     short = store.person_profile("628111")
     long = store.person_profile("628222")
 
-    assert "median" in short and "huruf kecil" in short
+    assert "median" in short and "lowercase" in short
     assert short != long
     assert store.person_profile("628999") == ""
     store.close()
@@ -166,13 +166,17 @@ def test_profile_uses_live_stats_after_enough_samples(tmp_path) -> None:
 
     text = store.profile("c@g.us")
 
-    assert "median" in text and "partikel:" in text
+    assert "median" in text and "particles:" in text
     store.close()
 
 
 def test_casual_blank_line_becomes_two_bubbles() -> None:
-    # Kasus produksi: model menulis dua kalimat obrolan dengan baris kosong, tanpa penanda `---`.
-    text = "iya, lumayan. udah nggak berat lagi rasanya 🙂\n\nkamu sendiri gimana? kelar juga kan kerjanya?"
+    # Production case: the model writes two chat sentences separated by a blank line,
+    # with no `---` marker.
+    text = (
+        "iya, lumayan. udah nggak berat lagi rasanya 🙂\n\n"
+        "kamu sendiri gimana? kelar juga kan kerjanya?"
+    )
 
     parts = humanize_reply(text, max_parts=3)
 
@@ -185,7 +189,7 @@ def test_casual_blank_line_becomes_two_bubbles() -> None:
 def test_long_paragraphs_are_not_shredded() -> None:
     text = ("a " * 200).strip() + "\n\n" + ("b " * 200).strip()
 
-    assert len(humanize_reply(text, max_parts=3)) == 1  # terlalu panjang: biar utuh satu pesan
+    assert len(humanize_reply(text, max_parts=3)) == 1  # too long: keep it as one whole message
 
 
 def test_explicit_marker_still_wins() -> None:

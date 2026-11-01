@@ -1,11 +1,11 @@
-"""Fixture builder bersama untuk test; bukan perilaku runtime."""
+"""Shared fixture builder for tests; not runtime behavior."""
 
 from __future__ import annotations
 
 from dataclasses import replace
 from pathlib import Path
 
-from sanka.engine.config import (
+from eidesoul.engine.config import (
     AffectConfig,
     ApprovalConfig,
     Config,
@@ -17,14 +17,30 @@ from sanka.engine.config import (
     SandboxConfig,
     StyleConfig,
 )
-from sanka.engine.db import Database
-from sanka.engine.memory import MemoryContext, MemoryHit
-from sanka.engine.roles import Role, RoleRegistry
-from sanka.engine.soul import Soul
+from eidesoul.engine.db import Database
+from eidesoul.engine.memory import MemoryContext, MemoryHit
+from eidesoul.engine.roles import Role, RoleRegistry
+from eidesoul.engine.soul import Soul, SoulStyle
 
 
 def role(name: str, **kwargs) -> Role:
     return Role(name=name, **kwargs)
+
+
+def default_soul(**overrides) -> Soul:
+    """Fixture soul: the shipped packs stay selected so agent tests keep real data."""
+    body = {
+        "name": "Eidesoul",
+        "persona": "p",
+        "style": SoulStyle(
+            patterns=("jawatimur",),
+            facts=("indonesia",),
+            max_patterns=2,
+            max_facts=3,
+        ),
+    }
+    body.update(overrides)
+    return Soul(**body)
 
 
 def build_config(
@@ -49,7 +65,7 @@ def build_config(
         paths=Paths(
             config=base / "config.yaml",
             roles=base / "roles.yaml",
-            soul_md=base / "SOUL.md",
+            soul_yaml=base / "soul.yaml",
             workspace=workspace_path,
         ),
         database=database_config or DatabaseConfig(url="sqlite+pysqlite://", url_env=""),
@@ -61,7 +77,7 @@ def build_config(
         roles=RoleRegistry(by_name=role_map, default=default_role),
         default_role=default_role,
         gateways={},
-        soul=soul or Soul(persona="p"),
+        soul=soul or default_soul(),
         sandbox=SandboxConfig(),
         mcp={},
         **overrides,
@@ -71,14 +87,14 @@ def build_config(
 def database(tmp_path: str | Path, name: str = "test.db") -> Database:
     db = Database(f"sqlite+pysqlite:///{Path(tmp_path) / name}")
     db.ensure()
-    from sanka.gateways import ensure_schemas
+    from eidesoul.gateways import ensure_schemas
 
     ensure_schemas(db)
     return db
 
 
 class FakeMem0:
-    """AsyncMemory palsu: cukup untuk kontrak adapter (bukan perilaku Mem0)."""
+    """Fake AsyncMemory: just enough for the adapter contract (not Mem0 behavior)."""
 
     available = True
 
@@ -143,7 +159,7 @@ class FakeMem0:
 
 
 class FakeGateway:
-    """Gateway kontrak: merekam kiriman, tanpa transport."""
+    """Contract gateway: records sends, no transport."""
 
     name = "fake"
     capabilities = frozenset({"text"})
@@ -356,23 +372,30 @@ def make_agent(
     soul=None,
     currents=None,
 ):
-    """Bangun Agent lengkap dengan DB SQLite temp dan FakeGateway."""
+    """Build a full Agent with a temp SQLite DB and FakeGateway."""
     from types import SimpleNamespace
 
-    from sanka.engine.agent import Agent
-    from sanka.engine.approvals import ApprovalStore
-    from sanka.engine.context import WorkingMemory
-    from sanka.engine.memory.ledger import ActionLedger
-    from sanka.engine.stores.affect import AffectStore
-    from sanka.engine.stores.history import HistoryStore
-    from sanka.engine.stores.recipes import RecipeStore
-    from sanka.engine.stores.skills import SkillStore
-    from sanka.engine.stores.style import StyleStore
+    from eidesoul.engine.agent import Agent
+    from eidesoul.engine.approvals import ApprovalStore
+    from eidesoul.engine.context import WorkingMemory
+    from eidesoul.engine.memory.ledger import ActionLedger
+    from eidesoul.engine.stores.affect import AffectStore
+    from eidesoul.engine.stores.history import HistoryStore
+    from eidesoul.engine.stores.recipes import RecipeStore
+    from eidesoul.engine.stores.skills import SkillStore
+    from eidesoul.engine.stores.style import StyleStore
 
     db = database(tmp_path)
     config = build_config(
         tmp_path,
-        roles=roles or {"member": Role("member", tools=("read", "memory", "chat_history", "skill", "recipe", "send"), commands=("*",))},
+        roles=roles
+        or {
+            "member": Role(
+                "member",
+                tools=("read", "memory", "chat_history", "skill", "recipe", "send"),
+                commands=("*",),
+            )
+        },
         default_role=default_role,
         soul=soul,
         affect=AffectConfig(enabled=affect),
@@ -443,8 +466,8 @@ def inbound_message(
 ):
     from datetime import datetime
 
-    from sanka.engine.context import ChatMessage
-    from sanka.engine.inbound import Inbound
+    from eidesoul.engine.context import ChatMessage
+    from eidesoul.engine.inbound import Inbound
 
     return Inbound(
         chat_id=chat_id,
@@ -465,36 +488,40 @@ def inbound_message(
 
 
 def make_runtime(
-    tmp_path, monkeypatch, *, engine_extra: str = "", role_tools='["*"]', settings_approval: bool = True
+    tmp_path,
+    monkeypatch,
+    *,
+    engine_extra: str = "",
+    role_tools='["*"]',
+    settings_approval: bool = True,
 ):
-    """Bootstrap seperti `sanka run` tetapi tanpa gateway/LLM sungguhan."""
+    """Bootstrap like `eidesoul run` but without a real gateway/LLM."""
     from types import SimpleNamespace
 
-    from sanka.engine.agent import Agent
-    from sanka.engine.approvals import ApprovalStore
-    from sanka.engine.config import load_config, load_host
-    from sanka.engine.context import WorkingMemory
-    from sanka.engine.db import Database
-    from sanka.engine.memory.ledger import ActionLedger
-    from sanka.engine.stores.documents import DocumentStore
-    from sanka.engine.stores.history import HistoryStore
-    from sanka.engine.stores.recipes import RecipeStore
-    from sanka.engine.stores.skills import SkillStore
+    from eidesoul.engine.agent import Agent
+    from eidesoul.engine.approvals import ApprovalStore
+    from eidesoul.engine.config import load_config, load_host
+    from eidesoul.engine.context import WorkingMemory
+    from eidesoul.engine.db import Database
+    from eidesoul.engine.memory.ledger import ActionLedger
+    from eidesoul.engine.stores.documents import DocumentStore
+    from eidesoul.engine.stores.history import HistoryStore
+    from eidesoul.engine.stores.recipes import RecipeStore
+    from eidesoul.engine.stores.skills import SkillStore
 
     base = Path(tmp_path)
     monkeypatch.setenv("K", "x")
-    monkeypatch.setenv("SANKA_DATABASE_URL", f"sqlite+pysqlite:///{base / 'sanka.db'}")
+    monkeypatch.setenv("EIDESOUL_DATABASE_URL", f"sqlite+pysqlite:///{base / 'eidesoul.db'}")
     (base / "config.yaml").write_text(
-        "database:\n  url_env: SANKA_DATABASE_URL\nworkspace: .sanka/workspace\n"
-        "roles_file: roles.yaml\n"
+        "database:\n  url_env: EIDESOUL_DATABASE_URL\nworkspace: .eidesoul/workspace\n"
+        "roles_file: roles.yaml\nsoul_file: soul.yaml\n"
         "engine:\n"
         "  llm:\n    api_key_env: K\n    model: m\n    base_url: http://x\n"
         "  default_role: member\n"
         "  approval:\n"
         f"    mode: yolo\n    settings: {str(settings_approval).lower()}\n"
         f"{engine_extra}"
-        "gateways: {}\n"
-        "soul:\n  name: sanka\n  language: id\n  pronouns: aku\n",
+        "gateways: {}\n",
         encoding="utf-8",
     )
     (base / "roles.yaml").write_text(
@@ -502,10 +529,13 @@ def make_runtime(
         f"  member:\n    name: member\n    tools: {role_tools}\n    commands: [\"*\"]\n",
         encoding="utf-8",
     )
-    (base / "SOUL.md").write_text("Kamu Sanka yang hidup di chat.", encoding="utf-8")
+    (base / "soul.yaml").write_text(
+        "name: Eidesoul\nlanguage: id\npronouns: aku\npersona: Kamu Eidesoul yang hidup di chat.\n",
+        encoding="utf-8",
+    )
 
     host, paths = load_host(base / "config.yaml")
-    db = Database(f"sqlite+pysqlite:///{base / 'sanka.db'}")
+    db = Database(f"sqlite+pysqlite:///{base / 'eidesoul.db'}")
     db.ensure()
     documents = DocumentStore(db, paths)
     documents.seed()

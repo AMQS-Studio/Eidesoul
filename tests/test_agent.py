@@ -1,20 +1,22 @@
-"""Kontrak Agent: satu turn otonom tanpa transport, approval, memori, dan bubble."""
+"""Agent contract: one autonomous turn without transport, approvals, memory, or bubbles."""
 
 from __future__ import annotations
 
 import asyncio
 from dataclasses import replace
 
-from sanka.engine.config import ApprovalConfig, CharacterConfig, HumanizeConfig
-from sanka.engine.tools import execute
 from support import (
     FakeGateway,
     FakeLLM,
     FakeMemory,
+    default_soul,
     inbound_message,
     make_agent,
     role,
 )
+
+from eidesoul.engine.config import ApprovalConfig, CharacterConfig, HumanizeConfig
+from eidesoul.engine.tools import execute
 
 DM = "628111@s.whatsapp.net"
 GROUP = "123@g.us"
@@ -52,7 +54,7 @@ def test_group_mention_replies(tmp_path) -> None:
 
     handle(
         env,
-        inbound_message("sanka tolong", chat_id=GROUP, is_dm=False, is_mention=True),
+        inbound_message("eidesoul tolong", chat_id=GROUP, is_dm=False, is_mention=True),
     )
 
     assert env.gateway.sent and env.gateway.sent[0][0] == GROUP
@@ -128,14 +130,16 @@ def test_memory_block_and_runtime_reach_prompt(tmp_path) -> None:
 
 
 def test_character_patterns_reach_the_system_prompt(tmp_path, monkeypatch) -> None:
-    from sanka.engine import patterns as pattern_catalog
+    from eidesoul.engine import patterns as pattern_catalog
+    from eidesoul.engine.soul import SoulStyle
 
-    monkeypatch.setattr(pattern_catalog, "VECTORS", tmp_path / "no-vectors.json")
-    pattern_catalog._load_vectors.cache_clear()
-    env = make_agent(tmp_path, answer="berat ya. capeknya di bagian mana?")
-    env.agent.config = replace(
-        env.agent.config, character=CharacterConfig(enabled=True, patterns=2)
+    monkeypatch.setattr(pattern_catalog, "_load_vectors", lambda name: {})
+    env = make_agent(
+        tmp_path,
+        answer="berat ya. capeknya di bagian mana?",
+        soul=default_soul(style=SoulStyle(patterns=("jawatimur",), max_patterns=2)),
     )
+    env.agent.config = replace(env.agent.config, character=CharacterConfig(enabled=True))
 
     handle(env, inbound_message("aku capek banget, gak kuat", chat_id=DM))
 
@@ -162,7 +166,7 @@ def test_shell_requires_approval_then_approve_executes(tmp_path) -> None:
             self.call = await execute(
                 {handler.name: handler for handler in specs},
                 "shell",
-                {"command": "printf sanka-ok"},
+                {"command": "printf eidesoul-ok"},
                 ctx,
             )
             return f"tool: {self.call}"
@@ -184,13 +188,13 @@ def test_shell_requires_approval_then_approve_executes(tmp_path) -> None:
     pending = env.agent.approvals.pending(DM, "628111")
     assert len(pending) == 1
 
-    from sanka.engine.commands.approve import COMMAND as APPROVE
+    from eidesoul.engine.commands.approve import COMMAND as APPROVE
 
     inbound = inbound_message("/approve 1", chat_id=DM)
     ctx = env.agent.command_context(DM, "628111", (role("member"),), env.gateway, "1", inbound)
     result = asyncio.run(APPROVE.fn(ctx))
 
-    assert "sanka-ok" in result
+    assert "eidesoul-ok" in result
     assert env.agent.approvals.get(1).status == "approved"
 
 
@@ -201,7 +205,7 @@ def test_sensitive_shell_command_waits_then_approve_executes(tmp_path) -> None:
             self.call = await execute(
                 {handler.name: handler for handler in specs},
                 "shell",
-                {"command": "printf sanka-ok"},
+                {"command": "printf eidesoul-ok"},
                 ctx,
             )
             return f"tool: {self.call}"
@@ -219,11 +223,11 @@ def test_sensitive_shell_command_waits_then_approve_executes(tmp_path) -> None:
     handle(env, inbound_message("jalankan shell", chat_id=DM))
 
     assert "pending approval #1" in env.gateway.sent[0][1]
-    from sanka.engine.commands.approve import COMMAND as APPROVE
+    from eidesoul.engine.commands.approve import COMMAND as APPROVE
 
     ctx = env.agent.command_context(DM, "628111", (role("member"),), env.gateway, "1")
     result = asyncio.run(APPROVE.fn(ctx))
-    assert "sanka-ok" in result
+    assert "eidesoul-ok" in result
     assert env.agent.approvals.get(1).status == "approved"
 
 
@@ -241,7 +245,7 @@ def test_approve_rejects_other_sender(tmp_path) -> None:
         )
 
     approval = asyncio.run(create())
-    from sanka.engine.commands.approve import COMMAND as APPROVE
+    from eidesoul.engine.commands.approve import COMMAND as APPROVE
 
     ctx = env.agent.command_context(DM, "628111", (role("member"),), env.gateway, str(approval.id))
     result = asyncio.run(APPROVE.fn(ctx))
@@ -264,7 +268,7 @@ def test_typing_events_around_turn(tmp_path) -> None:
 
 
 def test_partial_send_does_not_mark_answered(tmp_path) -> None:
-    from sanka.engine.inbound import GatewayError
+    from eidesoul.engine.inbound import GatewayError
 
     class FailingGateway(FakeGateway):
         def __init__(self) -> None:
@@ -319,7 +323,7 @@ def test_gender_command_reports_unknown_names_and_usage(tmp_path) -> None:
 def test_konteks_command_prints_the_stored_block(tmp_path) -> None:
     import time
 
-    from sanka.engine.stores.currents import CurrentsStore
+    from eidesoul.engine.stores.currents import CurrentsStore
 
     env = make_agent(tmp_path)
     env.agent.currents = CurrentsStore(env.db)
@@ -327,7 +331,9 @@ def test_konteks_command_prints_the_stored_block(tmp_path) -> None:
     env.agent.currents.save(
         {
             "updated_at": now,
-            "topics": {"rupiah": {"text": "rupiah melemah", "fetched_at": now, "source": "web_search"}},
+            "topics": {
+                "rupiah": {"text": "rupiah melemah", "fetched_at": now, "source": "web_search"}
+            },
         }
     )
 

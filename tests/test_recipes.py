@@ -1,4 +1,4 @@
-"""Kontrak resep user: store persisten di database, validasi, eksekutor rantai tool."""
+"""User recipe contract: store persisted in the database, validation, tool-chain executor."""
 
 from __future__ import annotations
 
@@ -6,13 +6,13 @@ import asyncio
 from pathlib import Path
 
 import pytest
-
-from sanka.engine.config import Config
-from sanka.engine.registry import Handler
-from sanka.engine.schema import recipes as recipes_table
-from sanka.engine.stores.recipes import RecipeStore, run_recipe
-from sanka.engine.tools import ToolContext
 from support import build_config, database, inbound_message, make_agent, role
+
+from eidesoul.engine.config import Config
+from eidesoul.engine.registry import Handler
+from eidesoul.engine.schema import recipes as recipes_table
+from eidesoul.engine.stores.recipes import RecipeStore, run_recipe
+from eidesoul.engine.tools import ToolContext
 
 
 def make_config(root: Path) -> Config:
@@ -134,7 +134,7 @@ def test_run_recipe_chain_substitution_and_failure(tmp_path: Path) -> None:
 
     store.save("gagal", "recipe", "d", steps=[{"tool": "nosuch", "args": {}}])
     out = asyncio.run(run_recipe(store.get("gagal"), "", ctx, specs))
-    assert out.startswith("error: langkah 1 (nosuch) gagal:")
+    assert out.startswith("error: step 1 (nosuch) failed:")
 
 
 def test_agent_dispatches_recipe_command(tmp_path: Path) -> None:

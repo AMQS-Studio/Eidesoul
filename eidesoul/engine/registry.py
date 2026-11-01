@@ -1,0 +1,198 @@
+"""Handler registry: metadata (name, aliases, description) plus folder auto-discovery."""
+
+from __future__ import annotations
+
+import fnmatch
+import importlib
+import pkgutil
+import re
+from collections.abc import Awaitable, Callable, Sequence
+from dataclasses import dataclass, field
+from pathlib import Path
+from typing import Any
+
+HandlerFn = Callable[..., Awaitable[str]]
+NAME = re.compile(r"^[a-z][a-z0-9_]{0,63}$")
+
+
+class RegistryError(RuntimeError):
+    """A handler breaks the contract, or a name/alias is duplicated. Every error is collected."""
+
+
+@dataclass(frozen=True)
+class Handler:
+    """One callable unit (command or tool) with its default permissions."""
+
+    name: str
+    description: str
+    fn: HandlerFn | None = None
+    aliases: tuple[str, ...] = ()
+    usage: str = ""
+    parameters: dict[str, Any] = field(default_factory=dict)
+    pattern: str = ""
+    hidden: bool = False
+    family: str = ""
+
+    @property
+    def perm(self) -> str:
+        return self.pattern or self.name
+
+
+def allows(patterns: tuple[str, ...], name: str) -> bool:
+    return any(fnmatch.fnmatchcase(name, pattern) for pattern in patterns)
+
+
+def _schema_errors(parameters: object) -> list[str]:
+    if not isinstance(parameters, dict):
+        return ["parameters must be an object schema"]
+    errors: list[str] = []
+    if parameters.get("type") != "object":
+        errors.append("parameters.type must be 'object'")
+    properties = parameters.get("properties")
+    if not isinstance(properties, dict):
+        errors.append("parameters.properties must be an object")
+        properties = {}
+    for key, value in properties.items():
+        if not isinstance(value, dict):
+            errors.append(f"parameters.properties['{key}'] must be an object")
+    required = parameters.get("required")
+    if required is not None:
+        if not isinstance(required, list) or not all(isinstance(item, str) for item in required):
+            errors.append("parameters.required must be list[str]")
+        else:
+            unknown = [item for item in required if item not in properties]
+            if unknown:
+                joined = ", ".join(unknown)
+                errors.append(f"parameters.required contains unknown properties: {joined}")
+    return errors
+
+
+def validate(
+    handler: Handler,
+    source: str,
+    kind: str,
+    families: frozenset[str] = frozenset(),
+) -> list[str]:
+    """Check the handler contract; return the error list prefixed with `<source>.py: `."""
+    errors: list[str] = []
+
+    def add(message: str) -> None:
+        errors.append(f"{source}.py: {message}")
+
+    if handler.name != source:
+        add(f"handler name '{handler.name}' must match the file name '{source}'")
+    if not NAME.fullmatch(handler.name):
+        add(f"invalid name: '{handler.name}'")
+    if not handler.description.strip():
+        add("description is required")
+    for alias in handler.aliases:
+        if not NAME.fullmatch(alias):
+            add(f"invalid alias: '{alias}'")
+        elif alias == handler.name:
+            add(f"alias '{alias}' matches the handler name")
+    if handler.fn is not None and not callable(handler.fn):
+        add("fn must be callable")
+    if handler.fn is None:
+        if kind == "command":
+            add("command requires fn")
+        elif kind == "tool" and not handler.pattern:
+            add("tool requires fn")
+    if kind == "tool":
+        if handler.family not in families:
+            choices = ", ".join(sorted(families))
+            add(f"invalid family: '{handler.family}'; pick one of: {choices}")
+        if handler.fn is not None:
+            schema_errors = _schema_errors(handler.parameters)
+            errors.extend(f"{source}.py: {message}" for message in schema_errors)
+    return errors
+
+
+class Registry:
+    """Canonical name + aliases -> Handler; permissions always come explicitly from the role."""
+
+    def __init__(self, handlers: list[Handler], kind: str):
+        self.kind = kind
+        self.by_name: dict[str, Handler] = {}
+        self.aliases: dict[str, str] = {}
+        errors: list[str] = []
+        for handler in handlers:
+            key = handler.name.lower()
+            if key in self.by_name:
+                errors.append(f"duplicate {kind}: {key}")
+                continue
+            self.by_name[key] = handler
+            for alias in handler.aliases:
+                alias = alias.lower()
+                if alias in self.aliases or alias in self.by_name:
+                    errors.append(f"duplicate {kind} alias: {alias}")
+                    continue
+                self.aliases[alias] = key
+        if errors:
+            raise RegistryError("invalid handler:\n- " + "\n- ".join(errors))
+
+    def get(self, name: str) -> Handler | None:
+        key = name.lower()
+        return self.by_name.get(key) or self.by_name.get(self.aliases.get(key, ""))
+
+    def names(self) -> list[str]:
+        return sorted(self.by_name)
+
+    def patterns(self, explicit: tuple[str, ...] | None) -> tuple[str, ...]:
+        """Only the explicit list applies; the registry has no defaults."""
+        return explicit or ()
+
+    def entries(self, patterns: tuple[str, ...]) -> list[Handler]:
+        return [h for h in self.by_name.values() if not h.hidden and allows(patterns, h.name)]
+
+
+def discover(
+    package: str,
+    folder: Path,
+    attribute: str,
+    kind: str,
+    families: frozenset[str] = frozenset(),
+) -> list[Handler]:
+    """Import every module in the folder (sorted by name), validate, and merge the errors."""
+    found: list[Handler] = []
+    errors: list[str] = []
+    for info in sorted(pkgutil.iter_modules([str(folder)]), key=lambda item: item.name):
+        if info.name.startswith("_"):
+            continue
+        try:
+            module = importlib.import_module(f"{package}.{info.name}")
+        except Exception as exc:  # a broken plugin is reported alongside the other invalid plugins
+            errors.append(f"{info.name}.py: failed to import: {type(exc).__name__}: {exc}")
+            continue
+        handler = getattr(module, attribute, None)
+        if handler is None:
+            errors.append(f"{info.name}.py: does not define {attribute}")
+            continue
+        if not isinstance(handler, Handler):
+            errors.append(f"{info.name}.py: {attribute} is not a Handler")
+            continue
+        handler_errors = validate(handler, info.name, kind, families)
+        errors.extend(handler_errors)
+        if not handler_errors:
+            found.append(handler)
+    if errors:
+        raise RegistryError("invalid handler:\n- " + "\n- ".join(errors))
+    return found
+
+
+def discover_many(
+    sources: Sequence[tuple[str, Path]],
+    attribute: str,
+    kind: str,
+    families: frozenset[str] = frozenset(),
+) -> list[Handler]:
+    """Merge discovery across several packages (core + gateway) with aggregated errors."""
+    found: list[Handler] = []
+    errors: list[str] = []
+    for package, folder in sources:
+        try:
+            found.extend(discover(package, Path(folder), attribute, kind, families))
+        except RegistryError as exc:
+            errors.append(str(exc).split(":\n- ", 1)[-1])
+    if errors:
+        raise RegistryError("invalid handler:\n- " + "\n- ".join(errors))
+    return found

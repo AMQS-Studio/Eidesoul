@@ -1,4 +1,4 @@
-"""Kontrak root workspace per role: public read-only, scratch per chat, private trusted-only."""
+"""Workspace roots contract per role: public read-only, scratch per chat, private trusted-only."""
 
 from __future__ import annotations
 
@@ -7,10 +7,10 @@ from pathlib import Path
 
 from support import make_agent, role
 
-from sanka.engine.registry import Handler
-from sanka.engine.tools import execute, safe_chat
-from sanka.gateways.whatsapp.tools.send import _send
-from sanka.gateways.whatsapp.tools.send_to import _send_to
+from eidesoul.engine.registry import Handler
+from eidesoul.engine.tools import execute, safe_chat
+from eidesoul.gateways.whatsapp.tools.send import _send
+from eidesoul.gateways.whatsapp.tools.send_to import _send_to
 
 SEND = Handler(
     name="send",
@@ -97,7 +97,7 @@ def test_member_cannot_read_private_paths(tmp_path) -> None:
         str(env.config.workspace / "whatsapp" / "x.txt"),
     ):
         result = call(env, "read", {"path": name}, ctx)
-        assert result.startswith("error: path tidak diizinkan untuk role ini"), name
+        assert result.startswith("error: path is not allowed for this role"), name
 
 
 def test_member_cannot_write_public(tmp_path) -> None:
@@ -106,7 +106,7 @@ def test_member_cannot_write_public(tmp_path) -> None:
 
     result = call(env, "write", {"path": "public/x.txt", "content": "nope"}, ctx)
 
-    assert result == "error: public hanya read-only untuk role ini"
+    assert result == "error: public is read-only for this role"
 
 
 def test_member_send_reads_public_but_not_private(tmp_path) -> None:
@@ -121,7 +121,7 @@ def test_member_send_reads_public_but_not_private(tmp_path) -> None:
     denied = call(env, "send", {"path": "private/s.txt"}, ctx)
 
     assert not public.startswith("error:")
-    assert denied.startswith("error: path tidak diizinkan untuk role ini")
+    assert denied.startswith("error: path is not allowed for this role")
     assert env.gateway.files[0][1].name == "ok.txt"
 
 

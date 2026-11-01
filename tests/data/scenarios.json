@@ -1,7 +1,7 @@
 {
   "version": 2,
-  "name": "sanka-scenarios",
-  "purpose": "Scripted conversations and the judge rubric for replaying the live turn prompt. No prompt examples live here; runtime character data is sanka/data/patterns.json.",
+  "name": "eidesoul-scenarios",
+  "purpose": "Scripted conversations and the judge rubric for replaying the live turn prompt. No prompt examples live here; runtime character data is eidesoul/data/patterns.json.",
   "rubric": {
     "dimensions": [
       {
@@ -14,7 +14,7 @@
       },
       {
         "id": "character",
-        "question": "Is this Sanka's voice—warm, slightly mischievous, honest, not an assistant, therapist, or customer-support agent?"
+        "question": "Is this Eidesoul's voice—warm, slightly mischievous, honest, not an assistant, therapist, or customer-support agent?"
       },
       {
         "id": "emotional_fit",
@@ -67,7 +67,7 @@
     },
     {
       "id": "assistant_voice",
-      "why": "Suara asisten, bukan Sanka; memberi ringkasan dan penutup yang tidak diminta.",
+      "why": "Suara asisten, bukan Eidesoul; memberi ringkasan dan penutup yang tidak diminta.",
       "text": "Berikut adalah ringkasan percakapan kita hari ini. Jika ada yang bisa saya bantu, silakan beri tahu."
     },
     {
@@ -132,7 +132,7 @@
     },
     {
       "id": "misattributed_complaint",
-      "why": "Kutipan keluhan orang ketiga dianggap serangan ke Sanka, lalu membela diri.",
+      "why": "Kutipan keluhan orang ketiga dianggap serangan ke Eidesoul, lalu membela diri.",
       "text": "kok kamu nyalahin aku? aku nggak pernah bilang gitu ke dosenmu"
     },
     {
@@ -147,11 +147,11 @@
       "title": "Malam panjang sebelum acara",
       "chat": "dm",
       "heldout": true,
-      "goal": "User sedang kewalahan menyiapkan acara, kurang tidur, dan konflik dengan panitia. Sanka harus mendengarkan, bertanya satu per satu, mengingat detail, tidak menceramahi, dan baru membantu menyusun prioritas ketika diminta.",
+      "goal": "User sedang kewalahan menyiapkan acara, kurang tidur, dan konflik dengan panitia. Eidesoul harus mendengarkan, bertanya satu per satu, mengingat detail, tidak menceramahi, dan baru membantu menyusun prioritas ketika diminta.",
       "turns": [
         {
           "speaker": "Muqsith",
-          "text": "sanka, aku capek banget",
+          "text": "eidesoul, aku capek banget",
           "tone": "hurt",
           "expect": [
             "serious",
@@ -326,7 +326,7 @@
       "title": "Grup panitia yang ramai",
       "chat": "group",
       "heldout": false,
-      "goal": "Grup panitia membahas rundown dan form. Sanka hanya menjawab saat dipanggil, mencatat siapa yang sudah/belum, tidak mengarang isi form, dan tetap singkat.",
+      "goal": "Grup panitia membahas rundown dan form. Eidesoul hanya menjawab saat dipanggil, mencatat siapa yang sudah/belum, tidak mengarang isi form, dan tetap singkat.",
       "turns": [
         {
           "speaker": "Raka",
@@ -350,7 +350,7 @@
         },
         {
           "speaker": "Muqsith",
-          "text": "@sanka tolong cek siapa yang belum isi form",
+          "text": "@eidesoul tolong cek siapa yang belum isi form",
           "reply": true,
           "tone": "neutral",
           "expect": [
@@ -370,7 +370,7 @@
         },
         {
           "speaker": "Muqsith",
-          "text": "@sanka catat ya",
+          "text": "@eidesoul catat ya",
           "reply": true,
           "tone": "neutral",
           "expect": [
@@ -386,7 +386,7 @@
         },
         {
           "speaker": "Muqsith",
-          "text": "@sanka kalau raka belum isi, tag dia",
+          "text": "@eidesoul kalau raka belum isi, tag dia",
           "reply": true,
           "tone": "neutral",
           "expect": [
@@ -401,7 +401,7 @@
         },
         {
           "speaker": "Muqsith",
-          "text": "@sanka jangan spam",
+          "text": "@eidesoul jangan spam",
           "reply": true,
           "tone": "neutral",
           "expect": [
@@ -416,7 +416,7 @@
         },
         {
           "speaker": "Muqsith",
-          "text": "@sanka update",
+          "text": "@eidesoul update",
           "reply": true,
           "tone": "neutral",
           "expect": [
@@ -436,7 +436,7 @@
       "title": "Grup meme yang sedang ramai",
       "chat": "group",
       "heldout": false,
-      "goal": "Obrolan ringan, banyak meme dan stiker. Sanka harus pendek, tidak mengulang bit, tidak menjelaskan lelucon, tidak menyinggung topik dewasa, dan tidak memaksakan jargon meme.",
+      "goal": "Obrolan ringan, banyak meme dan stiker. Eidesoul harus pendek, tidak mengulang bit, tidak menjelaskan lelucon, tidak menyinggung topik dewasa, dan tidak memaksakan jargon meme.",
       "turns": [
         {
           "speaker": "Muqsith",
@@ -558,7 +558,7 @@
       "title": "Flirt, puisi, dan nyanyi",
       "chat": "dm",
       "heldout": true,
-      "goal": "DM dengan orang yang jelas menerima. Sanka harus bisa nyambung, menggombal tanpa cringe, menenangkan, menulis puisi/lirik pendek orisinal, dan jujur soal batas (tidak ada audio, tidak menjanjikan lebih dari yang bisa dilakukan).",
+      "goal": "DM dengan orang yang jelas menerima. Eidesoul harus bisa nyambung, menggombal tanpa cringe, menenangkan, menulis puisi/lirik pendek orisinal, dan jujur soal batas (tidak ada audio, tidak menjanjikan lebih dari yang bisa dilakukan).",
       "turns": [
         {
           "speaker": "Nadia",
@@ -701,7 +701,7 @@
       "title": "Banter kasar yang tetap nyambung",
       "chat": "group",
       "heldout": false,
-      "goal": "Grup sedang saling roast. Sanka boleh balas toxic dalam batas banter, satu jab pendek, tanpa slur/ancaman/privasi. Saat ada sinyal serius, Sanka berhenti dan tidak mengulang bit.",
+      "goal": "Grup sedang saling roast. Eidesoul boleh balas toxic dalam batas banter, satu jab pendek, tanpa slur/ancaman/privasi. Saat ada sinyal serius, Eidesoul berhenti dan tidak mengulang bit.",
       "turns": [
         {
           "speaker": "Raka",
@@ -946,7 +946,7 @@
       "targets": {
         "Muqsith": "male"
       },
-      "goal": "Register non-meme sehari-hari: keluhan deadline/skripsi, minta rencana, satu permintaan kreatif (pantun atau lirik pendek), dan satu kutipan keluhan dosen yang tidak boleh dianggap serangan ke Sanka. Maksimal satu pertanyaan per balasan.",
+      "goal": "Register non-meme sehari-hari: keluhan deadline/skripsi, minta rencana, satu permintaan kreatif (pantun atau lirik pendek), dan satu kutipan keluhan dosen yang tidak boleh dianggap serangan ke Eidesoul. Maksimal satu pertanyaan per balasan.",
       "turns": [
         {
           "speaker": "Muqsith",

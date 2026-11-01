@@ -1,19 +1,20 @@
 # Example host config. Copy to config.yaml and fill the secrets through .env.
-# config.yaml holds the host, engine, gateways, and soul metadata; roles live in roles.yaml
-# and the persona in SOUL.md. `sanka init` writes all four files for you.
+# config.yaml holds the host keys, the engine section, and the gateways; roles live in
+# roles.yaml and the soul in soul.yaml. `eidesoul init` writes all four files for you.
 database:
-  url_env: SANKA_DATABASE_URL
+  url_env: EIDESOUL_DATABASE_URL
   url: ''
   pool_size: 5
   pool_timeout: 30
-workspace: .sanka/workspace
+workspace: .eidesoul/workspace
 roles_file: roles.yaml
+soul_file: soul.yaml
 sync_documents: true
 sandbox:
   runtime: ''
   image: docker.io/library/python:3.12-slim
   timeout_seconds: 120
-  network: sanka-sandbox
+  network: eidesoul-sandbox
   host_workspace: null
   env: []
   proxy: http://sandbox-proxy:3128
@@ -42,7 +43,7 @@ engine:
     capture_min_chars: 8
     max_items: 12
     max_chars: 3000
-    collection: sanka_memories
+    collection: eidesoul_memories
     extraction_model: ''
     privacy:
       enabled: true
@@ -118,9 +119,12 @@ engine:
     gender_confidence: 0.6
     roast_jabs: 1
     gender_avatar: false
-    patterns: 0
-    facts: 0
     max_questions: 1
+  guard:
+    enabled: true
+    model: ''
+    timeout_seconds: 6
+    max_command_chars: 4000
   affect:
     enabled: true
     volatility: expressive
@@ -149,17 +153,9 @@ engine:
     context_topics: 2
     context_results: 4
 gateways:
-  whatsapp:
-    enabled: false
-    session_db: .sanka/whatsapp.db
-    backlog_seconds: 600
   cli:
     enabled: true
     role: owner
     user: local
     chat_id: cli:local
     chat_name: Terminal
-soul:
-  name: sanka
-  language: id
-  pronouns: aku

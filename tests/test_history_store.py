@@ -1,13 +1,14 @@
-"""Kontrak arsip Database: upsert kaya, jendela reset, kutipan, dan seed."""
+"""Database archive contract: rich upsert, reset windows, quotes, and seeding."""
 
 from __future__ import annotations
 
 from datetime import datetime
 
-from sanka.engine.context import ChatMessage, Media, Quote
-from sanka.engine.schema import messages
-from sanka.engine.stores.history import HistoryStore
 from support import database
+
+from eidesoul.engine.context import ChatMessage, Media, Quote
+from eidesoul.engine.schema import messages
+from eidesoul.engine.stores.history import HistoryStore
 
 
 def message(
@@ -55,7 +56,9 @@ def test_recent_order_and_find(tmp_path) -> None:
 
 def test_upsert_keeps_richer_fields(tmp_path) -> None:
     store = HistoryStore(database(tmp_path))
-    media = Media(kind="image", mimetype="image/png", filename="a.png", size=3, proto=None, ref=b"abc")
+    media = Media(
+        kind="image", mimetype="image/png", filename="a.png", size=3, proto=None, ref=b"abc"
+    )
     store.add("chat", message("a", ""))
     store.add(
         "chat",
@@ -125,7 +128,7 @@ def test_merge_never_downgrades_author_or_visibility(tmp_path) -> None:
     )
     store.add(
         "chat",
-        message("a", "", sender_name="sanka", sender_id="628567770837", author="bot"),
+        message("a", "", sender_name="eidesoul", sender_id="628567770837", author="bot"),
     )
     store.add("chat", message("a", "", sender_name="", sender_id="", author="unknown"))
     store.add("chat", message("a", "", sender_name="x", visibility=2))
@@ -134,7 +137,7 @@ def test_merge_never_downgrades_author_or_visibility(tmp_path) -> None:
 
     assert item is not None
     assert item.author == "bot"
-    assert item.sender_name == "sanka"
+    assert item.sender_name == "eidesoul"
     assert item.sender_id == "628567770837"
     assert item.visibility == 3
     assert item.text == "halo"

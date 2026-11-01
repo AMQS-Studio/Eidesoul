@@ -1,4 +1,4 @@
-"""Kontrak plugin Google: satu service account, identity-linked, permission per file."""
+"""Google plugin contract: one service account, identity-linked, per-file permission."""
 
 from __future__ import annotations
 
@@ -8,12 +8,12 @@ import pytest
 import yaml
 from support import build_config, database
 
-from sanka.admin.templates import ROLES
-from sanka.engine.roles import Role
-from sanka.engine.schema import google_identity
-from sanka.engine.tools import REGISTRY, ToolContext
-from sanka.engine.tools import google as google_tool
-from sanka.vendor.google_workspace.service import (
+from eidesoul.admin.templates import ROLES
+from eidesoul.engine.roles import Role
+from eidesoul.engine.schema import google_identity
+from eidesoul.engine.tools import REGISTRY, ToolContext
+from eidesoul.engine.tools import google as google_tool
+from eidesoul.vendor.google_workspace.service import (
     DOC_MIME,
     SHEET_MIME,
     GoogleError,

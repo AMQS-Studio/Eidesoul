@@ -1,11 +1,11 @@
-"""Kontrak keputusan: parser ketat, konteks lengkap, dan mention wajib dibalas."""
+"""Decision contract: strict parser, full context, and mentions always answered."""
 
 from __future__ import annotations
 
 import asyncio
 
-from sanka.engine import decision as decision_module
-from sanka.engine.decision import (
+from eidesoul.engine import decision as decision_module
+from eidesoul.engine.decision import (
     Decision,
     build_context,
     decide,
@@ -13,6 +13,7 @@ from sanka.engine.decision import (
     ground_tone,
     parse_decision,
 )
+from eidesoul.engine.soul import Soul
 
 VALID = """```json
 {"addressed":"me","act":"reply","mode":"daily","tone":"warm",
@@ -26,7 +27,9 @@ class FakeLLM:
         self.answers = answers
         self.calls: list[dict] = []
 
-    async def complete(self, system, user, *, max_tokens=300, temperature=0.2, session="") -> str:
+    async def complete(
+        self, system, user, *, max_tokens=300, temperature=0.2, session="", **kwargs
+    ) -> str:
         self.calls.append(
             {
                 "system": system,
@@ -82,7 +85,7 @@ def test_context_includes_emotion_relationship_and_transcript() -> None:
         chat_id="120@g.us",
         chat_name="panitia",
         current="Fahri: kamu culun",
-        transcript="Fahri: halo\nkamu (sanka): hai",
+        transcript="Fahri: halo\nkamu (eidesoul): hai",
         emotion={
             "summary": "guarded, energized, balanced",
             "pulse": "strong hostility pulse",
@@ -90,7 +93,13 @@ def test_context_includes_emotion_relationship_and_transcript() -> None:
             "arousal": 0.6,
             "dominance": 0.5,
             "trust_tier": "New",
-            "log": [{"appraisal": "hostility", "situation": "dihina", "relational_meaning": "sakit"}],
+            "log": [
+                {
+                    "appraisal": "hostility",
+                    "situation": "dihina",
+                    "relational_meaning": "sakit",
+                }
+            ],
         },
         relationship="- Fahri (member): baru, kesal 0.3",
         is_mention=True,
@@ -101,7 +110,7 @@ def test_context_includes_emotion_relationship_and_transcript() -> None:
     assert "P -0.3" in text and "trust New" in text
     assert "hostility: dihina (sakit)" in text
     assert "Fahri (member): baru, kesal 0.3" in text
-    assert "Fahri: halo" in text and "kamu (sanka): hai" in text
+    assert "Fahri: halo" in text and "kamu (eidesoul): hai" in text
     assert "Fahri: kamu culun" in text
     assert "real mention of you" in text
 
@@ -154,15 +163,16 @@ def test_decision_uses_one_llm_call_with_full_context() -> None:
             transcript="Fahri: besok rapat jam 3",
             emotion={"summary": "even, steady, balanced", "pulse": "subtle warmth pulse"},
             relationship="- Fahri (member): teman",
-            soul="Kamu Sanka.",
+            soul=Soul(name="Eidesoul", persona="Kamu Eidesoul."),
         )
     )
 
     assert parsed is not None and parsed.act == "ignore" and parsed.addressed == "other"
     assert len(llm.calls) == 1
     call = llm.calls[0]
-    assert call["session"] == "sanka-decision-120@g.us"
-    assert "Kamu Sanka." in call["system"]
+    assert call["session"] == "eidesoul-decision-120@g.us"
+    assert "Kamu Eidesoul." in call["system"]
+    assert "You are Eidesoul, a soul in chat." in call["system"]
     assert "panitia" in call["user"] and "Fahri: besok rapat jam 3" in call["user"]
 
 
@@ -254,7 +264,7 @@ def test_ground_tone_softens_cold_tone_when_mood_is_calm() -> None:
 
     grounded = ground_tone(decision, {"pleasure": 0.1, "arousal": 0.3}, annoyance=0.0)
 
-    assert grounded.tone == "neutral"  # tidak boleh mengaku ngambek saat PAD netral
+    assert grounded.tone == "neutral"  # must not claim a sulk while PAD is neutral
 
 
 def test_ground_tone_keeps_cold_tone_when_actually_hurt_or_annoyed() -> None:
@@ -266,7 +276,8 @@ def test_ground_tone_keeps_cold_tone_when_actually_hurt_or_annoyed() -> None:
     assert decision is not None
 
     assert ground_tone(decision, {"pleasure": -0.4}, annoyance=0.0).tone == "angry"
-    assert ground_tone(decision, {"pleasure": 0.3}, annoyance=0.6).tone == "angry"  # orangnya menyulut
+    # the person provokes it
+    assert ground_tone(decision, {"pleasure": 0.3}, annoyance=0.6).tone == "angry"
 
 
 def test_ground_tone_leaves_warm_tones_alone() -> None:

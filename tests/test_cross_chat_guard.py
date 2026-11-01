@@ -1,4 +1,4 @@
-"""Kontrak guard lintas ruang: kutipan verbatim dari room lain tidak boleh terkirim."""
+"""Cross-room guard contract: a verbatim quote from another room must never be sent."""
 
 from __future__ import annotations
 
@@ -8,11 +8,11 @@ from datetime import datetime
 from support import inbound_message, make_agent, role
 from test_whatsapp_gateway import make_gateway
 
-from sanka.engine import guard
-from sanka.engine.context import ChatMessage
-from sanka.engine.i18n import t
-from sanka.engine.tools import execute
-from sanka.gateways.whatsapp import directory
+from eidesoul.engine import guard
+from eidesoul.engine.context import ChatMessage
+from eidesoul.engine.i18n import t
+from eidesoul.engine.tools import execute
+from eidesoul.gateways.whatsapp import directory
 
 TARGET = "628999999999@s.whatsapp.net"
 SPAN = "alpha beta gamma delta epsilon zeta eta theta"

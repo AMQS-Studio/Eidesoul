@@ -1,4 +1,4 @@
-"""Kontrak vibe ruangan: VAD dari label Indonesia, dinamika attack/decay, dan blok prompt."""
+"""Room vibe contract: VAD from Indonesian labels, attack/decay dynamics, and the prompt block."""
 
 from __future__ import annotations
 
@@ -7,13 +7,13 @@ import time
 from pathlib import Path
 
 import pytest
-
-from sanka.engine.config import Config, VibeConfig
-from sanka.engine.decision import build_context
-from sanka.engine.stores.vibe import VibeRunner, VibeState, advance
-from sanka.engine.prompts import system_prompt
-from sanka.engine.roles import Role
 from support import build_config, database, role
+
+from eidesoul.engine.config import Config, VibeConfig
+from eidesoul.engine.decision import build_context
+from eidesoul.engine.prompts import system_prompt
+from eidesoul.engine.roles import Role
+from eidesoul.engine.stores.vibe import VibeRunner, VibeState, advance
 
 
 def make_config() -> Config:
@@ -46,7 +46,7 @@ def test_attack_and_baseline_move_gradually(tmp_path) -> None:
     asyncio.run(runner.observe("chat", "senang"))
 
     state = runner._state("chat")
-    assert 0.5 < state.baseline[0] < 0.9  # mood dasar tidak melompat
+    assert 0.5 < state.baseline[0] < 0.9  # the baseline mood does not jump
     assert state.current[0] > state.baseline[0]
 
 
@@ -56,16 +56,16 @@ def test_describe_uses_words(tmp_path) -> None:
 
     text = runner._describe(state)
 
-    assert "negatif, berenergi, percaya diri" in text
-    assert "jangan sebut angka" in text
+    assert "negative, energetic, confident" in text
+    assert "never cite numbers" in text
 
 
 def test_describe_follows_current_not_slow_baseline(tmp_path) -> None:
     runner = VibeRunner(database(tmp_path), VibeConfig())
     state = VibeState(current=[0.1, 0.9, 0.2], baseline=[0.5, 0.4, 0.5])
 
-    # baseline masih netral, tapi pesan barusan harus terbaca di blok prompt.
-    assert "negatif, berenergi, tertekan" in runner._describe(state)
+    # the baseline is still neutral, but the latest message must show up in the prompt block.
+    assert "negative, energetic, pressured" in runner._describe(state)
 
 
 def test_advance_pulls_current_to_baseline() -> None:
@@ -79,8 +79,8 @@ def test_advance_pulls_current_to_baseline() -> None:
 
     advance(state, now, VibeConfig())
 
-    assert state.current[0] < 0.9  # current mengejar baseline
-    assert state.baseline[0] < 0.8  # baseline mengejar netral
+    assert state.current[0] < 0.9  # current chases the baseline
+    assert state.baseline[0] < 0.8  # baseline chases neutral
 
 
 def test_vibe_block_in_prompts() -> None:
@@ -100,7 +100,7 @@ def test_start_reports_availability(tmp_path) -> None:
     ready = VibeRunner(
         database(tmp_path), VibeConfig(), classifier=lambda _t: {"joy": 1.0}
     )
-    assert asyncio.run(ready.start()) is True  # classifier disuntik: tanpa torch
+    assert asyncio.run(ready.start()) is True  # classifier injected: no torch needed
     asyncio.run(ready.close())
 
 
@@ -110,7 +110,7 @@ def test_start_keeps_loaded_model(tmp_path) -> None:
     runner._model = sentinel
 
     assert asyncio.run(runner.start()) is True
-    assert runner._model is sentinel  # model yang sudah ada tidak dimuat ulang
+    assert runner._model is sentinel  # an existing model is not reloaded
     asyncio.run(runner.close())
 
 

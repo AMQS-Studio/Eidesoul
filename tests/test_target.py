@@ -1,11 +1,11 @@
-"""Kontrak target gender: gaya mengetik dulu, avatar hanya cadangan, dan override manual."""
+"""Gender target contract: typing style first, avatar only as fallback, and manual override."""
 
 from __future__ import annotations
 
 from support import build_config, database
 
-from sanka.engine.stores.affect import AffectStore
-from sanka.engine.target import combine, parse_gender, score_style
+from eidesoul.engine.stores.affect import AffectStore
+from eidesoul.engine.target import combine, parse_gender, score_style
 
 
 def test_style_marker_requires_hits_and_margin() -> None:
@@ -13,7 +13,7 @@ def test_style_marker_requires_hits_and_margin() -> None:
     assert score_style(["akuu gemes", "kak akuu", "gemes deh", "🥺🥺🥺"])[0] == "female"
     assert score_style(["aku sedih", "kamu gimana"]) == ("unknown", 0.0)
     assert score_style([]) == ("unknown", 0.0)
-    assert score_style(["gue", "anjir"])[0] == "unknown"  # dua hit belum cukup
+    assert score_style(["gue", "anjir"])[0] == "unknown"  # two hits are not enough yet
 
 
 def test_style_ignores_false_friends_and_keeps_the_window() -> None:

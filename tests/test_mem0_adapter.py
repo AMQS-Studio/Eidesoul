@@ -1,4 +1,4 @@
-"""Kontrak adapter Mem0: config, scope/metadata, infer, supersedes, privasi forget."""
+"""Mem0 adapter contract: config, scope/metadata, infer, supersedes, privacy forget."""
 
 from __future__ import annotations
 
@@ -9,13 +9,13 @@ from types import SimpleNamespace
 
 import pytest
 from sqlalchemy import text as sql_text
-
-from sanka.engine.config import DatabaseConfig
-from sanka.engine.memory import context as memory_context
-from sanka.engine.memory.mem0 import Mem0Backend
 from support import FakeMem0, build_config, database
 
-PG = "postgresql+psycopg://sanka:secret@db:5432/sanka"
+from eidesoul.engine.config import DatabaseConfig
+from eidesoul.engine.memory import context as memory_context
+from eidesoul.engine.memory.mem0 import Mem0Backend
+
+PG = "postgresql+psycopg://eidesoul:secret@db:5432/eidesoul"
 
 
 def make_backend(tmp_path, monkeypatch) -> tuple[Mem0Backend, FakeMem0]:
@@ -33,8 +33,8 @@ def test_config_dict_maps_providers(tmp_path, monkeypatch) -> None:
 
     assert body["vector_store"]["provider"] == "pgvector"
     store = body["vector_store"]["config"]
-    assert store["connection_string"] == "postgresql://sanka:secret@db:5432/sanka"
-    assert store["collection_name"] == "sanka_memories"
+    assert store["connection_string"] == "postgresql://eidesoul:secret@db:5432/eidesoul"
+    assert store["collection_name"] == "eidesoul_memories"
     assert store["embedding_model_dims"] == 384
     assert body["llm"]["provider"] == "openai"
     assert body["llm"]["config"]["model"] == "m"
@@ -59,7 +59,7 @@ def test_ready_sets_opencode_session_header(tmp_path, monkeypatch) -> None:
     asyncio.run(backend.ready())
 
     client = backend._memory.llm.client
-    assert client.default_headers["x-opencode-session"] == "sanka-agent-mem0"
+    assert client.default_headers["x-opencode-session"] == "eidesoul-mem0"
     client.close()
 
 
@@ -95,7 +95,10 @@ def test_capture_infers_and_uses_person_identity(tmp_path, monkeypatch) -> None:
 
     asyncio.run(
         backend.capture(
-            [{"role": "user", "content": "aku suka kopi"}, {"role": "assistant", "content": "noted"}],
+            [
+                {"role": "user", "content": "aku suka kopi"},
+                {"role": "assistant", "content": "noted"},
+            ],
             person_id="628111",
             chat_id="g@g.us",
             audience="group",
@@ -186,7 +189,7 @@ def test_search_queries_only_requested_scopes(tmp_path, monkeypatch) -> None:
     )
     assert [hit.scope for hit in only_global] == ["global"]
     filters = [call[1]["filters"] for call in fake.calls if call[0] in {"search", "get_all"}]
-    assert {"agent_id": "sanka"} in filters
+    assert {"agent_id": "eidesoul"} in filters
 
 
 def test_context_timeout_returns_empty(tmp_path, monkeypatch) -> None:
@@ -207,7 +210,7 @@ def test_context_timeout_returns_empty(tmp_path, monkeypatch) -> None:
 # ---------------------------------------------------------------- id resolve
 
 UUID_A = "5d94099b-2441-4479-b058-119e8f56ef89"
-UUID_B = "5d94099b-3300-4479-b058-119e8f56ef89"  # prefix 8 sama dengan UUID_A
+UUID_B = "5d94099b-3300-4479-b058-119e8f56ef89"  # the 8-char prefix matches UUID_A
 UUID_C = "7577bf34-1111-4479-b058-119e8f56ef89"
 UUID_RE = re.compile(
     r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$", re.IGNORECASE
@@ -215,7 +218,7 @@ UUID_RE = re.compile(
 
 
 class IdStrictMem0(FakeMem0):
-    """Meniru pgvector: id selain UUID penuh membuat query gagal."""
+    """Mimics pgvector: any id that is not a full UUID makes the query fail."""
 
     def __init__(self) -> None:
         super().__init__()
@@ -253,13 +256,15 @@ def _item(memory_id: str, text: str, **meta) -> dict:
     return {"id": memory_id, "memory": text, "metadata": metadata, "created_at": 1.0}
 
 
-def make_resolving(tmp_path, monkeypatch, *, table_ids=(), items=()) -> tuple[Mem0Backend, IdStrictMem0]:
+def make_resolving(
+    tmp_path, monkeypatch, *, table_ids=(), items=()
+) -> tuple[Mem0Backend, IdStrictMem0]:
     backend, _fake = make_backend(tmp_path, monkeypatch)
     db = database(tmp_path)
     with db.engine.begin() as conn:
-        conn.execute(sql_text("CREATE TABLE sanka_memories (id TEXT PRIMARY KEY)"))
+        conn.execute(sql_text("CREATE TABLE eidesoul_memories (id TEXT PRIMARY KEY)"))
         for value in table_ids:
-            conn.execute(sql_text("INSERT INTO sanka_memories (id) VALUES (:id)"), {"id": value})
+            conn.execute(sql_text("INSERT INTO eidesoul_memories (id) VALUES (:id)"), {"id": value})
     backend.db = db
     fake = IdStrictMem0()
     for item in items:
@@ -305,11 +310,11 @@ def test_ambiguous_or_missing_prefix_never_reaches_mem0(tmp_path, monkeypatch) -
         tmp_path, monkeypatch, table_ids=[UUID_A, UUID_B, UUID_C]
     )
 
-    assert asyncio.run(backend.get("5d94099b")) is None  # ambigu
-    assert asyncio.run(backend.get("deadbeef")) is None  # tiada
+    assert asyncio.run(backend.get("5d94099b")) is None  # ambiguous
+    assert asyncio.run(backend.get("deadbeef")) is None  # missing
     assert asyncio.run(backend.get("")) is None
-    assert fake.seen == []  # prefix ambigu/tiada tidak pernah sampai ke Mem0
-    # id non-hex bukan prefix uuid: diteruskan seperti sebelumnya
+    assert fake.seen == []  # ambiguous/missing prefixes never reach Mem0
+    # a non-hex id is not a uuid prefix: passed through as before
     assert backend._resolve_id("7577bf34zz") == "7577bf34zz"
 
 

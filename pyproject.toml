@@ -1,6 +1,7 @@
 [project]
-name = "sanka-agent"
+name = "eidesoul"
 version = "0.1.0"
+description = "Eidesoul: a persistent soul engine."
 requires-python = ">=3.11"
 dependencies = [
   "SQLAlchemy>=2.0,<3",
@@ -10,38 +11,43 @@ dependencies = [
   "mcp>=2.3,<3",
   "PyYAML>=6",
   "ddgs>=9",
-  "google-api-python-client>=2.150,<3",
-  "google-auth>=2.35,<3",
-  "httpx>=0.27,<1",
 ]
 
 [project.optional-dependencies]
-# Mem0 pin protobuf<7 sedangkan Neonize butuh protobuf>=7; install mem0ai dengan
-# `pip install --no-deps "mem0ai>=2.2,<3"` setelah extra whatsapp (lihat README).
+# Mem0 pins protobuf<7 while Neonize needs protobuf>=7; install mem0ai with
+# `pip install --no-deps "mem0ai>=2.2,<3"` after the whatsapp extra (see README).
 memory = ["mem0ai>=2.2,<3", "sentence-transformers>=5.2,<6"]
 whatsapp = ["neonize>=0.5.2,<0.6", "segno>=1.6"]
+google = ["google-api-python-client>=2.150,<3", "google-auth>=2.35,<3", "httpx>=0.27,<1"]
 vibe = ["torch>=2.2", "transformers>=4.40,<6"]
-dev = ["pytest>=8", "pytest-cov>=6", "ruff>=0.17", "neonize>=0.5.2,<0.6", "segno>=1.6"]
+dev = [
+  "pytest>=8",
+  "pytest-cov>=6",
+  "ruff>=0.17",
+  "neonize>=0.5.2,<0.6",
+  "segno>=1.6",
+  "httpx>=0.27,<1",
+]
 
 [project.scripts]
-sanka = "sanka.__main__:main"
+eidesoul = "eidesoul.__main__:main"
 
 [build-system]
 requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
-include = ["sanka*"]
+include = ["eidesoul*"]
 
 [tool.setuptools.package-data]
-sanka = ["lang/*.yaml", "data/*.json"]
+eidesoul = ["lang/*.yaml", "library/patterns/*.json", "library/facts/*.json"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 
 [tool.ruff]
 line-length = 100
-extend-exclude = ["sanka/vendor"]
+extend-exclude = ["eidesoul/vendor"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "SIM", "C90", "PLR0912", "PLR0915"]
@@ -50,16 +56,16 @@ select = ["E", "F", "I", "UP", "B", "SIM", "C90", "PLR0912", "PLR0915"]
 max-complexity = 12
 
 [tool.ruff.lint.per-file-ignores]
-# Verbatim persona block: long prose lines, same reason prompts.py carries E501.
-"sanka/engine/soul.py" = ["E501"]
+# Long prose lines inside the soul loader template and prompt scaffolding.
+"eidesoul/engine/soul.py" = ["E501"]
 
 [tool.coverage.run]
 branch = true
-source = ["sanka"]
+source = ["eidesoul"]
 
 [tool.uv]
-# Mem0 mem-pin protobuf<7 sedangkan Neonize butuh >=6.32.1; build lama tetap memakai
-# protobuf 7 lewat `--no-deps`, jadi resolusi dipaksa dengan override, bukan no-deps.
+# Mem0 pins protobuf<7 while Neonize needs >=6.32.1; the older build still takes
+# protobuf 7 through `--no-deps`, so resolution is forced with an override.
 override-dependencies = ["protobuf>=7"]
 
 [[tool.uv.index]]

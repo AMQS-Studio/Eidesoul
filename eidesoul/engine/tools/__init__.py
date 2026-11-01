@@ -1,0 +1,247 @@
+"""Tool registry: one module per tool with `TOOL = Handler(...)`; a single execute door."""
+
+from __future__ import annotations
+
+import logging
+import re
+from pathlib import Path
+
+from ..config import Config
+from ..permissions import command_allowed
+from ..registry import Handler, Registry, allows, discover
+from ..roles import Role
+from ..safety import ActionRequest
+
+log = logging.getLogger(__name__)
+
+MAX_OUTPUT = 40_000
+MAX_ERROR = 500
+TRUNCATED = "\n...[truncated: output exceeds 40000 chars; narrow the query/read range or ask for the rest]"
+
+FAMILIES = frozenset({"shell", "read", "write", "web_search", "sandbox", "mcp"})
+
+PUBLIC = "public"
+SCRATCH = "scratch"
+PRIVATE = "private"
+
+
+class ToolContext:
+    def __init__(
+        self,
+        config: Config,
+        roles: tuple[Role, ...],
+        allowed: tuple[str, ...],
+        *,
+        chat_id: str = "",
+        sender: str = "",
+        request: str = "",
+        history=None,
+        memory=None,
+        ledger=None,
+        skills=None,
+        recipes=None,
+        affect=None,
+        agent=None,
+        gateway=None,
+        approved: bool = False,
+        approval_id: str = "",
+        person_id: str = "",
+        is_dm: bool = False,
+    ):
+        self.config = config
+        self.roles = tuple(roles) if isinstance(roles, (tuple, list)) else (roles,)
+        self.allowed = allowed
+        self.chat_id = chat_id
+        self.sender = sender
+        self.request = request
+        self.history = history
+        self.memory = memory
+        self.ledger = ledger
+        self.skills = skills
+        self.recipes = recipes
+        self.affect = affect
+        self.agent = agent
+        self.gateway = gateway
+        self.approved = approved
+        self.approval_id = approval_id
+        self.person_id = person_id or sender
+        self.is_dm = bool(is_dm)
+        self.used: list[str] = []
+        self.sent: list[dict] = []
+        self.reads: set[str] = set()
+        self.cross_reads: list[str] = []
+        self.memory_hits: list = []
+
+    @property
+    def role(self) -> Role | None:
+        return self.roles[0] if self.roles else None
+
+    @property
+    def trusted(self) -> bool:
+        return trusted_roles(self.roles)
+
+    @property
+    def roots(self) -> tuple[Path, ...]:
+        return workspace_roots(self.config, self.roles, self.chat_id)
+
+    @property
+    def scratch(self) -> Path | None:
+        return (
+            self.config.workspace / SCRATCH / safe_chat(self.chat_id)
+            if self.chat_id
+            else None
+        )
+
+    @property
+    def memory_admin(self) -> bool:
+        """Global memory (and its deletion) is limited to roles marked memory_admin."""
+        return any(role.memory_admin for role in self.roles)
+
+    def role_names(self) -> str:
+        return ", ".join(role.name for role in self.roles) or "-"
+
+
+def _int(args: dict, key: str, default: int) -> int:
+    try:
+        return int(args.get(key, default))
+    except (TypeError, ValueError):
+        return default
+
+
+def safe_chat(chat_id: str) -> str:
+    value = re.sub(r"[^A-Za-z0-9_.-]", "_", str(chat_id or "")).strip("._")
+    return (value or "chat")[:80]
+
+
+def trusted_roles(roles) -> bool:
+    return any("*" in (role.tools or ()) for role in roles)
+
+
+def workspace_roots(config: Config, roles, chat_id: str) -> tuple[Path, ...]:
+    base = config.workspace.resolve()
+    if trusted_roles(roles):
+        return (base,)
+    found = [base / PUBLIC]
+    if chat_id:
+        found.append(base / SCRATCH / safe_chat(chat_id))
+    return tuple(found)
+
+
+def resolve_path(config: Config, raw: str, roots: tuple[Path, ...]) -> Path:
+    """Resolve a path and reject anything outside the roots the role may touch."""
+    text = str(raw or "").strip()
+    if not text:
+        raise PermissionError("path is empty")
+    base = config.workspace.resolve()
+    path = Path(text).expanduser()
+    path = (path if path.is_absolute() else base / path).resolve()
+    if not any(path.is_relative_to(root) for root in roots):
+        raise PermissionError(f"path is not allowed for this role: {text}")
+    return path
+
+
+def resolve_for(config: Config, raw: str, roles, chat_id: str) -> Path:
+    """Map the model-facing prefix (`public/`, `scratch/`, `private/`) and resolve per role."""
+    text = str(raw or "").strip()
+    if not text:
+        raise PermissionError("path is empty")
+    trusted = trusted_roles(roles)
+    if (
+        not trusted
+        and not chat_id
+        and not (text == PUBLIC or text.startswith(PUBLIC + "/"))
+    ):
+        raise PermissionError("scratch needs an active chat")
+    if text == PUBLIC or text.startswith(PUBLIC + "/"):
+        target = text
+    elif text == SCRATCH or text.startswith(SCRATCH + "/"):
+        rest = text[len(SCRATCH) :].lstrip("/")
+        target = str(Path(SCRATCH) / safe_chat(chat_id) / rest)
+    elif text == PRIVATE or text.startswith(PRIVATE + "/") or trusted:
+        target = text
+    else:
+        target = str(Path(SCRATCH) / safe_chat(chat_id) / text)
+    return resolve_path(config, target, workspace_roots(config, roles, chat_id))
+
+
+def _resolve(ctx: ToolContext, raw: str) -> Path:
+    return resolve_for(ctx.config, raw, ctx.roles, ctx.chat_id)
+
+
+def _resolve_write(ctx: ToolContext, raw: str) -> Path:
+    path = _resolve(ctx, raw)
+    if not ctx.trusted and path.is_relative_to(ctx.config.workspace.resolve() / PUBLIC):
+        raise PermissionError("public is read-only for this role")
+    return path
+
+
+def truncate(text: str) -> str:
+    return text if len(text) <= MAX_OUTPUT else text[:MAX_OUTPUT] + TRUNCATED
+
+
+async def execute(specs: dict[str, Handler], name: str, args: dict, ctx: ToolContext) -> str:
+    """Single entry point: permission, safety/approval, run, catch errors, truncate output."""
+    spec = specs.get(name) or next((item for item in specs.values() if name in item.aliases), None)
+    if spec is None:
+        return f"error: unknown tool: {name}"
+    if not allows(ctx.allowed, spec.name):
+        return f"error: tool '{name}' is not allowed for role '{ctx.role_names()}'"
+    if spec.fn is None:
+        return f"error: tool '{name}' has no implementation"
+    if ctx.agent is not None and not ctx.approved:
+        decision = ctx.agent.safety.check(
+            ActionRequest(
+                tool=spec.name,
+                args=dict(args),
+                chat_id=ctx.chat_id,
+                sender=ctx.sender,
+                gateway=getattr(ctx.gateway, "name", "") or "",
+                roles=tuple(role.name for role in ctx.roles),
+            )
+        )
+        if spec.name == "sandbox" and decision.verdict == "allow":
+            guard = getattr(ctx.agent, "sandbox_guard", None)
+            if guard is not None:
+                decision = await guard.check(
+                    str(args.get("command") or ""),
+                    can_approve=command_allowed(ctx.roles, "approve"),
+                    chat_id=ctx.chat_id,
+                )
+        if decision.verdict == "deny":
+            return f"error: {decision.reason or 'action denied by safety policy'}"
+        if decision.verdict == "pending":
+            if ctx.approval_id:
+                return (
+                    f"pending approval #{ctx.approval_id} already waiting; "
+                    "ask the sender to /approve it."
+                )
+            approval = await ctx.agent.approvals.create(
+                kind="tool",
+                chat_id=ctx.chat_id,
+                sender=ctx.sender,
+                gateway=getattr(ctx.gateway, "name", "") or "",
+                tool=spec.name,
+                args=dict(args),
+                summary=f"{spec.name} {str(args)[:160]}",
+                roles=tuple(role.name for role in ctx.roles),
+            )
+            ctx.approval_id = str(approval.id)
+            return (
+                f"pending approval #{approval.id}: {approval.summary}. "
+                f"Tell the sender to run /approve {approval.id}."
+            )
+    ctx.used.append(spec.name)
+    try:
+        result = await spec.fn(args, ctx)
+    except PermissionError as exc:  # a rejected path needs no traceback
+        result = f"error: {exc}"[:MAX_ERROR]
+    except Exception as exc:  # no tool may take the process down
+        log.exception("tool %s failed", name)
+        result = f"error: {type(exc).__name__}: {exc}"[:MAX_ERROR]
+    return truncate(str(result))
+
+
+REGISTRY = Registry(
+    discover(__name__, Path(__file__).parent, "TOOL", "tool", FAMILIES),
+    "tool",
+)

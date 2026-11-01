@@ -1,4 +1,4 @@
-"""Kontrak tool sandbox: argv per runtime, deteksi runtime, timeout, batas output, env."""
+"""Sandbox tool contract: argv per runtime, runtime detection, timeout, output limits, env."""
 
 from __future__ import annotations
 
@@ -9,8 +9,8 @@ from types import SimpleNamespace
 
 import pytest
 
-from sanka.engine.config import ConfigError, SandboxConfig, load_config
-from sanka.engine.tools import sandbox
+from eidesoul.engine.config import ConfigError, SandboxConfig, load_config
+from eidesoul.engine.tools import sandbox
 
 
 class FakeProc:
@@ -38,7 +38,7 @@ def make_ctx(
     workspace = tmp_path / "work"
     (workspace / "public").mkdir(parents=True, exist_ok=True)
     (workspace / "scratch").mkdir(parents=True, exist_ok=True)
-    cfg.setdefault("network", "sanka-sandbox")
+    cfg.setdefault("network", "eidesoul-sandbox")
     cfg.setdefault("proxy", "http://sandbox-proxy:3128")
     return SimpleNamespace(
         config=SimpleNamespace(workspace=workspace, sandbox=SandboxConfig(**cfg)),
@@ -88,7 +88,7 @@ def test_podman_argv_has_keep_id_and_selinux_suffix(tmp_path: Path, monkeypatch)
         f"{workspace / 'scratch' / 'chat1'}:/work/scratch:Z",
     ]
     assert argv[argv.index("-w") + 1] == "/work/scratch"
-    assert argv[argv.index("--network") + 1] == "sanka-sandbox"
+    assert argv[argv.index("--network") + 1] == "eidesoul-sandbox"
     assert argv[argv.index("--cap-drop") + 1] == "ALL"
     assert argv[argv.index("--security-opt") + 1] == "no-new-privileges"
     assert argv[argv.index("--pids-limit") + 1] == "256"
@@ -123,7 +123,7 @@ def test_missing_proxy_fails_closed(tmp_path: Path, monkeypatch) -> None:
 
     result = run(make_ctx(tmp_path, runtime="podman", proxy=""))
 
-    assert result == "error: sandbox egress proxy belum dikonfigurasi (sandbox.proxy)"
+    assert result == "error: sandbox egress proxy is not configured (sandbox.proxy)"
     assert calls == []
 
 
@@ -133,7 +133,9 @@ def test_open_network_fails_closed(tmp_path: Path, monkeypatch) -> None:
 
     result = run(make_ctx(tmp_path, runtime="podman", network="bridge"))
 
-    assert result == "error: sandbox.network harus network internal khusus (bukan bridge/none/host)"
+    assert result == (
+        "error: sandbox.network must be a dedicated internal network (not bridge/none/host)"
+    )
     assert calls == []
 
 
@@ -142,7 +144,7 @@ def test_docker_argv_drops_podman_flags_and_uses_host_workspace(
 ) -> None:
     fake_runtimes(monkeypatch, {"docker"})
     calls = capture(monkeypatch, FakeProc())
-    # Path host tidak terlihat dari container bot; tool tidak boleh menolaknya.
+    # Host paths are invisible from the bot container; the tool must not reject them.
     host_ws = tmp_path / "host-workspace"
     assert not host_ws.exists()
     ctx = make_ctx(
@@ -162,7 +164,7 @@ def test_docker_argv_drops_podman_flags_and_uses_host_workspace(
     assert argv[argv.index("--user") + 1] == f"{os.getuid()}:{os.getgid()}"
     assert not mount.endswith(":Z")
     assert mount == f"{host_ws}:/work"
-    assert argv[argv.index("--network") + 1] == "sanka-sandbox"
+    assert argv[argv.index("--network") + 1] == "eidesoul-sandbox"
     pairs = [argv[index + 1] for index, item in enumerate(argv) if item == "--env"]
     assert "NO_PROXY=localhost" in pairs
 
@@ -179,7 +181,7 @@ def test_docker_socket_permission_denied_is_actionable(tmp_path: Path, monkeypat
     result = run(make_ctx(tmp_path, runtime="docker"))
 
     assert not result.startswith("exit=")
-    assert "UID container" in result or "uid container" in result
+    assert "container uid" in result
     assert "DOCKER_GID" in result
     assert "stat -c '%g %a' /var/run/docker.sock" in result
     assert "secret-xyz" not in result
@@ -196,7 +198,7 @@ def test_runtime_autodetect_and_missing_runtime_error(tmp_path: Path, monkeypatc
     result = run(make_ctx(tmp_path, runtime=""))
     assert calls == []
     assert result.startswith("error:")
-    assert "podman atau docker" in result
+    assert "podman or docker" in result
 
 
 def test_missing_explicit_runtime_does_not_raise(tmp_path: Path, monkeypatch) -> None:
@@ -216,7 +218,7 @@ def test_timeout_kills_process(tmp_path: Path, monkeypatch) -> None:
 
     result = run(make_ctx(tmp_path, runtime="podman"), timeout=1)
 
-    assert result == "error: timeout setelah 1 detik"
+    assert result == "error: timeout after 1 seconds"
     assert proc.killed is True
 
 
@@ -227,9 +229,9 @@ def test_output_is_tailed_and_marked(tmp_path: Path, monkeypatch) -> None:
     result = run(make_ctx(tmp_path, runtime="podman"))
 
     body = result.split("\n", 1)[1]
-    assert body.startswith("(dipotong)")
+    assert body.startswith("(truncated)")
     assert body.endswith("TAIL")
-    assert len(body.encode()) <= sandbox.MAX_OUTPUT_BYTES + len("(dipotong)\n")
+    assert len(body.encode()) <= sandbox.MAX_OUTPUT_BYTES + len("(truncated)\n")
 
 
 def test_container_env_does_not_inherit_secrets(tmp_path: Path, monkeypatch) -> None:
@@ -263,7 +265,7 @@ def test_container_env_does_not_inherit_secrets(tmp_path: Path, monkeypatch) -> 
 
 
 def test_load_config_reads_host_workspace_and_rejects_file(tmp_path: Path, monkeypatch) -> None:
-    monkeypatch.setenv("SANKA_TEST_KEY", "x")
+    monkeypatch.setenv("EIDESOUL_TEST_KEY", "x")
     host_ws = tmp_path / "host-workspace"
     host_ws.mkdir()
     target = tmp_path / "config.yaml"
@@ -271,10 +273,10 @@ def test_load_config_reads_host_workspace_and_rejects_file(tmp_path: Path, monke
         f"""
 database:
   url: "sqlite+pysqlite://"
-workspace: ".sanka/workspace"
+workspace: ".eidesoul/workspace"
 engine:
   llm:
-    api_key_env: SANKA_TEST_KEY
+    api_key_env: EIDESOUL_TEST_KEY
   default_role: owner
 gateways: {{}}
 soul:

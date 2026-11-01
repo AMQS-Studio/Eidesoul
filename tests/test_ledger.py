@@ -1,9 +1,10 @@
-"""Kontrak ledger aksi: autografis, terbatas, dan menyaring rahasia."""
+"""Action ledger contract: autographical, bounded, and secret-filtering."""
 
 from __future__ import annotations
 
-from sanka.engine.memory.ledger import ActionLedger
 from support import database
+
+from eidesoul.engine.memory.ledger import ActionLedger
 
 
 def test_log_and_recent_order(tmp_path) -> None:
@@ -56,7 +57,7 @@ def test_actions_context_caps_lines_and_keeps_failures(tmp_path) -> None:
 
     lines = ledger.actions_context().splitlines()
 
-    assert len(lines) == 11  # header + maksimal 10 aksi
+    assert len(lines) == 11  # header + at most 10 actions
     assert lines[1].startswith("- [")
     assert "chat-x" in lines[1] and "gagal — error" in lines[1]
     assert "chat-0" not in ledger.actions_context()
@@ -74,5 +75,5 @@ def test_sensitive_payload_never_stored(tmp_path) -> None:
     )
     rows = ledger.recent_actions()
     assert rows[0]["request"] == ""
-    assert "[isi sensitif tidak dicatat]" in rows[0]["summary"]
+    assert "[sensitive content not recorded]" in rows[0]["summary"]
     assert "rahasia" not in ledger.actions_context()

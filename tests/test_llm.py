@@ -1,10 +1,10 @@
-"""Kontrak parse_digest: kind dinormalisasi, fakta berisiko dibuang, tipe aneh diabaikan."""
+"""parse_digest contract: normalized kinds, risky facts dropped, odd types ignored."""
 
 from __future__ import annotations
 
 import json
 
-from sanka.engine.llm import parse_digest
+from eidesoul.engine.llm import parse_digest
 
 
 def test_parse_digest_keeps_known_kinds_and_rejects_others() -> None:

@@ -1,4 +1,4 @@
-"""Kontrak gateway WhatsApp: ingress protobuf, mention, render, dan routing kiriman."""
+"""WhatsApp gateway contract: protobuf ingress, mentions, rendering, and send routing."""
 
 from __future__ import annotations
 
@@ -9,15 +9,14 @@ from types import SimpleNamespace
 
 import pytest
 from neonize.proto.Neonize_pb2 import Message
-
-from sanka.engine.config import GatewaySettings
-from sanka.engine.context import ChatMessage, WorkingMemory
-from sanka.engine.inbound import GatewayError, Inbound
-from sanka.engine.stores.history import HistoryStore
-from sanka.gateways.whatsapp import directory, ingress
-from sanka.gateways.whatsapp.gateway import WhatsAppGateway
-from sanka.gateways.whatsapp.gateway import SENT_TTL
 from support import build_config, database
+
+from eidesoul.engine.config import GatewaySettings
+from eidesoul.engine.context import ChatMessage, WorkingMemory
+from eidesoul.engine.inbound import GatewayError, Inbound
+from eidesoul.engine.stores.history import HistoryStore
+from eidesoul.gateways.whatsapp import directory, ingress
+from eidesoul.gateways.whatsapp.gateway import SENT_TTL, WhatsAppGateway
 
 BOT = "628567770837"
 
@@ -105,7 +104,7 @@ def test_event_to_inbound_dm_and_person(tmp_path) -> None:
 def test_mention_and_reply_flags_come_from_payload(tmp_path) -> None:
     gateway = make_gateway(tmp_path)
 
-    plain = ingress.event_to_inbound(group_event("@sanka tolong"), gateway)
+    plain = ingress.event_to_inbound(group_event("@eidesoul tolong"), gateway)
     asserted = ingress.event_to_inbound(
         group_event("pagi", mentioned=(f"{BOT}@s.whatsapp.net",)), gateway
     )
@@ -148,11 +147,11 @@ def test_quote_is_read_from_context_info(tmp_path) -> None:
 
 
 def test_command_body_strips_only_bot_mentions() -> None:
-    from sanka.engine.agent import command_body
+    from eidesoul.engine.agent import command_body
 
-    assert command_body(f"@{BOT} /ping", "sanka", {BOT}) == "/ping"
-    assert command_body("@Budi /ping", "sanka", {BOT}) == "@Budi /ping"
-    assert command_body("@Sanka /status", "sanka", set()) == "/status"
+    assert command_body(f"@{BOT} /ping", "eidesoul", {BOT}) == "/ping"
+    assert command_body("@Budi /ping", "eidesoul", {BOT}) == "@Budi /ping"
+    assert command_body("@Eidesoul /status", "eidesoul", set()) == "/status"
 
 
 def test_render_converts_markdown_but_keeps_fence(tmp_path) -> None:
@@ -380,7 +379,9 @@ def revoke_event(target: str, sender: str, *, pushname: str = "Budi") -> Message
     ev = group_event("")
     ev.Info.ID = "revoke-1"
     ev.Info.Pushname = pushname
-    ev.Info.MessageSource.Chat.User, _, ev.Info.MessageSource.Chat.Server = "111@g.us".partition("@")
+    ev.Info.MessageSource.Chat.User, _, ev.Info.MessageSource.Chat.Server = (
+        "111@g.us".partition("@")
+    )
     ev.Info.MessageSource.Sender.User = sender
     ev.Info.MessageSource.Sender.Server = "s.whatsapp.net"
     ev.Message.protocolMessage.type = ProtocolMessage.REVOKE
@@ -399,7 +400,7 @@ STUBS: list[StubClient] = []
 
 
 class StubClient:
-    """Pengganti NewAClient: rekam handler, lalu biarkan run() selesai."""
+    """NewAClient replacement: records handlers, then lets run() finish."""
 
     def __init__(self, *args, **kwargs) -> None:
         self.handlers: dict[object, object] = {}
@@ -424,7 +425,7 @@ class StubClient:
 
 
 def drive_run(tmp_path, monkeypatch):
-    from sanka.gateways.whatsapp import gateway as gateway_module
+    from eidesoul.gateways.whatsapp import gateway as gateway_module
 
     gateway = make_gateway(tmp_path)
     monkeypatch.setattr(gateway_module, "NewAClient", StubClient)
@@ -444,7 +445,9 @@ def test_gateway_marks_revoked_rows_and_stays_silent(tmp_path, monkeypatch) -> N
                 sender_id="628333333333", sender_jid="628333333333@s.whatsapp.net")
 
     asyncio.run(client.handlers[Message](client, revoke_event("t1", "628222222222")))
-    asyncio.run(client.handlers[Message](client, revoke_event("t2", "628222222222", pushname="Budi")))
+    asyncio.run(
+        client.handlers[Message](client, revoke_event("t2", "628222222222", pushname="Budi"))
+    )
     asyncio.run(client.handlers[Message](client, revoke_event("hilang", "628222222222")))
 
     rows = {entry.id: entry for entry in gateway.windows.get("111@g.us")}
@@ -455,7 +458,7 @@ def test_gateway_marks_revoked_rows_and_stays_silent(tmp_path, monkeypatch) -> N
 
 
 def test_unreadable_stanza_becomes_a_placeholder_row(tmp_path, monkeypatch) -> None:
-    from sanka.gateways.whatsapp.gateway import UndecryptableMessageEv
+    from eidesoul.gateways.whatsapp.gateway import UndecryptableMessageEv
 
     gateway, client, handled = drive_run(tmp_path, monkeypatch)
     ev = UndecryptableMessageEv()
@@ -479,7 +482,7 @@ def test_unreadable_stanza_becomes_a_placeholder_row(tmp_path, monkeypatch) -> N
 
 
 def test_unreadable_stanza_ignores_available_and_broadcast(tmp_path) -> None:
-    from sanka.gateways.whatsapp.gateway import UndecryptableMessageEv
+    from eidesoul.gateways.whatsapp.gateway import UndecryptableMessageEv
 
     gateway = make_gateway(tmp_path)
     ev = UndecryptableMessageEv()

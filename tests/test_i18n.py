@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import pytest
 
-from sanka.engine import i18n
-from sanka.engine.commands import REGISTRY
-from sanka.engine.i18n import available, catalog, normalize_language, reload_catalogs, t
+from eidesoul.engine import i18n
+from eidesoul.engine.commands import REGISTRY
+from eidesoul.engine.i18n import available, catalog, normalize_language, reload_catalogs, t
 
 
 def test_catalogs_have_identical_keys() -> None:

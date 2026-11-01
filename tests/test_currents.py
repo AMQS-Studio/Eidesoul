@@ -1,4 +1,4 @@
-"""Kontrak konteks Indonesia: blok segar kedaluwarsa, refresh tidak menghapus item lama."""
+"""Indonesian context contract: fresh blocks expire, a refresh keeps old items."""
 
 from __future__ import annotations
 
@@ -7,8 +7,8 @@ import time
 
 from support import database
 
-from sanka.engine.currents import ITEM_CHARS, TOPICS, YEAR, format_block, query, refresh
-from sanka.engine.stores.currents import TTL_SECONDS, CurrentsStore
+from eidesoul.engine.currents import ITEM_CHARS, TOPICS, YEAR, format_block, query, refresh
+from eidesoul.engine.stores.currents import TTL_SECONDS, CurrentsStore
 
 
 def store(tmp_path) -> CurrentsStore:
@@ -25,13 +25,17 @@ def test_format_block_prints_fresh_items_and_expires() -> None:
     items = {
         "updated_at": now,
         "topics": {
-            "rupiah": {"text": "rupiah melemah ke 16.8rb/USD", "fetched_at": now, "source": "web_search"}
+            "rupiah": {
+                "text": "rupiah melemah ke 16.8rb/USD",
+                "fetched_at": now,
+                "source": "web_search",
+            }
         },
     }
 
     text = format_block(items, now=now, limit=6)
 
-    assert text.startswith("## Current Indonesia context (fetched ")
+    assert text.startswith("## Current context (fetched ")
     assert "rupiah: rupiah melemah" in text
     assert "(as of " in text
     assert format_block(items, now=now + 8 * 24 * 3600) == ""
@@ -45,10 +49,10 @@ def test_refresh_writes_one_item_per_topic_and_takes_the_oldest_first(tmp_path) 
 
     async def search(prompt: str, results: int) -> str:
         calls.append(prompt)
-        return f"hasil untuk {prompt}"
+        return f"result for {prompt}"
 
     async def summarize(prompt: str, text: str) -> str:
-        return f"ringkas {prompt}"
+        return f"summary of {prompt}"
 
     instrument = store(tmp_path)
     assert asyncio.run(refresh(instrument, search, summarize, topics=2, results=4, now=1000.0)) == 2
@@ -69,16 +73,18 @@ def test_refresh_writes_one_item_per_topic_and_takes_the_oldest_first(tmp_path) 
 
 def test_refresh_keeps_existing_items_when_search_fails(tmp_path) -> None:
     async def search(prompt: str, results: int) -> str:
-        return "error: searxng tidak tersedia"
+        return "error: searxng unavailable"
 
     async def summarize(prompt: str, text: str) -> str:
-        return "tidak dipakai"
+        return "not used"
 
     instrument = store(tmp_path)
     instrument.save(
         {
             "updated_at": 500.0,
-            "topics": {"ekonomi": {"text": "inflasi stabil", "fetched_at": 500.0, "source": "web_search"}},
+            "topics": {
+                "ekonomi": {"text": "inflasi stabil", "fetched_at": 500.0, "source": "web_search"}
+            },
         }
     )
 

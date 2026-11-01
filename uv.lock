@@ -582,6 +582,75 @@ wheels = [
 ]
 
 [[package]]
+name = "eidesoul"
+version = "0.1.0"
+source = { editable = "." }
+dependencies = [
+    { name = "ddgs" },
+    { name = "mcp" },
+    { name = "openai" },
+    { name = "psycopg", extra = ["binary"] },
+    { name = "psycopg-pool" },
+    { name = "pyyaml" },
+    { name = "sqlalchemy" },
+]
+
+[package.optional-dependencies]
+dev = [
+    { name = "httpx" },
+    { name = "neonize" },
+    { name = "pytest" },
+    { name = "pytest-cov" },
+    { name = "ruff" },
+    { name = "segno" },
+]
+google = [
+    { name = "google-api-python-client" },
+    { name = "google-auth" },
+    { name = "httpx" },
+]
+memory = [
+    { name = "mem0ai" },
+    { name = "sentence-transformers" },
+]
+vibe = [
+    { name = "torch", version = "2.15.0", source = { registry = "https://download.pytorch.org/whl/cpu" }, marker = "sys_platform == 'darwin'" },
+    { name = "torch", version = "2.15.0+cpu", source = { registry = "https://download.pytorch.org/whl/cpu" }, marker = "sys_platform != 'darwin'" },
+    { name = "transformers" },
+]
+whatsapp = [
+    { name = "neonize" },
+    { name = "segno" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "ddgs", specifier = ">=9" },
+    { name = "google-api-python-client", marker = "extra == 'google'", specifier = ">=2.150,<3" },
+    { name = "google-auth", marker = "extra == 'google'", specifier = ">=2.35,<3" },
+    { name = "httpx", marker = "extra == 'dev'", specifier = ">=0.27,<1" },
+    { name = "httpx", marker = "extra == 'google'", specifier = ">=0.27,<1" },
+    { name = "mcp", specifier = ">=2.3,<3" },
+    { name = "mem0ai", marker = "extra == 'memory'", specifier = ">=2.2,<3" },
+    { name = "neonize", marker = "extra == 'dev'", specifier = ">=0.5.2,<0.6" },
+    { name = "neonize", marker = "extra == 'whatsapp'", specifier = ">=0.5.2,<0.6" },
+    { name = "openai", specifier = ">=2,<4" },
+    { name = "psycopg", extras = ["binary"], specifier = ">=3.2,<4" },
+    { name = "psycopg-pool", specifier = ">=3.2,<4" },
+    { name = "pytest", marker = "extra == 'dev'", specifier = ">=8" },
+    { name = "pytest-cov", marker = "extra == 'dev'", specifier = ">=6" },
+    { name = "pyyaml", specifier = ">=6" },
+    { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.17" },
+    { name = "segno", marker = "extra == 'dev'", specifier = ">=1.6" },
+    { name = "segno", marker = "extra == 'whatsapp'", specifier = ">=1.6" },
+    { name = "sentence-transformers", marker = "extra == 'memory'", specifier = ">=5.2,<6" },
+    { name = "sqlalchemy", specifier = ">=2.0,<3" },
+    { name = "torch", marker = "extra == 'vibe'", specifier = ">=2.2", index = "https://download.pytorch.org/whl/cpu" },
+    { name = "transformers", marker = "extra == 'vibe'", specifier = ">=4.40,<6" },
+]
+provides-extras = ["memory", "whatsapp", "google", "vibe", "dev"]
+
+[[package]]
 name = "filelock"
 version = "4.2.4"
 source = { registry = "https://pypi.org/simple" }
@@ -2728,71 +2797,6 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/1b/6d/3fba214c1e5e0f69991677ec3bc17023f0421776975e1de0c682dca475e2/safetensors-0.8.0-cp310-abi3-win_amd64.whl", hash = "sha256:096ec1a98435df7beb08853bb5aa9081a84f23d0adc67ed1a0a10550f608373f", size = 355540, upload-time = "2026-06-09T07:52:27.832Z" },
     { url = "https://files.pythonhosted.org/packages/8d/fc/7eedc3510d97878876e32774eebbeb61c43f148a96e915c84229a3e967aa/safetensors-0.8.0-cp310-abi3-win_arm64.whl", hash = "sha256:f7838e5135a406ad3e02efdcb8cf2e5397d368b0154537c4fec682dbc544d452", size = 340500, upload-time = "2026-06-09T07:52:26.745Z" },
 ]
-
-[[package]]
-name = "sanka-agent"
-version = "0.1.0"
-source = { editable = "." }
-dependencies = [
-    { name = "ddgs" },
-    { name = "google-api-python-client" },
-    { name = "google-auth" },
-    { name = "httpx" },
-    { name = "mcp" },
-    { name = "openai" },
-    { name = "psycopg", extra = ["binary"] },
-    { name = "psycopg-pool" },
-    { name = "pyyaml" },
-    { name = "sqlalchemy" },
-]
-
-[package.optional-dependencies]
-dev = [
-    { name = "neonize" },
-    { name = "pytest" },
-    { name = "pytest-cov" },
-    { name = "ruff" },
-    { name = "segno" },
-]
-memory = [
-    { name = "mem0ai" },
-    { name = "sentence-transformers" },
-]
-vibe = [
-    { name = "torch", version = "2.15.0", source = { registry = "https://download.pytorch.org/whl/cpu" }, marker = "sys_platform == 'darwin'" },
-    { name = "torch", version = "2.15.0+cpu", source = { registry = "https://download.pytorch.org/whl/cpu" }, marker = "sys_platform != 'darwin'" },
-    { name = "transformers" },
-]
-whatsapp = [
-    { name = "neonize" },
-    { name = "segno" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "ddgs", specifier = ">=9" },
-    { name = "google-api-python-client", specifier = ">=2.150,<3" },
-    { name = "google-auth", specifier = ">=2.35,<3" },
-    { name = "httpx", specifier = ">=0.27,<1" },
-    { name = "mcp", specifier = ">=2.3,<3" },
-    { name = "mem0ai", marker = "extra == 'memory'", specifier = ">=2.2,<3" },
-    { name = "neonize", marker = "extra == 'dev'", specifier = ">=0.5.2,<0.6" },
-    { name = "neonize", marker = "extra == 'whatsapp'", specifier = ">=0.5.2,<0.6" },
-    { name = "openai", specifier = ">=2,<4" },
-    { name = "psycopg", extras = ["binary"], specifier = ">=3.2,<4" },
-    { name = "psycopg-pool", specifier = ">=3.2,<4" },
-    { name = "pytest", marker = "extra == 'dev'", specifier = ">=8" },
-    { name = "pytest-cov", marker = "extra == 'dev'", specifier = ">=6" },
-    { name = "pyyaml", specifier = ">=6" },
-    { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.17" },
-    { name = "segno", marker = "extra == 'dev'", specifier = ">=1.6" },
-    { name = "segno", marker = "extra == 'whatsapp'", specifier = ">=1.6" },
-    { name = "sentence-transformers", marker = "extra == 'memory'", specifier = ">=5.2,<6" },
-    { name = "sqlalchemy", specifier = ">=2.0,<3" },
-    { name = "torch", marker = "extra == 'vibe'", specifier = ">=2.2", index = "https://download.pytorch.org/whl/cpu" },
-    { name = "transformers", marker = "extra == 'vibe'", specifier = ">=4.40,<6" },
-]
-provides-extras = ["memory", "whatsapp", "vibe", "dev"]
 
 [[package]]
 name = "scikit-learn"

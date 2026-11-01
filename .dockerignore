@@ -2,7 +2,7 @@
 .github
 .gitignore
 .venv
-.sanka
+.eidesoul
 .env
 config.yaml
 __pycache__
@@ -13,9 +13,7 @@ __pycache__
 tests
 *.db
 *.log
-gateway.yaml
-engine.yaml
+# the host soul stays outside the image; mount it at run time
 soul.yaml
-roles/
 compose.example.yaml
 config.yaml.bak-*

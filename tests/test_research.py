@@ -1,4 +1,4 @@
-"""Kontrak kolektor riset: area, promosi berbasis bukti, penyaringan, dan workbook audit."""
+"""Research collector contract: areas, evidence-based promotion, filtering, and audit workbook."""
 
 from __future__ import annotations
 
@@ -40,7 +40,8 @@ def test_topics_are_unique_areas() -> None:
     assert len(research.TOPICS) == 24
     assert len(set(research.TOPICS)) == 24
     for tid, topic in research.TOPICS.items():
-        # Hanya `label`: worker Muse sendiri yang menurunkan sudut dan query, tanpa contoh tertanam.
+        # `label` only: the Muse worker derives the angle and query itself,
+        # with no embedded examples.
         assert set(topic) == {"label"}, tid
         assert 1 <= len(str(topic["label"]).split()) <= 6, tid
 

@@ -1,466 +1,397 @@
-# SankaAgent
+# Eidesoul
 
-Sanka is a persistent soul engine: one identity, one memory, many chat surfaces. The engine
-(`sanka/engine/`) owns the turn loop, config, memory, emotion, and tools. Gateways only carry
-messages in and out; the core never imports `neonize` or `sanka.gateways`.
+a persistent soul engine: one identity, one memory, any body
 
-- **One database = one soul.** Transcripts, Mem0 memory, affect, style, skills, recipes, the
-  `engine`/`soul`/`persona`/`role:<name>` documents, approvals, and `engine_lease` live in Postgres.
-- **One primary at a time.** A follower stays frozen; `/freeze` or `sanka console --takeover` moves
-  the heartbeat through the lease, never through two hearts.
-- **Identity is cross-chat.** Semantic memory is queried for `global` + `person:<sender>` +
-  `chat:<this chat>` only. Raw transcripts stay per chat.
-- **Privacy is a disclosure layer.** Entries carry a level 0-4; ordinary chat stays fluid, and only
-  sensitive or grave entries are guarded.
-- **Config is data.** `config.yaml` + `roles.yaml` + `SOUL.md` are seeds and mirrors of DB documents.
-- **Character is a pattern catalogue.** `sanka/data/patterns.json` holds the runtime moves; `SOUL.md`
-  holds the voice. No raw transcripts are shipped.
+[English](README.md) | [Bahasa Indonesia](README.id.md)
+
+[Architecture](#architecture) · [Quickstart](#quickstart) · [soul.yaml](#soulyaml) ·
+[Character library](#character-library) · [Supported gateways](#supported-gateways) ·
+[Roles and permissions](#roles-and-permissions) · [Safety](#safety) · [Credits](#credits)
+
+## What it is
+
+Eidesoul is a soul engine. It is not an agent, not an assistant template, and not an
+autonomous-agent framework.
+
+A soul engine keeps one identity and one memory and lets them inhabit any embodiment: a terminal, a
+chat app, a device, a robot. The engine owns the turn — it reads what arrived, recalls what it
+knows, decides, speaks — and nothing else. Everything that carries messages in and out is an
+appendage around that turn.
+
+Assistant is one role among companion, advisor, and robot embodiments. The soul declares its active
+role and the roles it can take in `soul.yaml`; the same identity, memory, and voice carry across all
+of them. Changing role changes what the soul is allowed to do, never who it is.
 
 ## Architecture
 
+Three layers, one direction of dependency.
+
+- **Core engine** — the turn loop plus the services it needs: prompt assembly, language catalog,
+  semantic memory and privacy, affect and style, the LLM client, and tool execution. Core never
+  imports a gateway, a transport library, or a vendor SDK eagerly.
+- **Gateway contract** — every transport implements the same small interface: normalize an incoming
+  message into one envelope, hand it to the engine, and deliver the reply. Gateways are plugins.
+  They are discovered by name, and a deployment enables only the ones it wants.
+- **State** — one database holds one soul: transcripts per conversation, semantic memory with a
+  privacy level, affect, approvals, and the single-primary lease. The host files
+  (`config.yaml`, `roles.yaml`, `soul.yaml`) are seeds and mirrors of what the database holds.
+
 ```mermaid
 flowchart LR
-  WA[WhatsApp gateway] -->|Inbound| AG[Agent turn]
-  CLI[CLI gateway] -->|Inbound| AG
-  AG --> LLM[LLM + tool families]
-  AG --> PAT[patterns.json + MiniLM]
-  AG --> MEM[Mem0 semantic memory]
-  AG --> PRIV[Privacy policy + auditor]
-  AG --> AFF[Affect + style + vibe]
-  AG --> DB[(Postgres + pgvector)]
-  AG -->|deliver_*| WA
-  AG -->|deliver_*| CLI
-  SUP[Supervisor + lease] --> AG
-  DB --- SUP
+  GA[Gateway A<br/>chat transport] -->|inbound envelope| CORE
+  GB[Gateway B<br/>terminal or local REPL] -->|inbound envelope| CORE
+  GC[Gateway C<br/>robot or custom body] -->|inbound envelope| CORE
+
+  subgraph CORE[Core engine]
+    TURN[Turn loop<br/>context - recall - decide - reply]
+    TURN --> PROMPT[Prompt + language catalog]
+    TURN --> MEM[Semantic memory + privacy]
+    TURN --> AFFECT[Affect, style, character]
+    TURN --> TOOLS[Tools<br/>removable capabilities]
+    TURN --> LLM[LLM client]
+  end
+
+  MEM <--> STORE[(Postgres + pgvector)]
+  PROMPT <--> STORE
+  LEASE[Single-primary lease] --- TURN
+
+  CORE -->|reply| GA
+  CORE -->|reply| GB
+  CORE -->|reply| GC
+
+  OWNED[Gateway-owned tools] -.granted by role.-> TOOLS
 ```
 
-The five repo docs are `TASK.md`, `README.md`, `LOG.md`, `AGENTS.md`, and `SOUL.md`.
+The lease is how one process stays primary: an instance without it stays frozen and standby, so two
+processes never speak with the same mouth. Everything the engine knows is stored, so a restart, a
+moved deployment, or a different body resumes the same soul rather than a fresh one.
 
-## Quickstart (Postgres + pgvector)
+## Tools are capabilities
+
+Tools are capabilities the soul can be granted, not a fixed body. A body decides which capabilities
+exist; a role decides which of them the soul may use in that body.
+
+The six core families are examples, not a taxonomy to fill: `shell`, `read`, `write`, `web_search`,
+`sandbox`, and `mcp`. They cover the common cases — run a command, read a file, search the web, call
+an MCP server — and nothing more.
+
+A robot, a device, or a custom gateway exposes its own body-specific actions as gateway-owned tool
+modules, next to the gateway that gives them meaning. A camera, a motor, a printer, or a home
+automation bus belongs to the embodiment, not to the engine. Roles grant those tools explicitly, so
+a companion role on a phone never inherits the controls of a robot.
+
+The engine never hardcodes a body and never hardcodes an agent loop. There is no planner to
+configure, no task graph to launch, no background swarm: one soul, one turn, and the capabilities
+this instant has been handed.
+
+## Quickstart
+
+Requirements: Python 3.12, Postgres 14+ with `pgvector`, and a reachable OpenAI-compatible LLM
+endpoint. The container image already pins Python 3.12; running from source on 3.11+ works too.
 
 ```bash
-# 1. Database: Postgres 14+ with pgvector
+# 1. One database for one soul
 cp compose.example.yaml compose.yaml          # set a real password
 podman compose -f compose.yaml up -d postgres
 
-# 2. Scaffold config.yaml, roles.yaml, SOUL.md, and .env
-python -m sanka init --dir .
+# 2. Scaffold config.yaml, roles.yaml, soul.yaml, and .env
+eidesoul init
 
-# 3. Fill .env
-#    OPENCODE_GO_API_KEY=...
-#    SANKA_DATABASE_URL=postgresql+psycopg://sanka:CHANGE_ME@127.0.0.1:5432/sanka
+# 3. Make it this soul, not the default one
+$EDITOR soul.yaml
 
-# 4. Schema + documents + check
-python -m sanka db upgrade
-python -m sanka db check
+# 4. Point it at the database and the model
+#    .env:
+#      EIDESOUL_DATABASE_URL=postgresql+psycopg://eidesoul:CHANGE_ME@127.0.0.1:5432/eidesoul
+#      OPENCODE_GO_API_KEY=...
 
-# 5. Enable WhatsApp in `gateways`, then run the primary
-python -m sanka run
+# 5. Create the schema and seed the host files into it
+eidesoul db upgrade
 
-# Local console against the same DB (takes the lease)
-python -m sanka console --takeover
+# 6. Run the gateways enabled in config.yaml
+eidesoul run
+
+# Local REPL against the same soul and database; takes the lease
+eidesoul console --takeover
 ```
 
-Requirements: Python 3.11+, Postgres 14+ with `vector`, and the WhatsApp extra for that gateway.
-`sentence-transformers` downloads the embedder once (`paraphrase-multilingual-MiniLM-L12-v2`,
-384 dims); it powers both memory embeddings and pattern retrieval.
+`eidesoul run` loads the documents, acquires the primary lease, and starts the enabled gateways. A
+second instance stays standby and frozen until it takes over through the lease, so
+`eidesoul console --takeover` is the supported way to talk to a running deployment by hand.
 
-Dependency note: Mem0 pins `protobuf<7` while Neonize needs `protobuf>=7`. Install Neonize first,
-then Mem0 without its resolver:
+`eidesoul db check` prints the schema and content summary; `eidesoul selftest` exercises stores,
+tools, and the LLM once without starting a gateway.
 
-```bash
-pip install -e ".[whatsapp,vibe]"
-pip install "sentence-transformers>=5.2,<6"
-pip install --no-deps "mem0ai>=2.2,<3"
-pip install httpx openai posthog pydantic pytz qdrant-client protobuf
-```
+Install the optional extras you actually use, or none at all:
 
-Without Mem0 the bot still replies and `/status` reports `Memory: unavailable: <reason>`. Without
-`sentence-transformers` the pattern selector falls back to keyword scoring.
-
-## Config surfaces
-
-| File / document | Where | Contents |
+| Extra | Brings | Needed for |
 |---|---|---|
-| `config.yaml` | host only | host keys (`database`, `workspace`, `roles_file`, `sandbox`, `web_search`, `mcp`, `sync_documents`) plus `engine`, `gateways`, `soul` |
-| `roles.yaml` | host only, `0600` | every role under one `roles:` mapping |
-| `SOUL.md` / `persona` | DB + mirror | persona voice, Indonesian, never translated |
-| `engine` / `soul` sections | DB + `config.yaml` | LLM, reply, memory + privacy, approval, affect, ambient, language |
-| `role:<name>` | DB + `roles.yaml` | `tools`, `commands`, `users`, `context`, `priority`, `memory_admin` |
-
-After editing `engine`/`soul`, `SOUL.md`, or `roles.yaml` by hand: `python -m sanka config import`.
-To write files from the DB: `python -m sanka config export`. `sync_documents: false` disables
-seeding for tests. The loader never creates directories.
-
-## Character: SOUL.md and the pattern catalogue
-
-`SOUL.md` is the voice: identity, personality, register, behavioural rules, backstory, relationships,
-and four dialogue examples. It stays Indonesian and short, and it must not duplicate the moves.
-
-`sanka/data/patterns.json` is the runtime character sheet: conditional moves ("if this, then
-that") tagged with a register, a gender target, and toxicity/adult gates. Each turn the engine reads
-the last messages, computes the room register, and picks `engine.character.patterns` lines (0-6,
-default 0; the production host uses 4). Selection is deterministic: keyword hits first, then cosine
-similarity against precomputed MiniLM vectors. The `always` invariants (language lock, length,
-question limit, grounding, floor, curse trigger) need no keyword hit.
-
-The move reaches the model inside `## Room patterns (apply the move, never copy the wording)`. `say`
-lines are owner-approved exemplars and must come from an owner correction, never from raw private
-chat.
-
-Pattern lifecycle:
+| `memory` | Mem0 + `sentence-transformers` | semantic memory and pack retrieval |
+| `vibe` | torch + transformers | the affect signal from text |
+| `whatsapp` | Neonize + segno | the WhatsApp gateway |
+| `google` | Google API client, google-auth, httpx | the Google Workspace tool |
 
 ```bash
-python scripts/patterns.py --check                      # schema, gates, duplicates, reachability
-python scripts/patterns.py --embed                      # rebuild pattern_vectors.json (384 dims)
-python scripts/patterns.py --stats                      # counts per register and gate
-python scripts/patterns.py --build-xlsx workspace/review-patterns.xlsx
-python scripts/patterns.py --apply-xlsx workspace/review-patterns.xlsx   # 1:1 by id
+uv sync --extra memory --extra vibe
 ```
 
-`--apply-xlsx` writes back `konten`, `contoh`, `hindari`, `keys`, and `komentar`, and reports unknown
-ids. After editing content, rerun `--check` then `--embed` so the vectors match.
+Without `memory` the soul still talks; memory-dependent features degrade and report why. Every extra
+is removable: nothing in core imports it eagerly.
 
-Scenario replay against the live prompt:
+## soul.yaml
+
+One database is one soul, and `soul.yaml` is where that soul is written down. Every key except
+`name` is optional; unknown keys are ignored. After the first `db upgrade` the stored soul is
+authoritative and `soul.yaml` is its seed and mirror — edit the file, then run
+`eidesoul config import` to fold the change in, or `eidesoul config export` to write the mirror back
+out.
+
+```yaml
+name: Eidesoul                  # required; falls back to "Eidesoul"
+description: ""                 # one line, shown in the persona block
+language: id                    # installed catalog: id | en
+pronouns: aku
+gender: unspecified             # male | female | nonbinary | unspecified
+role: assistant                 # the active role
+roles: [assistant, companion, advisor]   # roles this soul may inhabit
+locale: id-ID                   # context locale used by prompts and currents
+background: ""                  # free text: where this soul comes from
+persona: ""                     # free-form markdown: personality, voice, values
+style:
+  patterns: []                  # pattern pack ids from eidesoul/library/patterns/
+  facts: []                     # fact pack ids from eidesoul/library/facts/
+  registers: []                 # optional allow-list of registers; empty = pack default
+  max_patterns: 0               # pattern moves per turn, 0..6
+  max_facts: 0                  # facts per turn, 0..6
+examples: []                    # optional [{user: "...", soul: "..."}]
+```
+
+Rules the loader enforces:
+
+- `name` must be non-empty, otherwise the default is used.
+- `gender` must be one of `male`, `female`, `nonbinary`, or `unspecified`; anything else falls back
+  to `unspecified` with a warning.
+- `roles` is never empty; if `role` is not listed in `roles`, it is prepended.
+- Pack ids and registers must match `^[a-z0-9][a-z0-9-]{0,63}$`; an invalid id is an error, not a
+  silent skip.
+- `max_patterns` and `max_facts` clamp to `0..6`.
+- `persona` is rendered in a fixed order: name, description, active role, available roles, locale,
+  background, free-form persona, then dialogue examples. Empty sections are omitted.
+
+The active role and the style packs are the two knobs that shape a turn. The active role decides
+permissions and working posture; the style packs decide how the soul sounds, and how much of that
+character data it may use per turn. A soul with no packs selected has no borrowed colloquialisms and
+no facts — just its own `persona` and `background`.
+
+A short example:
+
+```yaml
+name: Eidesoul
+language: id
+role: companion
+roles: [assistant, companion]
+locale: id-ID
+background: |
+  Grew up around a noisy port and still thinks in harbour stories.
+persona: |
+  ## Personality
+  Direct, dry, warm once trust is earned.
+style:
+  patterns: [jawatimur]
+  facts: [indonesia]
+  max_patterns: 3
+  max_facts: 2
+examples:
+  - user: "long day"
+    soul: "come here, sit down first"
+```
+
+## Character library
+
+Character data is a library the soul opts into, not something the engine ships in its voice.
+Nothing is selected by default: an empty `style` means no patterns and no facts.
+
+Packs live under `eidesoul/library/`:
+
+- `patterns/<pack>.json` — conditional moves ("if this, then that") tagged with a register, a
+  gender target, and toxicity and adult gates. A pack carries `version`, `model`, `language`, a
+  `lexicon` of conversational tokens, and the `patterns` rows.
+- `facts/<pack>.json` — short grounded facts, each with at least one source URL. A pack carries
+  `version`, `model`, `language`, and the `facts` rows.
+
+Two packs ship as worked examples: `jawatimur` (East Javanese conversational moves) and `indonesia`
+(Indonesian facts). Select them, ignore them, or write your own:
+
+```yaml
+style:
+  patterns: [jawatimur]
+  facts: [indonesia]
+  registers: [serious, laughter]   # optional: keep only these registers
+  max_patterns: 3
+  max_facts: 2
+```
+
+Selection is deterministic per turn: the engine reads the recent messages, derives the room
+register, and picks at most `max_patterns` moves and `max_facts` facts. Keyword hits come first, then
+cosine similarity against precomputed vectors. A pack that is missing, unreadable, or named outside
+the id pattern contributes nothing and logs a warning instead of failing the turn.
+
+No raw transcripts are shipped. A `say` line in a pattern pack is an approved exemplar, never a
+copied private message, and fact rows carry sources rather than conversation.
+
+Edit packs with the scripts, never by hand:
 
 ```bash
-python scripts/replay.py --scenario roast_group --limit 4
-python scripts/replay.py --no-regulate --no-judge --limit 6
+python scripts/patterns.py --pack jawatimur --check     # schema, gates, duplicates, reachability
+python scripts/patterns.py --pack jawatimur --embed     # rebuild the pack vectors
+python scripts/fakta.py --pack indonesia --check        # schema and vectors
+python scripts/fakta.py --pack indonesia --embed
+python scripts/grow.py --pack jawatimur --patterns      # propose new rows from a corpus
 ```
 
-It reads `tests/data/scenarios.json` (turns, per-speaker targets, rubric, bad examples), builds the
-turn with `character_block(...)`, applies `regulate`, and writes `workspace/replay-<id>.json` with a
-transcript and a `hard_fail` count. It never writes back to the scenarios or the catalogue.
+`--embed` must run after any content change so vectors match the rows. A new pack is a new file pair
+in the same directories with a name that matches the id pattern; no code change is required to
+select it.
+
+## Supported gateways
+
+This is the whole list; nowhere else in the docs enumerates gateways.
+
+- **CLI** — built in. The default config enables it, and it is how `eidesoul run` and
+  `eidesoul console` talk to a soul without any network transport.
+- **WhatsApp** — an optional extra. Install it with `uv sync --extra whatsapp` and enable it in the
+  `gateways` section; omit both and it does not exist for this deployment. The core never imports
+  it, and the default member role never receives its `send` tool.
+- **Your own embodiment** — a robot, a voice loop, a device, or a private HTTP endpoint is just
+  another gateway. Implement the inbound envelope and the gateway interface, ship the class as an
+  entry point under the `eidesoul.gateways` group or enable it by name, and it joins the same soul.
+
+A gateway is a transport, not a brain. It normalizes input, delivers replies, and owns whatever
+body-specific tool modules it wants to expose. Gateway-owned tools are granted to roles explicitly,
+exactly like core tools.
 
 ## Roles and permissions
 
-No handler has default permissions; a role that omits `tools`/`commands` denies everything. Tools
-come from six families (`shell`, `read`, `write`, `web_search`, `sandbox`, `mcp`); permission is
-checked only in `sanka/engine/tools/__init__.py:execute`. Addresses in several roles are unioned, and
-contexts are ordered by `priority` then name. `memory_admin: true` is required for global memory
-writes. `/approve` never calls the LLM and re-checks role permissions.
+Permissions come only from roles. Every role lists its own `tools` and `commands`; no handler
+carries a default, so a role that omits a section is denied everything in it. One `roles.yaml` holds
+all roles, and the stored role is authoritative with the file as its mirror.
 
-### Workspace roots
+```yaml
+roles:
+  member:
+    priority: 10
+    users: []
+    tools: [read, web_search, sandbox, memory, google]
+    commands: [help, ping, reset, whoami, status, tools]
+    context: ""
+    memory_admin: false
+  owner:
+    priority: 100
+    users: ["<your address>"]
+    tools: ["*"]
+    commands: ["*"]
+    memory_admin: true
+```
 
-A role without `*` in `tools` sees only `public/` (shared, read-only) and `scratch/<chat>/`
-(writable); every other workspace path stays private. A bare member path resolves under
-`scratch/<chat>/`, explicit `public/...` is shared, and `private/...` is denied. Trusted roles (`*`
-in `tools`) keep the whole workspace and may write `public/`. The sandbox follows the same rule:
-members get `/work/public` read-only and `/work/scratch` writable, trusted roles get `/work`.
-Cross-room reads stay allowed, but a reply carrying an eight-word verbatim span from another room is
-replaced before sending.
+- `tools` and `commands` accept exact names and `*`. A missing list denies everything.
+- Tool permission is checked at one place, when a tool is executed, so a tool that is visible but
+  not granted cannot run.
+- `approve` is a command permission like any other: only a role that lists it can clear a pending
+  action.
+- `memory_admin: true` is required to write the soul's global memory.
+- Addresses in several roles are unioned; `context` blocks are ordered by priority, then name.
+- A workspace scope follows the same grant: a role without `*` sees the shared read-only area and
+  its own scratch area, and the sandbox mirrors that with read-only shared mounts and one writable
+  scratch mount.
 
-### Google Workspace
+Hand-editing `roles.yaml` is supported: run `eidesoul config import` afterwards so the database sees
+it.
 
-`google` is an in-process tool (family `mcp`, no Node server or `mcp__*` grant). One service account
-sees every file shared with it; each sender links a Google identity once in a DM through the device
-flow (`openid email profile`). `list/read/write` check the file's explicit user permission for that
-verified email and reject `anyone`/`domain` link-sharing. Set `GOOGLE_SERVICE_ACCOUNT_PATH`,
-`GOOGLE_OAUTH_CLIENT_ID`, and `GOOGLE_OAUTH_CLIENT_SECRET`. The OAuth client is External, type
-"TVs and Limited Input devices", scopes `openid email profile` (no Drive/Docs/Sheets user scopes,
-so no sensitive-scope review).
+## Safety
 
+Two independent mechanisms, both fail-closed.
 
-## Safety and approvals
+**Approvals.** Sensitive actions — `shell`, `sandbox`, and internal `settings` changes — pass the
+safety policy before they run. `approval.mode` is `yolo` by default (auto-approve, meant for a
+trusted single-operator deployment), `strict` parks every non-read-only action, and `off` disables
+the check entirely. `off` is a documented risk, not a convenience: nothing stands between the model
+and the host. `/approve` resolves a pending action, never calls the LLM, and re-checks the role's
+permissions first.
 
-| Level | Meaning | Group ceiling | DM ceiling |
-|---|---|---|---|
-| 0 | public | fluid | fluid |
-| 1 | team | fluid | fluid |
-| 2 | personal | fluid | fluid |
-| 3 | sensitive | confirmation | fluid |
-| 4 | secret | confirmation | confirmation |
-| 5 | credentials | never stored | never stored |
+**The sandbox guard.** Every command that reaches the `sandbox` tool passes two layers, in order:
 
-Levels 0-2 stay fluid everywhere; level 3 in a group and level 4 ask through `approvals`; vetoed
-entries are never shown or disclosed, and the subject of a memory (not the speaker) may veto it. The
-auditor pass runs only when a risky entry exists.
+1. *Deterministic.* A fixed rule set rejects host escape and destructive patterns — filesystem
+   wipes, device writes, kernel and namespace tools, container and firewall control, fetch-to-shell
+   pipes, privilege escalation, service management, and the classic fork bomb. Simple read-only
+   commands are allowed on the spot with no model call. Anything else is inconclusive.
+2. *Classifier.* Only the inconclusive commands reach a small, fast LLM classifier with a short
+   timeout. It answers one question: is this command trying to escape, attack infrastructure,
+   exfiltrate secrets, persist, or destroy host data? Unknown counts as suspicious.
 
-`shell` and `sandbox` calls and internal `settings` changes pass `SafetyPolicy`/`approvals`; the
-default mode is `yolo` (auto-approve), and `off` disables approval checks entirely - document the risk
-if you switch. Levels for tone come from `engine.character`: `toxicity` 0-4 and `adult_memes` 0-3,
-with a permanent floor (no sexual content with minors, no doxxing, no credible threats, no hate).
+The verdict decides who proceeds. A command the deterministic layer blocks is denied for everyone,
+including an approver. A pending or suspicious command becomes a pending approval for a role that
+holds `approve`, and is denied outright for every other role — a member is never parked in a queue
+it cannot clear. `approved=True` from `/approve` bypasses both layers, after the permission
+re-check. If the classifier is unavailable, times out, or returns something unparsable, the result
+is closed: pending for an approver, denied for everyone else. Commands longer than
+`guard.max_command_chars` are treated the same way.
 
-The sandbox fails closed unless `sandbox.network` is a dedicated internal network (not `none`,
-`bridge`, `host`, or `default`) and `sandbox.proxy` points at the egress proxy. `compose.example.yaml`
-runs `sandbox-proxy` (Squid) on the internal `sanka-sandbox` network; `deploy/sandbox-proxy/squid.conf`
-blocks private destinations. `sandbox.host_workspace` must be the host path that mirrors
-`config.workspace`, with `public/` and `scratch/` present.
+`guard.enabled: false` disables both layers; the sandbox then runs whatever it is handed. Use it
+only while debugging a rule, never in a deployment that accepts untrusted input. Logs record the
+verdict, the reason, and the conversation — never the command body.
 
-## Database, lease, and console
+The sandbox itself runs in a disposable container with only the shared and scratch mounts, on a
+dedicated internal network behind an egress proxy, with a timeout, a PID limit, memory, and CPU
+caps. Private destinations are blocked at the proxy, so a command cannot reach the host or the
+local network even when it is allowed to run.
+
+## Optional integrations
 
 ```bash
-python -m sanka db check                       # schema and row summary
-python -m sanka db backup                      # pg_dump
-python -m sanka console --takeover             # local REPL takes the lease
+uv sync --extra memory --extra vibe                     # memory + affect from source
+uv sync --extra whatsapp --extra google                 # optional gateway and integration
 ```
-
-`engine_lease` holds exactly one heartbeat. Other instances stay standby and frozen; `sanka console`
-without `--takeover` joins as a follower, and the production instance refreezes within about five
-seconds of losing the lease.
-
-## Migration from SQLite or the split layout
 
 ```bash
-python -m sanka config migrate --dir .        # fold the old layout into config.yaml + roles.yaml
-python -m sanka db import                     # old .sanka data
-python -m sanka memory migrate                # memory_legacy -> Mem0
-python -m sanka db upgrade && python -m sanka db check
+docker build --build-arg EXTRAS="--extra memory --extra vibe --extra whatsapp --extra google" .
 ```
 
-## Development
+- **Memory** (`memory`): Mem0 with a local multilingual embedder and pgvector. Without it, the soul
+  replies and reports why memory is unavailable.
+- **Affect** (`vibe`): a small emotion classifier that informs tone. Without it, tone comes from
+  style and character settings alone.
+- **WhatsApp** (`whatsapp`): the optional gateway. Never enabled by default.
+- **Google Workspace** (`google`): an in-process tool for files shared with a service account, with
+  per-sender identity linking. Without the extra the tool stays discoverable but inert and returns a
+  clear error instead of a traceback.
 
-```bash
-.venv/bin/python -m pytest -q
-.venv/bin/python -m sanka selftest
-python scripts/patterns.py --check
-ruff check . && ruff format --check .
-pytest -q --cov=sanka --cov-report=xml
-```
+Secrets belong in `.env` only. `config.yaml`, `roles.yaml`, `soul.yaml`, and `.env` are never
+committed.
 
-The suite is small and covers repo contracts only: routing/format/permission, gateway contract,
-lease, approval, cross-chat memory, privacy/disclosure, language selection, pattern selection, the
-pattern CLI, and the Neonize reply path. `sonar-project.properties` is ready for SonarCloud; code
-must stay at complexity 12 or lower.
+## Credits
 
-## Removed corpus pipeline
+Eidesoul stands on a lot of other people's work.
 
-The old collection and training toolchain is gone: no fetch/ingest scripts, no Excel review, no
-training loop, no downloaded dataset inbox, no `conversation_datasheet.json`. The character data is
-the hand-authored catalogue plus `SOUL.md`, and the replay harness is the only evaluation entry
-point. A future corpus refresh would be a new tool, not part of this repository.
+**Runtime and dependencies:** Python, SQLAlchemy, psycopg, pgvector, the OpenAI Python SDK, the MCP
+Python SDK, PyYAML, and DDGS.
 
----
+**Memory and character:** Mem0; sentence-transformers with the
+`paraphrase-multilingual-MiniLM-L12-v2` model.
 
-# Bahasa Indonesia
+**Affect:** `Aardiiiiy/EmoSense-ID-Indonesian-Emotion-Classifier` and the vendored emotion engine,
+whose license ships as `eidesoul/vendor/LICENSE.emotion-engine`.
 
-Sanka adalah mesin jiwa yang menetap: satu identitas, satu memori, banyak permukaan chat. Engine
-(`sanka/engine/`) mengurus giliran, config, memori, emosi, dan tool. Gateway cuma membawa pesan
-masuk dan keluar; core tidak pernah mengimpor `neonize` atau `sanka.gateways`.
+**Optional gateways and integrations:** Neonize, segno, the Google API Python Client, google-auth,
+and httpx.
 
-- **Satu database = satu jiwa.** Transkrip, memori Mem0, affect, gaya, skill, resep, dokumen
-  `engine`/`soul`/`persona`/`role:<name>`, approval, dan `engine_lease` ada di Postgres.
-- **Satu primary.** Instance lain standby dan beku; `/freeze` atau `sanka console --takeover`
-  memindahkan heartbeat lewat lease, bukan dua jantung.
-- **Identitas lintas chat.** Memori semantik hanya ditanya untuk `global` + `person:<pengirim>` +
-  `chat:<chat ini>`. Transkrip mentah tetap per chat.
-- **Privasi itu lapisan pengungkapan.** Entri membawa level 0-4; obrolan biasa tetap cair.
-- **Config adalah data.** `config.yaml` + `roles.yaml` + `SOUL.md` adalah seed dan mirror dokumen DB.
-- **Karakter adalah katalog pola.** `sanka/data/patterns.json` menyimpan gerakan runtime; `SOUL.md`
-  menyimpan suara. Tidak ada transkrip mentah di repo.
+**Thanks:** the discussion groups and testers referenced during development (see `references/`), and
+everyone who tried the early builds and reported what broke. No raw transcripts from those
+conversations are shipped: the character library contains authored exemplars and sourced facts, not
+chat logs.
 
-Lima dokumen repo: `TASK.md`, `README.md`, `LOG.md`, `AGENTS.md`, `SOUL.md`.
+## License
 
-## Arsitektur
-
-```mermaid
-flowchart LR
-  WA[Gateway WhatsApp] -->|Inbound| AG[Giliran agent]
-  CLI[Gateway CLI] -->|Inbound| AG
-  AG --> LLM[LLM + keluarga tool]
-  AG --> PAT[patterns.json + MiniLM]
-  AG --> MEM[Memori Mem0]
-  AG --> PRIV[Kebijakan privasi + auditor]
-  AG --> AFF[Affect + gaya + vibe]
-  AG --> DB[(Postgres + pgvector)]
-  AG -->|deliver_*| WA
-  AG -->|deliver_*| CLI
-  SUP[Supervisor + lease] --> AG
-  DB --- SUP
-```
-
-## Quickstart (Postgres + pgvector)
-
-```bash
-# 1. Database: Postgres 14+ dengan pgvector
-cp compose.example.yaml compose.yaml          # ganti password
-podman compose -f compose.yaml up -d postgres
-
-# 2. Scaffold config.yaml, roles.yaml, SOUL.md, dan .env
-python -m sanka init --dir .
-
-# 3. Isi .env
-#    OPENCODE_GO_API_KEY=...
-#    SANKA_DATABASE_URL=postgresql+psycopg://sanka:CHANGE_ME@127.0.0.1:5432/sanka
-
-# 4. Schema + dokumen + verifikasi
-python -m sanka db upgrade
-python -m sanka db check
-
-# 5. Aktifkan WhatsApp di `gateways`, lalu jalankan primary
-python -m sanka run
-
-# Console lokal ke DB yang sama (mengambil lease)
-python -m sanka console --takeover
-```
-
-Butuh Python 3.11+, Postgres 14+ dengan `vector`, dan extra WhatsApp untuk gateway itu.
-`sentence-transformers` mengunduh embedder sekali (`paraphrase-multilingual-MiniLM-L12-v2`, 384
-dimensi); dipakai untuk embedding memori dan pengambilan pola.
-
-Catatan dependensi: Mem0 mem-pin `protobuf<7` sementara Neonize butuh `protobuf>=7`. Pasang Neonize
-dulu, lalu Mem0 tanpa resolver-nya:
-
-```bash
-pip install -e ".[whatsapp,vibe]"
-pip install "sentence-transformers>=5.2,<6"
-pip install --no-deps "mem0ai>=2.2,<3"
-pip install httpx openai posthog pydantic pytz qdrant-client protobuf
-```
-
-Tanpa Mem0 bot tetap menjawab dan `/status` melaporkan `Memory: unavailable: <alasan>`. Tanpa
-`sentence-transformers` pemilih pola jatuh ke pencocokan kata kunci.
-
-## Permukaan config
-
-| Berkas / dokumen | Lokasi | Isi |
-|---|---|---|
-| `config.yaml` | host saja | kunci host (`database`, `workspace`, `roles_file`, `sandbox`, `web_search`, `mcp`, `sync_documents`) plus `engine`, `gateways`, `soul` |
-| `roles.yaml` | host saja, `0600` | semua role dalam satu mapping `roles:` |
-| `SOUL.md` / `persona` | DB + mirror | suara persona, Indonesia, tidak diterjemahkan |
-| bagian `engine` / `soul` | DB + `config.yaml` | LLM, reply, memori + privasi, approval, affect, ambient, bahasa |
-| `role:<name>` | DB + `roles.yaml` | `tools`, `commands`, `users`, `context`, `priority`, `memory_admin` |
-
-Setelah mengedit `engine`/`soul`, `SOUL.md`, atau `roles.yaml` manual: `python -m sanka config
-import`. Untuk menulis berkas dari DB: `python -m sanka config export`. `sync_documents: false`
-mematikan seeding untuk tes. Loader tidak pernah membuat direktori.
-
-## Karakter: SOUL.md dan katalog pola
-
-`SOUL.md` adalah suara: identitas, kepribadian, register, aturan perilaku, latar, hubungan, dan empat
-contoh dialog. Isinya tetap Indonesia, pendek, dan tidak menduplikasi gerakan.
-
-`sanka/data/patterns.json` adalah lembar karakter runtime: gerakan bersyarat ("kalau ini, maka
-itu") dengan tag register, target gender, dan gate toxicity/adult. Tiap turn engine membaca pesan
-terakhir, menghitung register ruangan, lalu memilih `engine.character.patterns` baris (0-6, default 0;
-host produksi memakai 4). Pemilihan deterministik: kata kunci dulu, lalu cosine vektor MiniLM yang
-dipra-hitung. Pola `always` (kunci bahasa, panjang, batas pertanyaan, grounding, floor, pemicu
-umpatan) tidak butuh kata kunci.
-
-Gerakan masuk ke prompt sebagai `## Room patterns (apply the move, never copy the wording)`. Baris
-`say` adalah contoh yang disetujui pemilik dan harus berasal dari koreksi pemilik, bukan chat pribadi
-mentah.
-
-Siklus hidup pola:
-
-```bash
-python scripts/patterns.py --check                      # skema, gate, duplikat, keterjangkauan
-python scripts/patterns.py --embed                      # bangun ulang pattern_vectors.json (384 dim)
-python scripts/patterns.py --stats                      # hitungan per register dan gate
-python scripts/patterns.py --build-xlsx workspace/review-patterns.xlsx
-python scripts/patterns.py --apply-xlsx workspace/review-patterns.xlsx   # 1:1 per id
-```
-
-`--apply-xlsx` menulis balik `konten`, `contoh`, `hindari`, `keys`, dan `komentar`, serta melaporkan
-id yang tidak dikenal. Setelah mengubah konten, jalankan `--check` lalu `--embed` supaya vektor
-cocok.
-
-Replay skenario terhadap prompt hidup:
-
-```bash
-python scripts/replay.py --scenario roast_group --limit 4
-python scripts/replay.py --no-regulate --no-judge --limit 6
-```
-
-Skrip membaca `tests/data/scenarios.json` (turn, target per pembicara, rubrik, contoh buruk),
-merakit turn dengan `character_block(...)`, menjalankan `regulate`, lalu menulis
-`workspace/replay-<id>.json` berisi transkrip dan hitungan `hard_fail`. Skrip ini tidak pernah
-menulis balik ke skenario atau katalog.
-
-## Role dan izin
-
-Tidak ada handler yang punya izin default; role yang tidak menyebut `tools`/`commands` menolak
-semuanya. Tool berasal dari enam keluarga (`shell`, `read`, `write`, `web_search`, `sandbox`, `mcp`)
-dan izin diperiksa hanya di `sanka/engine/tools/__init__.py:execute`. Alamat di beberapa role
-digabung, konteks diurutkan menurut `priority` lalu nama. `memory_admin: true` wajib untuk menulis
-memori global. `/approve` tidak pernah memanggil LLM dan memeriksa ulang izin role.
-
-### Root workspace
-
-Role tanpa `*` di `tools` hanya melihat `public/` (bersama, read-only) dan `scratch/<chat>/` (bisa
-ditulis); path workspace lain tetap privat. Path polos anggota dipetakan ke `scratch/<chat>/`, `public/`
-eksplisit berarti bersama, dan `private/...` ditolak. Role tepercaya (`*` di `tools`) tetap memegang
-seluruh workspace dan boleh menulis `public/`. Sandbox mengikuti aturan yang sama: anggota mendapat
-`/work/public` read-only dan `/work/scratch` yang bisa ditulis, role tepercaya mendapat `/work`. Baca
-lintas ruang tetap boleh, tetapi balasan yang memuat delapan kata verbatim dari room lain diganti
-sebelum dikirim.
-
-### Google Workspace
-
-`google` adalah tool in-process (keluarga `mcp`, tanpa server Node atau izin `mcp__*`). Satu service
-account melihat setiap file yang dibagikan kepadanya; tiap pengirim menautkan identitas Google sekali
-lewat DM dengan device flow (`openid email profile`). `list/read/write` memeriksa izin user eksplisit
-untuk email terverifikasi itu dan menolak link-sharing `anyone`/`domain`. Isi
-`GOOGLE_SERVICE_ACCOUNT_PATH`, `GOOGLE_OAUTH_CLIENT_ID`, dan `GOOGLE_OAUTH_CLIENT_SECRET`. OAuth
-client-nya External, tipe "TVs and Limited Input devices", scope `openid email profile` (tanpa scope
-Drive/Docs/Sheets milik user, jadi tidak perlu review sensitive scope).
-
-## Keamanan dan approval
-
-| Level | Arti | Plafon grup | Plafon DM |
-|---|---|---|---|
-| 0 | publik | cair | cair |
-| 1 | tim | cair | cair |
-| 2 | pribadi | cair | cair |
-| 3 | sensitif | konfirmasi | cair |
-| 4 | rahasia | konfirmasi | konfirmasi |
-| 5 | kredensial | tidak disimpan | tidak disimpan |
-
-Level 0-2 cair di mana saja; level 3 di grup dan level 4 meminta konfirmasi lewat `approvals`; entri
-yang diveto tidak pernah ditampilkan atau diungkap, dan yang boleh memveto adalah subjek memori, bukan
-pembicaranya. Auditor hanya jalan kalau ada entri berisiko.
-
-`shell`, `sandbox`, dan perubahan internal `settings` melewati `SafetyPolicy`/`approvals`; mode
-default `yolo` (otomatis setuju), dan `off` mematikan pemeriksaan approval sepenuhnya - catat
-risikonya kalau diubah. Level nada datang dari `engine.character`: `toxicity` 0-4 dan `adult_memes`
-0-3, dengan floor permanen (tanpa konten seksual dengan anak, doxing, ancaman kredibel, kebencian).
-
-Sandbox gagal tertutup kecuali `sandbox.network` adalah network internal khusus (bukan `none`,
-`bridge`, `host`, atau `default`) dan `sandbox.proxy` menunjuk proxy egress. `compose.example.yaml`
-menjalankan `sandbox-proxy` (Squid) di network internal `sanka-sandbox`;
-`deploy/sandbox-proxy/squid.conf` memblokir tujuan privat. `sandbox.host_workspace` harus path host
-yang mencerminkan `config.workspace`, dengan `public/` dan `scratch/` sudah ada.
-
-## Database, lease, dan console
-
-```bash
-python -m sanka db check                       # ringkasan schema dan baris
-python -m sanka db backup                      # pg_dump
-python -m sanka console --takeover             # REPL lokal mengambil lease
-```
-
-`engine_lease` hanya punya satu heartbeat. Instance lain standby dan beku; `sanka console` tanpa
-`--takeover` ikut sebagai follower, dan instance produksi membeku lagi sekitar lima detik setelah
-kehilangan lease.
-
-## Migrasi dari SQLite atau layout lama
-
-```bash
-python -m sanka config migrate --dir .        # lipat layout lama ke config.yaml + roles.yaml
-python -m sanka db import                     # data .sanka lama
-python -m sanka memory migrate                # memory_legacy -> Mem0
-python -m sanka db upgrade && python -m sanka db check
-```
-
-## Pengembangan
-
-```bash
-.venv/bin/python -m pytest -q
-.venv/bin/python -m sanka selftest
-python scripts/patterns.py --check
-ruff check . && ruff format --check .
-pytest -q --cov=sanka --cov-report=xml
-```
-
-Suite-nya kecil dan hanya menguji kontrak repo: routing/format/izin, kontrak gateway, lease,
-approval, memori lintas chat, privasi/pengungkapan, pemilihan bahasa, pemilihan pola, CLI pola, dan
-jalur balasan Neonize. `sonar-project.properties` siap untuk SonarCloud; kompleksitas kode maksimal
-12.
-
-## Pipeline korpus yang dihapus
-
-Toolchain pengumpulan dan pelatihan lama sudah hilang: tidak ada skrip fetch/ingest, tidak ada review
-Excel, tidak ada loop pelatihan, tidak ada inbox dataset unduhan, tidak ada
-`conversation_datasheet.json`. Data karakter adalah katalog yang ditulis tangan plus `SOUL.md`, dan
-harness replay adalah satu-satunya pintu evaluasi. Kalau nanti perlu menyegarkan korpus, itu tool
-baru, bukan bagian dari repo ini.
+This repository does not declare a project license. Every third-party component keeps its own
+license and attribution; the vendored emotion engine carries its license next to its source, and the
+remaining dependencies are distributed under the terms of their upstream projects. Review those
+terms before redistributing a build.

@@ -1,14 +1,15 @@
-"""Kontrak gateway CLI: stdin -> Inbound, output ke stdout, /quit berhenti."""
+"""CLI gateway contract: stdin -> Inbound, output to stdout, /quit stops."""
 
 from __future__ import annotations
 
 import asyncio
 import io
 
-from sanka.engine.config import GatewaySettings
-from sanka.engine.context import WorkingMemory
-from sanka.engine.stores.history import HistoryStore
 from support import build_config, database
+
+from eidesoul.engine.config import GatewaySettings
+from eidesoul.engine.context import WorkingMemory
+from eidesoul.engine.stores.history import HistoryStore
 
 
 class RecordingAgent:
@@ -22,7 +23,7 @@ class RecordingAgent:
 
 
 def make_cli(tmp_path):
-    from sanka.gateways.cli.gateway import CliGateway
+    from eidesoul.gateways.cli.gateway import CliGateway
 
     config = build_config(tmp_path)
     db = database(tmp_path)
@@ -61,7 +62,7 @@ def test_send_text_prints_with_prefix(tmp_path, capsys) -> None:
     message_id = asyncio.run(gateway.send_text("cli:local", "halo dunia"))
 
     out = capsys.readouterr().out
-    assert "Sanka: halo dunia" in out
+    assert "Eidesoul: halo dunia" in out
     assert message_id.startswith("cli-")
 
 

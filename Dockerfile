@@ -9,7 +9,7 @@ RUN apt-get update \
         ca-certificates ffmpeg libmagic1 tzdata postgresql-client \
     && rm -rf /var/lib/apt/lists/*
 
-# CLI docker statis untuk tool `sandbox`; daemon tetap di host (socket di-mount terpisah).
+# Static docker CLI for the `sandbox` tool; the daemon stays on the host (mounted socket).
 ARG DOCKER_CLI_VERSION=27.5.1
 RUN apt-get update && apt-get install -y --no-install-recommends curl \
     && curl --proto '=https' --proto-redir '=https' -fsSL "https://download.docker.com/linux/static/stable/x86_64/docker-${DOCKER_CLI_VERSION}.tgz" \
@@ -18,33 +18,38 @@ RUN apt-get update && apt-get install -y --no-install-recommends curl \
     && apt-get purge -y curl && apt-get autoremove -y \
     && rm -rf /var/lib/apt/lists/*
 
-# uv memasang dependency dari uv.lock (versi + hash terkunci), bukan resolusi pip bebas.
+# uv installs the locked dependency set (pinned versions and hashes), not a free pip resolve.
 COPY --from=ghcr.io/astral-sh/uv:0.13.6 /uv /uvx /bin/
 
 WORKDIR /app
 
-COPY pyproject.toml uv.lock ./
-RUN uv sync --locked --no-build --no-install-project --extra whatsapp --extra vibe --extra memory
+# Optional extras are a build argument; the defaults cover memory and the emotion model.
+# Add gateways or integrations with:
+#   docker build --build-arg EXTRAS="--extra memory --extra vibe --extra whatsapp --extra google" .
+ARG EXTRAS="--extra memory --extra vibe"
 
-COPY sanka ./sanka
-RUN uv sync --locked --no-build --extra whatsapp --extra vibe --extra memory
+COPY pyproject.toml uv.lock ./
+RUN uv sync --locked --no-build --no-install-project $EXTRAS
+
+COPY eidesoul ./eidesoul
+RUN uv sync --locked --no-build $EXTRAS
 
 ENV PATH="/app/.venv/bin:$PATH" \
-    HF_HOME=/app/.sanka/hf
+    HF_HOME=/app/.eidesoul/hf
 
-RUN useradd --create-home --uid 1000 --shell /usr/sbin/nologin sanka \
-    && mkdir -p /app/.sanka \
-    && chown -R sanka:sanka /app
+RUN useradd --create-home --uid 1000 --shell /usr/sbin/nologin eidesoul \
+    && mkdir -p /app/.eidesoul \
+    && chown -R eidesoul:eidesoul /app
 
-# Harus SETELAH useradd: grup docker mengikuti gid socket di host.
+# Must come AFTER useradd: the docker group follows the socket gid on the host.
 ARG DOCKER_GID=994
 RUN groupadd -g "${DOCKER_GID}" docker || true \
-    && usermod -aG docker sanka
+    && usermod -aG docker eidesoul
 
-USER sanka
-# Model embedder Mem0 diunduh sekali saat build ke cache milik user sanka.
+USER eidesoul
+# The Mem0 embedder is downloaded once at build time into the eidesoul user cache.
 RUN python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2')"
 
 STOPSIGNAL SIGINT
-# `sanka run` membuat schema, men-seed dokumen, lalu acquire lease primary.
-CMD ["python", "-m", "sanka", "run"]
+# `eidesoul run` creates the schema, seeds the documents, then acquires the primary lease.
+CMD ["python", "-m", "eidesoul", "run"]

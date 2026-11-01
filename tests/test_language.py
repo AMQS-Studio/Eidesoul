@@ -5,11 +5,11 @@ from __future__ import annotations
 import asyncio
 
 import yaml
-
-from sanka.engine.prompts import system_prompt
-from sanka.engine.roles import Role
-from sanka.engine.soul import Soul, normalize_language
 from support import inbound_message, make_agent, make_runtime
+
+from eidesoul.engine.prompts import system_prompt
+from eidesoul.engine.roles import Role
+from eidesoul.engine.soul import Soul, normalize_language
 
 CHAT = "cli:local"
 
@@ -36,14 +36,14 @@ def test_language_command_writes_soul_document_and_mirror(tmp_path, monkeypatch)
     assert result == "🗣️ Reply language set to en."
     assert env.agent.soul.language == "en"
     assert "language: en" in env.documents.get("soul")
-    mirror = yaml.safe_load(env.paths.config.read_text(encoding="utf-8"))
-    assert mirror["soul"]["language"] == "en"
+    mirror = yaml.safe_load(env.paths.soul_yaml.read_text(encoding="utf-8"))
+    assert mirror["language"] == "en"
     assert run_language(env, "") == "🗣️ Reply language: en. Available: en, id."
-    assert run_command(env, "ping") == "🏓 Pong! Sanka is alive and ready."
+    assert run_command(env, "ping") == "🏓 Pong! Eidesoul is alive and ready."
 
     assert run_language(env, "id") == "🗣️ Bahasa balasan diatur ke id."
     assert env.agent.soul.language == "id"
-    assert run_command(env, "ping") == "🏓 Pong! Sanka hidup dan siap."
+    assert run_command(env, "ping") == "🏓 Pong! Eidesoul hidup dan siap."
 
 
 def test_language_command_rejects_unknown_language(tmp_path, monkeypatch) -> None:

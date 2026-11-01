@@ -1,4 +1,4 @@
-"""Kontrak settings: baca/ubah dokumen, validasi, mirror, audit, approval, reload."""
+"""Settings contract: read/change documents, validation, mirror, audit, approval, reload."""
 
 from __future__ import annotations
 
@@ -6,10 +6,10 @@ import asyncio
 
 import yaml
 from sqlalchemy import select
-
-from sanka.engine.schema import config_changes
-from sanka.engine.tools import execute
 from support import make_runtime
+
+from eidesoul.engine.schema import config_changes
+from eidesoul.engine.tools import execute
 
 CHAT = "cli:local"
 
@@ -18,7 +18,9 @@ def run(env, action: str, **args) -> str:
     ctx = env.agent.tool_context(
         CHAT, "local", (env.config.roles.default_role(),), env.gateway
     )
-    return asyncio.run(execute(env.agent.tools.by_name, "settings", {"action": action, **args}, ctx))
+    return asyncio.run(
+        execute(env.agent.tools.by_name, "settings", {"action": action, **args}, ctx)
+    )
 
 
 def test_schema_and_get(tmp_path, monkeypatch) -> None:
@@ -29,7 +31,7 @@ def test_schema_and_get(tmp_path, monkeypatch) -> None:
     assert "engine.memory.max_items" in schema
 
     assert run(env, "get", file="engine", path="default_role").strip() == "member"
-    assert "Kamu Sanka" in run(env, "get", file="persona")
+    assert "Kamu Eidesoul" in run(env, "get", file="soul")
 
 
 def test_set_soul_language_updates_runtime_and_mirror(tmp_path, monkeypatch) -> None:
@@ -40,8 +42,8 @@ def test_set_soul_language_updates_runtime_and_mirror(tmp_path, monkeypatch) -> 
 
     assert result.startswith("ok:")
     assert env.agent.soul.language == "en"
-    mirror = yaml.safe_load(env.paths.config.read_text(encoding="utf-8"))
-    assert mirror["soul"]["language"] == "en"
+    mirror = yaml.safe_load(env.paths.soul_yaml.read_text(encoding="utf-8"))
+    assert mirror["language"] == "en"
     assert env.agent.soul.language == "en"
 
 
@@ -56,14 +58,14 @@ def test_invalid_engine_value_does_not_change_document(tmp_path, monkeypatch) ->
     assert env.agent.config.memory.backend == "mem0"
 
 
-def test_write_persona_changes_prompt_and_mirror(tmp_path, monkeypatch) -> None:
+def test_write_soul_changes_prompt_and_mirror(tmp_path, monkeypatch) -> None:
     env = make_runtime(tmp_path, monkeypatch, settings_approval=False)
+    content = "name: Eidesoul\npersona: Persona baru yang tenang.\n"
 
-    result = run(env, "write", file="persona", content="Persona baru yang tenang.")
+    result = run(env, "write", file="soul", content=content)
 
     assert result.startswith("ok:")
-    assert env.agent.soul.persona == "Persona baru yang tenang."
-    assert env.paths.soul_md.read_text(encoding="utf-8") == "Persona baru yang tenang."
+    assert env.paths.soul_yaml.read_text(encoding="utf-8") == content
     assert "Persona baru yang tenang." in env.agent.soul.persona
 
 
@@ -123,7 +125,7 @@ def test_gateway_edit_updates_gateways_mapping(tmp_path, monkeypatch) -> None:
     assert result.startswith("ok:")
     raw = yaml.safe_load(env.paths.config.read_text(encoding="utf-8"))
     assert raw["gateways"]["cli"]["chat_name"] == "Terminal 2"
-    assert "engine" in raw and "soul" in raw
+    assert "engine" in raw and "soul_file" in raw and "soul" not in raw
 
 
 def test_host_rejects_reserved_sections(tmp_path, monkeypatch) -> None:

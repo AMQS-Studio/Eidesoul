@@ -1,13 +1,14 @@
 #!/usr/bin/env python3
-"""Kolektor bahan riset bahasa percakapan: Muse memilih query, skrip mencari, Muse mengekstrak.
+"""Conversational-language research: Muse picks queries, the script searches, Muse extracts.
 
-Satu area = satu worker Muse tanpa tool. Worker menurunkan sendiri sudut, sub-topik, dan query-nya;
-skrip hanya menjalankan query itu, mengumpulkan hasil, lalu meminta worker yang sama mengekstrak
-kalimat/idiom/meme/konteks yang terbukti dipakai berulang. Keluaran = data mentah + workbook audit;
-studi pola dan training tidak dikerjakan di sini.
+One area = one Muse worker without tools. The worker derives its own angles, sub-topics, and
+queries; the script only runs those queries, gathers the results, then asks the same worker to
+extract sentences/idioms/memes/context that are demonstrably reused. Output = raw data + an audit
+workbook; pattern study and training do not happen here.
 
-Status topik (no_hits/kering/bad_json/timeout) tidak punya kolom sendiri karena kolom `ringkasan`
-dikunci plan; status ditempel di sel `model` dan dicetak ke konsol.
+Topic status (no_hits/dry/bad_json/timeout) has no column of its own because the `ringkasan`
+columns are fixed by the plan; the status is appended to the `model` cell and printed to the
+console.
 """
 
 from __future__ import annotations
@@ -33,85 +34,85 @@ import xlsx  # noqa: E402
 from _paths import safe_path  # noqa: E402
 from patterns import REGISTERS, TARGETS  # noqa: E402
 
-from sanka.engine.config import load_config, load_env  # noqa: E402
-from sanka.engine.llm import LLM  # noqa: E402
-from sanka.engine.patterns import load_patterns  # noqa: E402
-from sanka.engine.tools.web_search import _search_sync  # noqa: E402
+from eidesoul.engine.config import load_config, load_env  # noqa: E402
+from eidesoul.engine.llm import LLM  # noqa: E402
+from eidesoul.engine.patterns import load_patterns  # noqa: E402
+from eidesoul.engine.tools.web_search import _search_sync  # noqa: E402
 
 OUT = ROOT / "workspace" / "research"
 OUT_ROOT = OUT.parent
-MODEL = "muse-spark-1.3-contributor"  # satu-satunya varian Muse yang tersedia di plan Go
+MODEL = "muse-spark-1.3-contributor"  # the only Muse variant available on the Go plan
 MIN_DOMAINS, MIN_REPEATS, MIN_CONFIDENCE, GROUP_MIN = 2, 3, 2, 3
 QUERIES_PER_ROUND, HITS_PER_QUERY, QUERY_ROUNDS = 4, 6, 3
 SIMILARITY, DUPLICATE, MIRROR = 0.7, 0.80, 0.55
 TEXT_MIN, TEXT_MAX, MEANING_MAX = 3, 240, 200
-SESSION = "sanka-research"
+SESSION = "eidesoul-research"
 
 TOPICS: dict[str, dict] = {
-    "T1": {"label": "grup cowok Surabaya"},
-    "T2": {"label": "Seputar Kampus UIN Malang"},
-    "T3": {"label": "organisasi dan panitia kampus"},
-    "T4": {"label": "curhat dan comfort"},
-    "T5": {"label": "romance dan gombal"},
-    "T6": {"label": "pantun puisi lirik"},
-    "T7": {"label": "meme yang masih hidup"},
-    "T8": {"label": "satire politik"},
-    "T9": {"label": "stiker dan maksudnya"},
-    "T10": {"label": "singkatan dan partikel chat"},
-    "T11": {"label": "bahasa Jawa Timuran"},
-    "T12": {"label": "batas kosakata kasar"},
-    "T13": {"label": "menolak dan mengalihkan"},
-    "T14": {"label": "menutup obrolan"},
-    "T15": {"label": "konflik dan baikan"},
-    "T16": {"label": "konteks Indonesia terbaru"},
-    "T17": {"label": "kultur Malang"},
-    "T18": {"label": "bola dan suporter"},
-    "T19": {"label": "fotografi"},
-    "T20": {"label": "kerja dan karir"},
-    "T21": {"label": "kultur Jawa Jogja Solo"},
-    "T22": {"label": "kultur Sunda Bandung"},
-    "T23": {"label": "kultur Indonesia umum"},
-    "T24": {"label": "bahasa daerah di grup campuran"},
+    "T1": {"label": "Surabaya boys group chat"},
+    "T2": {"label": "UIN Malang campus life"},
+    "T3": {"label": "campus organizations and committees"},
+    "T4": {"label": "venting and comfort talk"},
+    "T5": {"label": "romance and pickup lines"},
+    "T6": {"label": "rhymes poetry and lyrics"},
+    "T7": {"label": "memes still in circulation"},
+    "T8": {"label": "political satire"},
+    "T9": {"label": "stickers and their meaning"},
+    "T10": {"label": "chat abbreviations and particles"},
+    "T11": {"label": "East Javanese speech"},
+    "T12": {"label": "profanity vocabulary limits"},
+    "T13": {"label": "declining and deflecting"},
+    "T14": {"label": "closing a conversation"},
+    "T15": {"label": "conflict and making up"},
+    "T16": {"label": "recent Indonesian context"},
+    "T17": {"label": "Malang culture"},
+    "T18": {"label": "football and supporters"},
+    "T19": {"label": "photography"},
+    "T20": {"label": "work and careers"},
+    "T21": {"label": "Jogja Solo Javanese culture"},
+    "T22": {"label": "Bandung Sundanese culture"},
+    "T23": {"label": "general Indonesian culture"},
+    "T24": {"label": "regional languages in mixed groups"},
 }
 
-RESEARCH_SYSTEM = """Kamu peneliti bahasa percakapan Indonesia (fokus Jawa Timuran/Suroboyo),
-bukan penulis kode.
-Dari hasil pencarian yang diberikan, kumpulkan bukti pemakaian nyata: kalimat, komentar, deskripsi
-media, idiom, meme, atau konteks bertanggal yang benar-benar dipakai orang, beserta artinya.
-Balas HANYA satu objek JSON: {"items": [...]} tanpa teks lain.
-Satu item:
+RESEARCH_SYSTEM = """You research Indonesian conversational language (East Javanese/Suroboyo focus),
+not code.
+From the search results given, collect evidence of real usage: sentences, comments, media
+descriptions, idioms, memes, or dated context that people actually use, along with its meaning.
+Reply with ONLY one JSON object: {"items": [...]} and no other text.
+One item:
 {"kind","text","meaning","register","media","gate","evidence","synthetic","confidence","why"}.
 kind: line|comment|description|idiom|context|meme. media: image|video|none.
 register: soal|planning|comfort|romance|creative|roast|meme|banter|serious|neutral.
 gate: {"target":"any|male|female","min_toxicity":0-4,"min_adult":0-3}.
 evidence: {"repeats":<int>,"sources":[<url>...],"platform":"forum|news|social|repo|other"}.
-confidence: 1-3 (3 = kamu yakin frasa ini umum dipakai).
-text maksimal 240 karakter, satu baris, tanpa URL, tanpa @pengguna, tanpa nomor telepon,
-tanpa nama orang.
-Setiap item wajib menyebut minimal satu URL dari hasil pencarian yang diberikan;
-jangan mengarang sumber.
-Item yang kamu susun sendiri wajib "synthetic": true dan "why" menjelaskan pola nyata yang ditiru.
-Jangan menyalin ujaran kebencian, materi seksual, atau data pribadi; tulis sebagai deskripsi pola
-bila perlu.
-Jangan menulis kode, path berkas, atau saran perubahan repo."""
+confidence: 1-3 (3 = you are sure the phrase is widely used).
+Write `text` in Indonesian: at most 240 characters, one line, no URLs, no @mentions, no phone
+numbers, no person names.
+Every item must cite at least one URL from the search results given; never invent sources.
+An item you compose yourself must set "synthetic": true and its "why" must explain the real
+pattern it imitates.
+Do not copy hate speech, sexual material, or personal data; describe the pattern instead when
+needed.
+Do not write code, file paths, or repo change suggestions."""
 
-QUERY_SYSTEM = """Kamu peneliti bahasa percakapan. Kamu diberi satu area besar. Turunkan sendiri sudut,
-sub-topik, dan query mesin pencari yang paling mungkin menemukan contoh percakapan nyata (forum,
-komentar sosial media, artikel, repo, dokumentasi). Boleh campur Indonesia dan Inggris. Jangan
-mengandalkan contoh dari siapa pun; tidak ada daftar contoh yang diberikan karena akan cepat basi.
-Cari terus sampai kering.
-Balas HANYA JSON: {"queries": ["...", "..."], "subtopics": ["...", "..."]} tanpa teks lain.
-Kosongkan "queries" kalau kamu menilai area ini sudah tidak menghasilkan sudut baru.
-Jangan menulis kode atau path berkas."""
+QUERY_SYSTEM = """You research conversational language. You are given one broad area. Derive
+your own angles, sub-topics, and search-engine queries most likely to find real conversation
+examples (forums, social-media comments, articles, repos, documentation). You may mix Indonesian
+and English. Do not rely on examples from anyone else; no example list is given because it would
+go stale fast. Keep searching until the area runs dry.
+Reply with ONLY JSON: {"queries": ["...", "..."], "subtopics": ["...", "..."]} and no other text.
+Leave "queries" empty when you judge the area no longer yields new angles.
+Do not write code or file paths."""
 
 NOTE = (
-    "prompt dikirim ke muse-spark-1.3-contributor (Meta dapat memakai request untuk training); "
-    "hanya URL publik + persona/pola repo, tanpa isi WhatsApp"
+    "prompts go to muse-spark-1.3-contributor (Meta may use requests for training); public URLs "
+    "plus repo persona/patterns only, never WhatsApp content"
 )
 
 KINDS = frozenset({"line", "comment", "description", "idiom", "context", "meme"})
 MEDIA = frozenset({"image", "video", "none"})
-FORBIDDEN = ("sanka/", "scripts/", "import ", "def ", "```")
+FORBIDDEN = ("eidesoul/", "scripts/", "import ", "def ", "```")
 PHONE = re.compile(r"\b(?:\+62|08)\d{7,}\b")
 OBJECT = re.compile(r"\{.*\}", re.DOTALL)
 DATE = re.compile(r"\d{4}-\d{2}-\d{2}")
@@ -129,7 +130,7 @@ WIDTHS = {
 
 
 def client(config) -> LLM:
-    """Klien Muse: `LLM` yang ada, hanya model/temperature/timeout yang diganti."""
+    """Muse client: the existing `LLM`, only model/temperature/timeout swapped."""
     return LLM(
         replace(
             config,
@@ -144,35 +145,35 @@ async def search(query: str, limit: int) -> list[dict]:
 
 def query_prompt(topic: dict, seen: list[str]) -> str:
     label = str(topic["label"])
-    already = "\n".join(f"- {text}" for text in seen[:10]) or "(belum ada)"
+    already = "\n".join(f"- {text}" for text in seen[:10]) or "(none yet)"
     return "\n".join(
         [
             f"Area: {label}",
-            "Kamu bebas menentukan sudut dan sub-topik; jangan mengandalkan contoh dari siapa pun; "
-            "cari sampai kering.",
-            f"Sudah ada:\n{already}",
-            f"Tulis maksimal {QUERIES_PER_ROUND} query mesin pencari baru yang belum dipakai, "
-            "plus sub-topik/istilah yang ingin digali.",
-            'Balas hanya JSON: {"queries": [...], "subtopics": [...]}',
+            "You choose the angles and sub-topics yourself; do not rely on examples from anyone "
+            "else; search until the area runs dry.",
+            f"Already collected:\n{already}",
+            f"Write at most {QUERIES_PER_ROUND} new, unused search queries, plus the sub-topics/"
+            "terms you want to mine.",
+            'Reply with JSON only: {"queries": [...], "subtopics": [...]}',
         ]
     )
 
 
 def items_prompt(topic: dict, hits: list[dict]) -> str:
-    lines = [f"Area: {topic['label']}", "Hasil pencarian:"]
+    lines = [f"Area: {topic['label']}", "Search results:"]
     for index, hit in enumerate(hits, start=1):
         lines.append(
             f"[{index}] {hit.get('title', '')} | {hit.get('href', '')} | {hit.get('body', '')}"
         )
-    lines.append("Ambil 8-14 item.")
+    lines.append("Extract 8-14 items.")
     lines.append(
-        "Setiap item wajib memakai minimal satu URL dari daftar di atas; jangan mengarang URL."
+        "Every item must use at least one URL from the list above; never invent URLs."
     )
     return "\n".join(lines)
 
 
 def parse(raw: str) -> list[dict]:
-    """Objek JSON pertama di balasan -> daftar item dict; gagal = daftar kosong."""
+    """First JSON object in the reply -> list of item dicts; on failure = an empty list."""
     found = OBJECT.search(str(raw or ""))
     if not found:
         return []
@@ -196,7 +197,7 @@ def _clean_terms(values) -> list[str]:
 
 
 def parse_queries(raw: str) -> tuple[list[str], list[str]]:
-    """`{"queries": [...], "subtopics": [...]}` -> (query, subtopik); gagal = ([], [])."""
+    """`{"queries": [...], "subtopics": [...]}` -> (queries, subtopics); on failure = ([], [])."""
     found = OBJECT.search(str(raw or ""))
     if not found:
         return [], []
@@ -219,62 +220,62 @@ def _int_ok(value, low: int, high: int) -> bool:
 
 def _text_reason(text) -> str | None:
     if not isinstance(text, str):
-        return "text bukan string"
+        return "text is not a string"
     if not TEXT_MIN <= len(text) <= TEXT_MAX:
-        return "panjang text"
+        return "text length"
     lowered = text.lower()
     if "\n" in text:
-        return "text lebih dari satu baris"
+        return "text spans more than one line"
     if "http" in lowered:
-        return "text memuat URL"
+        return "text contains a URL"
     if "@" in text:
-        return "text memuat mention"
+        return "text contains a mention"
     if PHONE.search(text):
-        return "text memuat nomor telepon"
+        return "text contains a phone number"
     if any(token in lowered for token in FORBIDDEN):
-        return "text memuat kode atau path"
+        return "text contains code or a path"
     return None
 
 
 def _evidence_reason(item: dict) -> str | None:
     evidence = item.get("evidence")
     if not isinstance(evidence, dict):
-        return "evidence hilang"
+        return "evidence is missing"
     sources = evidence.get("sources")
     if not isinstance(sources, list) or not sources:
-        return "sources kosong"
+        return "sources are empty"
     if any(not isinstance(url, str) or not url.startswith("http") for url in sources):
-        return "sources bukan URL"
+        return "sources are not URLs"
     if not _int_ok(evidence.get("repeats"), 0, 10**6):
-        return "repeats bukan int >= 0"
+        return "repeats is not an int >= 0"
     return None
 
 
 def item_ok(item: dict) -> str | None:
-    """None bila item lolos, selain itu alasan penolakan pendek."""
+    """None when the item passes, otherwise a short rejection reason."""
     if not isinstance(item, dict):
-        return "bukan objek"
+        return "not an object"
     if str(item.get("kind")) not in KINDS:
-        return "kind tidak dikenal"
+        return "unknown kind"
     if str(item.get("register")) not in REGISTERS:
-        return "register tidak dikenal"
+        return "unknown register"
     if str(item.get("media")) not in MEDIA:
-        return "media tidak dikenal"
+        return "unknown media"
     reason = _text_reason(item.get("text"))
     if reason:
         return reason
     meaning = item.get("meaning", "")
     if not isinstance(meaning, str) or len(meaning) > MEANING_MAX:
-        return "meaning tidak valid"
+        return "meaning is not valid"
     if not _int_ok(item.get("confidence"), 1, 3):
-        return "confidence bukan 1..3"
+        return "confidence is not 1..3"
     if not isinstance(item.get("synthetic"), bool):
-        return "synthetic bukan bool"
+        return "synthetic is not a bool"
     return _evidence_reason(item)
 
 
 def norm(text: str) -> str:
-    """Huruf kecil tanpa non-alfanumerik."""
+    """Lowercase, without non-alphanumerics."""
     return "".join(char for char in str(text or "").lower() if char.isalnum())
 
 
@@ -284,7 +285,7 @@ def shingles(text: str, size: int = 5) -> set[str]:
 
 
 def group(items: list[dict]) -> list[list[dict]]:
-    """Greedy, urut masukan: gabung ke grup yang representatifnya mirip (5-gram terdekat dulu)."""
+    """Greedy, input order: join a group whose representative is similar (nearest 5-grams first)."""
     groups: list[list[dict]] = []
     for item in items:
         body = norm(item.get("text", ""))
@@ -333,7 +334,7 @@ def _gate(item: dict) -> tuple[str, int, int]:
 
 
 def promote(groups: list[list[dict]]) -> tuple[list[dict], list[dict]]:
-    """Grup -> (dipromosikan, ditolak) memakai bukti lintas domain atau ukuran grup."""
+    """Groups -> (promoted, rejected) using cross-domain evidence or group size."""
     promoted: list[dict] = []
     rejected: list[dict] = []
     for members in groups:
@@ -374,7 +375,7 @@ def promote(groups: list[list[dict]]) -> tuple[list[dict], list[dict]]:
 
 
 def compare(text: str, patterns: list[dict]) -> tuple[str, str, float]:
-    """(status_vs_pola, pola_terdekat, similarity) terhadap katalog pola runtime."""
+    """(status_vs_pattern, nearest_pattern, similarity) against the runtime pattern packs."""
     body = norm(text)
     nearest, best = "", 0.0
     for pattern in patterns:
@@ -387,7 +388,7 @@ def compare(text: str, patterns: list[dict]) -> tuple[str, str, float]:
         ratio = difflib.SequenceMatcher(None, body, norm(corpus)).ratio()
         if ratio > best:
             nearest, best = str(pattern.get("id") or ""), ratio
-    status = "duplikat" if best >= DUPLICATE else "mirip" if best >= MIRROR else "baru"
+    status = "duplicate" if best >= DUPLICATE else "similar" if best >= MIRROR else "new"
     return status, nearest, round(best, 3)
 
 
@@ -453,7 +454,7 @@ async def _complete(
             session=SESSION,
             reasoning_effort="minimal",
         )
-    except Exception:  # jalur latar best-effort: satu topik gagal tidak menghentikan run
+    except Exception:  # best-effort background path: one failed topic does not stop the run
         return ""
     result["chars_out"] += len(text)
     return text
@@ -469,7 +470,7 @@ async def _call(
     max_tokens: int,
     temperature: float,
 ) -> str:
-    """Panggilan Muse dengan 3 percobaan, lalu fallback model default repo untuk topik ini."""
+    """Muse call with 3 attempts, then the repo default model as fallback for this topic."""
     llm = fallback if result["fallback"] else primary
     text = ""
     for attempt in range(3):
@@ -496,7 +497,7 @@ def _collect(result: dict, items: list[dict], collected: list[str]) -> None:
                 {
                     "topic": result["topic"],
                     "text": str(item.get("text") or "")[:120],
-                    "reason": f"item_tidak_valid:{reason}",
+                    "reason": f"invalid_item:{reason}",
                 }
             )
             continue
@@ -547,16 +548,16 @@ async def run_topic(
             if not fresh:
                 if round_index == 1:
                     label = topic["label"]
-                    fresh = [label, f"{label} indonesia", f"{label} contoh"]
+                    fresh = [label, f"{label} indonesia", f"{label} example"]
                 else:
-                    result["status"] = result["status"] or "kering"
+                    result["status"] = result["status"] or "dry"
                     break
             hits: list[dict] = []
             for query in fresh:
                 used.add(query)
                 try:
                     found = await search(query, hits_per_query)
-                except Exception:  # backend pencarian mati: query lain tetap jalan
+                except Exception:  # search backend down: the other queries still run
                     found = []
                 result["log"].append(
                     {
@@ -564,7 +565,7 @@ async def run_topic(
                         "putaran": round_index,
                         "query": query,
                         "hits": len(found),
-                        "dipakai": "ya" if found else "tidak",
+                        "dipakai": "yes" if found else "no",
                     }
                 )
                 result["sources"][query] = [
@@ -592,7 +593,7 @@ async def run_topic(
                     primary,
                     fallback,
                     RESEARCH_SYSTEM,
-                    prompt_items + "\n\nBalas hanya JSON.",
+                    prompt_items + "\n\nReply with JSON only.",
                     result,
                     max_tokens=3200,
                     temperature=0.5,
@@ -798,7 +799,7 @@ def _safe_name(value: object) -> str:
 
 
 def write(out, results: list[dict], *, stamped: bool = True) -> Path:
-    """Tulis raw/, filtered.json, sources.json, dan workbook audit; tidak pernah menimpa."""
+    """Write raw/, filtered.json, sources.json, and the audit workbook; never overwrites."""
     stamp = time.strftime("%Y%m%d-%H%M%S", time.gmtime())
     root = safe_path(OUT_ROOT, out)
     base = root
@@ -851,8 +852,8 @@ def _report(results: list[dict], book: Path) -> None:
         for result in results
     )
     print(
-        f"topics={len(results)} raw={raw} promoted={promoted} sintetis={synthetic} "
-        f"ditolak={rejected} calls={calls} est=${est:.4f}"
+        f"topics={len(results)} raw={raw} promoted={promoted} synthetic={synthetic} "
+        f"rejected={rejected} calls={calls} est=${est:.4f}"
     )
     print(f"workbook={book}")
     for result in results:
@@ -864,12 +865,12 @@ def _chosen(value: str) -> list[str]:
     wanted = [part.strip() for part in str(value or "").split(",") if part.strip()]
     unknown = [tid for tid in wanted if tid not in TOPICS]
     if unknown:
-        raise SystemExit(f"topik tidak dikenal: {', '.join(unknown)}")
+        raise SystemExit(f"unknown topics: {', '.join(unknown)}")
     return wanted or list(TOPICS)
 
 
 def _env() -> None:
-    """`load_env` hanya menerima nama berkas polos; jalankan dari root repo."""
+    """`load_env` only accepts a plain file name; run from the repo root."""
     if os.environ.get("OPENCODE_GO_API_KEY"):
         return
     if not (ROOT / ".env").is_file():
@@ -888,20 +889,20 @@ def _run_file(path: Path, out: Path, patterns: list[dict]) -> int:
     try:
         body = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, ValueError) as exc:
-        raise SystemExit(f"{path} tidak terbaca: {exc}") from exc
+        raise SystemExit(f"{path} is unreadable: {exc}") from exc
     items = body.get("items") if isinstance(body, dict) else None
     if not isinstance(items, list):
-        raise SystemExit(f"{path}: kunci 'items' harus list")
+        raise SystemExit(f"{path}: the 'items' key must be a list")
     results: dict[str, dict] = {}
     for item in items:
         given = str(item.get("topic") or "T1") if isinstance(item, dict) else "T1"
         tid = given if given in TOPICS else "T1"
         result = results.setdefault(tid, _blank(tid))
-        reason = item_ok(item) if isinstance(item, dict) else "bukan objek"
+        reason = item_ok(item) if isinstance(item, dict) else "not an object"
         if reason:
             text = str(item.get("text") or "")[:120] if isinstance(item, dict) else ""
             result["rejected"].append(
-                {"topic": tid, "text": text, "reason": f"item_tidak_valid:{reason}"}
+                {"topic": tid, "text": text, "reason": f"invalid_item:{reason}"}
             )
             continue
         result["raw"] += 1
@@ -917,13 +918,13 @@ def _run_async(chosen: list[str], args) -> list[dict]:
     config = load_config(ROOT / "config.yaml")
     primary = client(config)
     fallback = LLM(replace(config, llm=replace(config.llm, timeout_seconds=180)))
-    patterns = load_patterns()
+    patterns = load_patterns(("jawatimur",))
     gate = asyncio.Semaphore(max(1, int(args.concurrency)))
 
     async def one(tid: str) -> dict:
         try:
             return await run_topic(primary, fallback, tid, args.hits_per_query, gate)
-        except Exception as exc:  # satu area gagal: laporkan, area lain lanjut
+        except Exception as exc:  # one area failed: report it, the other areas keep going
             broken = _blank(tid)
             broken["status"] = f"timeout: {type(exc).__name__}"
             return broken
@@ -947,8 +948,8 @@ def _run_async(chosen: list[str], args) -> list[dict]:
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="Kolektor bahan riset bahasa percakapan")
-    parser.add_argument("--topics", default="", help="id area dipisah koma (default semua)")
+    parser = argparse.ArgumentParser(description="Conversational-language research collector")
+    parser.add_argument("--topics", default="", help="comma-separated area ids (default: all)")
     parser.add_argument("--concurrency", type=int, default=5)
     parser.add_argument("--hits-per-query", type=int, default=HITS_PER_QUERY)
     parser.add_argument("--dry-run", action="store_true")
@@ -964,10 +965,10 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     if args.from_file:
         _env()
-        return _run_file(Path(args.from_file), out, load_patterns())
+        return _run_file(Path(args.from_file), out, load_patterns(("jawatimur",)))
     _env()
     if not os.environ.get("OPENCODE_GO_API_KEY"):
-        raise SystemExit("OPENCODE_GO_API_KEY tidak ada di .env")
+        raise SystemExit("OPENCODE_GO_API_KEY is not set in .env")
     results = _run_async(chosen, args)
     _report(results, write(out, results))
     return 0

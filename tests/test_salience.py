@@ -1,9 +1,9 @@
-"""Kontrak kompetisi blok prompt: wajib selalu masuk, opsional bersaing saat sempit."""
+"""Prompt block competition contract: mandatory always fits, optional ones compete when tight."""
 
 from __future__ import annotations
 
-from sanka.engine.context import keyword_set
-from sanka.engine.salience import COMPETING, MANDATORY, ORDER, select
+from eidesoul.engine.context import keyword_set
+from eidesoul.engine.salience import COMPETING, MANDATORY, ORDER, select
 
 
 def names(kept: list[tuple[str, str]]) -> list[str]:

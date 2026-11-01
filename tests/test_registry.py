@@ -1,4 +1,4 @@
-"""Kontrak discovery: handler bawaan, drop-in, agregasi error, dan izin eksplisit kosong."""
+"""Discovery contract: built-in handlers, drop-ins, error aggregation, and empty explicit grants."""
 
 from __future__ import annotations
 
@@ -7,12 +7,12 @@ from pathlib import Path
 
 import pytest
 
-from sanka.engine.commands import REGISTRY as COMMANDS
-from sanka.engine.permissions import commands_for, tool_patterns, tools_for
-from sanka.engine.roles import Role
-from sanka.engine.registry import RegistryError, discover
-from sanka.engine.tools import FAMILIES
-from sanka.engine.tools import REGISTRY as TOOLS
+from eidesoul.engine.commands import REGISTRY as COMMANDS
+from eidesoul.engine.permissions import commands_for, tool_patterns, tools_for
+from eidesoul.engine.registry import RegistryError, discover
+from eidesoul.engine.roles import Role
+from eidesoul.engine.tools import FAMILIES
+from eidesoul.engine.tools import REGISTRY as TOOLS
 
 
 def package(root: Path, name: str, files: dict[str, str]) -> Path:
@@ -76,7 +76,7 @@ def test_drop_in_tool_discovered(tmp_path: Path, monkeypatch: pytest.MonkeyPatch
         "plug_valid",
         {
             "echo.py": (
-                "from sanka.engine.registry import Handler\n"
+                "from eidesoul.engine.registry import Handler\n"
                 "\n"
                 "async def fn(args, ctx):\n"
                 '    return "ok"\n'
@@ -100,12 +100,13 @@ def test_invalid_modules_aggregate_errors(tmp_path: Path, monkeypatch: pytest.Mo
         "plug_invalid",
         {
             "bad_name.py": (
-                "from sanka.engine.registry import Handler\n"
+                "from eidesoul.engine.registry import Handler\n"
                 "\n"
                 "async def fn(args, ctx):\n"
                 '    return ""\n'
                 "\n"
-                'TOOL = Handler(name="Bad-Name", description="", fn=fn, family="nope", parameters={})\n'
+                'TOOL = Handler(name="Bad-Name", description="", fn=fn, family="nope", '
+                "parameters={})\n"
             ),
             "no_handler.py": "VALUE = 1\n",
         },
@@ -117,7 +118,14 @@ def test_invalid_modules_aggregate_errors(tmp_path: Path, monkeypatch: pytest.Mo
     finally:
         clear_modules("plug_invalid")
     message = str(caught.value)
-    for fragment in ("bad_name.py", "Bad-Name", "deskripsi", "family", "no_handler.py", "tidak mendefinisikan TOOL"):
+    for fragment in (
+        "bad_name.py",
+        "Bad-Name",
+        "description is required",
+        "family",
+        "no_handler.py",
+        "does not define TOOL",
+    ):
         assert fragment in message
 
 

@@ -1,8 +1,7 @@
 .env
 config.yaml
 roles.yaml
-roles/
-.sanka/
+.eidesoul/
 .venv/
 __pycache__/
 *.pyc
@@ -16,8 +15,7 @@ workspace/
 # local chat exports for analysis (never committed)
 references/
 
-# host config, roles, and secrets (roles.yaml holds phone numbers)
-roles.yaml
+# host config backups and secrets
 config.yaml.bak-*
 config.bak-*/
 compose.yaml

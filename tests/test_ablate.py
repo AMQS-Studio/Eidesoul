@@ -1,13 +1,13 @@
-"""Kontrak harness ablasi: replay gerbang dari arsip tanpa menyentuh runtime."""
+"""Ablation harness contract: replay gates from the archive without touching runtime."""
 
 from __future__ import annotations
 
 from datetime import datetime
 
-from sanka.engine.ablate import classify, replay_metrics
-from sanka.engine.context import ChatMessage, Quote
+from eidesoul.engine.ablate import classify, replay_metrics
+from eidesoul.engine.context import ChatMessage, Quote
 
-BOT = "sanka"
+BOT = "eidesoul"
 
 
 def message(
@@ -33,13 +33,13 @@ def message(
 def test_classify_replays_gate_and_reply_window() -> None:
     bot_quote = Quote(id="q", sender_name=BOT, sender_id="628567770837", text="tadi")
     messages = [
-        message("p1", "sanka rapat jam tiga", 0),
+        message("p1", "eidesoul rapat jam tiga", 0),
         message(BOT, "rapatnya jam tiga", 1, outgoing=True),
         message("p1", "jam berapa ya tadi?", 2),
         message("p2", "eh tiket bola", 3),
         message(BOT, "oke", 4, outgoing=True),
         message("p3", "iya", 5, quote=bot_quote),
-        message("p1", "sanka", 6),
+        message("p1", "eidesoul", 6),
     ]
 
     rows = classify(messages, bot_name=BOT)
@@ -53,13 +53,13 @@ def test_replay_metrics_counts_false_positives_and_misses() -> None:
     bot_quote = Quote(id="q", sender_name=BOT, sender_id="628567770837", text="tadi")
     rows = classify(
         [
-            message("p1", "sanka rapat jam tiga", 0),
+            message("p1", "eidesoul rapat jam tiga", 0),
             message(BOT, "rapatnya jam tiga", 1, outgoing=True),
             message("p1", "jam berapa ya tadi?", 2),
             message("p2", "eh tiket bola", 3),
             message(BOT, "oke", 4, outgoing=True),
             message("p3", "iya", 5, quote=bot_quote),
-            message("p1", "sanka", 6),
+            message("p1", "eidesoul", 6),
         ],
         bot_name=BOT,
     )
@@ -78,7 +78,7 @@ def test_replay_metrics_counts_false_positives_and_misses() -> None:
 
 def test_last_incoming_without_reply_is_missed() -> None:
     bot_quote = Quote(id="q", sender_name=BOT, sender_id="628567770837", text="tadi")
-    rows = classify([message("p1", "sanka tolong", 0, quote=bot_quote)], bot_name=BOT)
+    rows = classify([message("p1", "eidesoul tolong", 0, quote=bot_quote)], bot_name=BOT)
 
     metrics = replay_metrics(rows)
 

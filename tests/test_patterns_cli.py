@@ -1,4 +1,4 @@
-"""Kontrak alat katalog: skema ditolak jelas, workbook review bolak-balik 1:1."""
+"""Catalog tool contract: schema rejected clearly, review workbook round-trips 1:1."""
 
 from __future__ import annotations
 
@@ -37,12 +37,12 @@ def book(*rows: dict) -> dict:
 
 def test_xlsx_roundtrip_keeps_unicode_and_numbers(tmp_path) -> None:
     path = tmp_path / "book.xlsx"
-    rows = [["no", "user", "sanka"], [1, "kowe lo elek", "raimu lo koyok 😌"]]
+    rows = [["no", "user", "eidesoul"], [1, "kowe lo elek", "raimu lo koyok 😌"]]
 
     xlsx.write_workbook(path, [("pola", rows, [6, 30, 40])])
 
     assert xlsx.read_workbook(path)["pola"] == [
-        ["no", "user", "sanka"],
+        ["no", "user", "eidesoul"],
         ["1", "kowe lo elek", "raimu lo koyok 😌"],
     ]
 
@@ -69,28 +69,28 @@ def test_validate_names_each_deficit() -> None:
     )
     joined = "\n".join(deficits)
 
-    assert "id ganda ganda" in joined
-    assert "content harus 10-200 karakter" in joined
-    assert "register 'fisip' di luar kosakata" in joined
-    assert "tidak bisa dipilih selector" in joined
+    assert "duplicate id" in joined
+    assert "content must be 10-200 characters" in joined
+    assert "register 'fisip' is outside the vocabulary" in joined
+    assert "cannot be selected by the selector" in joined
     assert "min/max toxicity" in joined
-    assert "key 'Huruf' harus huruf kecil" in joined
+    assert "key 'Huruf' must be lowercase" in joined
     assert "source 'ngarang'" in joined
 
 
 def test_validate_requires_capital_start_for_say() -> None:
     body = book(row("kecil", say=["halo semua"]))
-    assert "huruf besar" in "\n".join(cli.validate(body))
+    assert "uppercase letter" in "\n".join(cli.validate(body))
 
 
 def test_validate_flags_say_reused_across_rows() -> None:
     body = book(row("satu", say=["halo semua"]), row("dua", say=["halo semua"]))
-    assert "say ganda" in "\n".join(cli.validate(body))
+    assert "duplicate say" in "\n".join(cli.validate(body))
 
 
 def test_always_pattern_may_omit_keys() -> None:
     assert cli.validate(book(row("invarian", keys=[], always=True))) == []
-    assert "butuh minimal satu key" in "\n".join(cli.validate(book(row("kosong", keys=[]))))
+    assert "needs at least one key" in "\n".join(cli.validate(book(row("kosong", keys=[]))))
 
 
 def test_build_and_apply_workbook_roundtrip(tmp_path) -> None:
@@ -131,7 +131,7 @@ def test_apply_workbook_reports_missing_columns(tmp_path) -> None:
     applied, problems = cli.apply_xlsx(body, path)
 
     assert applied == 0
-    assert "kolom hilang" in problems[0]
+    assert "missing columns" in problems[0]
 
 
 def test_apply_workbook_reports_unknown_ids(tmp_path) -> None:

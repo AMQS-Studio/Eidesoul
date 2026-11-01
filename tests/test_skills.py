@@ -1,4 +1,4 @@
-"""Kontrak skill: frontmatter, indeks, progressive disclosure, file pendukung, dan save."""
+"""Skill contract: frontmatter, index, progressive disclosure, support files, and save."""
 
 from __future__ import annotations
 
@@ -6,16 +6,16 @@ import asyncio
 from pathlib import Path
 
 import pytest
-
-from sanka.engine.commands import CommandContext
-from sanka.engine.commands.skill import COMMAND as SKILLCMD
-from sanka.engine.config import Config
-from sanka.engine.db import Database
-from sanka.engine.schema import skill_files
-from sanka.engine.stores.skills import SkillStore, parse_frontmatter
-from sanka.engine.tools import REGISTRY as TOOLS
-from sanka.engine.tools import ToolContext, execute
 from support import build_config, database, role
+
+from eidesoul.engine.commands import CommandContext
+from eidesoul.engine.commands.skill import COMMAND as SKILLCMD
+from eidesoul.engine.config import Config
+from eidesoul.engine.db import Database
+from eidesoul.engine.schema import skill_files
+from eidesoul.engine.stores.skills import SkillStore, parse_frontmatter
+from eidesoul.engine.tools import REGISTRY as TOOLS
+from eidesoul.engine.tools import ToolContext, execute
 
 SKILL_BODY = """# Deploy aman
 
@@ -67,9 +67,9 @@ def test_index_view_read_and_usage(tmp_path: Path) -> None:
     add_file(db, "deploy-aman", "references/checklist.md", "cek dulu")
 
     assert "deploy-aman: Deploy service" in store.index()
-    assert "dipakai" not in store.index()
+    assert "used" not in store.index()
     assert "# Deploy aman" in store.view("deploy-aman")
-    assert "dipakai 1×" in store.index()
+    assert "used 1x" in store.index()
     assert "cek dulu" in store.read("deploy-aman", "references/checklist.md")
     with pytest.raises(PermissionError):
         store.read("deploy-aman", "../secret.txt")
@@ -113,10 +113,10 @@ def test_skill_tool_autonomous_lifecycle(tmp_path: Path) -> None:
 
     assert "deploy: Deploy aman." in asyncio.run(call({"action": "list"}))
     assert "# Deploy" in asyncio.run(call({"action": "view", "name": "deploy"}))
-    assert "skill disimpan" in asyncio.run(
+    assert "skill saved" in asyncio.run(
         call({"action": "save", "name": "lain", "description": "Lain.", "body": "# Lain\n"})
     )
-    assert "skill disimpan" in asyncio.run(
+    assert "skill saved" in asyncio.run(
         call(
             {
                 "action": "save",
@@ -128,7 +128,7 @@ def test_skill_tool_autonomous_lifecycle(tmp_path: Path) -> None:
         )
     )
     assert "Deploy v2." in store.index()
-    assert "diarsipkan" in asyncio.run(call({"action": "archive", "name": "lain"}))
+    assert "archived" in asyncio.run(call({"action": "archive", "name": "lain"}))
     assert "lain" not in store.names()
 
 

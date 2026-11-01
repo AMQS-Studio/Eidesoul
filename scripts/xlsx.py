@@ -1,8 +1,8 @@
-"""XLSX minimal (tulis/baca) dengan pustaka standar saja.
+"""Minimal XLSX reader/writer using only the standard library.
 
-Repo ini tidak memakai openpyxl/pandas, jadi workbook dibuat langsung dari XML di dalam ZIP.
-Cukup untuk kebutuhan audit: beberapa sheet, header tebal, kolom lebar, sel teks inline, dan
-pembacaan kembali komentar yang diketik manusia (inline string maupun sharedStrings).
+This repo does not use openpyxl/pandas, so workbooks are built directly from XML inside a ZIP.
+Enough for audit needs: several sheets, bold headers, column widths, inline text cells, and
+reading back human-typed comments (inline strings as well as sharedStrings).
 """
 
 from __future__ import annotations
@@ -56,7 +56,7 @@ def _cell(ref: str, value, bold: bool) -> str:
 
 
 def write_workbook(path: Path, sheets: list[tuple[str, list[list], list[int]]]) -> Path:
-    """[(nama_sheet, [[sel,...],...], [lebar_kolom,...]), ...] -> file .xlsx."""
+    """[(sheet_name, [[cell,...],...], [column_width,...]), ...] -> .xlsx file."""
     path.parent.mkdir(parents=True, exist_ok=True)
     overrides = []
     workbook_sheets = []
@@ -146,7 +146,7 @@ def _raw_text(attributes: dict, body: str, shared: list[str]) -> str:
 
 
 def read_workbook(path: Path) -> dict[str, list[list[str]]]:
-    """{nama_sheet: [[sel,...],...]}; mendukung inline string dan sharedStrings."""
+    """{sheet_name: [[cell,...],...]}; supports inline strings and sharedStrings."""
     shared: list[str] = []
     with zipfile.ZipFile(path) as archive:
         names = set(archive.namelist())

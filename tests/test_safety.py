@@ -1,11 +1,11 @@
-"""Kontrak klasifikasi approval: hanya shell destruktif dan aksi internal yang menunggu."""
+"""Approval classification contract: only destructive shell and internal actions wait."""
 
 from __future__ import annotations
 
 import pytest
 
-from sanka.engine.config import ApprovalConfig
-from sanka.engine.safety import ActionRequest, ApprovalPolicy, build_safety
+from eidesoul.engine.config import DEFAULT_SENSITIVE_COMMANDS, ApprovalConfig
+from eidesoul.engine.safety import ActionRequest, ApprovalPolicy, build_safety, scan_command
 
 
 def request(tool: str, **args) -> ActionRequest:
@@ -26,7 +26,7 @@ def verdict(config: ApprovalConfig, tool: str, **args) -> str:
 ALLOWED_SHELL = [
     "ls -la",
     "git status",
-    "printf sanka-ok",
+    "printf eidesoul-ok",
     "python -c 'print(1)'",
     "echo hi > notes.txt",
 ]
@@ -84,3 +84,10 @@ def test_destructive_internal_actions_wait_for_approval() -> None:
 
 def test_empty_sensitive_commands_disables_command_gate() -> None:
     assert verdict(ApprovalConfig(sensitive_commands=()), "shell", command="rm -rf x") == "allow"
+
+
+def test_scan_command_is_the_shared_scanner() -> None:
+    assert scan_command("rm -rf x", DEFAULT_SENSITIVE_COMMANDS) is True
+    assert scan_command("bash -c 'systemctl restart x'", DEFAULT_SENSITIVE_COMMANDS) is True
+    assert scan_command("ls -la", DEFAULT_SENSITIVE_COMMANDS) is False
+    assert scan_command("ls -la", ()) is False
