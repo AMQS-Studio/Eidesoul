@@ -12,7 +12,6 @@ BOLD = re.compile(r"\*\*(.+?)\*\*")
 BULLET = re.compile(r"^[-*]\s+", re.MULTILINE)
 LINK = re.compile(r"\[([^\]]+)\]\(([^)]+)\)")
 BUBBLE = re.compile(r"(?m)^\s*-{3,}\s*$")  # a "---" line alone = new bubble; the model's choice
-INLINE_BUBBLE = re.compile(r"[ \t]+-{3,}[ \t]+")  # "one --- two" in the middle of a line
 BLANK = re.compile(r"\n\s*\n")
 LIST_LINE = re.compile(r"(?m)^\s*(?:[-*•]|\d+[.)]|\d\ufe0f?\u20e3)\s")
 CASUAL_BUBBLE_MAX = 300
@@ -20,6 +19,34 @@ CASUAL_BUBBLE_MAX = 300
 
 def strip_blocks(text: str) -> str:
     return BLOCK.sub("", text or "")
+
+
+def inline_breaks(text: str) -> str:
+    """'one --- two' -> a real bubble break; a linear scan, no backtracking on a space run."""
+    out: list[str] = []
+    index = 0
+    size = len(text)
+    while index < size:
+        space = index
+        while space < size and text[space] in " \t":
+            space += 1
+        if space == index:
+            out.append(text[index])
+            index += 1
+            continue
+        dashes = space
+        while dashes < size and text[dashes] == "-":
+            dashes += 1
+        after = dashes
+        while after < size and text[after] in " \t":
+            after += 1
+        if dashes - space >= 3 and after > dashes:
+            out.append("\n---\n")
+            index = after
+            continue
+        out.append(text[index:space])
+        index = space
+    return "".join(out)
 
 
 def _heading(line: str) -> str:
@@ -75,7 +102,7 @@ def human_chunks(text: str, *, max_parts: int = 3) -> list[str]:
         if piece.lstrip().startswith(FENCE_START):
             current = f"{current}\n{piece}".strip() if current else piece.strip()
             continue
-        piece = INLINE_BUBBLE.sub("\n---\n", piece)
+        piece = inline_breaks(piece)
         for index, part in enumerate(BUBBLE.split(piece)):
             chunk = part.strip()
             if not chunk:

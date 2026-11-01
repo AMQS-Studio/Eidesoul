@@ -13,6 +13,7 @@ from eidesoul.engine.character import (
     over_level,
     polish,
     regulate,
+    unwrap_quotes,
 )
 from eidesoul.engine.config import CharacterConfig
 
@@ -29,6 +30,16 @@ class StubLLM:
         self.calls += 1
         self.kwargs = kwargs
         return self.reply
+
+
+def test_wrapped_quotes_are_unwrapped_without_backtracking() -> None:
+    assert unwrap_quotes('"halo"') == "halo"
+    assert unwrap_quotes("`halo`") == "halo"
+    assert unwrap_quotes('"a"b"') == 'a"b'          # inner quote marks stay
+    assert unwrap_quotes('"abc') == '"abc'          # unclosed: unchanged
+    assert unwrap_quotes("' ") == "' "                # no closing mark: unchanged
+    assert unwrap_quotes('""') == ""
+    assert unwrap_quotes('"' + "a" * 50_000) == '"' + "a" * 50_000
 
 
 def config_with(tmp_path, **character):

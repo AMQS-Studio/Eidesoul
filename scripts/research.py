@@ -452,7 +452,6 @@ async def _complete(
             max_tokens=max_tokens,
             temperature=temperature,
             session=SESSION,
-            reasoning_effort="minimal",
         )
     except Exception:  # best-effort background path: one failed topic does not stop the run
         return ""

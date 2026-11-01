@@ -8,7 +8,7 @@ from sqlalchemy import select
 from support import database
 
 from eidesoul.engine.config import StyleConfig
-from eidesoul.engine.reply import FENCE, clean_prose, human_chunks
+from eidesoul.engine.reply import FENCE, clean_prose, human_chunks, inline_breaks
 from eidesoul.engine.schema import state
 from eidesoul.engine.stores.style import StyleStore
 
@@ -110,6 +110,15 @@ def test_inline_marker_splits_like_a_line_marker() -> None:
     parts = humanize_reply("sedihnya karena apa? --- aku di sini kalau mau cerita", max_parts=3)
 
     assert parts == ["sedihnya karena apa?", "aku di sini kalau mau cerita"]
+
+
+def test_inline_break_scan_keeps_the_marker_rules() -> None:
+    assert inline_breaks("a --- b") == "a\n---\nb"
+    assert inline_breaks("a ----- b") == "a\n---\nb"      # a long dash run is still one break
+    assert inline_breaks("a ---") == "a ---"               # no trailing space: not a marker
+    assert inline_breaks("--- b") == "--- b"               # no leading space: not a marker
+    assert inline_breaks("a\t---\tb") == "a\n---\nb"     # tabs count as the space around it
+    assert inline_breaks("a -- b") == "a -- b"             # two dashes is not a marker
 
 
 def test_inline_marker_inside_fence_stays_one_bubble() -> None:

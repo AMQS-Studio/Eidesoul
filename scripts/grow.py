@@ -342,7 +342,6 @@ class Muse:
             max_tokens=max_tokens,
             temperature=0.2,
             session=session,
-            reasoning_effort="minimal",
         )
 
     async def ask(self, system: str, user: str, session: str, max_tokens: int) -> str:

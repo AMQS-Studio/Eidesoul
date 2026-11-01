@@ -116,7 +116,7 @@ def write_workbook(path: Path, sheets: list[tuple[str, list[list], list[int]]]) 
 
 
 CELL = re.compile(r"<c\b([^>]*)>(.*?)</c>|<c\b([^>]*)/>", re.DOTALL)
-ATTR = re.compile(r'(\w+)="([^"]*)"')
+ATTR = re.compile(r'(\w\w*+)="([^"]*)"')  # linear: no backtracking on a long run of word chars
 INLINE = re.compile(r"<t[^>]*>(.*?)</t>", re.DOTALL)
 VALUE = re.compile(r"<v>(.*?)</v>", re.DOTALL)
 ROW = re.compile(r"<row\b[^>]*>(.*?)</row>", re.DOTALL)

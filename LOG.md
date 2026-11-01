@@ -39,6 +39,28 @@ reached `opencode.ai`); `console` shows `/whoami` as `dm "Terminal" (cli:local)`
 `/status` with the same model and archive counts; `init --provider groq` writes `GROQ_API_KEY=` first
 in `.env` and `init` without the flag exits with the argparse "required" error.
 
+## 2026-11-01 — SonarCloud: dead keyword argument and three backtracking regexes
+
+**Bug (S930)** — `scripts/replay.py`, `scripts/grow.py`, and `scripts/research.py` passed
+`reasoning_effort="minimal"` to `LLM.complete`, which has no such parameter, so those judge and
+summarise calls raised `TypeError` inside best-effort handlers and silently returned nothing. The
+argument is gone: effort is operator config (`engine.llm.reasoning_effort`) and no internal call
+forces a value.
+
+**Super-linear regex (S8786)** — `character.QUOTED` became `unwrap_quotes` (read the leading quote
+run, then the closing run that ends at the last non-space character) and `reply.INLINE_BUBBLE`
+became `inline_breaks` (replace one `space-run ---run space-run` at a time, left to right). Both are
+linear on an unclosed quote or a long space run; a 600k-case fuzz against the old patterns
+reproduces every result exactly. `scripts/xlsx.ATTR` uses a possessive word run
+(`(\w\w*+)="([^"]*)"`) so the same scan no longer backtracks.
+
+**Scanner** — `sonar-project.properties` pointed at the phantom `sanka-agent` key; it now carries
+`sonar.organization=inimuqsith` and `sonar.projectKey=inimuqsith_SankaAgent`.
+
+**Verification** — `pytest -q` 491 passed, including the new
+`test_wrapped_quotes_are_unwrapped_without_backtracking` and
+`test_inline_break_scan_keeps_the_marker_rules`.
+
 ## 2026-11-01 — v2: providers, guard package, capability spine, affect prototypes, soul resolver
 
 **Providers** — new `eidesoul/providers/` package holding only client/auth/default-model facts for

@@ -22,7 +22,7 @@ ASSISTANT_TELL = re.compile(
 MARKDOWN = re.compile(r"(?m)^\s*(?:#{1,6}\s+|[-*]\s+|\d+[.)]\s+)")
 SENTENCE = re.compile(r"[.!?]+(?:\s|$)")
 BUBBLE_LINE = re.compile(r"(?m)^\s*-{3,}\s*$")
-QUOTED = re.compile(r'^\s*["\'`“”]+(.*?)["\'`“”]+\s*$', re.DOTALL)
+QUOTES = "\"'`\u201c\u201d"
 FINAL_PREFIX = re.compile(r"^\s*FINAL\s*:\s*", re.IGNORECASE)
 FENCE_START = "```"
 LINE_MAX = 240
@@ -67,13 +67,36 @@ def needs_polish(text: str, *, max_chars: int = 400) -> bool:
     return any(len(line) > LINE_MAX for line in body.splitlines())
 
 
+def unwrap_quotes(text: str) -> str:
+    """Inner text when the whole string is wrapped in quote marks, else `text`.
+
+    A linear scan: the opening run is consumed, the closing run must be quote marks only, so the
+    inner text ends at the first quote mark of that run. No regex, so an unclosed quote cannot
+    backtrack.
+    """
+    body = str(text or "").strip()
+    lead = 0
+    while lead < len(body) and body[lead] in QUOTES:
+        lead += 1
+    if not lead:
+        return text
+    close = len(body)
+    while close > 0 and body[close - 1].isspace():
+        close -= 1
+    run = close
+    while run > 0 and body[run - 1] in QUOTES:
+        run -= 1
+    for opening in range(lead, 0, -1):
+        inner_end = max(run, opening)
+        if inner_end < close:
+            return body[opening:inner_end]
+    return text
+
+
 def _clean(raw: str) -> str:
     text = str(raw or "").strip()
     text = FINAL_PREFIX.sub("", text)
-    quoted = QUOTED.match(text)
-    if quoted:
-        text = quoted.group(1).strip()
-    return text
+    return unwrap_quotes(text).strip()
 
 
 def _rejected(draft: str, text: str) -> bool:

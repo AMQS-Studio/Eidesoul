@@ -176,7 +176,6 @@ async def judge(llm: LLM, sheet: dict, scenario: dict, transcript: list[str], re
             judge_payload(sheet, scenario, transcript, reply),
             max_tokens=800,
             temperature=0.0,
-            reasoning_effort="minimal",
             session=f"replay-judge-{scenario['id']}",
         )
     except Exception:
