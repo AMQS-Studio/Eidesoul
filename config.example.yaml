@@ -93,6 +93,7 @@ engine:
   prompt:
     salience: true
     max_chars: 9000
+    thread_chars: 4000
   humanize:
     enabled: true
     cpms: 25.0

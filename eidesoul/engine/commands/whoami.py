@@ -22,9 +22,17 @@ def _kind_key(ctx: CommandContext) -> str:
 async def whoami(ctx: CommandContext) -> str:
     lang = ctx.lang
     roles = ", ".join(role.name.capitalize() for role in ctx.roles) or "-"
+    person_id = ctx.inbound.person_id if ctx.inbound is not None else ""
+    person = ctx.agent.identity.person(person_id) or {}
     lines = [
         t("command.whoami.user", lang, who=ctx.sender or ctx.chat_id),
         t("command.whoami.role", lang, roles=roles),
+        t(
+            "command.whoami.identity",
+            lang,
+            name=person.get("name") or "-",
+            id=person_id or "-",
+        ),
         t("command.whoami.chat", lang, chat=_chat_label(ctx, lang)),
         t("command.whoami.surface", lang, surface=ctx.gateway.name if ctx.gateway is not None else "-"),
     ]

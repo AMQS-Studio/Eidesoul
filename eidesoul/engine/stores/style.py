@@ -73,6 +73,23 @@ def _merge(target: dict, source: dict) -> dict:
     return source
 
 
+def merge_buckets(left: dict, right: dict) -> dict:
+    """Sum two style buckets; `lengths` keeps the newest `MAX_LENGTHS` samples."""
+    merged = _empty()
+    for key, value in _empty().items():
+        if isinstance(value, list):
+            merged[key] = [*(left.get(key) or []), *(right.get(key) or [])][-MAX_LENGTHS:]
+        elif isinstance(value, dict):
+            counts: dict[str, int] = {}
+            for source in (left, right):
+                for name, count in (source.get(key) or {}).items():
+                    counts[str(name)] = counts.get(str(name), 0) + int(count)
+            merged[key] = counts
+        else:
+            merged[key] = int(left.get(key) or 0) + int(right.get(key) or 0)
+    return merged
+
+
 def _percentile(values: list[int], ratio: float) -> int:
     if not values:
         return 0
@@ -190,6 +207,28 @@ class StyleStore:
             if person_id:
                 bucket = self._data["people"].setdefault(person_id, _empty())
                 self._count(bucket, body)
+            self._flush()
+
+    def people_ids(self) -> list[str]:
+        """Every person id that owns a style bucket."""
+        with self._lock:
+            return sorted(self._data["people"])
+
+    def merge_people(self, old: str, new: str) -> None:
+        """Fold one person's bucket into another when two identities become one."""
+        source = str(old or "").strip()
+        target = str(new or "").strip()
+        if not source or not target or source == target:
+            return
+        with self._lock:
+            held = self._data["people"].get(source)
+            if held is None:
+                return
+            existing = self._data["people"].get(target)
+            self._data["people"][target] = (
+                merge_buckets(existing, held) if existing is not None else held
+            )
+            del self._data["people"][source]
             self._flush()
 
     def seed_from_history(self, history) -> bool:

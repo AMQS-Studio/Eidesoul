@@ -161,6 +161,19 @@ topics = Table(
     Column("research_count", Integer, nullable=False, default=0),
 )
 
+chat_eras = Table(
+    "chat_eras",
+    metadata,
+    Column("id", BigIntPK, primary_key=True, autoincrement=True),
+    Column("chat_id", String(120), nullable=False),
+    Column("started_at", Float, nullable=False),
+    Column("ended_at", Float, nullable=False),
+    Column("summary", Text, nullable=False, default=""),
+    Column("keywords", Json, nullable=False, default=list),
+    Column("unresolved", Json, nullable=False, default=list),
+)
+Index("ix_chat_eras_chat", chat_eras.c.chat_id, chat_eras.c.ended_at)
+
 drives = Table(
     "drives",
     metadata,
@@ -179,6 +192,30 @@ chat_people = Table(
     Column("last_seen", Float, nullable=False, default=0.0),
     Column("interactions", Integer, nullable=False, default=0),
     PrimaryKeyConstraint("chat_id", "person_id", name="pk_chat_people"),
+)
+
+person_links = Table(
+    "person_links",
+    metadata,
+    Column("gateway", String(40), primary_key=True),
+    Column("address", String(160), primary_key=True),
+    Column("person_id", String(80), nullable=False),
+    Column("created_at", Float, nullable=False),
+    Column("seen_at", Float, nullable=False, default=0.0),
+    Column("linked_by", String(120), nullable=False, default=""),
+)
+Index("ix_person_links_person", person_links.c.person_id)
+
+person_link_codes = Table(
+    "person_link_codes",
+    metadata,
+    Column("code", String(16), primary_key=True),
+    Column("person_id", String(80), nullable=False),
+    Column("gateway", String(40), nullable=False),
+    Column("created_at", Float, nullable=False),
+    Column("expires_at", Float, nullable=False),
+    Column("attempts", Integer, nullable=False, default=0),
+    Column("used_at", Float, nullable=False, default=0.0),
 )
 
 skills = Table(

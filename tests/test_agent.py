@@ -16,6 +16,7 @@ from support import (
 )
 
 from eidesoul.engine.config import ApprovalConfig, CharacterConfig, HumanizeConfig
+from eidesoul.engine.schema import people, person_links
 from eidesoul.engine.tools import execute
 
 DM = "628111@s.whatsapp.net"
@@ -38,6 +39,17 @@ def test_dm_reply_is_delivered_and_recorded(tmp_path) -> None:
     ids = [item.id for item in env.windows.get(DM)]
     assert ids[0] == "m-halo" and len(ids) == 2
     assert env.llm.calls == 1 and env.llm.decisions == 1
+
+
+def test_the_bot_echo_does_not_mint_an_identity(tmp_path) -> None:
+    env = make_agent(tmp_path)
+    inbound = inbound_message("balasanku", sender="628567770837")
+    echo = replace(inbound, message=replace(inbound.message, outgoing=True))
+
+    handle(env, echo)
+
+    assert env.db.fetch_all(people.select()) == []
+    assert env.db.fetch_all(person_links.select()) == []
 
 
 def test_group_without_call_is_ignored_without_llm(tmp_path) -> None:
@@ -110,7 +122,7 @@ def test_auto_capture_runs_for_memory_role(tmp_path) -> None:
 
     assert memory.captures
     call = memory.captures[0]
-    assert call["person_id"] == "628111"
+    assert call["person_id"] == env.agent.identity.resolve("fake", "628111")
     assert call["chat_id"] == DM
     assert call["audience"] == "private"
 
@@ -121,7 +133,8 @@ def test_memory_block_and_runtime_reach_prompt(tmp_path) -> None:
 
     handle(env, inbound_message("halo", chat_id=DM))
 
-    assert memory.context_calls and memory.context_calls[0]["person_id"] == "628111"
+    person = env.agent.identity.resolve("fake", "628111")
+    assert memory.context_calls and memory.context_calls[0]["person_id"] == person
     assert "suka kopi" in env.llm.system
     assert "## Self" in env.llm.system
     assert "Reply in Indonesian" in env.llm.system

@@ -41,16 +41,17 @@ def test_builtin_handlers_discovered() -> None:
         "kirim",
         "konteks",
         "language",
+        "link",
         "memori",
         "mood",
         "pending",
         "ping",
         "reload",
-        "reset",
         "skill",
         "status",
         "stop",
         "tools",
+        "unlink",
         "whoami",
     }
     assert set(TOOLS.names()) == {

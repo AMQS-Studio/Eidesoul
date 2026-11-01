@@ -19,7 +19,7 @@ if TYPE_CHECKING:
 
 log = logging.getLogger(__name__)
 
-HISTORY_LIMIT = 20
+LIVE_BUFFER = 40  # live merge buffer, not the payload
 PREVIEW_LINES = 12
 PREVIEW_CHARS = 1500
 INLINE_TEXT_LINES = 80
@@ -164,7 +164,7 @@ class ChatMessage:
 class WorkingMemory:
     """Per-chat message window; the full archive stays in HistoryStore."""
 
-    def __init__(self, limit: int = HISTORY_LIMIT, store: "HistoryStore | None" = None):
+    def __init__(self, limit: int = LIVE_BUFFER, store: "HistoryStore | None" = None):
         self.limit = max(1, limit)
         self.store = store
         self._data: dict[str, list[ChatMessage]] = {}
@@ -299,19 +299,7 @@ class WorkingMemory:
                 changed += 1
         return changed
 
-    def through(self, chat_id: str, message: ChatMessage) -> list[ChatMessage]:
-        history = self.get(chat_id)
-        for index, item in enumerate(history):
-            if item is message:
-                return history[: index + 1]
-        tail = history[-(self.limit - 1) :] if self.limit > 1 else []
-        return [*tail, message]
-
     def invalidate(self, chat_id: str) -> None:
-        self._data.pop(chat_id, None)
-        self._loaded.discard(chat_id)
-
-    def reset(self, chat_id: str) -> None:
         self._data.pop(chat_id, None)
         self._loaded.discard(chat_id)
 
@@ -662,9 +650,7 @@ async def build_user_content(
     numbers, planned = _plan_images(config, current, order)
 
     label = f' "{_flatten(chat_name, NAME_LIMIT)}"' if chat_name.strip() else ""
-    lines = [
-        f"Chat context{label} ({len(messages)} last messages, oldest → newest; local time):"
-    ]
+    lines = [f"Thread{label} ({len(messages)} messages, oldest → newest; local time):"]
     for entry in messages:
         lines.append("")
         lines.extend(_message_lines(config, chat_id, entry, numbers, current))

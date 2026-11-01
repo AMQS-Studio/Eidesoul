@@ -19,6 +19,7 @@ class Inbound:
     chat_id: str
     message: ChatMessage
     is_dm: bool
+    person_address: str = ""
     is_mention: bool = False
     is_reply: bool = False
     is_self: bool = False

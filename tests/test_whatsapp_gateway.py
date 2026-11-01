@@ -96,7 +96,8 @@ def test_event_to_inbound_dm_and_person(tmp_path) -> None:
     assert inbound is not None
     assert inbound.chat_id == "628222222222@s.whatsapp.net"
     assert inbound.is_dm is True
-    assert inbound.person_id == "628222222222"
+    assert inbound.person_address == "628222222222"
+    assert inbound.person_id == ""  # the core assigns the person id, not the gateway
     assert inbound.message.text == "halo"
     assert inbound.message.sender_name == "Budi"
 
@@ -117,7 +118,7 @@ def test_mention_and_reply_flags_come_from_payload(tmp_path) -> None:
     assert reply.is_reply is True
 
 
-def test_lid_sender_resolves_to_person(tmp_path) -> None:
+def test_lid_sender_maps_to_the_pn_address(tmp_path) -> None:
     gateway = make_gateway(tmp_path)
     directory.set_lid(gateway.db, "999@lid", "628999999999@s.whatsapp.net")
     ev = group_event("halo")
@@ -127,7 +128,7 @@ def test_lid_sender_resolves_to_person(tmp_path) -> None:
     inbound = ingress.event_to_inbound(ev, gateway)
 
     assert inbound is not None
-    assert inbound.person_id == "628999999999"
+    assert inbound.person_address == "628999999999"
     assert inbound.message.sender_address == "628999999999@s.whatsapp.net"
     assert inbound.message.sender_id == "628999999999"
 

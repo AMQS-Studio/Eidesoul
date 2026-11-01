@@ -1,5 +1,43 @@
 # LOG
 
+## 2026-11-01 — identity is runtime state, context is assembled state (`/reset` deleted)
+
+**Identity** — `people` keeps the person and the new `person_links` table maps `(gateway, address)`
+to an opaque `per_…` id (ten base32 characters, `eidesoul/engine/identity.py`). `Inbound` carries
+`person_address` and the core fills `person_id` in `Agent.handle`; the WhatsApp ingress and the CLI
+gateway stopped computing an identity and `directory.resolve_person` is gone. `roles.*.users` holds
+only `per_…` ids (`RoleRegistry.for_person`), so no phone number lives in config any more.
+
+**Linking** — `/link` shows the identity card, `/link <gateway>` issues a six-character code (ten
+minutes, five attempts) and `/link <code>` consumes it from the other gateway; `/unlink <gateway>
+confirm` detaches one address. The code names the surviving identity: the new gateway's provisional
+`per_…` is folded in through `IdentityStore.merge` (chat_people summed, links re-pointed, google rows
+re-keyed, `people` fields carried over) and `StyleStore.merge_people` moves the style bucket;
+`memory.rekey` moves Mem0 entries. `/whoami` shows `🪪 Identitas: <name> (<per_…>)`.
+
+**Adopt** — `eidesoul people list|link|unlink|adopt` is the operator surface. `adopt` collects every
+legacy id (`people`, `chat_people`, the google tables, style buckets, role `users`), resolves the new
+identity, folds the old one, rewrites the role documents plus the `roles.yaml` mirror, re-keys memory
+when Mem0 is available, and is idempotent.
+
+**Context** — the payload is `assembly.thread`: rows from the archive, the newest tail (floor six,
+cap twenty, twelve hundred characters) plus up to three quote anchors, deduped and trimmed to
+`engine.prompt.thread_chars` (4000) without ever dropping the floor. `WorkingMemory` is a live merge
+buffer of forty rows (`LIVE_BUFFER`) and no longer decides the payload; `through` is gone and the
+header reads `Thread (N messages, oldest → newest; local time)`.
+
+**Eras** — the ambient digest archives a dated `chat_eras` row when the new capsule summary shares
+under 20% of the old summary's keywords, and `topic_block` then renders `Sebelumnya: …` above the
+current topic instead of a wipe.
+
+**Removed** — `/reset` (and its `r`/`clear`/`new` aliases), `HistoryStore.reset`, the `chats.reset_ts`
+read filter (the column and its write stay for deployed schemas), `WorkingMemory.reset`, and the
+`command.reset.*` catalog keys.
+
+**Verification** — `pytest -q` 519 passed; `ruff check` on every touched file matches its baseline;
+a scratch deployment seeded with a legacy owner ran `people adopt` (`6285111242960 -> per_…`),
+preserved name/trust/notes/chat_people/style, rewrote `roles.yaml`, and the second run migrated 0.
+
 ## 2026-11-01 — neutral core: no gateway or provider vocabulary in `eidesoul/engine`
 
 **Message facts** — `ChatMessage.sender_jid` is `sender_address`, and a new `sender_kind` (`"person"`

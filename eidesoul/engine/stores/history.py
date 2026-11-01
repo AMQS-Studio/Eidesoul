@@ -199,23 +199,6 @@ class HistoryStore:
             )
         return len(rows)
 
-    def reset(self, chat_id: str) -> None:
-        now = time.time()
-        with self.db.connect() as conn:
-            self.db.upsert(
-                conn,
-                chats,
-                [
-                    {
-                        "chat_id": chat_id,
-                        "name": "",
-                        "reset_ts": now,
-                    }
-                ],
-                ["chat_id"],
-                update={"reset_ts": now},
-            )
-
     def set_visibility(self, chat_id: str, message_ids: Sequence[str], level: int) -> int:
         """Raise the privacy mark of archive rows; visibility may only go up, never down."""
         value = clamp_visibility(level)
@@ -303,12 +286,6 @@ class HistoryStore:
             deleted_admin=bool(row.get("deleted_admin")),
         )
 
-    def _reset_ts(self, chat_id: str) -> float:
-        found = self.db.fetch_one(
-            select(chats.c.reset_ts).where(chats.c.chat_id == chat_id)
-        )
-        return float(found["reset_ts"]) if found else 0.0
-
     def chat_name(self, chat_id: str) -> str:
         if not chat_id:
             return ""
@@ -318,10 +295,9 @@ class HistoryStore:
         return str(found["name"]) if found else ""
 
     def recent(self, chat_id: str, limit: int) -> list[ChatMessage]:
-        reset = self._reset_ts(chat_id)
         statement = (
             select(messages)
-            .where(and_(messages.c.chat_id == chat_id, messages.c.ts >= reset))
+            .where(messages.c.chat_id == chat_id)
             .order_by(messages.c.ts.desc(), messages.c.id.desc())
             .limit(max(1, int(limit)))
         )

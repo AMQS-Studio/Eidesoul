@@ -120,7 +120,10 @@ second instance stays standby and frozen until it takes over through the lease, 
 `eidesoul console --takeover` is the supported way to talk to a running deployment by hand.
 
 `eidesoul db check` prints the schema and content summary; `eidesoul selftest` exercises stores,
-tools, and the LLM once without starting a gateway.
+tools, and the LLM once without starting a gateway. `eidesoul people list` shows the identities and
+their gateway addresses, and `eidesoul people adopt` moves legacy raw addresses (a phone number,
+`local`) onto `per_…` ids, folding their affect and style state and rewriting the role documents; it
+is idempotent, so an upgraded deployment runs it once.
 
 `uv sync` installs the capability spine: Postgres+pgvector storage, Mem0 memory, the multilingual
 embedder, the affect prototypes, and the guard. Only transport and integrations are extras:
@@ -288,12 +291,12 @@ roles:
     priority: 10
     users: []
     tools: [read, web_search, sandbox, memory, google]
-    commands: [help, ping, reset, whoami, status, tools]
+    commands: [help, ping, link, unlink, whoami, status, tools]
     context: ""
     memory_admin: false
   owner:
     priority: 100
-    users: ["<your address>"]
+    users: ["per_xxxxxxxxxx"]
     tools: ["*"]
     commands: ["*"]
     memory_admin: true
@@ -305,7 +308,10 @@ roles:
 - `approve` is a command permission like any other: only a role that lists it can clear a pending
   action.
 - `memory_admin: true` is required to write the soul's global memory.
-- Addresses in several roles are unioned; `context` blocks are ordered by priority, then name.
+- A role lists opaque `per_…` identities (`eidesoul people list`), never a phone number or JID:
+  `person_links` maps each gateway address to that identity, `/link` attaches a second gateway
+  to the same person, and `/unlink` detaches one. Identities in several roles are unioned;
+  `context` blocks are ordered by priority, then name.
 - A workspace scope follows the same grant: a role without `*` sees the shared read-only area and
   its own scratch area, and the sandbox mirrors that with read-only shared mounts and one writable
   scratch mount.

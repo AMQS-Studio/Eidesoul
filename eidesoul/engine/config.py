@@ -161,6 +161,7 @@ class SkillsConfig:
 class PromptConfig:
     salience: bool = True
     max_chars: int = 9000
+    thread_chars: int = 4000
 
 
 @dataclass(frozen=True)
@@ -788,6 +789,7 @@ def load_config(
         prompt=PromptConfig(
             salience=_bool(prompt_raw.get("salience"), True),
             max_chars=int(_num(prompt_raw.get("max_chars"), 9000)),
+            thread_chars=int(_num(prompt_raw.get("thread_chars"), 4000)),
         ),
         humanize=HumanizeConfig(
             enabled=_bool(humanize_raw.get("enabled"), False),

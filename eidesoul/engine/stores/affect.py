@@ -20,7 +20,7 @@ from ...vendor import emotion_engine as engine
 from .. import guard
 from ..config import AffectConfig
 from ..db import Database
-from ..schema import chat_people, drives, people, state, topics
+from ..schema import chat_eras, chat_people, drives, people, state, topics
 
 log = logging.getLogger(__name__)
 
@@ -32,6 +32,8 @@ NOTES_KEEP = 4
 NOTES_TEXT = 120
 PROMPT_CHARS = 1200
 TOPIC_CHARS = 400
+ERA_CHARS = 700
+ERA_PREFIX = "Sebelumnya: "
 LOG_LINES = 3
 PULSE_MINUTES = 5.0  # pre_turn_decay closer than this changes nothing
 PULSE_MAX_HOURS = 24.0  # cap on drive growth after a long downtime/clock skew
@@ -704,12 +706,68 @@ class AffectStore:
         summary = str(data["summary"]).strip()
         if not summary:
             return ""
-        lines = [f"Topic currently hot in this chat: {summary}"]
+        past = self.eras(chat_id, 1)
+        lines: list[str] = []
+        if past:
+            lines.append(f"{ERA_PREFIX}{str(past[0]['summary']).strip()}")
+        lines.append(f"Topic currently hot in this chat: {summary}")
         pending = [str(item) for item in data["unresolved"] if str(item).strip()][:2]
         if pending:
             lines.append(f"Unanswered questions: {'; '.join(pending)}")
+        limit = ERA_CHARS if past else TOPIC_CHARS
+        if past:
+            room = limit - len("\n".join(lines[1:])) - 1
+            keep = max(len(ERA_PREFIX), room)
+            if len(lines[0]) > keep:
+                lines[0] = lines[0][: max(len(ERA_PREFIX), keep - 1)] + "…"
         text = "\n".join(lines)
-        return text if len(text) <= TOPIC_CHARS else text[: TOPIC_CHARS - 1] + "…"
+        return text if len(text) <= limit else text[: limit - 1] + "…"
+
+    def archive_era(
+        self,
+        chat_id: str,
+        summary: str,
+        keywords: list[str],
+        unresolved: list[str],
+        *,
+        started_at: float,
+        ended_at: float,
+    ) -> None:
+        """Close a topic era; the next summary starts a new one."""
+        clean_keywords = [str(item).strip() for item in keywords if str(item).strip()][:10]
+        clean_pending = [str(item).strip() for item in unresolved if str(item).strip()][:5]
+        with self._lock, self.db.connect() as conn:
+            conn.execute(
+                insert(chat_eras).values(
+                    chat_id=chat_id,
+                    started_at=float(started_at),
+                    ended_at=float(ended_at),
+                    summary=" ".join(str(summary or "").split())[:240],
+                    keywords=clean_keywords,
+                    unresolved=clean_pending,
+                )
+            )
+
+    def eras(self, chat_id: str, limit: int = 3) -> list[dict]:
+        """Closed topic eras for this chat, newest first."""
+        with self._lock, self.db.connect() as conn:
+            rows = (
+                conn.execute(
+                    select(chat_eras)
+                    .where(chat_eras.c.chat_id == chat_id)
+                    .order_by(chat_eras.c.ended_at.desc(), chat_eras.c.id.desc())
+                    .limit(max(1, int(limit)))
+                )
+                .mappings()
+                .all()
+            )
+        found = []
+        for row in rows:
+            data = dict(row)
+            data["keywords"] = _as_list(data.get("keywords"))
+            data["unresolved"] = _as_list(data.get("unresolved"))
+            found.append(data)
+        return found
 
     def set_topic(
         self,

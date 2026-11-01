@@ -471,6 +471,7 @@ def inbound_message(
 
     return Inbound(
         chat_id=chat_id,
+        person_address=sender,
         message=ChatMessage(
             id=message_id or f"m-{text[:8]}",
             sender_name=sender_name,

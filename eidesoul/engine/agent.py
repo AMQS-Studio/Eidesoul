@@ -7,10 +7,11 @@ import contextlib
 import logging
 import random
 import time
+from dataclasses import replace
 from datetime import datetime
 from pathlib import Path
 
-from . import guard
+from . import assembly, guard
 from .approvals import ApprovalStore
 from .commands import REGISTRY as CORE_COMMANDS
 from .commands import CommandContext
@@ -34,6 +35,7 @@ from .decision import (
     ground_tone,
 )
 from .i18n import reload_catalogs, t
+from .identity import IdentityStore
 from .inbound import Gateway, GatewayError, Inbound
 from .llm import LLM
 from .memory import MemoryBackend, MemoryContext, memory_status
@@ -107,6 +109,7 @@ class Agent:
         vibe=None,
         gateways: tuple[Gateway, ...] = (),
         documents=None,
+        identity=None,
         approvals: ApprovalStore | None = None,
         safety: SafetyPolicy | None = None,
         runtime: RuntimeFacts | None = None,
@@ -129,6 +132,7 @@ class Agent:
         self.vibe = vibe
         self.gateways = tuple(gateways)
         self.documents = documents
+        self.identity = identity or IdentityStore(db)
         self.approvals = approvals or ApprovalStore(db, config.approval)
         self.safety = safety or build_safety(config.approval)
         self.sandbox_guard = SandboxGuard(
@@ -168,9 +172,7 @@ class Agent:
     def _role_set(self, inbound: Inbound) -> tuple[Role, ...]:
         if inbound.role_override:
             return self.config.roles.override(inbound.role_override)
-        return self.config.roles.for_address(
-            inbound.person_id or inbound.message.sender_address
-        )
+        return self.config.roles.for_person(inbound.person_id)
 
     @staticmethod
     def _sender(inbound: Inbound) -> str:
@@ -399,6 +401,15 @@ class Agent:
 
     # ------------------------------------------------------------- turn
 
+    def _identify(self, inbound: Inbound, gateway: Gateway) -> Inbound:
+        """Core-owned identity: the gateway hands in an address, the core assigns the id."""
+        raw = inbound.person_address or inbound.message.sender_address or self._sender(inbound)
+        try:
+            return replace(inbound, person_id=self.identity.resolve(gateway.name, raw))
+        except Exception:
+            log.exception("identity resolve failed gateway=%s", gateway.name)
+            return replace(inbound, person_id=inbound.person_id or raw)
+
     async def handle(self, inbound: Inbound, gateway: Gateway) -> None:
         message = inbound.message
         chat_id = inbound.chat_id
@@ -413,6 +424,8 @@ class Agent:
             log.info("old message chat=%s age=%.0fs: archive only", chat_id, age)
             return
 
+        # Only a message this turn acts on earns an identity: the bot's own echo must not mint one.
+        inbound = self._identify(inbound, gateway)
         text = message.text
         crisis = guard.is_crisis(text)
         roles = self._role_set(inbound)
@@ -638,13 +651,16 @@ class Agent:
                             person_style = self.style.person_profile(inbound.person_id)
                         except Exception:
                             log.debug("style: failed to read the chat profile chat=%s", chat_id, exc_info=True)
-                    window = self.windows.get(chat_id)
-                    for entry in window:
+                    messages = assembly.thread(
+                        self.history,
+                        chat_id,
+                        message,
+                        max_chars=self.config.prompt.thread_chars,
+                        window=self.windows.get(chat_id),
+                    )
+                    for entry in messages:
                         with contextlib.suppress(Exception):
                             await gateway.prepare_media(chat_id, entry)
-                    messages = self.windows.through(chat_id, message)
-                    if any(entry is message for entry in window):
-                        messages = window
                     covered = frozenset(entry.id for entry in messages if entry.id)
                     target, confidence, source = await self._target(
                         inbound, gateway, messages, message

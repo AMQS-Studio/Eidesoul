@@ -77,7 +77,7 @@ ENGINE: dict = {
         "ttl_seconds": 900,
     },
     "skills": {"max_index_chars": 3000},
-    "prompt": {"salience": True, "max_chars": 9000},
+    "prompt": {"salience": True, "max_chars": 9000, "thread_chars": 4000},
     "humanize": {
         "enabled": True,
         "cpms": 25.0,
@@ -185,7 +185,8 @@ ROLES: dict[str, dict] = {
         "commands": [
             "help",
             "ping",
-            "reset",
+            "link",
+            "unlink",
             "whoami",
             "status",
             "tools",
@@ -207,7 +208,16 @@ ROLES: dict[str, dict] = {
         "priority": 0,
         "users": [],
         "tools": ["read", "web_search", "chat_history", "memory"],
-        "commands": ["help", "ping", "reset", "whoami", "status", "tools", "cari"],
+        "commands": [
+            "help",
+            "ping",
+            "link",
+            "unlink",
+            "whoami",
+            "status",
+            "tools",
+            "cari",
+        ],
         "memory_admin": False,
         "context": (
             "You do not know this person yet. Stay polite and never open another chat's data.\n"

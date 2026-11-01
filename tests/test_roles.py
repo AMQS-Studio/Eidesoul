@@ -22,13 +22,13 @@ def test_load_role_mapping_and_union() -> None:
     registry = load_roles(source, "guest")
 
     assert registry.names() == ["guest", "owner", "panitia"]
-    roles = registry.for_address("628111")
+    roles = registry.for_person("628111")
     assert [role.name for role in roles] == ["owner", "panitia"]
     assert tool_patterns(roles) == ("*", "read")
     assert command_patterns(roles) == ("*", "help")
-    assert registry.for_address("628999")[0].name == "guest"
+    assert registry.for_person("628999")[0].name == "guest"
     # the core compares canonical identities only; a gateway hands in the bare identity
-    assert registry.for_address("628111@s.whatsapp.net")[0].name == "guest"
+    assert registry.for_person("628111@s.whatsapp.net")[0].name == "guest"
 
 
 def test_name_must_match_key() -> None:

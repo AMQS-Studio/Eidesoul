@@ -74,7 +74,7 @@ class CliGateway:
                     sender_address=self.settings.user or "local",
                 ),
                 is_dm=True,
-                person_id=self.settings.user or "local",
+                person_address=self.settings.user or "local",
                 role_override=(self.settings.role,) if self.settings.role else (),
             )
             try:

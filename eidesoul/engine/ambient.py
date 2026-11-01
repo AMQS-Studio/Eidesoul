@@ -13,6 +13,7 @@ from datetime import date, datetime
 
 from . import guard
 from .config import Config
+from .context import keyword_set
 from .currents import refresh
 from .roles import Role
 from .tools import ToolContext, execute
@@ -22,6 +23,15 @@ log = logging.getLogger(__name__)
 
 TRANSCRIPT_CHARS = 300
 AMBIENT_ROLE = ("web_search",)
+DRIFT_FLOOR = 0.2
+
+
+def drift(old: str, new: str) -> bool:
+    """True when the new summary shares almost none of the old summary's keywords."""
+    fresh = keyword_set(new)
+    if not fresh:
+        return False
+    return len(keyword_set(old) & fresh) / len(fresh) < DRIFT_FLOOR
 
 
 class Ambient:
@@ -219,6 +229,7 @@ class Ambient:
             summary = str(data.get("topic") or "")
             keywords = [str(item) for item in data.get("keywords") or []]
             unresolved = [str(item) for item in data.get("unresolved") or []]
+            self._close_era(chat_id, topic, summary)
             if summary or keywords or unresolved:
                 self.affect.set_topic(chat_id, summary, keywords, unresolved)
             self.affect.mark_digest(chat_id)
@@ -252,6 +263,21 @@ class Ambient:
             log.exception("ambient digest failed chat=%s", chat_id)
         finally:
             self.busy.discard(chat_id)
+
+    def _close_era(self, chat_id: str, topic: dict, summary: str) -> None:
+        """Archive the old topic as a dated era once the digest moved to another subject."""
+        previous = str(topic["summary"]).strip()
+        fresh = " ".join(str(summary or "").split())
+        if not previous or not fresh or not drift(previous, fresh):
+            return
+        self.affect.archive_era(
+            chat_id,
+            previous,
+            list(topic["keywords"]),
+            list(topic["unresolved"]),
+            started_at=float(topic["last_message"]),
+            ended_at=time.time(),
+        )
 
     async def _research(self, chat_id: str) -> None:
         if self.affect is None or self.llm is None:

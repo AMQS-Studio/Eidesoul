@@ -1,4 +1,4 @@
-"""Database archive contract: rich upsert, reset windows, quotes, and seeding."""
+"""Database archive contract: rich upsert, windows, quotes, and seeding."""
 
 from __future__ import annotations
 
@@ -74,17 +74,6 @@ def test_upsert_keeps_richer_fields(tmp_path) -> None:
     assert item.media.ref == b"abc"
     assert item.quote is not None and item.quote.text == "halo"
     assert store.message_count() == 1
-
-
-def test_reset_clears_window_but_keeps_archive(tmp_path) -> None:
-    store = HistoryStore(database(tmp_path))
-    store.add("chat", message("a", "lama", when=datetime(2026, 1, 1, 10)))
-    store.reset("chat")
-    store.add("chat", message("b", "baru", when=datetime.now()))
-
-    assert [item.id for item in store.recent("chat", 10)] == ["b"]
-    assert store.message_count() == 2
-    assert [item.id for item in store.search("chat", "lama")] == ["a"]
 
 
 def test_chat_name_and_recent_chats(tmp_path) -> None:

@@ -184,14 +184,13 @@ def event_to_inbound(ev, gateway) -> Inbound | None:
         unreadable=False,
     )
     bots = gateway.self_handles()
-    person_id = directory.resolve_person(gateway.db, sender) or sender_digits
     return Inbound(
         chat_id=chat_id,
         message=message,
         is_dm=not is_group(chat_id),
+        person_address=sender_digits,
         is_mention=mentioned(ev, bots),
         is_reply=replies_to_bot(ev, bots),
         is_self=bool(sender_digits and sender_digits in bots and not outgoing),
-        person_id=person_id,
         raw=ev,
     )

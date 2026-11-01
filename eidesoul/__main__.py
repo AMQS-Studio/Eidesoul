@@ -612,6 +612,84 @@ def _models(args: argparse.Namespace) -> int:
     return 0
 
 
+def _people_db(args: argparse.Namespace):
+    db = _doc_store(args)[1]
+    db.ensure()  # a deployment upgraded in place may miss the newest tables
+    return db
+
+
+def _people_adopt(args: argparse.Namespace) -> int:
+    from .admin import people as admin_people
+
+    documents, db = _doc_store(args)
+    try:
+        db.ensure()
+        documents.seed()
+        config = load_config(documents.paths.config, documents=documents, require_key=False)
+        rows = asyncio.run(admin_people.adopt(db, config, documents))
+    finally:
+        db.dispose()
+    for old, new, gateway, address in rows:
+        print(f"{old} -> {new} ({gateway}:{address})", flush=True)
+    print(f"adopt: {len(rows)} addresses migrated", flush=True)
+    return 0
+
+
+def _people_list(args: argparse.Namespace) -> int:
+    from .admin import people as admin_people
+
+    db = _people_db(args)
+    try:
+        for line in admin_people.summary(db):
+            print(line, flush=True)
+    finally:
+        db.dispose()
+    return 0
+
+
+def _people_link(args: argparse.Namespace) -> int:
+    from .admin import people as admin_people
+
+    db = _people_db(args)
+    try:
+        status = admin_people.link(db, args.person_id, args.gateway, args.address)
+    finally:
+        db.dispose()
+    if status == "ok":
+        print(f"linked {args.person_id} {args.gateway} {args.address}", flush=True)
+        return 0
+    if status == "taken":
+        print("address already linked", file=sys.stderr, flush=True)
+        return 2
+    print("error: person_id is empty", file=sys.stderr, flush=True)
+    return 2
+
+
+def _people_unlink(args: argparse.Namespace) -> int:
+    from .admin import people as admin_people
+
+    db = _people_db(args)
+    try:
+        removed = admin_people.unlink(db, args.person_id, args.gateway)
+    finally:
+        db.dispose()
+    print("unlinked" if removed else "not linked", flush=True)
+    return 0
+
+
+def _people_dispatch(args: argparse.Namespace) -> int:
+    handlers = {
+        "list": _people_list,
+        "link": _people_link,
+        "unlink": _people_unlink,
+        "adopt": _people_adopt,
+    }
+    if args.people_command in handlers:
+        return handlers[args.people_command](args)
+    build_parser().print_help()
+    return 2
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="eidesoul", description="Eidesoul soul engine")
     parser.add_argument("--config", default=None, help="path to config.yaml (default: ./config.yaml)")
@@ -658,6 +736,17 @@ def build_parser() -> argparse.ArgumentParser:
     db_restore.add_argument("file", help="backup file")
     db_restore.add_argument("--yes", action="store_true", help="confirm the restore")
     db_restore.add_argument("--force", action="store_true", help="ignore an active lease")
+    people = sub.add_parser("people", help="person identity operations")
+    people_sub = people.add_subparsers(dest="people_command")
+    people_sub.add_parser("list", help="list identities, roles, and linked addresses")
+    people_link = people_sub.add_parser("link", help="link a gateway address to an identity")
+    people_link.add_argument("person_id", help="per_… identity id")
+    people_link.add_argument("gateway", help="gateway name, e.g. whatsapp")
+    people_link.add_argument("address", help="the gateway's own address for that person")
+    people_unlink = people_sub.add_parser("unlink", help="remove one gateway link")
+    people_unlink.add_argument("person_id", help="per_… identity id")
+    people_unlink.add_argument("gateway", help="gateway name")
+    people_sub.add_parser("adopt", help="move legacy raw addresses onto per_… identities")
     return parser
 
 
@@ -676,8 +765,9 @@ def main(argv: list[str] | None = None) -> int:
             return _config_export(args)
         if args.command == "config" and args.config_command == "import":
             return _config_import(args)
-        if args.command == "library":
-            return _library_dispatch(args)
+        dispatch = {"library": _library_dispatch, "people": _people_dispatch}
+        if args.command in dispatch:
+            return dispatch[args.command](args)
         if args.command == "db":
             handlers = {
                 "upgrade": _db_upgrade,

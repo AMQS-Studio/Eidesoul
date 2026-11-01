@@ -13,7 +13,6 @@ from sqlalchemy import and_, func, select, update
 from ...engine.context import ChatMessage
 from ...engine.db import Database
 from ...engine.schema import chats, messages
-from .identity import normalize_jid
 from .schema import wa_contacts, wa_lid_map
 
 log = logging.getLogger(__name__)
@@ -97,17 +96,6 @@ def pn_jid(db: Database, jid: str) -> str:
         return ""
     found = db.fetch_one(select(wa_lid_map.c.pn).where(wa_lid_map.c.lid == jid))
     return str(found["pn"]) if found is not None and found["pn"] else ""
-
-
-def resolve_person(db: Database, jid: str) -> str:
-    raw = str(jid or "")
-    if not raw:
-        return ""
-    if raw.endswith("@lid"):
-        mapped = db.fetch_one(select(wa_lid_map.c.pn).where(wa_lid_map.c.lid == raw))
-        if mapped is not None and str(mapped["pn"]):
-            return normalize_jid(str(mapped["pn"]))
-    return normalize_jid(raw)
 
 
 def refresh_sender_names(db: Database) -> int:

@@ -46,11 +46,11 @@ class RoleRegistry:
             raise RoleError("no roles loaded")
         return self.by_name[self.names()[0]]
 
-    def for_address(self, address: str) -> tuple[Role, ...]:
-        """Every role that lists this address, ordered by priority desc then name."""
+    def for_person(self, person_id: str) -> tuple[Role, ...]:
+        """Every role that lists this person id, ordered by priority desc then name."""
         from .permissions import normalize  # local: permissions imports this module
 
-        who = normalize(str(address or ""))
+        who = normalize(str(person_id or ""))
         matched = [
             role
             for role in self.by_name.values()
@@ -61,7 +61,7 @@ class RoleRegistry:
         return tuple(sorted(matched, key=lambda role: (-role.priority, role.name)))
 
     def override(self, names: tuple[str, ...]) -> tuple[Role, ...]:
-        """Replace the for_address result with named roles (used by the CLI gateway)."""
+        """Replace the for_person result with named roles (used by the CLI gateway)."""
         found: list[Role] = []
         for name in names:
             role = self.get(name)

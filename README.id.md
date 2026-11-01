@@ -128,7 +128,10 @@ Instance kedua tetap standby dan beku sampai mengambil alih lewat lease, jadi
 berjalan.
 
 `eidesoul db check` mencetak ringkasan skema dan isi; `eidesoul selftest` menguji store, tool, dan
-LLM sekali tanpa menjalankan gateway.
+LLM sekali tanpa menjalankan gateway. `eidesoul people list` menampilkan identitas dan alamat
+gateway-nya, dan `eidesoul people adopt` memindahkan alamat lama (nomor telepon, `local`) ke id
+`per_…`, ikut membawa state affect dan style-nya serta menulis ulang dokumen peran; ia idempoten,
+jadi deployment yang di-upgrade cukup menjalankannya sekali.
 
 `uv sync` memasang tulang punggung kemampuan: penyimpanan Postgres+pgvector, memori Mem0, embedder
 multibahasa, prototipe affect, dan guard. Hanya transport dan integrasi yang berupa extra:
@@ -303,12 +306,12 @@ roles:
     priority: 10
     users: []
     tools: [read, web_search, sandbox, memory, google]
-    commands: [help, ping, reset, whoami, status, tools]
+    commands: [help, ping, link, unlink, whoami, status, tools]
     context: ""
     memory_admin: false
   owner:
     priority: 100
-    users: ["<alamat Anda>"]
+    users: ["per_xxxxxxxxxx"]
     tools: ["*"]
     commands: ["*"]
     memory_admin: true
@@ -320,7 +323,10 @@ roles:
 - `approve` adalah izin command seperti yang lain: hanya peran yang mencantumkannya bisa
   menyelesaikan aksi yang tertunda.
 - `memory_admin: true` wajib untuk menulis memori global jiwa.
-- Alamat di beberapa peran digabung; blok `context` diurutkan berdasarkan priority, lalu name.
+- Peran mencantumkan identitas opaque `per_…` (`eidesoul people list`), bukan nomor telepon atau
+  JID: `person_links` memetakan tiap alamat gateway ke identitas itu, `/link` menautkan gateway
+  kedua ke orang yang sama, dan `/unlink` melepasnya. Identitas di beberapa peran digabung;
+  blok `context` diurutkan berdasarkan priority, lalu name.
 - Cakupan workspace mengikuti pemberian yang sama: peran tanpa `*` melihat area bersama yang
   read-only dan area scratch miliknya, dan sandbox mencerminkan itu dengan mount bersama read-only
   serta satu mount scratch yang bisa ditulis.

@@ -349,12 +349,13 @@ def test_agent_turn_asks_then_sends_after_confirmation(tmp_path) -> None:
         answer={"kind": "yes", "level": 0},
         text="halo juga",
     )
+    person = env.agent.identity.resolve("fake", "628111")
     env.memory.hits["m3"] = MemoryHit(
         id="m3",
         text="aib budi",
         level=3,
-        owner_id="628111",
-        subject_id="628111",
+        owner_id=person,
+        subject_id=person,
         confirmed=True,
     )
     group = inbound_message(
