@@ -85,3 +85,10 @@ Eidesoul checklist. Every item is done when the listed surface exists and works 
       a repository URL in `pyproject.toml`.
 - [x] README credits table (component, license, author, source, use) covers every declared
       dependency and is mirrored in `README.id.md`.
+- [x] The core carries no gateway or provider vocabulary: roles match `Inbound.person_id`, deletion
+      and role comparison use canonical addresses, the DM/group label comes from `Inbound.is_dm`,
+      mentionability is `ChatMessage.sender_kind == "person"`, and WhatsApp's digit rule lives in
+      `eidesoul/gateways/whatsapp/identity.py`.
+- [x] The provider is the operator's choice with no code default: `engine.llm.provider` is required,
+      `eidesoul init --provider <name>` is required, and the scaffold `.env` names only the chosen
+      provider's key variable.

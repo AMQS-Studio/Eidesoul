@@ -157,9 +157,30 @@ def test_the_scaffold_writes_the_operator_choice():
 
 
 def test_the_scaffold_ships_no_model_of_its_own():
-    body = yaml.safe_load(templates.files()["config.yaml"])
+    body = yaml.safe_load(templates.files(provider="groq")["config.yaml"])
 
     assert body["engine"]["llm"]["model"] == ""
+
+
+def test_the_scaffold_env_only_names_the_chosen_key():
+    env = templates.files(provider="groq")[".env"]
+
+    assert env.startswith("GROQ_API_KEY=")
+    assert "OPENCODE" not in env
+
+
+def test_a_missing_provider_is_a_config_error(tmp_path):
+    write_folder(tmp_path, {"model": "m"})
+
+    with pytest.raises(ConfigError, match="engine.llm.provider is required"):
+        load_config(tmp_path / "config.yaml")
+
+
+def test_custom_needs_a_key_variable(tmp_path):
+    write_folder(tmp_path, {"provider": "custom", "base_url": "http://x", "model": "m"})
+
+    with pytest.raises(ConfigError, match="engine.llm.api_key_env is required"):
+        load_config(tmp_path / "config.yaml")
 
 
 def test_unknown_provider_is_rejected_by_the_scaffold():

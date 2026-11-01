@@ -102,20 +102,20 @@ class WhatsAppGateway:
             try:
                 if ev.Info.MessageSource.Chat.Server == "g.us":
                     await self.ensure_group_name(ev.Info.MessageSource.Chat.User + "@g.us")
-                revoked = ingress.revoke_target(ev)
+                revoked = ingress.revoke_target(ev, self)
                 if revoked is not None:
-                    target_id, by_jid = revoked
+                    target_id, by_address = revoked
                     source = ev.Info.MessageSource
                     chat_id = f"{source.Chat.User}@{source.Chat.Server}"
-                    name = directory.contact_name(self.db, by_jid) or (
+                    name = directory.contact_name(self.db, by_address) or (
                         ev.Info.Pushname or ""
                     ).strip()
-                    if self.windows.mark_deleted(chat_id, target_id, by_jid, name):
+                    if self.windows.mark_deleted(chat_id, target_id, by_address, name):
                         log.info(
                             "message deleted chat=%s id=%s by=%s",
                             chat_id,
                             target_id,
-                            name or by_jid,
+                            name or by_address,
                         )
                     return
                 inbound = ingress.event_to_inbound(ev, self)
@@ -229,9 +229,9 @@ class WhatsAppGateway:
         known: dict[str, str] = {}
         names: dict[str, str] = {}
         for entry in self.windows.get(chat_id):
-            if not entry.sender_id or not entry.sender_jid:
+            if not entry.sender_id or not entry.sender_address:
                 continue
-            known.setdefault(entry.sender_id, entry.sender_jid)
+            known.setdefault(entry.sender_id, entry.sender_address)
             label = (entry.sender_name or "").strip().casefold()
             if not label:
                 continue

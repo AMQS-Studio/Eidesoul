@@ -40,10 +40,10 @@ HOST: dict = {
 
 ENGINE: dict = {
     "llm": {
-        "provider": "opencode",
-        "base_url": "https://opencode.ai/inference/go/openai/v1",
+        "provider": "",
+        "base_url": "",
         "model": "",
-        "api_key_env": "OPENCODE_GO_API_KEY",
+        "api_key_env": "",
         "reasoning_effort": "",
         "timeout_seconds": 120,
         "temperature": 0.9,
@@ -215,12 +215,18 @@ ROLES: dict[str, dict] = {
     },
 }
 
-ENV = """OPENCODE_GO_API_KEY=
-EIDESOUL_DATABASE_URL=postgresql+psycopg://eidesoul:CHANGE_ME@127.0.0.1:5432/eidesoul
+ENV_TAIL = """EIDESOUL_DATABASE_URL=postgresql+psycopg://eidesoul:CHANGE_ME@127.0.0.1:5432/eidesoul
 GOOGLE_SERVICE_ACCOUNT_PATH=
 GOOGLE_OAUTH_CLIENT_ID=
 GOOGLE_OAUTH_CLIENT_SECRET=
 """
+
+
+def env_file(provider: str) -> str:
+    """`.env` content: only the chosen provider's key variable, then the shared tail."""
+    key_env = PROVIDERS[provider].api_key_env
+    head = f"{key_env}=\n" if key_env else ""
+    return head + ENV_TAIL
 
 
 def dump(body: object) -> str:
@@ -234,7 +240,7 @@ def soul_yaml() -> str:
     return DEFAULT_SOUL_YAML + style_block(style)
 
 
-def files(*, provider: str = "opencode", model: str = "") -> dict[str, str]:
+def files(*, provider: str, model: str = "") -> dict[str, str]:
     """Every scaffold file: relative path -> content.
 
     `provider` and `model` are the operator's pick; the scaffold never ships a model id of
@@ -254,5 +260,5 @@ def files(*, provider: str = "opencode", model: str = "") -> dict[str, str]:
         "config.yaml": dump(config),
         "roles.yaml": dump({"roles": ROLES}),
         "soul.yaml": soul_yaml(),
-        ".env": ENV,
+        ".env": env_file(provider),
     }

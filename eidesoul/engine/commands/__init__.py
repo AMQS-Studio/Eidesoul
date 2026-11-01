@@ -20,6 +20,7 @@ class CommandContext:
     commands: tuple[Handler, ...]
     tools: tuple[Handler, ...]
     sender: str = ""
+    is_dm: bool = True
     inbound: Any = None
 
     @property

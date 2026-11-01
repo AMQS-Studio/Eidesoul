@@ -276,6 +276,8 @@ database:
 workspace: ".eidesoul/workspace"
 engine:
   llm:
+    provider: custom
+    base_url: http://x
     api_key_env: EIDESOUL_TEST_KEY
     model: test-model
   default_role: owner

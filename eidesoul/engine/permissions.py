@@ -17,10 +17,9 @@ __all__ = [
 
 
 def normalize(value: str) -> str:
-    """Keep the digits only; a JID without digits is used as-is (lowercase)."""
-    head = str(value or "").split("@")[0].split(":")[0]
-    digits = "".join(ch for ch in head if ch.isdigit())
-    return digits or str(value or "").lower()
+    """Canonical form for role and address comparison; gateways hand in identities
+    already in their canonical shape."""
+    return str(value or "").strip().casefold()
 
 
 def _as_roles(roles) -> tuple:

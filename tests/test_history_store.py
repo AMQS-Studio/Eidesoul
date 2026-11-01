@@ -17,7 +17,8 @@ def message(
     *,
     when: datetime | None = None,
     sender_name: str = "Budi",
-    sender_jid: str = "628222@s.whatsapp.net",
+    sender_address: str = "628222@s.whatsapp.net",
+    sender_kind: str = "person",
     media: Media | None = None,
     quote: Quote | None = None,
     outgoing: bool = False,
@@ -36,7 +37,8 @@ def message(
         media=media,
         quote=quote,
         outgoing=outgoing,
-        sender_jid=sender_jid,
+        sender_address=sender_address,
+        sender_kind=sender_kind,
         author=author,
         visibility=visibility,
         view_once=view_once,
@@ -104,8 +106,21 @@ def test_people_and_style_seed_skip_outgoing(tmp_path) -> None:
 
     people = store.people_seed()
     assert [row["text"] for row in people] == ["halo"]
-    assert people[0]["sender_jid"] == "628222@s.whatsapp.net"
+    assert people[0]["sender_address"] == "628222@s.whatsapp.net"
     assert [row["text"] for row in store.style_sample()] == ["halo"]
+
+
+def test_sender_address_and_kind_roundtrip(tmp_path) -> None:
+    store = HistoryStore(database(tmp_path))
+    store.add("chat", message("a", "halo", sender_kind=""))
+    store.add("chat", message("b", "halo"))
+
+    plain = store.find("chat", "a")
+    person = store.find("chat", "b")
+
+    assert plain.sender_address == "628222@s.whatsapp.net"
+    assert plain.sender_kind == ""
+    assert person.sender_kind == "person"
 
 
 def test_author_and_visibility_roundtrip(tmp_path) -> None:

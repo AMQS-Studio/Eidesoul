@@ -8,15 +8,15 @@ from . import CommandContext
 
 
 def _chat_label(ctx: CommandContext, lang: str) -> str:
-    kind = t(f"command.whoami.{_kind_key(ctx.chat_id)}", lang)
+    kind = t(f"command.whoami.{_kind_key(ctx)}", lang)
     name = ctx.gateway.chat_name(ctx.chat_id) if ctx.gateway is not None else ""
     if name:
         return t("command.whoami.chat_label", lang, kind=kind, name=name, id=ctx.chat_id)
     return t("command.whoami.chat_plain", lang, kind=kind, id=ctx.chat_id)
 
 
-def _kind_key(chat_id: str) -> str:
-    return "group" if chat_id.endswith("@g.us") else "dm"
+def _kind_key(ctx: CommandContext) -> str:
+    return "dm" if ctx.is_dm else "group"
 
 
 async def whoami(ctx: CommandContext) -> str:

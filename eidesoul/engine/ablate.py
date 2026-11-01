@@ -160,6 +160,7 @@ async def decision_shift(
     chat_id: str = "",
     history: list[ChatMessage] | None = None,
     affect=None,
+    is_dm: bool = True,
 ) -> dict:
     """Compare the gate decision with and without the ablated blocks (a real LLM)."""
     if sample <= 0:
@@ -173,7 +174,6 @@ async def decision_shift(
     sampled = rows[-sample:]
     messages = history if history is not None else [row.message for row in rows]
     bot_name = config.soul.name
-    is_dm = bool(chat_id) and not chat_id.endswith("@g.us")
     counts = {"addressed_changed": 0, "act_changed": 0, "tone_changed": 0}
     compared = 0
     examples: list[dict] = []

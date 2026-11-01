@@ -9,7 +9,8 @@ import time
 from collections.abc import Sequence
 from datetime import datetime
 
-from sqlalchemy import Text, and_, case, cast, func, or_, select
+from sqlalchemy import Text, and_, case, cast, func, literal, or_, select
+from sqlalchemy.dialects.postgresql import JSONB
 
 from ..context import (
     AUTHOR_RANK,
@@ -20,9 +21,13 @@ from ..context import (
     clamp_visibility,
 )
 from ..db import Database
-from ..schema import Json, chats, messages
+from ..schema import chats, messages
 
 log = logging.getLogger(__name__)
+
+# Facts ride in the `data` blob but never make a row richer: the upsert keeps the old content
+# when the incoming row carries nothing but these keys.
+FACT_KEYS = ("sender_kind",)
 
 
 def _media_json(media: Media) -> dict:
@@ -66,6 +71,8 @@ def _data(message: ChatMessage) -> dict:
         data["view_once"] = True
     if message.unreadable:
         data["unreadable"] = True
+    if message.sender_kind:
+        data["sender_kind"] = message.sender_kind
     return data
 
 
@@ -105,7 +112,7 @@ class HistoryStore:
             "ts": message.when.timestamp(),
             "sender_id": message.sender_id or "",
             "sender_name": message.sender_name or "",
-            "sender_address": message.sender_jid or "",
+            "sender_address": message.sender_address or "",
             "text": message.text or "",
             "outgoing": bool(message.outgoing),
             "author": message.author,
@@ -119,15 +126,26 @@ class HistoryStore:
         }
 
     @staticmethod
+    def _content_data(excluded, dialect: str):
+        """The incoming `data` without its fact keys; NULL when the row carries no content."""
+        if dialect == "postgresql":
+            stripped = cast(excluded.data, JSONB)
+            for key in FACT_KEYS:
+                stripped = stripped - cast(literal(key), Text)
+            return func.nullif(cast(stripped, Text), "{}")
+        stripped = excluded.data
+        for key in FACT_KEYS:
+            stripped = func.json_remove(stripped, f"$.{key}")
+        return func.nullif(stripped, "{}")
+
+    @staticmethod
     def _merge(stmt, dialect: str) -> dict:
         table = messages
         excluded = stmt.excluded
-        if dialect == "postgresql":
-            data = func.coalesce(
-                cast(func.nullif(cast(excluded.data, Text), "{}"), Json), table.c.data
-            )
-        else:
-            data = func.coalesce(func.nullif(excluded.data, "{}"), table.c.data)
+        data = case(
+            (HistoryStore._content_data(excluded, dialect).is_(None), table.c.data),
+            else_=excluded.data,
+        )
         new_rank = case(AUTHOR_RANK, value=excluded.author, else_=0)
         old_rank = case(AUTHOR_RANK, value=table.c.author, else_=0)
         keep_new = new_rank >= old_rank
@@ -192,7 +210,6 @@ class HistoryStore:
                         "chat_id": chat_id,
                         "name": "",
                         "reset_ts": now,
-                        "kind": "group" if chat_id.endswith("@g.us") else "dm",
                     }
                 ],
                 ["chat_id"],
@@ -212,9 +229,11 @@ class HistoryStore:
             changed += 1
         return changed
 
-    def mark_deleted(self, chat_id: str, message_id: str, by_jid: str, by_name: str = "") -> bool:
+    def mark_deleted(
+        self, chat_id: str, message_id: str, by_address: str, by_name: str = ""
+    ) -> bool:
         entry = self.find(chat_id, message_id)
-        if entry is None or not entry.mark_deleted(by_jid, by_name):
+        if entry is None or not entry.mark_deleted(by_address, by_name):
             return False
         self.add(chat_id, entry)
         return True
@@ -229,7 +248,6 @@ class HistoryStore:
             "chat_id": chat_id,
             "name": value,
             "reset_ts": 0.0,
-            "kind": "group" if chat_id.endswith("@g.us") else "dm",
         }
         with self.db.connect() as conn:
             self.db.upsert(
@@ -274,7 +292,8 @@ class HistoryStore:
             media=_media_from(data.get("media"), row.get("media_ref")),
             quote=quote,
             outgoing=bool(row["outgoing"]),
-            sender_jid=str(row["sender_address"]),
+            sender_address=str(row["sender_address"]),
+            sender_kind=str(data.get("sender_kind") or ""),
             author=author,
             visibility=clamp_visibility(row.get("visibility")),
             view_once=bool(data.get("view_once")),
@@ -369,7 +388,7 @@ class HistoryStore:
                 messages.c.chat_id,
                 messages.c.sender_id,
                 messages.c.sender_name,
-                messages.c.sender_address.label("sender_jid"),
+                messages.c.sender_address.label("sender_address"),
                 messages.c.text,
                 messages.c.ts,
             )

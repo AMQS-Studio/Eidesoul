@@ -108,7 +108,8 @@ def row(mid: str, text: str, **kwargs) -> ChatMessage:
         sender_id=kwargs.pop("sender_id", "628222"),
         when=datetime(2026, 1, 1, 10),
         text=text,
-        sender_jid=kwargs.pop("sender_jid", ""),
+        sender_address=kwargs.pop("sender_address", ""),
+        sender_kind=kwargs.pop("sender_kind", ""),
         **kwargs,
     )
 
@@ -119,7 +120,9 @@ def head(text: str) -> str:
 
 def test_deleted_row_hides_its_text_in_the_payload(tmp_path) -> None:
     config = build_config(tmp_path, soul=Soul(name="eidesoul", persona="p"))
-    entry = row("m1", "rahasia banget", author="manual_owner", sender_jid="628222@s.whatsapp.net")
+    entry = row(
+        "m1", "rahasia banget", author="manual_owner", sender_address="628222@s.whatsapp.net"
+    )
     assert entry.mark_deleted("628222@s.whatsapp.net") is True
 
     text = asyncio.run(build_user_content(config, "chat", [entry], entry))
@@ -130,10 +133,10 @@ def test_deleted_row_hides_its_text_in_the_payload(tmp_path) -> None:
 
 def test_deleted_by_admin_names_the_admin_and_bot_rows_are_never_admin(tmp_path) -> None:
     config = build_config(tmp_path, soul=Soul(name="eidesoul", persona="p"))
-    member = row("m1", "isi", sender_jid="628222@s.whatsapp.net")
+    member = row("m1", "isi", sender_address="628222@s.whatsapp.net")
     member.mark_deleted("628999@s.whatsapp.net", "Ani")
     bot = row("b1", "halo", sender_name="eidesoul", sender_id="628567770837", author="bot",
-              sender_jid="628567770837@s.whatsapp.net")
+              sender_address="628567770837@s.whatsapp.net")
     bot.mark_deleted("628567770837@s.whatsapp.net", "Owner")
 
     text = asyncio.run(build_user_content(config, "chat", [member, bot], bot))
@@ -171,16 +174,37 @@ def test_prompt_entry_uses_the_deletion_note_not_the_retained_text() -> None:
     )
 
 
-def test_normal_row_tag_is_unchanged_and_pn_rows_expose_a_mention_handle(tmp_path) -> None:
+def test_deletion_matches_the_canonical_address_not_its_digits() -> None:
+    digits_only = row("m1", "isi", sender_address="628222@s.whatsapp.net")
+    same = row("m2", "isi", sender_address="628222@s.whatsapp.net")
+
+    assert digits_only.mark_deleted("628222") is True
+    assert digits_only.deleted_admin is True
+    assert same.mark_deleted("628222@s.whatsapp.net") is True
+    assert same.deleted_admin is False
+
+
+def test_normal_row_tag_is_unchanged_and_person_rows_expose_a_mention_handle(tmp_path) -> None:
     config = build_config(tmp_path, soul=Soul(name="eidesoul", persona="p"))
     plain = row("m1", "halo")
-    pn = row("m2", "halo", sender_jid="628222@s.whatsapp.net")
+    person = row("m2", "halo", sender_address="628222@example.net", sender_kind="person")
 
-    text = asyncio.run(build_user_content(config, "chat", [plain, pn], pn))
+    text = asyncio.run(build_user_content(config, "chat", [plain, person], person))
     lines = [line for line in text.splitlines() if line.startswith("[2026-01-01 10:00]")]
 
     assert lines[0] == "[2026-01-01 10:00] Budi (628222) [role=unknown vis=L2]:"
     assert lines[1].endswith("[role=unknown vis=L2, mention=@628222]:")
+
+
+def test_a_non_person_address_gets_no_mention_tag(tmp_path) -> None:
+    config = build_config(tmp_path, soul=Soul(name="eidesoul", persona="p"))
+    entry = row("m1", "halo", sender_address="628222@example.net")
+
+    text = asyncio.run(build_user_content(config, "chat", [entry], entry))
+    line = head(text)
+
+    assert "mention=@" not in line
+    assert line.endswith("[role=unknown vis=L2]:")
 
 
 def test_placeholder_row_clears_when_the_real_message_arrives() -> None:

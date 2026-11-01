@@ -27,7 +27,7 @@ def init(
     folder: str | Path,
     *,
     force: bool = False,
-    provider: str = "opencode",
+    provider: str,
     model: str = "",
 ) -> tuple[list[Path], list[Path]]:
     """Write the scaffold; return (written, skipped). `model` stays the operator's pick."""
@@ -51,7 +51,7 @@ def report(
     written: list[Path],
     skipped: list[Path],
     *,
-    provider: str = "opencode",
+    provider: str,
     model: str = "",
 ) -> str:
     lines = [f"Eidesoul scaffold: {Path(base).expanduser().resolve()}"]
@@ -59,8 +59,12 @@ def report(
         lines.append(f"  wrote  {path}")
     for path in skipped:
         lines.append(f"  kept   {path} (already exists; --force to overwrite)")
-    key_env = PROVIDERS[provider].api_key_env if provider in PROVIDERS else "the provider key"
-    steps = [f"fill .env ({key_env}, EIDESOUL_DATABASE_URL)"]
+    key_env = PROVIDERS[provider].api_key_env
+    steps = [
+        f"fill .env ({key_env}, EIDESOUL_DATABASE_URL)"
+        if key_env
+        else "fill .env (EIDESOUL_DATABASE_URL)"
+    ]
     if not model:
         steps.append(
             "choose a model: `eidesoul models` lists the ids the provider serves, then set "

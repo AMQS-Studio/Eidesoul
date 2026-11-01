@@ -22,7 +22,12 @@ BASE = {
     "workspace": ".eidesoul/workspace",
     "roles_file": "roles.yaml",
     "engine": {
-        "llm": {"api_key_env": "EIDESOUL_TEST_KEY", "model": "seed-model", "base_url": "http://x"},
+        "llm": {
+            "provider": "custom",
+            "base_url": "http://x",
+            "api_key_env": "EIDESOUL_TEST_KEY",
+            "model": "seed-model",
+        },
         "default_role": "guest",
         "memory": {
             "privacy": {
@@ -91,7 +96,8 @@ def test_documents_override_config_sections(tmp_path, monkeypatch) -> None:
     docs = DocumentStore(database(tmp_path), load_host(tmp_path / "config.yaml")[1])
     docs.put(
         "engine",
-        "llm:\n  model: doc-model\n  api_key_env: EIDESOUL_TEST_KEY\ndefault_role: owner\n",
+        "llm:\n  provider: custom\n  base_url: http://doc\n"
+        "  model: doc-model\n  api_key_env: EIDESOUL_TEST_KEY\ndefault_role: owner\n",
     )
     docs.put("soul", "name: eidesoul\nlanguage: id\npronouns: aku\n")
     docs.put("role:owner", "name: owner\ntools: ['*']\nmemory_admin: true\n")

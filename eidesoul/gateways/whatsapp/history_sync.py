@@ -10,7 +10,7 @@ from neonize.proto.waHistorySync.WAWebProtobufsHistorySync_pb2 import HistorySyn
 from neonize.proto.waCompanionReg.WAWebProtobufsCompanionReg_pb2 import DeviceProps
 
 from ...engine.context import AUTHOR_UNKNOWN, DEFAULT_VISIBILITY, ChatMessage
-from ...engine.permissions import normalize
+from .identity import normalize_jid
 from . import directory
 from .media import describe_media, event_time, message_text, quote_from_proto
 
@@ -141,14 +141,14 @@ def _sync_item(db, web, fallback_chat: str, fallback_ts: int = 0, self_jid: str 
     author = AUTHOR_UNKNOWN
     from_me = bool(key.fromMe)
     if from_me:
-        sender_jid = self_jid
+        sender_address = self_jid
     elif chat_id.endswith("@g.us"):
-        sender_jid = key.participant or web.participant or ""
+        sender_address = key.participant or web.participant or ""
     else:
-        sender_jid = chat_id
-    sender_id = normalize(sender_jid) if sender_jid else ""
+        sender_address = chat_id
+    sender_id = normalize_jid(sender_address) if sender_address else ""
     sender = (
-        directory.contact_name(db, sender_jid) if sender_jid else ""
+        directory.contact_name(db, sender_address) if sender_address else ""
     ) or (web.pushName or "").strip() or sender_id
     return (
         chat_id,
@@ -161,7 +161,8 @@ def _sync_item(db, web, fallback_chat: str, fallback_ts: int = 0, self_jid: str 
             media=media,
             quote=quote,
             outgoing=from_me,
-            sender_jid=sender_jid,
+            sender_address=sender_address,
+            sender_kind="person" if sender_address.endswith("@s.whatsapp.net") else "",
             author=author,
             visibility=DEFAULT_VISIBILITY,
         ),

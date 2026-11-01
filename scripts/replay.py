@@ -85,7 +85,7 @@ def message(text: str, *, speaker: str, when: datetime, index: int, author: str 
         id=f"replay-{index}",
         sender_name=speaker,
         sender_id="owner" if speaker == "Muqsith" else speaker.lower(),
-        sender_jid="",
+        sender_address="",
         when=when,
         text=text,
         outgoing=author == AUTHOR_BOT,

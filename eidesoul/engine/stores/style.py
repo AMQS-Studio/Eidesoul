@@ -215,10 +215,10 @@ class StyleStore:
                 if chat_id:
                     self._count(self._data["chats"].setdefault(chat_id, _empty()), body)
                 person_id = ""
-                jid = str(item.get("sender_jid") or "")
-                if jid and history is not None:
+                address = str(item.get("sender_address") or "")
+                if address and history is not None:
                     try:
-                        person_id = history.resolve_person(jid)
+                        person_id = history.resolve_person(address)
                     except Exception:
                         person_id = ""
                 person_id = person_id or str(item.get("sender_id") or "")

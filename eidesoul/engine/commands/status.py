@@ -21,7 +21,8 @@ def _ago(stamp: float, lang: str) -> str:
 
 
 def _chat_label(ctx: CommandContext, lang: str) -> str:
-    kind = t(f"command.status.{'chat_group' if ctx.chat_id.endswith('@g.us') else 'chat_dm'}", lang)
+    key = "chat_dm" if ctx.is_dm else "chat_group"
+    kind = t(f"command.status.{key}", lang)
     name = ctx.gateway.chat_name(ctx.chat_id) if ctx.gateway is not None else ""
     label = t("command.status.chat_label", lang, kind=kind, name=name) if name else kind
     return t("command.status.chat_roles", lang, label=label, roles=ctx.role_names())

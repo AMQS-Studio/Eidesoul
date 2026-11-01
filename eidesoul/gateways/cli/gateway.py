@@ -71,7 +71,7 @@ class CliGateway:
                     sender_id=self.settings.user or "local",
                     when=datetime.now(),
                     text=text,
-                    sender_jid=self.settings.user or "local",
+                    sender_address=self.settings.user or "local",
                 ),
                 is_dm=True,
                 person_id=self.settings.user or "local",

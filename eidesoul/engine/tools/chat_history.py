@@ -57,7 +57,7 @@ def _target(raw: str, ctx: ToolContext) -> str | tuple[str, str]:
             f"- {name} ({chat_id})" if name else f"- {chat_id}"
             for chat_id, name in candidates[:CANDIDATE_LIMIT]
         )
-        return f'error: several chats match "{raw}"; use the full name or JID:\n{listing}'
+        return f'error: several chats match "{raw}"; use the full name or id:\n{listing}'
     if target is None:
         return f'error: chat "{raw}" is not in the archive.'
     return target
@@ -134,7 +134,7 @@ TOOL = Handler(
     family="read",
     description=(
         "Search an archived chat, newest first. Default: this chat's archive (outside the "
-        "20-message payload). chat=<group/contact name or JID> reads another archived chat; read "
+        "20-message payload). chat=<chat name or id> reads another archived chat; read "
         "the target with this tool before sending anything to it."
     ),
     fn=_search,
@@ -146,7 +146,7 @@ TOOL = Handler(
             "chat": {
                 "type": "string",
                 "description": (
-                    "Other archived chat: group/contact name (partial ok) or JID. Empty = this chat."
+                    "Other archived chat: chat name (partial ok) or id. Empty = this chat."
                 ),
             },
             "before": {"type": "string", "description": "Upper time bound, ISO YYYY-MM-DD or YYYY-MM-DDTHH:MM."},

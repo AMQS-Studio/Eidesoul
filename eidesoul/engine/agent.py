@@ -168,11 +168,13 @@ class Agent:
     def _role_set(self, inbound: Inbound) -> tuple[Role, ...]:
         if inbound.role_override:
             return self.config.roles.override(inbound.role_override)
-        return self.config.roles.for_address(inbound.message.sender_jid)
+        return self.config.roles.for_address(
+            inbound.person_id or inbound.message.sender_address
+        )
 
     @staticmethod
     def _sender(inbound: Inbound) -> str:
-        return inbound.message.sender_id or inbound.message.sender_jid or inbound.chat_id
+        return inbound.message.sender_id or inbound.message.sender_address or inbound.chat_id
 
     async def _target(
         self, inbound: Inbound, gateway: Gateway, messages, message
@@ -197,7 +199,7 @@ class Agent:
             grab = getattr(gateway, "avatar", None)
             if callable(grab):
                 try:
-                    shot = await grab(message.sender_jid)
+                    shot = await grab(message.sender_address)
                 except Exception:
                     log.debug("gender: avatar fetch failed", exc_info=True)
                     shot = None
@@ -265,6 +267,7 @@ class Agent:
             roles=roles,
             chat_id=chat_id,
             sender=sender,
+            is_dm=inbound.is_dm if inbound is not None else True,
             args=args,
             commands=tuple(commands_for(self.commands, roles)),
             tools=tuple(specs),
@@ -545,7 +548,7 @@ class Agent:
                         message.sender_name,
                         message.text,
                         roles[0].name,
-                        message.sender_jid,
+                        message.sender_address,
                         None if crisis else decision,
                         message.id,
                     )

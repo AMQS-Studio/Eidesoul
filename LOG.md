@@ -1,5 +1,44 @@
 # LOG
 
+## 2026-11-01 — neutral core: no gateway or provider vocabulary in `eidesoul/engine`
+
+**Message facts** — `ChatMessage.sender_jid` is `sender_address`, and a new `sender_kind` (`"person"`
+when the transport can mention that address, `""` otherwise) carries mentionability. The gateway
+computes both (`whatsapp/ingress.py`, `whatsapp/history_sync.py`) and the archive persists the kind in
+the message `data` blob next to media, quote, and the visibility flags; the richer-content upsert now
+strips `FACT_KEYS` before deciding a row is empty, so a fact alone never overwrites media or a quote.
+`_human_rows` labels the address column `sender_address`, which the style and affect seeds read.
+
+**Canonical identities** — `permissions.normalize` is `strip().casefold()` and nothing else: the core
+no longer parses phone digits or JID domains. WhatsApp's digit rule moved verbatim to the new
+`eidesoul/gateways/whatsapp/identity.py` (`normalize_jid`), used by ingress, directory, history sync,
+and media. Roles now match `Inbound.person_id` (falling back to `sender_address`), so `roles.yaml`
+keeps its bare-digit owner entries; a gateway that leaves `person_id` empty must list full addresses.
+Deletion compares canonical addresses (`mark_deleted(by_address)`, `WorkingMemory`/`HistoryStore`)
+and `ingress.revoke_target(ev, gateway)` returns the same canonical address the live path uses, LID
+mapped to PN. Mention rendering is `sender_kind == "person"`.
+
+**Chat shape** — `CommandContext.is_dm` (from `Inbound.is_dm`, `True` when there is no envelope)
+replaces the `@g.us` suffix test in `/whoami` and `/status`; `ablate.decision_shift` takes `is_dm`
+and `scripts/ablate.py` computes it at the call site. Core no longer writes `chats.kind`
+(`reset`, `set_chat_name`): only the WhatsApp directory labels a chat, and the column keeps its
+`'dm'` default. The long-text cache moved from `workspace/whatsapp/` to `workspace/media/` and the
+duplicate WhatsApp `text_path` is gone; old cache files are abandoned and rewritten on demand.
+`chat_history` and the prompt scaffolding say "chat name or id" instead of "group/contact name or
+JID".
+
+**Provider is the operator's** — `LLMConfig` defaults for `provider`, `base_url`, and `api_key_env`
+are blank, `_llm_config` raises `ConfigError` when `engine.llm.provider` is missing or when a
+provider without a default key has no `api_key_env`, and the scaffold follows: `eidesoul init
+--provider <name>` is required, `templates.ENGINE["llm"]` ships blanks, and `.env` names only the
+chosen provider's key variable (`env_file`). Both README quickstarts show the flag.
+
+**Verification** — `pytest -q` 489 passed; `selftest` passes every check except `llm`, which the
+provider refused with `429 GoUsageLimitError: Go usage limit exceeded` (external quota, the request
+reached `opencode.ai`); `console` shows `/whoami` as `dm "Terminal" (cli:local)` on surface `cli` and
+`/status` with the same model and archive counts; `init --provider groq` writes `GROQ_API_KEY=` first
+in `.env` and `init` without the flag exits with the argparse "required" error.
+
 ## 2026-11-01 — v2: providers, guard package, capability spine, affect prototypes, soul resolver
 
 **Providers** — new `eidesoul/providers/` package holding only client/auth/default-model facts for

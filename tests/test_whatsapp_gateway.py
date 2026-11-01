@@ -128,7 +128,7 @@ def test_lid_sender_resolves_to_person(tmp_path) -> None:
 
     assert inbound is not None
     assert inbound.person_id == "628999999999"
-    assert inbound.message.sender_jid == "628999999999@s.whatsapp.net"
+    assert inbound.message.sender_address == "628999999999@s.whatsapp.net"
     assert inbound.message.sender_id == "628999999999"
 
 
@@ -186,7 +186,7 @@ def test_send_text_resolves_mentions_and_quotes(tmp_path) -> None:
             sender_id="628222222222",
             when=__import__("datetime").datetime.now(),
             text="halo",
-            sender_jid="628222222222@s.whatsapp.net",
+            sender_address="628222222222@s.whatsapp.net",
         ),
     )
 
@@ -303,7 +303,7 @@ def seed_sender(gateway, chat: str = "111@g.us", **kwargs) -> ChatMessage:
         sender_id=kwargs.pop("sender_id", "628222222222"),
         when=__import__("datetime").datetime.now(),
         text=kwargs.pop("text", "halo"),
-        sender_jid=kwargs.pop("sender_jid", "628222222222@s.whatsapp.net"),
+        sender_address=kwargs.pop("sender_address", "628222222222@s.whatsapp.net"),
         **kwargs,
     )
     gateway.windows.append(chat, entry)
@@ -314,7 +314,7 @@ def test_resolve_mentions_never_fabricates_a_tag(tmp_path) -> None:
     gateway = make_gateway(tmp_path)
     seed_sender(gateway)
     seed_sender(gateway, id="b", sender_name="Ani", sender_id="628333333333",
-                sender_jid="628333333333@s.whatsapp.net")
+                sender_address="628333333333@s.whatsapp.net")
 
     body, mentions = gateway._resolve_mentions("@628222222222 halo", "111@g.us")
     by_name, name_mentions = gateway._resolve_mentions("@Ani halo", "111@g.us")
@@ -332,7 +332,7 @@ def test_resolve_mentions_leaves_ambiguous_names_alone(tmp_path) -> None:
     gateway = make_gateway(tmp_path)
     seed_sender(gateway, id="a", sender_name="Ani", sender_id="628222222222")
     seed_sender(gateway, id="b", sender_name="Ani", sender_id="628333333333",
-                sender_jid="628333333333@s.whatsapp.net")
+                sender_address="628333333333@s.whatsapp.net")
 
     body, mentions = gateway._resolve_mentions("@Ani halo", "111@g.us")
 
@@ -351,7 +351,8 @@ def test_sender_lid_with_alt_resolves_to_pn(tmp_path) -> None:
     inbound = ingress.event_to_inbound(ev, gateway)
 
     assert inbound is not None
-    assert inbound.message.sender_jid == "628999999999@s.whatsapp.net"
+    assert inbound.message.sender_address == "628999999999@s.whatsapp.net"
+    assert inbound.message.sender_kind == "person"
     assert inbound.message.sender_id == "628999999999"
 
 
@@ -389,11 +390,13 @@ def revoke_event(target: str, sender: str, *, pushname: str = "Budi") -> Message
     return ev
 
 
-def test_revoke_target_reads_only_revoke_protocol_messages() -> None:
-    revoked = ingress.revoke_target(revoke_event("t1", "628222222222"))
+def test_revoke_target_reads_only_revoke_protocol_messages(tmp_path) -> None:
+    gateway = make_gateway(tmp_path)
+
+    revoked = ingress.revoke_target(revoke_event("t1", "628222222222"), gateway)
 
     assert revoked == ("t1", "628222222222@s.whatsapp.net")
-    assert ingress.revoke_target(group_event("halo")) is None
+    assert ingress.revoke_target(group_event("halo"), gateway) is None
 
 
 STUBS: list[StubClient] = []
@@ -442,7 +445,7 @@ def test_gateway_marks_revoked_rows_and_stays_silent(tmp_path, monkeypatch) -> N
     gateway, client, handled = drive_run(tmp_path, monkeypatch)
     seed_sender(gateway, id="t1", text="rahasia")
     seed_sender(gateway, id="t2", text="isi lain", sender_name="Citra",
-                sender_id="628333333333", sender_jid="628333333333@s.whatsapp.net")
+                sender_id="628333333333", sender_address="628333333333@s.whatsapp.net")
 
     asyncio.run(client.handlers[Message](client, revoke_event("t1", "628222222222")))
     asyncio.run(
@@ -477,7 +480,8 @@ def test_unreadable_stanza_becomes_a_placeholder_row(tmp_path, monkeypatch) -> N
     assert len(rows) == 1
     assert rows[0].unreadable is True
     assert rows[0].text == ""
-    assert rows[0].sender_jid == "628222222222@s.whatsapp.net"
+    assert rows[0].sender_address == "628222222222@s.whatsapp.net"
+    assert rows[0].sender_kind == "person"
     assert handled == []
 
 

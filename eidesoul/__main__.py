@@ -631,7 +631,7 @@ def build_parser() -> argparse.ArgumentParser:
     init = sub.add_parser("init", help="scaffold config.yaml, roles.yaml, soul.yaml, and .env")
     init.add_argument("--dir", default=".", help="target directory")
     init.add_argument("--force", action="store_true", help="overwrite existing files")
-    init.add_argument("--provider", default="opencode", help="provider name (default: opencode)")
+    init.add_argument("--provider", required=True, help="provider name")
     init.add_argument(
         "--model", default="", help="model id to write; omitted leaves it for the operator"
     )

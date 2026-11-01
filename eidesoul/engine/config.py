@@ -67,10 +67,10 @@ class Documents(Protocol):
 
 @dataclass(frozen=True)
 class LLMConfig:
-    provider: str = "opencode"
-    base_url: str = "https://opencode.ai/inference/go/openai/v1"
+    provider: str = ""  # chosen by the operator at init; never a provider default
+    base_url: str = ""
     model: str = ""  # chosen by the operator at init; never filled from a provider default
-    api_key_env: str = "OPENCODE_GO_API_KEY"
+    api_key_env: str = ""
     reasoning_effort: str = ""  # "" = the provider's own default
     session_header: str = ""
     api_key_optional: bool = False
@@ -626,6 +626,49 @@ def _gateways(raw: Mapping, *, required: bool = False) -> dict[str, GatewaySetti
     return result
 
 
+def _llm_config(
+    llm_raw: Mapping, *, require_key: bool, require_model: bool
+) -> LLMConfig:
+    """The `engine.llm` block: a provider name is required, never defaulted in code."""
+    provider = str(llm_raw.get("provider") or "").strip()
+    if not provider:
+        raise ConfigError(
+            "engine.llm.provider is required; choose one with `eidesoul init --provider <name>` "
+            "or set engine.llm.provider in config.yaml"
+        )
+    try:
+        provider, defaults = resolve(
+            provider,
+            str(llm_raw.get("base_url") or ""),
+            str(llm_raw.get("api_key_env") or ""),
+        )
+    except ValueError as exc:
+        raise ConfigError(str(exc)) from exc
+    if not defaults.api_key_env:
+        raise ConfigError("engine.llm.api_key_env is required when the provider has no default")
+    model = str(llm_raw.get("model") or "").strip()
+    if require_model and not model:
+        raise ConfigError(
+            "engine.llm.model is required; list ids with `eidesoul models` and set one with "
+            "`eidesoul init --model <id>` or by editing config.yaml"
+        )
+    if require_key and not defaults.api_key_optional and not os.environ.get(defaults.api_key_env):
+        raise ConfigError(f"env {defaults.api_key_env} is not set (put it in .env)")
+    return LLMConfig(
+        provider=provider,
+        base_url=defaults.base_url,
+        model=model,
+        api_key_env=defaults.api_key_env,
+        reasoning_effort=str(llm_raw.get("reasoning_effort") or "").strip(),
+        session_header=defaults.session_header,
+        api_key_optional=defaults.api_key_optional,
+        models_url=defaults.models_url,
+        timeout_seconds=_num(llm_raw.get("timeout_seconds"), 120.0),
+        temperature=_num(llm_raw.get("temperature"), 0.9),
+        run_budget_seconds=int(_num(llm_raw.get("run_budget_seconds"), 240)),
+    )
+
+
 def load_config(
     path: str | Path | None = None,
     *,
@@ -641,23 +684,9 @@ def load_config(
         raise ConfigError(f"config YAML is invalid: {exc}") from exc
     raw = raw if isinstance(raw, dict) else {}
     engine = _engine(raw, documents)
-    llm_raw = _section(engine, "llm")
-    try:
-        provider, defaults = resolve(
-            str(llm_raw.get("provider") or "opencode"),
-            str(llm_raw.get("base_url") or ""),
-            str(llm_raw.get("api_key_env") or ""),
-        )
-    except ValueError as exc:
-        raise ConfigError(str(exc)) from exc
-    model = str(llm_raw.get("model") or "").strip()
-    if require_model and not model:
-        raise ConfigError(
-            "engine.llm.model is required; list ids with `eidesoul models` and set one with "
-            "`eidesoul init --model <id>` or by editing config.yaml"
-        )
-    if require_key and not defaults.api_key_optional and not os.environ.get(defaults.api_key_env):
-        raise ConfigError(f"env {defaults.api_key_env} is not set (put it in .env)")
+    llm = _llm_config(
+        _section(engine, "llm"), require_key=require_key, require_model=require_model
+    )
     default_role = str(engine.get("default_role") or "").strip()
     if not default_role:
         raise ConfigError("engine.default_role is required")
@@ -721,19 +750,7 @@ def load_config(
         paths=paths,
         database=database,
         documents=documents,
-        llm=LLMConfig(
-            provider=provider,
-            base_url=defaults.base_url,
-            model=model,
-            api_key_env=defaults.api_key_env,
-            reasoning_effort=str(llm_raw.get("reasoning_effort") or "").strip(),
-            session_header=defaults.session_header,
-            api_key_optional=defaults.api_key_optional,
-            models_url=defaults.models_url,
-            timeout_seconds=_num(llm_raw.get("timeout_seconds"), 120.0),
-            temperature=_num(llm_raw.get("temperature"), 0.9),
-            run_budget_seconds=int(_num(llm_raw.get("run_budget_seconds"), 240)),
-        ),
+        llm=llm,
         workspace=host.workspace,
         reply=ReplyConfig(quiet_seconds=int(_num(reply_raw.get("quiet_seconds"), 600))),
         approval=ApprovalConfig(

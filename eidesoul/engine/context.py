@@ -132,7 +132,9 @@ class ChatMessage:
     media: Media | None = None
     quote: Quote | None = None
     outgoing: bool = False
-    sender_jid: str = ""
+    sender_address: str = ""
+    # "person" when the transport can mention that address, "" otherwise
+    sender_kind: str = ""
     author: str = AUTHOR_UNKNOWN
     visibility: int = DEFAULT_VISIBILITY
     view_once: bool = False
@@ -146,15 +148,15 @@ class ChatMessage:
             self.author = AUTHOR_UNKNOWN
         self.visibility = clamp_visibility(self.visibility)
 
-    def mark_deleted(self, by_jid: str, by_name: str = "") -> bool:
+    def mark_deleted(self, by_address: str, by_name: str = "") -> bool:
         if self.deleted:
             return False
         self.deleted = True
         self.deleted_by = str(by_name or "")
         self.deleted_admin = bool(
             self.author != AUTHOR_BOT
-            and bool(by_jid)
-            and normalize(self.sender_jid) != normalize(by_jid)
+            and bool(by_address)
+            and normalize(self.sender_address) != normalize(by_address)
         )
         return True
 
@@ -192,7 +194,7 @@ class WorkingMemory:
                 chosen,
                 sender_name=old.sender_name,
                 sender_id=old.sender_id,
-                sender_jid=old.sender_jid,
+                sender_address=old.sender_address,
             )
         return replace(
             chosen,
@@ -266,10 +268,12 @@ class WorkingMemory:
             return
         self.set_chat_name(chat_id, name)
 
-    def mark_deleted(self, chat_id: str, message_id: str, by_jid: str, by_name: str = "") -> bool:
+    def mark_deleted(
+        self, chat_id: str, message_id: str, by_address: str, by_name: str = ""
+    ) -> bool:
         self._ensure(chat_id)
         for index, entry in enumerate(self._data.setdefault(chat_id, [])):
-            if entry.id != message_id or not entry.mark_deleted(by_jid, by_name):
+            if entry.id != message_id or not entry.mark_deleted(by_address, by_name):
                 continue
             if self.store is not None:
                 try:
@@ -279,7 +283,7 @@ class WorkingMemory:
             return True
         if self.store is None:
             return False
-        return self.store.mark_deleted(chat_id, message_id, by_jid, by_name)
+        return self.store.mark_deleted(chat_id, message_id, by_address, by_name)
 
     def set_visibility(self, chat_id: str, message_ids: tuple[str, ...], level: int) -> int:
         self._ensure(chat_id)
@@ -363,7 +367,7 @@ def _relative(config: Config, path: Path) -> str:
 
 
 def text_path(config: Config, chat_id: str, message_id: str) -> Path:
-    folder = config.workspace / "whatsapp" / sanitize(chat_id, 40)
+    folder = config.workspace / "media" / sanitize(chat_id, 40)
     return folder / f"{sanitize(message_id or f'tmp-{time.time_ns()}', 60)}.txt"
 
 
@@ -612,7 +616,7 @@ def _message_lines(
 ) -> list[str]:
     stamp = f"[{entry.when:%Y-%m-%d %H:%M}]"
     tag = entry_tag(entry)
-    if entry.author != AUTHOR_BOT and entry.sender_id and entry.sender_jid.endswith("@s.whatsapp.net"):
+    if entry.author != AUTHOR_BOT and entry.sender_id and entry.sender_kind == "person":
         tag = f"{tag}, mention=@{entry.sender_id}"
     if entry.author == AUTHOR_BOT:
         name = _flatten(entry.sender_name or config.soul.name, NAME_LIMIT) or "-"

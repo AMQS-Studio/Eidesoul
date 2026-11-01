@@ -101,8 +101,8 @@ OpenAI. Image container sudah memakai Python 3.12; menjalankan dari source di 3.
 cp compose.example.yaml compose.yaml          # isi password yang sebenarnya
 podman compose -f compose.yaml up -d postgres
 
-# 2. Scaffold config.yaml, roles.yaml, soul.yaml, dan .env
-eidesoul init
+# 2. Scaffold config.yaml, roles.yaml, soul.yaml, dan .env; provider adalah pilihan operator
+eidesoul init --provider openai
 
 # 3. Jadikan ini jiwa Anda, bukan jiwa default
 $EDITOR soul.yaml
@@ -110,7 +110,7 @@ $EDITOR soul.yaml
 # 4. Arahkan ke database dan model
 #    .env:
 #      EIDESOUL_DATABASE_URL=postgresql+psycopg://eidesoul:CHANGE_ME@127.0.0.1:5432/eidesoul
-#      OPENCODE_GO_API_KEY=...
+#      OPENAI_API_KEY=...
 
 # 5. Buat skema dan seed berkas host ke dalamnya
 eidesoul db upgrade

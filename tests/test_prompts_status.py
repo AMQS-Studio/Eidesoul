@@ -100,6 +100,32 @@ def test_status_and_whoami(tmp_path, monkeypatch) -> None:
     assert "Surface: fake" in who
 
 
+def test_chat_kind_label_follows_the_inbound_flag(tmp_path, monkeypatch) -> None:
+    env = make_runtime(tmp_path, monkeypatch, settings_approval=False)
+    agent = env.agent
+    roles = (env.config.roles.default_role(),)
+
+    def run(name: str, inbound) -> str:
+        return asyncio.run(
+            agent._command(name, "", "chat", "local", roles, env.gateway, inbound)
+        )
+
+    assert 'Chat: group "' in run("whoami", inbound_message("/whoami", is_dm=False))
+    assert 'Chat: dm "' in run("whoami", inbound_message("/whoami", is_dm=True))
+    assert 'Chat: dm "' in run("whoami", inbound_message("/whoami"))
+    assert "Chat: group" in run("status", inbound_message("/status", is_dm=False))
+    assert "Chat: dm" in run("status", inbound_message("/status", is_dm=True))
+
+
+def test_a_context_without_an_inbound_defaults_to_dm(tmp_path, monkeypatch) -> None:
+    env = make_runtime(tmp_path, monkeypatch, settings_approval=False)
+    roles = (env.config.roles.default_role(),)
+
+    ctx = env.agent.command_context("chat", "local", roles, env.gateway)
+
+    assert ctx.is_dm is True
+
+
 def test_commands_requesting_llm_do_not_decide(tmp_path) -> None:
     env = make_agent(tmp_path)
     asyncio.run(

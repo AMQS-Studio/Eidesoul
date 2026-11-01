@@ -16,8 +16,8 @@ from ...engine.context import (
     Quote,
 )
 from ...engine.inbound import Inbound
-from ...engine.permissions import normalize
 from . import directory
+from .identity import normalize_jid
 from .media import contexts, describe_media, event_time, message_text, views_once
 
 log = logging.getLogger(__name__)
@@ -31,8 +31,8 @@ def self_handles(me) -> set[str]:
     if me is None:
         return set()
     values = {
-        normalize(getattr(getattr(me, "JID", None), "User", "") or ""),
-        normalize(getattr(getattr(me, "LID", None), "User", "") or ""),
+        normalize_jid(getattr(getattr(me, "JID", None), "User", "") or ""),
+        normalize_jid(getattr(getattr(me, "LID", None), "User", "") or ""),
     }
     return {value for value in values if value and any(ch.isdigit() for ch in value)}
 
@@ -52,13 +52,15 @@ def sender_name(ev, sender_digits: str, sender: str) -> str:
 def mentioned(ev, bots: set[str]) -> bool:
     """Transport fact only: a real mention in the payload, not a guess from the text."""
     return any(
-        normalize(jid) in bots for context in contexts(ev.Message) for jid in context.mentionedJID
+        normalize_jid(jid) in bots
+        for context in contexts(ev.Message)
+        for jid in context.mentionedJID
     )
 
 
 def replies_to_bot(ev, bots: set[str]) -> bool:
     return any(
-        normalize(context.participant) in bots
+        normalize_jid(context.participant) in bots
         for context in contexts(ev.Message)
         if context.participant
     )
@@ -83,7 +85,7 @@ def quote(ev, windows, chat_id: str) -> Quote | None:
         quoted_media = describe_media(quoted, context.stanzaID or f"{ev.Info.ID}-quote")
         if not quoted_text.strip() and quoted_media is None:
             continue
-        participant = normalize(context.participant) if context.participant else ""
+        participant = normalize_jid(context.participant) if context.participant else ""
         return Quote(
             id=context.stanzaID,
             sender_name=participant,
@@ -94,15 +96,17 @@ def quote(ev, windows, chat_id: str) -> Quote | None:
     return None
 
 
-def revoke_target(ev) -> tuple[str, str] | None:
-    """(target message id, remover JID) for protocolMessage REVOKE; None otherwise."""
+def revoke_target(ev, gateway) -> tuple[str, str] | None:
+    """(target message id, remover address) for protocolMessage REVOKE; None otherwise."""
     protocol = getattr(ev.Message, "protocolMessage", None)
     if protocol is None or not protocol.ListFields():
         return None
     if protocol.type != ProtocolMessage.REVOKE or not protocol.key.ID:
         return None
     sender = ev.Info.MessageSource.Sender
-    return protocol.key.ID, f"{sender.User}@{sender.Server}"
+    address = f"{sender.User}@{sender.Server}"
+    mapped = directory.pn_jid(gateway.db, address) if address.endswith("@lid") else ""
+    return protocol.key.ID, mapped or address
 
 
 def unreadable_message(ev, gateway) -> tuple[str, ChatMessage] | None:
@@ -115,9 +119,13 @@ def unreadable_message(ev, gateway) -> tuple[str, ChatMessage] | None:
     mapped = ""
     if sender.endswith("@lid"):
         mapped = directory.pn_jid(gateway.db, sender)
-    sender_jid = mapped or sender
-    digits = normalize(mapped or source.Sender.User or source.Sender.RawAgent)
-    name = directory.contact_name(gateway.db, sender_jid) or (ev.Info.Pushname or "").strip() or digits
+    sender_address = mapped or sender
+    digits = normalize_jid(mapped or source.Sender.User or source.Sender.RawAgent)
+    name = (
+        directory.contact_name(gateway.db, sender_address)
+        or (ev.Info.Pushname or "").strip()
+        or digits
+    )
     message = ChatMessage(
         id=ev.Info.ID,
         sender_name=name,
@@ -126,7 +134,8 @@ def unreadable_message(ev, gateway) -> tuple[str, ChatMessage] | None:
         text="",
         author=AUTHOR_MANUAL if source.IsFromMe else AUTHOR_UNKNOWN,
         unreadable=True,
-        sender_jid=sender_jid,
+        sender_address=sender_address,
+        sender_kind="person" if sender_address.endswith("@s.whatsapp.net") else "",
     )
     return chat_id, message
 
@@ -142,8 +151,8 @@ def event_to_inbound(ev, gateway) -> Inbound | None:
         alt = getattr(source, "SenderAlt", None)
         mapped = f"{alt.User}@{alt.Server}" if getattr(alt, "User", "") else ""
         mapped = mapped or directory.pn_jid(gateway.db, sender)
-    sender_jid = mapped or sender
-    sender_digits = normalize(mapped or source.Sender.User or source.Sender.RawAgent)
+    sender_address = mapped or sender
+    sender_digits = normalize_jid(mapped or source.Sender.User or source.Sender.RawAgent)
     message_id = ev.Info.ID or f"tmp-{datetime.now().timestamp()}"
     text = message_text(ev.Message)
     media = describe_media(ev.Message, message_id)
@@ -154,7 +163,7 @@ def event_to_inbound(ev, gateway) -> Inbound | None:
     if outgoing:
         author = AUTHOR_BOT if gateway.is_bot_message(message_id) else AUTHOR_MANUAL
     name = sender_name(ev, sender_digits, sender)
-    known = directory.contact_name(gateway.db, sender_jid)
+    known = directory.contact_name(gateway.db, sender_address)
     if author == AUTHOR_BOT:
         known = gateway.config.soul.name
         name = gateway.config.soul.name
@@ -167,7 +176,8 @@ def event_to_inbound(ev, gateway) -> Inbound | None:
         media=media,
         quote=quote(ev, gateway.windows, chat_id),
         outgoing=outgoing,
-        sender_jid=sender_jid,
+        sender_address=sender_address,
+        sender_kind="person" if sender_address.endswith("@s.whatsapp.net") else "",
         author=author,
         visibility=DEFAULT_VISIBILITY,
         view_once=views_once(ev.Message),

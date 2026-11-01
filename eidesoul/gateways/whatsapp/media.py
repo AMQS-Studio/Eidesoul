@@ -5,7 +5,6 @@ from __future__ import annotations
 import contextlib
 import logging
 import mimetypes
-import time
 from pathlib import Path
 
 from neonize.utils import extract_text
@@ -172,7 +171,7 @@ def describe_media(message, message_id: str) -> Media | None:
 
 
 def quote_from_proto(message, message_id: str) -> Quote | None:
-    from ...engine.permissions import normalize
+    from .identity import normalize_jid
 
     for context in contexts(message):
         quoted = context.quotedMessage
@@ -183,7 +182,7 @@ def quote_from_proto(message, message_id: str) -> Quote | None:
         if not text.strip() and media is None:
             continue
         participant = context.participant or ""
-        sender_id = normalize(participant) if participant else ""
+        sender_id = normalize_jid(participant) if participant else ""
         return Quote(
             id=context.stanzaID,
             sender_name=sender_id or participant,
@@ -221,11 +220,6 @@ def _relative(config: Config, path: Path) -> str:
 def attachment_path(config: Config, chat_id: str, message_id: str, filename: str) -> Path:
     folder = config.workspace / "attachments" / sanitize(chat_id, 40)
     return folder / f"{sanitize(message_id, 60)}-{sanitize(filename, 80)}"
-
-
-def text_path(config: Config, chat_id: str, message_id: str) -> Path:
-    folder = config.workspace / "whatsapp" / sanitize(chat_id, 40)
-    return folder / f"{sanitize(message_id or f'tmp-{time.time_ns()}', 60)}.txt"
 
 
 async def download_media(client, config: Config, chat_id: str, message_id: str, media: Media) -> None:
@@ -288,7 +282,6 @@ __all__ = [
     "quote_from_proto",
     "sanitize",
     "send_kind",
-    "text_path",
     "unwrap_message",
     "views_once",
 ]

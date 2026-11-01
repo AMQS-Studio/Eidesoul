@@ -44,6 +44,12 @@ Hard rules for changes in this repo.
 - A gateway is an appendage: transport only through the contract in `eidesoul/engine/inbound.py`
   (`Inbound`, `Gateway`, `GatewayError`). Gateway-owned tools/commands live in
   `eidesoul/gateways/<name>/tools|commands`, never in core.
+- The core holds no gateway or provider vocabulary: no transport address suffix test, no JID
+  parsing, no provider name. Roles match `Inbound.person_id`, deletion and role comparison use the
+  canonical form from `permissions.normalize`, the DM/group label is `Inbound.is_dm`,
+  mentionability is `ChatMessage.sender_kind == "person"`, and gateways normalize their own
+  identities (`eidesoul/gateways/whatsapp/identity.py`). `engine.llm.provider` is required and has
+  no code default; `eidesoul init --provider` writes it.
 - Every optional feature must be removable: extras in `pyproject.toml`, lazy imports, no core import
   of gateway or vendor libraries, no compatibility shims. Prefer deleting an optional path over
   carrying a fallback.

@@ -180,6 +180,7 @@ def main() -> int:
                         chat_id=chat,
                         history=messages,
                         affect=stores.get("affect"),
+                        is_dm=not chat.endswith("@g.us"),
                     )
                 )
         print(report(chat, ablate.replay_metrics(rows), budget, shift))

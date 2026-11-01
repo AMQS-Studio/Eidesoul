@@ -553,21 +553,21 @@ def test_seed_from_history_builds_people_once(tmp_path) -> None:
     rows = [
         {
             "sender_id": FRIEND,
-            "sender_jid": f"{FRIEND}@s.whatsapp.net",
+            "sender_address": f"{FRIEND}@s.whatsapp.net",
             "sender_name": "Fahri",
             "ts": 100.0,
             "chat_id": CHAT,
         },
         {
             "sender_id": FRIEND,
-            "sender_jid": f"{FRIEND}@s.whatsapp.net",
+            "sender_address": f"{FRIEND}@s.whatsapp.net",
             "sender_name": "Fahri",
             "ts": 200.0,
             "chat_id": CHAT,
         },
         {
             "sender_id": OWNER,
-            "sender_jid": f"{OWNER}@s.whatsapp.net",
+            "sender_address": f"{OWNER}@s.whatsapp.net",
             "sender_name": "Muqsith",
             "ts": 150.0,
             "chat_id": OTHER,
@@ -591,7 +591,7 @@ def test_seed_chat_people_adds_membership_once(tmp_path) -> None:
     rows = [
         {
             "sender_id": FRIEND,
-            "sender_jid": f"{FRIEND}@s.whatsapp.net",
+            "sender_address": f"{FRIEND}@s.whatsapp.net",
             "sender_name": "Fahri",
             "ts": 300.0,
             "chat_id": OTHER,

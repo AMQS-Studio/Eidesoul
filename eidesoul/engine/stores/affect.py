@@ -259,7 +259,7 @@ class AffectStore:
         name: str,
         text: str,
         role: str,
-        sender_jid: str,
+        sender_address: str,
         decision,
         message_id: str,
     ) -> None:
@@ -1065,12 +1065,12 @@ class AffectStore:
         )
 
     @staticmethod
-    def _resolve_person(history, jid: str) -> str:
+    def _resolve_person(history, address: str) -> str:
         resolver = getattr(history, "resolve_person", None)
-        if not callable(resolver) or not jid:
+        if not callable(resolver) or not address:
             return ""
         try:
-            return str(resolver(jid) or "")
+            return str(resolver(address) or "")
         except Exception:
             return ""
 
@@ -1086,8 +1086,8 @@ class AffectStore:
             rows = []
         grouped: dict[str, dict] = {}
         for item in rows:
-            jid = str(item.get("sender_jid") or "")
-            person_id = self._resolve_person(history, jid) or str(item.get("sender_id") or "")
+            address = str(item.get("sender_address") or "")
+            person_id = self._resolve_person(history, address) or str(item.get("sender_id") or "")
             if not person_id:
                 continue
             stamp = float(item.get("ts") or 0.0)
@@ -1174,8 +1174,8 @@ class AffectStore:
         grouped: dict[str, dict[str, tuple[float, int]]] = {}
         for item in rows:
             chat_id = str(item.get("chat_id") or "")
-            jid = str(item.get("sender_jid") or "")
-            person_id = self._resolve_person(history, jid) or str(item.get("sender_id") or "")
+            address = str(item.get("sender_address") or "")
+            person_id = self._resolve_person(history, address) or str(item.get("sender_id") or "")
             if not chat_id or not person_id:
                 continue
             stamp = float(item.get("ts") or 0.0)

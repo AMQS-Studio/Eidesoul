@@ -12,8 +12,8 @@ from sqlalchemy import and_, func, select, update
 
 from ...engine.context import ChatMessage
 from ...engine.db import Database
-from ...engine.permissions import normalize
 from ...engine.schema import chats, messages
+from .identity import normalize_jid
 from .schema import wa_contacts, wa_lid_map
 
 log = logging.getLogger(__name__)
@@ -106,8 +106,8 @@ def resolve_person(db: Database, jid: str) -> str:
     if raw.endswith("@lid"):
         mapped = db.fetch_one(select(wa_lid_map.c.pn).where(wa_lid_map.c.lid == raw))
         if mapped is not None and str(mapped["pn"]):
-            return normalize(str(mapped["pn"]))
-    return normalize(raw)
+            return normalize_jid(str(mapped["pn"]))
+    return normalize_jid(raw)
 
 
 def refresh_sender_names(db: Database) -> int:
@@ -297,4 +297,4 @@ def label(chat_id: str, name: str) -> str:
 
 
 def message_jid(message: ChatMessage) -> str:
-    return message.sender_jid
+    return message.sender_address

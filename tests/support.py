@@ -477,7 +477,7 @@ def inbound_message(
             sender_id=sender,
             when=datetime.now(),
             text=text,
-            sender_jid=f"{sender}@s.whatsapp.net",
+            sender_address=f"{sender}@s.whatsapp.net",
         ),
         is_dm=is_dm,
         is_mention=is_mention,
@@ -516,7 +516,7 @@ def make_runtime(
         "database:\n  url_env: EIDESOUL_DATABASE_URL\nworkspace: .eidesoul/workspace\n"
         "roles_file: roles.yaml\nsoul_file: soul.yaml\n"
         "engine:\n"
-        "  llm:\n    api_key_env: K\n    model: m\n    base_url: http://x\n"
+        "  llm:\n    provider: custom\n    base_url: http://x\n    api_key_env: K\n    model: m\n"
         "  default_role: member\n"
         "  approval:\n"
         f"    mode: yolo\n    settings: {str(settings_approval).lower()}\n"

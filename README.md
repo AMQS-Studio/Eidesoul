@@ -94,8 +94,8 @@ endpoint. The container image already pins Python 3.12; running from source on 3
 cp compose.example.yaml compose.yaml          # set a real password
 podman compose -f compose.yaml up -d postgres
 
-# 2. Scaffold config.yaml, roles.yaml, soul.yaml, and .env
-eidesoul init
+# 2. Scaffold config.yaml, roles.yaml, soul.yaml, and .env; the provider is the operator's pick
+eidesoul init --provider openai
 
 # 3. Make it this soul, not the default one
 $EDITOR soul.yaml
@@ -103,7 +103,7 @@ $EDITOR soul.yaml
 # 4. Point it at the database and the model
 #    .env:
 #      EIDESOUL_DATABASE_URL=postgresql+psycopg://eidesoul:CHANGE_ME@127.0.0.1:5432/eidesoul
-#      OPENCODE_GO_API_KEY=...
+#      OPENAI_API_KEY=...
 
 # 5. Create the schema and seed the host files into it
 eidesoul db upgrade
