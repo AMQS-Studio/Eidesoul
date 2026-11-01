@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 
 from eidesoul.engine.config import DEFAULT_SENSITIVE_COMMANDS, ApprovalConfig
-from eidesoul.engine.safety import ActionRequest, ApprovalPolicy, build_safety, scan_command
+from eidesoul.engine.guard import ActionRequest, ApprovalPolicy, build_safety, scan_command
 
 
 def request(tool: str, **args) -> ActionRequest:

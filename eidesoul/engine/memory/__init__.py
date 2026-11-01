@@ -175,8 +175,6 @@ def memory_status(backend) -> str:
 
 async def build_memory(config, *, db=None) -> MemoryBackend:
     """Build the Mem0 backend; any failure falls back to NullMemory with a visible reason."""
-    if config.memory.backend == "null":
-        return NullMemory("disabled (memory.backend=null)")
     if config.database_url().startswith("sqlite"):
         return NullMemory("mem0 needs Postgres+pgvector, not SQLite")
     try:

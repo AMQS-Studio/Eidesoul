@@ -5,7 +5,8 @@ from __future__ import annotations
 import yaml
 
 from ..engine.config import DEFAULT_SENSITIVE_COMMANDS
-from ..engine.soul import DEFAULT_SOUL_YAML
+from ..engine.soul import DEFAULT_SOUL_YAML, load_soul, style_block
+from . import library
 
 HOST: dict = {
     "database": {
@@ -36,6 +37,7 @@ HOST: dict = {
 
 ENGINE: dict = {
     "llm": {
+        "provider": "opencode",
         "base_url": "https://opencode.ai/inference/go/openai/v1",
         "model": "deepseek-v4.1-flash",
         "api_key_env": "OPENCODE_GO_API_KEY",
@@ -60,11 +62,6 @@ ENGINE: dict = {
             "group_max_level": 2,
             "dm_max_level": 4,
             "auditor": True,
-        },
-        "embedder": {
-            "provider": "huggingface",
-            "model": "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2",
-            "dimensions": 384,
         },
         "telemetry": False,
     },
@@ -112,12 +109,9 @@ ENGINE: dict = {
         "grudge_half_life_hours": 1.5,
         "vibe": {
             "enabled": True,
-            "model": "Aardiiiiy/EmoSense-ID-Indonesian-Emotion-Classifier",
-            "max_length": 128,
             "attack": 0.35,
             "baseline_influence": 0.05,
             "hold_seconds": 1.2,
-            "neutral_floor": 0.35,
             "tick_seconds": 1.0,
         },
     },
@@ -229,11 +223,18 @@ def dump(body: object) -> str:
     return yaml.safe_dump(body, sort_keys=False, allow_unicode=True)
 
 
+def soul_yaml() -> str:
+    """The seed soul plus the style its own text resolves to; never loads the embedder."""
+    soul = load_soul(yaml.safe_load(DEFAULT_SOUL_YAML) or {})
+    style = library.seed_style(library.soul_text(soul), soul.language)
+    return DEFAULT_SOUL_YAML + style_block(style)
+
+
 def files() -> dict[str, str]:
     """Every scaffold file: relative path -> content."""
     return {
         "config.yaml": dump(CONFIG),
         "roles.yaml": dump({"roles": ROLES}),
-        "soul.yaml": DEFAULT_SOUL_YAML,
+        "soul.yaml": soul_yaml(),
         ".env": ENV,
     }

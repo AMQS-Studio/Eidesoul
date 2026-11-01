@@ -122,21 +122,20 @@ second instance stays standby and frozen until it takes over through the lease, 
 `eidesoul db check` prints the schema and content summary; `eidesoul selftest` exercises stores,
 tools, and the LLM once without starting a gateway.
 
-Install the optional extras you actually use, or none at all:
+`uv sync` installs the capability spine: Postgres+pgvector storage, Mem0 memory, the multilingual
+embedder, the affect prototypes, and the guard. Only transport and integrations are extras:
 
 | Extra | Brings | Needed for |
 |---|---|---|
-| `memory` | Mem0 + `sentence-transformers` | semantic memory and pack retrieval |
-| `vibe` | torch + transformers | the affect signal from text |
 | `whatsapp` | Neonize + segno | the WhatsApp gateway |
 | `google` | Google API client, google-auth, httpx | the Google Workspace tool |
 
 ```bash
-uv sync --extra memory --extra vibe
+uv sync --extra whatsapp --extra google
 ```
 
-Without `memory` the soul still talks; memory-dependent features degrade and report why. Every extra
-is removable: nothing in core imports it eagerly.
+Every extra is removable: nothing in core imports it eagerly, and without it the affected tool or
+gateway reports why it is inert.
 
 ## soul.yaml
 
@@ -153,11 +152,11 @@ language: id                    # installed catalog: id | en
 pronouns: aku
 gender: unspecified             # male | female | nonbinary | unspecified
 role: assistant                 # the active role
-roles: [assistant, companion, advisor]   # roles this soul may inhabit
+roles: [assistant]              # optional; defaults to [role]
 locale: id-ID                   # context locale used by prompts and currents
 background: ""                  # free text: where this soul comes from
 persona: ""                     # free-form markdown: personality, voice, values
-style:
+style:                          # written by `eidesoul library resolve`, not by hand
   patterns: []                  # pattern pack ids from eidesoul/library/patterns/
   facts: []                     # fact pack ids from eidesoul/library/facts/
   registers: []                 # optional allow-list of registers; empty = pack default
@@ -171,19 +170,24 @@ Rules the loader enforces:
 - `name` must be non-empty, otherwise the default is used.
 - `gender` must be one of `male`, `female`, `nonbinary`, or `unspecified`; anything else falls back
   to `unspecified` with a warning.
-- `roles` is never empty; if `role` is not listed in `roles`, it is prepended.
+- `roles` defaults to `[role]` when absent; if `role` is not listed in `roles`, it is prepended,
+  and the rendered persona only lists the other roles when there is more than one.
 - Pack ids and registers must match `^[a-z0-9][a-z0-9-]{0,63}$`; an invalid id is an error, not a
   silent skip.
 - `max_patterns` and `max_facts` clamp to `0..6`.
 - `persona` is rendered in a fixed order: name, description, active role, available roles, locale,
   background, free-form persona, then dialogue examples. Empty sections are omitted.
+- `style` is derived: `eidesoul init` seeds it and `eidesoul library resolve --force` rewrites it
+  from `description` + `background` + `persona` + `examples`, keeping only packs whose `language`
+  matches the soul. A weak match, a tie, or no match selects nothing, and a kind that resolves
+  nothing keeps the packs the soul already had.
 
 The active role and the style packs are the two knobs that shape a turn. The active role decides
 permissions and working posture; the style packs decide how the soul sounds, and how much of that
 character data it may use per turn. A soul with no packs selected has no borrowed colloquialisms and
 no facts — just its own `persona` and `background`.
 
-A short example:
+A short example (omit `style` and let the resolver write it):
 
 ```yaml
 name: Eidesoul
@@ -209,7 +213,9 @@ examples:
 ## Character library
 
 Character data is a library the soul opts into, not something the engine ships in its voice.
-Nothing is selected by default: an empty `style` means no patterns and no facts.
+Selection is top-down: `soul.yaml` names the packs, `eidesoul init` seeds that list for the soul's
+language, and `eidesoul library resolve` re-derives it from what the author actually wrote. An empty
+`style` means no patterns and no facts.
 
 Packs live under `eidesoul/library/`:
 
@@ -233,7 +239,7 @@ style:
 
 Selection is deterministic per turn: the engine reads the recent messages, derives the room
 register, and picks at most `max_patterns` moves and `max_facts` facts. Keyword hits come first, then
-cosine similarity against precomputed vectors. A pack that is missing, unreadable, or named outside
+cosine similarity on the shared embedder (`eidesoul/engine/embed.py`). A pack that is missing, unreadable, or named outside
 the id pattern contributes nothing and logs a warning instead of failing the turn.
 
 No raw transcripts are shipped. A `say` line in a pattern pack is an approved exemplar, never a
@@ -348,18 +354,18 @@ local network even when it is allowed to run.
 ## Optional integrations
 
 ```bash
-uv sync --extra memory --extra vibe                     # memory + affect from source
 uv sync --extra whatsapp --extra google                 # optional gateway and integration
 ```
 
 ```bash
-docker build --build-arg EXTRAS="--extra memory --extra vibe --extra whatsapp --extra google" .
+docker build --build-arg EXTRAS="--extra whatsapp --extra google" .
 ```
 
-- **Memory** (`memory`): Mem0 with a local multilingual embedder and pgvector. Without it, the soul
-  replies and reports why memory is unavailable.
-- **Affect** (`vibe`): a small emotion classifier that informs tone. Without it, tone comes from
-  style and character settings alone.
+Memory, the embedder, and the affect prototypes are part of the core install; there is no extra to
+add for them. On SQLite, Mem0 stays off and `status` reports why.
+
+- **Affect vibes** read the shared embedder against `eidesoul/library/affect/*.json`; with no
+  embedder the room mood stays neutral instead of guessing.
 - **WhatsApp** (`whatsapp`): the optional gateway. Never enabled by default.
 - **Google Workspace** (`google`): an in-process tool for files shared with a service account, with
   per-sender identity linking. Without the extra the tool stays discoverable but inert and returns a
@@ -370,28 +376,45 @@ committed.
 
 ## Credits
 
-Eidesoul stands on a lot of other people's work.
+Every component below keeps its own license and attribution. Versions are the ones the lock file
+installs; the last column says what Eidesoul uses it for.
 
-**Runtime and dependencies:** Python, SQLAlchemy, psycopg, pgvector, the OpenAI Python SDK, the MCP
-Python SDK, PyYAML, and DDGS.
+| Component | License | Author / org | Source | Used for |
+|---|---|---|---|---|
+| Python | PSF-2.0 | Python Software Foundation | https://www.python.org/ | runtime |
+| SQLAlchemy | MIT | Michael Bayer / SQLAlchemy authors | https://www.sqlalchemy.org/ | storage |
+| psycopg | LGPL-3.0-only | Daniele Varrazzo | https://psycopg.org/ | Postgres driver |
+| psycopg-pool | LGPL-3.0-only | Daniele Varrazzo | https://www.psycopg.org/ | connection pool |
+| pgvector | PostgreSQL | pgvector contributors | https://github.com/pgvector/pgvector | vector column |
+| openai-python | Apache-2.0 | OpenAI | https://github.com/openai/openai-python | LLM client |
+| MCP Python SDK | MIT | Model Context Protocol authors | https://github.com/modelcontextprotocol/python-sdk | MCP tools |
+| PyYAML | MIT | Kirill Simonov / PyYAML authors | https://pyyaml.org/ | config + soul files |
+| ddgs | MIT | ddgs authors | https://github.com/deedy5/ddgs | web search |
+| Mem0 (`mem0ai`) | Apache-2.0 | Mem0 | https://github.com/mem0ai/mem0 | semantic memory |
+| sentence-transformers | Apache-2.0 | UKP Lab / Hugging Face | https://github.com/huggingface/sentence-transformers | embeddings |
+| paraphrase-multilingual-MiniLM-L12-v2 | Apache-2.0 | sentence-transformers | https://huggingface.co/sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2 | embedder weights |
+| PyTorch | Apache-2.0 AND Apache-2.0 WITH LLVM-exception AND BSD-2-Clause AND BSD-3-Clause AND BSL-1.0 AND ISC AND MIT AND Zlib | Meta / PyTorch contributors | https://github.com/pytorch/pytorch | tensor runtime |
+| Transformers | Apache-2.0 | Hugging Face | https://github.com/huggingface/transformers | model loading |
+| Neonize | not declared upstream | krypton-byte | https://github.com/krypton-byte/neonize | WhatsApp transport |
+| segno | BSD-3-Clause | Lars Heuer | https://github.com/heuer/segno | QR pairing |
+| google-api-python-client | Apache-2.0 | Google | https://github.com/googleapis/google-api-python-client | Workspace tool |
+| google-auth | Apache-2.0 | Google | https://github.com/googleapis/google-auth-library-python | Google auth |
+| httpx | BSD-3-Clause | Encode | https://github.com/encode/httpx | HTTP client |
+| emotion-engine | MIT | PioneerJeff Labs | https://github.com/pioneerjeff-labs/emotion-engine | vendored affect engine |
+| EmoSense-ID classifier | see model card | Aardiiiiy | https://huggingface.co/Aardiiiiy/EmoSense-ID-Indonesian-Emotion-Classifier | calibration reference only |
+| pytest | MIT | pytest authors | https://github.com/pytest-dev/pytest | dev |
+| pytest-cov | MIT | pytest-cov authors | https://github.com/pytest-dev/pytest-cov | dev |
+| ruff | MIT | Astral | https://github.com/astral-sh/ruff | dev |
 
-**Memory and character:** Mem0; sentence-transformers with the
-`paraphrase-multilingual-MiniLM-L12-v2` model.
-
-**Affect:** `Aardiiiiy/EmoSense-ID-Indonesian-Emotion-Classifier` and the vendored emotion engine,
-whose license ships as `eidesoul/vendor/LICENSE.emotion-engine`.
-
-**Optional gateways and integrations:** Neonize, segno, the Google API Python Client, google-auth,
-and httpx.
-
-**Thanks:** the discussion groups and testers referenced during development (see `references/`), and
+Thanks to the discussion groups and testers referenced during development (see `references/`), and to
 everyone who tried the early builds and reported what broke. No raw transcripts from those
 conversations are shipped: the character library contains authored exemplars and sourced facts, not
 chat logs.
 
 ## License
 
-This repository does not declare a project license. Every third-party component keeps its own
-license and attribution; the vendored emotion engine carries its license next to its source, and the
-remaining dependencies are distributed under the terms of their upstream projects. Review those
-terms before redistributing a build.
+Eidesoul is released under the [Apache License 2.0](LICENSE). Copyright 2026 Abdul Muqsith.
+
+Third-party components keep their own terms; the table above lists each license, author, and source.
+The vendored emotion engine carries its license next to its source as
+`eidesoul/vendor/LICENSE.emotion-engine`.

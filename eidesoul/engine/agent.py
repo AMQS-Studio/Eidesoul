@@ -47,8 +47,7 @@ from .registry import Handler, Registry
 from .reply import human_chunks, split_text, typing_delay
 from .roles import Role
 from .runtime import RuntimeFacts
-from .safety import SafetyPolicy, build_safety
-from .sandbox_guard import SandboxGuard
+from .guard import SafetyPolicy, SandboxGuard, build_safety
 from .target import classify, combine, score_style
 from .tools import REGISTRY as CORE_TOOLS
 from .tools import ToolContext
@@ -984,13 +983,11 @@ class Agent:
             "database": config.database,
             "paths": config.paths,
             "llm.api_key_env": config.llm.api_key_env,
-            "memory.backend": memory.backend,
             "memory.collection": memory.collection,
-            "memory.embedder": memory.embedder,
             "memory.extraction_model": memory.extraction_model,
             "affect.enabled": config.affect.enabled,
             "affect.vibe.enabled": config.affect.vibe.enabled,
-            "affect.vibe.model": config.affect.vibe.model,
+            "affect.vibe.attack": config.affect.vibe.attack,
             "ambient.enabled": config.ambient.enabled,
             "style.enabled": config.style.enabled,
         }

@@ -15,6 +15,7 @@ from typing import Protocol
 
 import yaml
 
+from ..providers import resolve
 from .roles import RoleError, RoleRegistry, load_roles
 from .soul import Soul, load_soul
 
@@ -66,6 +67,7 @@ class Documents(Protocol):
 
 @dataclass(frozen=True)
 class LLMConfig:
+    provider: str = "opencode"
     base_url: str = "https://opencode.ai/inference/go/openai/v1"
     model: str = "deepseek-v4.1-flash"
     api_key_env: str = "OPENCODE_GO_API_KEY"
@@ -103,13 +105,6 @@ class WebSearchConfig:
 
 
 @dataclass(frozen=True)
-class EmbedderConfig:
-    provider: str = "huggingface"
-    model: str = "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
-    dimensions: int = 384
-
-
-@dataclass(frozen=True)
 class PrivacyConfig:
     """Disclosure policy limits: level 0-4, group vs DM ceilings, optional auditor."""
 
@@ -123,14 +118,12 @@ class PrivacyConfig:
 
 @dataclass(frozen=True)
 class MemoryConfig:
-    backend: str = "mem0"  # mem0 | null
     auto_capture: bool = True
     capture_min_chars: int = 8
     max_items: int = 12
     max_chars: int = 3000
     collection: str = "eidesoul_memories"
     extraction_model: str = ""  # empty = llm.model
-    embedder: EmbedderConfig = field(default_factory=EmbedderConfig)
     telemetry: bool = False
     privacy: PrivacyConfig = field(default_factory=PrivacyConfig)
 
@@ -173,13 +166,10 @@ class HumanizeConfig:
 
 @dataclass(frozen=True)
 class VibeConfig:
-    enabled: bool = True  # fail-open when torch/model is missing
-    model: str = "Aardiiiiy/EmoSense-ID-Indonesian-Emotion-Classifier"
-    max_length: int = 128
+    enabled: bool = True  # fail-open when the embedder is unavailable
     attack: float = 0.35
     baseline_influence: float = 0.05
     hold_seconds: float = 1.2
-    neutral_floor: float = 0.35
     tick_seconds: float = 1.0
 
 
@@ -313,6 +303,12 @@ class Config:
     guard: GuardConfig = field(default_factory=GuardConfig)
 
     def api_key(self) -> str:
+        """The key for this provider; a local Ollama endpoint accepts any non-empty string."""
+        found = os.environ.get(self.llm.api_key_env)
+        if found:
+            return found
+        if self.llm.provider == "ollama":
+            return "ollama"
         return os.environ[self.llm.api_key_env]
 
     def database_url(self) -> str:
@@ -635,8 +631,16 @@ def load_config(
     raw = raw if isinstance(raw, dict) else {}
     engine = _engine(raw, documents)
     llm_raw = _section(engine, "llm")
-    api_key_env = str(llm_raw.get("api_key_env") or "OPENCODE_GO_API_KEY")
-    if require_key and not os.environ.get(api_key_env):
+    try:
+        provider, base_url, api_key_env, model = resolve(
+            str(llm_raw.get("provider") or "opencode"),
+            str(llm_raw.get("base_url") or ""),
+            str(llm_raw.get("api_key_env") or ""),
+            str(llm_raw.get("model") or ""),
+        )
+    except ValueError as exc:
+        raise ConfigError(str(exc)) from exc
+    if require_key and provider != "ollama" and not os.environ.get(api_key_env):
         raise ConfigError(f"env {api_key_env} is not set (put it in .env)")
     default_role = str(engine.get("default_role") or "").strip()
     if not default_role:
@@ -675,14 +679,10 @@ def load_config(
     guard_raw = _section(engine, "guard")
     vibe_raw = _section(affect_raw, "vibe")
 
-    memory_backend = str(memory_raw.get("backend") or "mem0").strip().lower()
-    if memory_backend not in {"mem0", "null"}:
-        raise ConfigError("memory.backend must be 'mem0' or 'null'")
     approval_mode = str(approval_raw.get("mode") or "yolo").strip().lower()
     if approval_mode not in {"yolo", "off", "strict"}:
         raise ConfigError("approval.mode must be 'yolo', 'off', or 'strict'")
     approval_commands = approval_raw.get("sensitive_commands")
-    embedder_raw = _section(memory_raw, "embedder")
     privacy_raw = _section(memory_raw, "privacy")
 
     def _level(key: str, default: int) -> int:
@@ -706,8 +706,9 @@ def load_config(
         database=database,
         documents=documents,
         llm=LLMConfig(
-            base_url=str(llm_raw.get("base_url") or "https://opencode.ai/inference/go/openai/v1"),
-            model=str(llm_raw.get("model") or "deepseek-v4.1-flash"),
+            provider=provider,
+            base_url=base_url,
+            model=model,
             api_key_env=api_key_env,
             timeout_seconds=_num(llm_raw.get("timeout_seconds"), 120.0),
             temperature=_num(llm_raw.get("temperature"), 0.9),
@@ -734,7 +735,6 @@ def load_config(
         mcp=host.mcp,
         web_search=host.web_search,
         memory=MemoryConfig(
-            backend=memory_backend,
             auto_capture=_bool(memory_raw.get("auto_capture"), True),
             capture_min_chars=int(_num(memory_raw.get("capture_min_chars"), 8)),
             max_items=int(_num(memory_raw.get("max_items"), 12)),
@@ -742,14 +742,6 @@ def load_config(
             collection=str(memory_raw.get("collection") or "eidesoul_memories").strip()
             or "eidesoul_memories",
             extraction_model=str(memory_raw.get("extraction_model") or "").strip(),
-            embedder=EmbedderConfig(
-                provider=str(embedder_raw.get("provider") or "huggingface").strip(),
-                model=str(
-                    embedder_raw.get("model")
-                    or "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
-                ).strip(),
-                dimensions=int(_num(embedder_raw.get("dimensions"), 384)),
-            ),
             telemetry=_bool(memory_raw.get("telemetry"), False),
             privacy=privacy,
         ),
@@ -792,15 +784,9 @@ def load_config(
             grudge_half_life_hours=_num(affect_raw.get("grudge_half_life_hours"), 1.5),
             vibe=VibeConfig(
                 enabled=_bool(vibe_raw.get("enabled"), True),
-                model=str(
-                    vibe_raw.get("model")
-                    or "Aardiiiiy/EmoSense-ID-Indonesian-Emotion-Classifier"
-                ),
-                max_length=int(_num(vibe_raw.get("max_length"), 128)),
                 attack=_num(vibe_raw.get("attack"), 0.35),
                 baseline_influence=_num(vibe_raw.get("baseline_influence"), 0.05),
                 hold_seconds=_num(vibe_raw.get("hold_seconds"), 1.2),
-                neutral_floor=_num(vibe_raw.get("neutral_floor"), 0.35),
                 tick_seconds=_num(vibe_raw.get("tick_seconds"), 1.0),
             ),
         ),

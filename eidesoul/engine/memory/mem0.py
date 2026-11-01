@@ -16,6 +16,7 @@ from sqlalchemy import String, cast, column, select, table
 from sqlalchemy.engine import make_url
 
 from ..config import Config
+from ..embed import DIM, MODEL
 from ..guard import SENSITIVE
 from . import MemoryContext, MemoryHit
 from . import context as memory_context
@@ -162,7 +163,7 @@ class Mem0Backend:
                 "config": {
                     "connection_string": dsn,
                     "collection_name": memory.collection,
-                    "embedding_model_dims": memory.embedder.dimensions,
+                    "embedding_model_dims": DIM,
                 },
             },
             "llm": {
@@ -175,11 +176,8 @@ class Mem0Backend:
                 },
             },
             "embedder": {
-                "provider": memory.embedder.provider,
-                "config": {
-                    "model": memory.embedder.model,
-                    "embedding_dims": memory.embedder.dimensions,
-                },
+                "provider": "huggingface",
+                "config": {"model": MODEL, "embedding_dims": DIM},
             },
             "history_db_path": str(history_path),
             "custom_instructions": CUSTOM_INSTRUCTIONS,

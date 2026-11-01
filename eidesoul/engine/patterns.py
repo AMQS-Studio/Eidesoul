@@ -12,17 +12,18 @@ from __future__ import annotations
 
 import json
 import logging
-import math
 import re
 from functools import cache
 from pathlib import Path
 
+from . import embed
+
 log = logging.getLogger(__name__)
 
-MODEL = "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
+MODEL = embed.MODEL
 LIBRARY = Path(__file__).resolve().parent.parent / "library" / "patterns"
 PACK = re.compile(r"^[a-z0-9][a-z0-9-]{0,63}$")
-DIM = 384
+DIM = embed.DIM
 LEXICON_KEYS = ("serious", "laughter", "roast", "meme")
 SERIOUS_REGISTERS = frozenset({"serious", "comfort", "soal"})
 TARGETS = frozenset({"male", "female", "unknown"})
@@ -215,29 +216,6 @@ def _vectors(ids: list[str], packs: tuple[str, ...] = ()) -> dict[str, list[floa
     return usable
 
 
-def _cosine(left, right) -> float:
-    norm_left = math.sqrt(sum(float(value) ** 2 for value in left))
-    norm_right = math.sqrt(sum(float(value) ** 2 for value in right))
-    if not norm_left or not norm_right:
-        return 0.0
-    dot = sum(float(a) * float(b) for a, b in zip(left, right, strict=False))
-    return dot / (norm_left * norm_right)
-
-
-@cache
-def _default_encoder():
-    try:
-        from sentence_transformers import SentenceTransformer
-    except ImportError:
-        _warn_once("model", "patterns: sentence-transformers is not installed, using keywords")
-        return None
-    try:
-        return SentenceTransformer(MODEL, device="cpu")
-    except Exception:
-        _warn_once("load", "patterns: could not load %s, using keywords", MODEL)
-        return None
-
-
 def _given(value):
     """An explicit encoder: anything with `.encode`, not only a callable object."""
     return value if hasattr(value, "encode") else None
@@ -252,15 +230,19 @@ def _cosines(
     vectors = _vectors([row["id"] for row in patterns], packs)
     if not vectors:
         return {}
-    model = _given(encoder) or _default_encoder()
+    model = _given(encoder)
     if model is None:
+        found = embed.encode([body])
+    else:
+        try:
+            found = model.encode([body], convert_to_numpy=True)
+        except Exception:
+            _warn_once("encode", "patterns: encode failed, using keywords")
+            return {}
+    if not found:
         return {}
-    try:
-        query = model.encode([body], convert_to_numpy=True)[0]
-    except Exception:
-        _warn_once("encode", "patterns: encode failed, using keywords")
-        return {}
-    return {ident: _cosine(query, vector) for ident, vector in vectors.items()}
+    query = [float(value) for value in found[0]]
+    return {ident: embed.cosine(query, vector) for ident, vector in vectors.items()}
 
 
 def _score(hits: int, similarity: float | None) -> float | None:

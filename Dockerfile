@@ -23,10 +23,10 @@ COPY --from=ghcr.io/astral-sh/uv:0.13.6 /uv /uvx /bin/
 
 WORKDIR /app
 
-# Optional extras are a build argument; the defaults cover memory and the emotion model.
-# Add gateways or integrations with:
-#   docker build --build-arg EXTRAS="--extra memory --extra vibe --extra whatsapp --extra google" .
-ARG EXTRAS="--extra memory --extra vibe"
+# The capability spine (Mem0 + embedder) ships in the core dependencies; only transports
+# and integrations are extras. Add them with:
+#   docker build --build-arg EXTRAS="--extra whatsapp --extra google" .
+ARG EXTRAS=""
 
 COPY pyproject.toml uv.lock ./
 RUN uv sync --locked --no-build --no-install-project $EXTRAS

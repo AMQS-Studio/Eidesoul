@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import time
 from pathlib import Path
 
@@ -13,7 +14,13 @@ from eidesoul.engine.config import Config, VibeConfig
 from eidesoul.engine.decision import build_context
 from eidesoul.engine.prompts import system_prompt
 from eidesoul.engine.roles import Role
-from eidesoul.engine.stores.vibe import VibeRunner, VibeState, advance
+from eidesoul.engine.stores.vibe import (
+    PrototypeSource,
+    VibeRunner,
+    VibeState,
+    advance,
+    load_bank,
+)
 
 
 def make_config() -> Config:
@@ -21,14 +28,18 @@ def make_config() -> Config:
 
 
 def test_vad_mapping_is_negative_for_anger() -> None:
-    point = VibeRunner.vad({"anger": 0.9, "joy": 0.1}, 0.35)
+    point = VibeRunner.vad({"anger": 0.9, "joy": 0.1})
 
     assert point is not None
     assert point[0] < 0.3 and point[1] > 0.7
 
 
-def test_vad_neutral_floor_returns_none() -> None:
-    assert VibeRunner.vad({"joy": 0.2, "anger": 0.2}, 0.35) is None
+def test_vad_below_the_floor_is_neutral() -> None:
+    assert VibeRunner.vad({"joy": 0.6, "anger": 0.2}) is None
+
+
+def test_vad_ambiguous_top_two_is_neutral() -> None:
+    assert VibeRunner.vad({"joy": 0.90, "anger": 0.89}) is None
 
 
 def test_attack_and_baseline_move_gradually(tmp_path) -> None:
@@ -104,14 +115,38 @@ def test_start_reports_availability(tmp_path) -> None:
     asyncio.run(ready.close())
 
 
-def test_start_keeps_loaded_model(tmp_path) -> None:
+def test_start_disables_vibe_without_an_embedder(tmp_path) -> None:
     runner = VibeRunner(database(tmp_path), VibeConfig())
-    sentinel = object()
-    runner._model = sentinel
+    runner._source = PrototypeSource(bank={})
 
-    assert asyncio.run(runner.start()) is True
-    assert runner._model is sentinel  # an existing model is not reloaded
-    asyncio.run(runner.close())
+    assert asyncio.run(runner.start()) is False
+    assert runner._failed is True
+
+
+def test_load_bank_merges_files_and_drops_odd_rows(tmp_path) -> None:
+    (tmp_path / "id.json").write_text(
+        json.dumps(
+            {
+                "prototypes": {
+                    "Joy": ["wkwk seneng banget"],
+                    "nonsense": ["halo halo"],
+                    "anger": ["ih"],
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    assert load_bank(tmp_path) == {"joy": ("wkwk seneng banget",)}
+
+
+def test_prototype_source_scores_the_shipped_bank() -> None:
+    source = PrototypeSource()
+
+    assert source.scores("") == {}  # no text, no score
+    assert max(source.scores("goblok banget sih kamu").items(), key=lambda kv: kv[1])[0] == "anger"
+    assert VibeRunner.vad(source.scores("besok rapat jam sembilan")) is None
+    assert VibeRunner.vad(source.scores("aku capek banget sama kerjaan")) is not None
 
 
 def test_state_persists_to_database(tmp_path) -> None:

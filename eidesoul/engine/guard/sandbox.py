@@ -14,8 +14,8 @@ import json
 import logging
 import re
 
-from .config import GuardConfig
-from .safety import SafetyDecision, scan_command
+from ..config import GuardConfig
+from .policy import SafetyDecision, scan_command
 
 log = logging.getLogger(__name__)
 

@@ -8,7 +8,7 @@ import pytest
 from support import make_agent, role
 
 from eidesoul.engine.config import DEFAULT_SENSITIVE_COMMANDS, GuardConfig
-from eidesoul.engine.sandbox_guard import GUARD_SYSTEM, SandboxGuard, screen
+from eidesoul.engine.guard import GUARD_SYSTEM, SandboxGuard, screen
 from eidesoul.engine.tools import execute
 
 CHAT = "cli:local"

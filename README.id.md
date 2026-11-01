@@ -130,21 +130,20 @@ berjalan.
 `eidesoul db check` mencetak ringkasan skema dan isi; `eidesoul selftest` menguji store, tool, dan
 LLM sekali tanpa menjalankan gateway.
 
-Pasang extra opsional yang benar-benar dipakai, atau tidak sama sekali:
+`uv sync` memasang tulang punggung kemampuan: penyimpanan Postgres+pgvector, memori Mem0, embedder
+multibahasa, prototipe affect, dan guard. Hanya transport dan integrasi yang berupa extra:
 
 | Extra | Membawa | Dibutuhkan untuk |
 |---|---|---|
-| `memory` | Mem0 + `sentence-transformers` | memori semantik dan pengambilan pack |
-| `vibe` | torch + transformers | sinyal affect dari teks |
 | `whatsapp` | Neonize + segno | gateway WhatsApp |
 | `google` | Google API client, google-auth, httpx | tool Google Workspace |
 
 ```bash
-uv sync --extra memory --extra vibe
+uv sync --extra whatsapp --extra google
 ```
 
-Tanpa `memory`, jiwa tetap bicara; fitur yang bergantung pada memori menurun dan melaporkan
-alasannya. Setiap extra bisa dilepas: tidak ada bagian core yang mengimpornya secara eager.
+Setiap extra bisa dilepas: tidak ada bagian core yang mengimpornya secara eager, dan tanpa extra,
+tool atau gateway terkait menjelaskan mengapa ia inert.
 
 <a id="soulyaml"></a>
 ## soul.yaml
@@ -162,11 +161,11 @@ language: id                    # katalog terpasang: id | en
 pronouns: aku
 gender: unspecified             # male | female | nonbinary | unspecified
 role: assistant                 # peran aktif
-roles: [assistant, companion, advisor]   # peran yang boleh dihuni jiwa ini
+roles: [assistant]              # opsional; default [role]
 locale: id-ID                   # locale konteks untuk prompt dan currents
 background: ""                  # teks bebas: asal-usul jiwa ini
 persona: ""                     # markdown bebas: kepribadian, suara, nilai
-style:
+style:                          # ditulis `eidesoul library resolve`, bukan manual
   patterns: []                  # id pack pattern dari eidesoul/library/patterns/
   facts: []                     # id pack fakta dari eidesoul/library/facts/
   registers: []                 # allow-list register opsional; kosong = default pack
@@ -180,19 +179,24 @@ Aturan yang ditegakkan loader:
 - `name` harus tidak kosong, jika tidak dipakai nilai default.
 - `gender` harus salah satu dari `male`, `female`, `nonbinary`, atau `unspecified`; nilai lain
   jatuh ke `unspecified` dengan peringatan.
-- `roles` tidak pernah kosong; jika `role` tidak ada di `roles`, ia ditambahkan di depan.
+- `roles` default `[role]` bila tidak diisi; jika `role` tidak ada di `roles`, ia ditambahkan di
+  depan, dan persona hanya mencantumkan peran lain bila jumlahnya lebih dari satu.
 - Id pack dan register harus cocok dengan `^[a-z0-9][a-z0-9-]{0,63}$`; id tidak valid adalah error,
   bukan dilewati diam-diam.
 - `max_patterns` dan `max_facts` dijepit ke `0..6`.
 - `persona` dirender dengan urutan tetap: nama, deskripsi, peran aktif, peran tersedia, locale,
   background, persona bebas, lalu contoh dialog. Bagian kosong dihilangkan.
+- `style` diturunkan: `eidesoul init` mengisinya dan `eidesoul library resolve --force` menulis
+  ulang dari `description` + `background` + `persona` + `examples`, hanya memakai pack yang
+  `language`-nya sama dengan jiwa. Kecocokan lemah, seri, atau kosong tidak memilih apa pun, dan
+  jenis yang tidak menemukan padanan mempertahankan pack yang sudah ada.
 
 Peran aktif dan pack gaya adalah dua tombol yang membentuk satu giliran. Peran aktif menentukan izin
 dan sikap kerja; pack gaya menentukan bagaimana jiwa terdengar dan seberapa banyak data karakter
 yang boleh dipakai per giliran. Jiwa tanpa pack tidak meminjam gaya bahasa daerah dan tidak memakai
 fakta — hanya `persona` dan `background` miliknya sendiri.
 
-Contoh singkat:
+Contoh singkat (biarkan `style` ditulis resolver):
 
 ```yaml
 name: Eidesoul
@@ -219,7 +223,9 @@ examples:
 ## Pustaka karakter
 
 Data karakter adalah pustaka yang dipilih jiwa, bukan sesuatu yang dikirim engine lewat suaranya.
-Tidak ada yang dipilih secara default: `style` kosong berarti tanpa pattern dan tanpa fakta.
+Seleksi berjalan dari atas ke bawah: `soul.yaml` menyebut pack-nya, `eidesoul init` mengisi daftar
+itu sesuai bahasa jiwa, dan `eidesoul library resolve` menurunkannya kembali dari tulisan penulis.
+`style` kosong berarti tanpa pattern dan tanpa fakta.
 
 Pack berada di bawah `eidesoul/library/`:
 
@@ -243,7 +249,7 @@ style:
 
 Seleksi bersifat deterministik per giliran: engine membaca pesan terakhir, menurunkan register
 ruangan, lalu memilih paling banyak `max_patterns` gerakan dan `max_facts` fakta. Hit kata kunci
-didahulukan, lalu kemiripan kosinus terhadap vektor yang sudah dihitung. Pack yang hilang, tidak
+didahulukan, lalu kemiripan kosinus pada embedder bersama (`eidesoul/engine/embed.py`). Pack yang hilang, tidak
 terbaca, atau namanya di luar pola id tidak menyumbang apa pun dan mencatat peringatan alih-alih
 menggagalkan giliran.
 
@@ -366,18 +372,18 @@ bahkan ketika ia diizinkan berjalan.
 ## Integrasi opsional
 
 ```bash
-uv sync --extra memory --extra vibe                     # memori + affect dari source
 uv sync --extra whatsapp --extra google                 # gateway dan integrasi opsional
 ```
 
 ```bash
-docker build --build-arg EXTRAS="--extra memory --extra vibe --extra whatsapp --extra google" .
+docker build --build-arg EXTRAS="--extra whatsapp --extra google" .
 ```
 
-- **Memori** (`memory`): Mem0 dengan embedder multibahasa lokal dan pgvector. Tanpanya, jiwa tetap
-  membalas dan melaporkan mengapa memori tidak tersedia.
-- **Affect** (`vibe`): classifier emosi kecil yang memberi masukan pada nada. Tanpanya, nada datang
-  dari pengaturan gaya dan karakter saja.
+Memori, embedder, dan prototipe affect adalah bagian dari instalasi core; tidak ada extra untuk
+mereka. Di SQLite, Mem0 tidak aktif dan `status` melaporkan alasannya.
+
+- **Vibe affect** membaca embedder bersama terhadap `eidesoul/library/affect/*.json`; tanpa embedder
+  suasana ruangan tetap netral, bukan menebak.
 - **WhatsApp** (`whatsapp`): gateway opsional. Tidak pernah aktif secara default.
 - **Google Workspace** (`google`): tool in-process untuk berkas yang dibagikan ke service account,
   dengan penautan identitas per pengirim. Tanpa extra ini tool tetap terdaftar tetapi inert dan
@@ -389,21 +395,37 @@ di-commit.
 <a id="credits"></a>
 ## Kredit
 
-Eidesoul berdiri di atas karya banyak pihak lain.
+Setiap komponen di bawah ini mempertahankan lisensi dan atribusinya masing-masing. Versinya adalah
+yang dipasang lock file; kolom terakhir menjelaskan untuk apa Eidesoul memakainya.
 
-**Runtime dan dependensi:** Python, SQLAlchemy, psycopg, pgvector, OpenAI Python SDK, MCP Python
-SDK, PyYAML, dan DDGS.
+| Komponen | Lisensi | Penulis / organisasi | Sumber | Dipakai untuk |
+|---|---|---|---|---|
+| Python | PSF-2.0 | Python Software Foundation | https://www.python.org/ | runtime |
+| SQLAlchemy | MIT | Michael Bayer / SQLAlchemy authors | https://www.sqlalchemy.org/ | penyimpanan |
+| psycopg | LGPL-3.0-only | Daniele Varrazzo | https://psycopg.org/ | driver Postgres |
+| psycopg-pool | LGPL-3.0-only | Daniele Varrazzo | https://www.psycopg.org/ | pool koneksi |
+| pgvector | PostgreSQL | pgvector contributors | https://github.com/pgvector/pgvector | kolom vektor |
+| openai-python | Apache-2.0 | OpenAI | https://github.com/openai/openai-python | klien LLM |
+| MCP Python SDK | MIT | Model Context Protocol authors | https://github.com/modelcontextprotocol/python-sdk | tool MCP |
+| PyYAML | MIT | Kirill Simonov / PyYAML authors | https://pyyaml.org/ | berkas config + soul |
+| ddgs | MIT | ddgs authors | https://github.com/deedy5/ddgs | web search |
+| Mem0 (`mem0ai`) | Apache-2.0 | Mem0 | https://github.com/mem0ai/mem0 | memori semantik |
+| sentence-transformers | Apache-2.0 | UKP Lab / Hugging Face | https://github.com/huggingface/sentence-transformers | embedding |
+| paraphrase-multilingual-MiniLM-L12-v2 | Apache-2.0 | sentence-transformers | https://huggingface.co/sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2 | bobot embedder |
+| PyTorch | Apache-2.0 AND Apache-2.0 WITH LLVM-exception AND BSD-2-Clause AND BSD-3-Clause AND BSL-1.0 AND ISC AND MIT AND Zlib | Meta / PyTorch contributors | https://github.com/pytorch/pytorch | runtime tensor |
+| Transformers | Apache-2.0 | Hugging Face | https://github.com/huggingface/transformers | pemuatan model |
+| Neonize | tidak dinyatakan upstream | krypton-byte | https://github.com/krypton-byte/neonize | transport WhatsApp |
+| segno | BSD-3-Clause | Lars Heuer | https://github.com/heuer/segno | pemasangan QR |
+| google-api-python-client | Apache-2.0 | Google | https://github.com/googleapis/google-api-python-client | tool Workspace |
+| google-auth | Apache-2.0 | Google | https://github.com/googleapis/google-auth-library-python | autentikasi Google |
+| httpx | BSD-3-Clause | Encode | https://github.com/encode/httpx | klien HTTP |
+| emotion-engine | MIT | PioneerJeff Labs | https://github.com/pioneerjeff-labs/emotion-engine | engine affect yang di-vendor |
+| EmoSense-ID classifier | lihat model card | Aardiiiiy | https://huggingface.co/Aardiiiiy/EmoSense-ID-Indonesian-Emotion-Classifier | acuan kalibrasi saja |
+| pytest | MIT | pytest authors | https://github.com/pytest-dev/pytest | dev |
+| pytest-cov | MIT | pytest-cov authors | https://github.com/pytest-dev/pytest-cov | dev |
+| ruff | MIT | Astral | https://github.com/astral-sh/ruff | dev |
 
-**Memori dan karakter:** Mem0; sentence-transformers dengan model
-`paraphrase-multilingual-MiniLM-L12-v2`.
-
-**Affect:** `Aardiiiiy/EmoSense-ID-Indonesian-Emotion-Classifier` dan emotion engine yang
-di-vendor, yang lisensinya disertakan sebagai `eidesoul/vendor/LICENSE.emotion-engine`.
-
-**Gateway dan integrasi opsional:** Neonize, segno, Google API Python Client, google-auth, dan
-httpx.
-
-**Terima kasih:** grup diskusi dan para penguji yang dirujuk selama pengembangan (lihat
+Terima kasih kepada grup diskusi dan para penguji yang dirujuk selama pengembangan (lihat
 `references/`), serta semua yang mencoba build awal dan melaporkan apa yang rusak. Tidak ada
 transkrip mentah dari percakapan itu yang dikirim: pustaka karakter berisi contoh yang ditulis
 sendiri dan fakta bersumber, bukan log chat.
@@ -411,7 +433,8 @@ sendiri dan fakta bersumber, bukan log chat.
 <a id="license"></a>
 ## Lisensi
 
-Repositori ini tidak menyatakan lisensi proyek. Setiap komponen pihak ketiga mempertahankan lisensi
-dan atribusinya masing-masing; emotion engine yang di-vendor membawa lisensinya di samping
-source-nya, dan dependensi lain didistribusikan dengan ketentuan proyek upstream masing-masing.
-Tinjau ketentuan tersebut sebelum mendistribusikan ulang sebuah build.
+Eidesoul dirilis di bawah [Apache License 2.0](LICENSE). Hak cipta 2026 Abdul Muqsith.
+
+Komponen pihak ketiga mempertahankan ketentuannya masing-masing; tabel di atas mencantumkan lisensi,
+penulis, dan sumber tiap komponen. Emotion engine yang di-vendor membawa lisensinya di samping
+source-nya sebagai `eidesoul/vendor/LICENSE.emotion-engine`.

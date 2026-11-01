@@ -2,6 +2,9 @@
 name = "eidesoul"
 version = "0.1.0"
 description = "Eidesoul: a persistent soul engine."
+license = "Apache-2.0"
+license-files = ["LICENSE"]
+authors = [{ name = "Abdul Muqsith", email = "136996767+inimuqsith@users.noreply.github.com" }]
 requires-python = ">=3.11"
 dependencies = [
   "SQLAlchemy>=2.0,<3",
@@ -11,15 +14,16 @@ dependencies = [
   "mcp>=2.3,<3",
   "PyYAML>=6",
   "ddgs>=9",
+  "mem0ai>=2.2,<3",
+  "sentence-transformers>=5.2,<6",
+  # Declared directly so the pytorch-cpu index in [tool.uv.sources] applies: without it
+  # the transitive torch requirement resolves to the CUDA wheels.
+  "torch>=2.2",
 ]
 
 [project.optional-dependencies]
-# Mem0 pins protobuf<7 while Neonize needs protobuf>=7; install mem0ai with
-# `pip install --no-deps "mem0ai>=2.2,<3"` after the whatsapp extra (see README).
-memory = ["mem0ai>=2.2,<3", "sentence-transformers>=5.2,<6"]
 whatsapp = ["neonize>=0.5.2,<0.6", "segno>=1.6"]
 google = ["google-api-python-client>=2.150,<3", "google-auth>=2.35,<3", "httpx>=0.27,<1"]
-vibe = ["torch>=2.2", "transformers>=4.40,<6"]
 dev = [
   "pytest>=8",
   "pytest-cov>=6",
@@ -29,18 +33,22 @@ dev = [
   "httpx>=0.27,<1",
 ]
 
+[project.urls]
+Repository = "https://github.com/inimuqsith/Eidesoul"
+
 [project.scripts]
 eidesoul = "eidesoul.__main__:main"
 
 [build-system]
-requires = ["setuptools>=68"]
+# PEP 639 license metadata (`license` string plus `license-files`) needs setuptools 77.
+requires = ["setuptools>=77"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
 include = ["eidesoul*"]
 
 [tool.setuptools.package-data]
-eidesoul = ["lang/*.yaml", "library/patterns/*.json", "library/facts/*.json"]
+eidesoul = ["lang/*.yaml", "library/patterns/*.json", "library/facts/*.json", "library/affect/*.json"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
@@ -64,8 +72,8 @@ branch = true
 source = ["eidesoul"]
 
 [tool.uv]
-# Mem0 pins protobuf<7 while Neonize needs >=6.32.1; the older build still takes
-# protobuf 7 through `--no-deps`, so resolution is forced with an override.
+# Mem0 pins protobuf<7 while Neonize needs >=6.32.1; both are core-adjacent installs, so one
+# protobuf that satisfies Neonize is forced instead of letting the cap win.
 override-dependencies = ["protobuf>=7"]
 
 [[tool.uv.index]]

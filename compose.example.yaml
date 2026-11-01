@@ -20,7 +20,7 @@ services:
     build:
       context: .
       args:
-        EXTRAS: "--extra memory --extra vibe"
+        EXTRAS: "--extra whatsapp --extra google"
     restart: unless-stopped
     depends_on:
       postgres:

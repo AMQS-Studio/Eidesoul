@@ -10,7 +10,7 @@ from ..config import Config
 from ..permissions import command_allowed
 from ..registry import Handler, Registry, allows, discover
 from ..roles import Role
-from ..safety import ActionRequest
+from ..guard import ActionRequest
 
 log = logging.getLogger(__name__)
 

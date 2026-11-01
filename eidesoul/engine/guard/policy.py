@@ -9,8 +9,8 @@ import shlex
 from dataclasses import dataclass
 from typing import Protocol
 
-from .config import ApprovalConfig
-from .registry import allows
+from ..config import ApprovalConfig
+from ..registry import allows
 
 READ_ONLY = frozenset({"read", "memory", "skill", "chat_history", "web_search"})
 

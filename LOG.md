@@ -1,5 +1,62 @@
 # LOG
 
+## 2026-11-01 — v2: providers, guard package, capability spine, affect prototypes, soul resolver
+
+**Providers** — new `eidesoul/providers/` package holding only client/auth/default-model facts for
+the OpenAI-compatible endpoints (`opencode`, `openai`, `google`, `openrouter`, `groq`, `deepseek`,
+`ollama`, `custom`). `LLMConfig` gained `provider` as its first field, `load_config` resolves the
+name into `base_url`/`api_key_env`/`model` before building the config (explicit values still win,
+`ConfigError` on an unknown name, `custom` needs a `base_url`), and `api_key()` accepts an empty
+`OLLAMA_API_KEY` for a local endpoint. `config.example.yaml` and the `init` template gained the
+`provider` key; Gemini is reached through its OpenAI-compatible endpoint.
+
+**Guard package** — `eidesoul/engine/guard.py`, `safety.py`, and `sandbox_guard.py` moved verbatim
+into `eidesoul/engine/guard/` as `patterns.py`, `policy.py`, and `sandbox.py`, and the package
+`__init__` re-exports the same public symbols, so `from . import guard` call sites in the agent,
+ambient, llm, privacy, and affect modules did not change. No shim: the three old modules are gone and
+`agent.py`, `tools/__init__.py`, and the two guard test modules import from the package.
+
+**One embedder** — `eidesoul/engine/embed.py` owns the MiniLM model, the 384 dimensions, and the
+cosine helper; patterns, facts, affect prototypes, the admin resolver, and Mem0 all share it, so the
+two private `_default_encoder` copies and three private cosine implementations are gone. Encoding
+runs without progress bars.
+
+**Affect prototypes** — the EmoSense classifier is replaced by multilingual prototype sentences in
+`eidesoul/library/affect/{id,en}.json` (`anger, anticipation, disgust, fear, joy, sadness, surprise,
+trust`, six casual sentences each). `stores/vibe.py` now loads the bank, scores a message by the max
+cosine per label, and turns neutral input into `None` through a calibrated floor and margin
+(`0.73`/`0.063`, measured on the fixture sentences: neutral `0.54`, accepted `>= 0.92`).
+`VibeConfig` lost `model`, `max_length`, and `neutral_floor`; `scripts/affect.py --check/--stats`
+gates the data. The `vibe` extra and the torch/transformers dependency are gone.
+
+**Capability spine** — `mem0ai` and `sentence-transformers` are core dependencies (plus a direct
+`torch` so the `pytorch-cpu` index keeps applying; without it the lock pulled the CUDA wheels).
+`MemoryConfig.backend`, `MemoryConfig.embedder`, and `EmbedderConfig` are deleted: memory is Mem0 or
+nothing, the embedder is the shared MiniLM, and `build_memory` only skips SQLite. The Dockerfile's
+`EXTRAS` defaults to empty and `compose.example.yaml` asks for `whatsapp`+`google`. `uv.lock`
+regenerated (125 packages, no CUDA).
+
+**Soul and resolver** — `DEFAULT_SOUL_YAML` is identity only (`roles`, `style`, and the `examples`
+comment are gone); `load_soul` defaults `roles` to `(role,)` and the persona only lists other roles
+when there is more than one. New `eidesoul/admin/library.py` derives the style top-down:
+`pack_profiles`, `packs_for(language)`, `suggest(text, packs, use_embedding=...)` (cosine tier with a
+floor and margin, then a keyword tier, never a forced pick), `seed_style` for `init`, and
+`resolve_soul` which rewrites `style:` while preserving every other key. `eidesoul library resolve
+[--explain] [--force]` writes `soul.yaml` and prints `next: eidesoul config import`.
+
+**License and credits** — Apache-2.0 `LICENSE` with `Copyright 2026 Abdul Muqsith`, PEP 639
+`license`/`license-files` metadata (setuptools floor raised to 77), an author, and a repository URL.
+The README credits list is now one table per language (component, license, author, source, use) and
+covers every declared dependency; values come from installed distribution metadata, and packages
+without a declared license say so.
+
+**Verification** — `pytest -q` 464 passed; `uv lock --check` clean; `scripts/affect.py --check`
+prints `labels=8 ok`; the prototype fixtures classify to `sadness`/`anger`/`joy`/`fear`/`trust` with
+`besok rapat jam sembilan` staying neutral; `eidesoul init` writes `style` with `jawatimur` and
+`indonesia` and no `roles`/`examples`; `eidesoul library resolve --explain --force` reports
+`indonesia facts ... tokens: surabaya` and keeps `jawatimur`; a second call prints `style already
+set`; `selftest` OK and `STATUS` present.
+
 ## 2026-11-01 — v1: rebrand, soul.yaml, character library, sandbox guard
 
 **Brand** — the project is Eidesoul everywhere: package `eidesoul`, CLI `eidesoul`, default

@@ -17,7 +17,13 @@ Hard rules for changes in this repo.
 - Tracked docs are `TASK.md`, `README.md`, `README.id.md`, `LOG.md`, `AGENTS.md`, and `soul.yaml`.
   Do not create other tracked `.md` files.
 - Core lives in `eidesoul/engine/` and must not import `eidesoul.gateways` or `neonize`.
-  Root `eidesoul/` only holds `__main__.py`, `admin/`, `gateways/`, `library/`, `lang/`, `vendor/`.
+  Root `eidesoul/` only holds `__main__.py`, `admin/`, `gateways/`, `library/`, `lang/`, `providers/`,
+  `vendor/`.
+- Core may import `eidesoul.providers`: that package holds client, auth, and default-model facts for
+  the selectable AI providers and nothing else, and it never imports an engine module. Select a
+  provider by name in `engine.llm.provider`; explicit `base_url`/`api_key_env`/`model` stay overrides.
+- Guard modules live only under `eidesoul/engine/guard/` (`patterns.py`, `policy.py`, `sandbox.py`);
+  callers import the package (`from .guard import ...`), never a module path inside it.
 - Eidesoul is a soul engine, not an agent product and not an assistant template. Assistant is one
   role among companion, advisor, and robot embodiments.
 - Tools are removable capabilities. The six core families (`shell`, `read`, `write`, `web_search`,
@@ -29,6 +35,16 @@ Hard rules for changes in this repo.
 - Every optional feature must be removable: extras in `pyproject.toml`, lazy imports, no core import
   of gateway or vendor libraries, no compatibility shims. Prefer deleting an optional path over
   carrying a fallback.
+
+## Capability spine
+
+- The spine is required, never optional: Postgres+pgvector storage, Mem0 semantic memory, one shared
+  embedder (`eidesoul/engine/embed.py`, MiniLM, 384 dim), the affect prototypes under
+  `eidesoul/library/affect/`, the guard, and the lease. Transport and integrations stay extras
+  (`whatsapp`, `google`).
+- A dependency the spine needs goes into `dependencies`, not into an extra; a feature that only a
+  gateway or a body needs stays an extra. The Dockerfile installs `EXTRAS` (empty by default) on top
+  of the locked core set.
 
 ## Extending
 
@@ -70,8 +86,22 @@ Hard rules for changes in this repo.
   `lexicon`, and `patterns`; fact packs carry `version`, `model`, `language`, and `facts`.
 - Never put names, phone numbers, URLs, or raw transcripts into a pattern pack. Every fact carries at
   least one source URL. A fact is not a move: never move one between the two kinds.
+- Affect prototypes live in `eidesoul/library/affect/<language>.json`: exactly the eight
+  `EMOTION_VAD` labels, at least six short casual sentences each, never a name, URL, or phone number.
+  `scripts/affect.py --check` gates them.
 - Edit packs with `scripts/patterns.py` and `scripts/fakta.py` (`--pack`, `--check`, then `--embed`);
   grow new rows from the corpus with `scripts/grow.py`, never by hand.
+- `soul.style` is derived, not hand-tuned: `eidesoul library resolve` (or `eidesoul init`) writes it
+  from the soul text, gated by language, and never forces a pack. A kind without a match keeps the
+  packs the soul already selected.
+
+## Licensing
+
+- The project is Apache-2.0 (`LICENSE`, `pyproject.toml` `license` + `license-files`). Every new
+  dependency ships its row in the README credits table (component, license, author, source, use) in
+  the same commit; both `README.md` and `README.id.md` carry the same rows.
+- Record the license the installed distribution declares. A package with no declared upstream
+  license is written as `not declared upstream` with its repository link, never guessed.
 
 ## Safety
 

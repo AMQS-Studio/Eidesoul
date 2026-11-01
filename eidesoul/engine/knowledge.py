@@ -10,17 +10,18 @@ from __future__ import annotations
 
 import json
 import logging
-import math
 import re
 from functools import cache
 from pathlib import Path
 
+from . import embed
+
 log = logging.getLogger(__name__)
 
-MODEL = "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
+MODEL = embed.MODEL
 LIBRARY = Path(__file__).resolve().parent.parent / "library" / "facts"
 PACK = re.compile(r"^[a-z0-9][a-z0-9-]{0,63}$")
-DIM = 384
+DIM = embed.DIM
 CAP = 6
 MIN_SIMILARITY = 0.55  # cosine strong enough to select without a keyword hit
 KEY_WEIGHT, HIT_WEIGHT = 0.7, 0.3
@@ -127,29 +128,6 @@ def _vectors(ids: list[str], packs: tuple[str, ...] = ()) -> dict[str, list[floa
     return usable if len(usable) >= COVERAGE * len(ids) else {}
 
 
-def _cosine(left, right) -> float:
-    norm_left = math.sqrt(sum(float(value) ** 2 for value in left))
-    norm_right = math.sqrt(sum(float(value) ** 2 for value in right))
-    if not norm_left or not norm_right:
-        return 0.0
-    dot = sum(float(a) * float(b) for a, b in zip(left, right, strict=False))
-    return dot / (norm_left * norm_right)
-
-
-@cache
-def _default_encoder():
-    try:
-        from sentence_transformers import SentenceTransformer
-    except ImportError:
-        _warn_once("model", "facts: sentence-transformers is not installed, using keywords")
-        return None
-    try:
-        return SentenceTransformer(MODEL, device="cpu")
-    except Exception:
-        _warn_once("load", "facts: could not load %s, using keywords", MODEL)
-        return None
-
-
 def _given(value):
     """An explicit encoder: anything with `.encode`, not only a callable object."""
     return value if hasattr(value, "encode") else None
@@ -164,15 +142,19 @@ def _cosines(
     vectors = _vectors([row["id"] for row in facts], packs)
     if not vectors:
         return {}
-    model = _given(encoder) or _default_encoder()
+    model = _given(encoder)
     if model is None:
+        found = embed.encode([body])
+    else:
+        try:
+            found = model.encode([body], convert_to_numpy=True)
+        except Exception:
+            _warn_once("encode", "facts: encode failed, using keywords")
+            return {}
+    if not found:
         return {}
-    try:
-        query = model.encode([body], convert_to_numpy=True)[0]
-    except Exception:
-        _warn_once("encode", "facts: encode failed, using keywords")
-        return {}
-    return {ident: _cosine(query, vector) for ident, vector in vectors.items()}
+    query = [float(value) for value in found[0]]
+    return {ident: embed.cosine(query, vector) for ident, vector in vectors.items()}
 
 
 def _hits(keys: list[str], body: str, tokens: set[str]) -> int:

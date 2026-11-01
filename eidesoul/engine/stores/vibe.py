@@ -1,7 +1,9 @@
-"""Room vibe: anima-style attack/hold/decay dynamics with an Indonesian emotion classifier.
+"""Room vibe: anima-style attack/hold/decay dynamics scored against emotion prototypes.
 
 Not a replacement for `affect`: vibe is the room mood that keeps moving from the text, stored
-per chat in the `state` table, and used as prompt context. Every failure fails open.
+per chat in the `state` table, and used as prompt context. Labels come from multilingual
+prototype sentences on the shared embedder, so there is no second model to load. Every
+failure fails open.
 """
 
 from __future__ import annotations
@@ -13,9 +15,11 @@ import logging
 import math
 import time
 from dataclasses import dataclass, field
+from pathlib import Path
 
 from sqlalchemy import select
 
+from .. import embed
 from ..config import VibeConfig
 from ..db import Database
 from ..schema import state as state_table
@@ -25,6 +29,9 @@ log = logging.getLogger(__name__)
 NEUTRAL = (0.5, 0.4, 0.5)
 CURRENT_TAU = (120.0, 45.0, 90.0)  # V, A, D seconds
 BASELINE_TAU = 14400.0  # 4 hours
+LIBRARY = Path(__file__).resolve().parent.parent.parent / "library" / "affect"
+PROTOTYPE_FLOOR = 0.73  # calibrated: neutral sentences score <= 0.54, emotional ones >= 0.92
+PROTOTYPE_MARGIN = 0.063  # calibrated: half of the smallest gap between accepted matches
 EMOTION_VAD = {
     "anger": (0.15, 0.85, 0.80),
     "anticipation": (0.60, 0.60, 0.55),
@@ -37,6 +44,81 @@ EMOTION_VAD = {
 }
 
 STATE_KEY = "vibe"
+
+
+def load_bank(folder: Path = LIBRARY) -> dict[str, tuple[str, ...]]:
+    """Merged prototypes per emotion label; every `*.json` under `folder` contributes."""
+    found: dict[str, list[str]] = {}
+    dropped: list[str] = []
+    for target in sorted(Path(folder).glob("*.json")) if Path(folder).is_dir() else ():
+        try:
+            body = json.loads(target.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            log.warning("vibe: unreadable prototype file %s", target.name)
+            continue
+        rows = body.get("prototypes") if isinstance(body, dict) else None
+        if not isinstance(rows, dict):
+            continue
+        for label, entries in rows.items():
+            name = str(label).strip().lower()
+            if name not in EMOTION_VAD:
+                dropped.append(f"{target.name}:{name}")
+                continue
+            for entry in entries if isinstance(entries, list) else ():
+                text = " ".join(str(entry or "").split())
+                if len(text) < 6:
+                    dropped.append(f"{target.name}:{name}:{text!r}")
+                    continue
+                found.setdefault(name, []).append(text)
+    if dropped:
+        log.warning(
+            "vibe: dropped %d prototype(s) from %s: %s",
+            len(dropped),
+            Path(folder).name,
+            ", ".join(dropped[:5]),
+        )
+    return {label: tuple(rows) for label, rows in found.items()}
+
+
+class PrototypeSource:
+    """Emotion label -> the max cosine over that label's prototypes on the shared embedder."""
+
+    def __init__(self, bank: dict[str, tuple[str, ...]] | None = None) -> None:
+        self.bank = load_bank() if bank is None else dict(bank)
+        self._vectors: dict[str, list[list[float]]] = {}
+
+    def _embed_bank(self) -> dict[str, list[list[float]]]:
+        labels = [label for label, rows in self.bank.items() if rows]
+        texts = [text for label in labels for text in self.bank[label]]
+        if not texts:
+            return {}
+        found = embed.encode(texts)
+        if len(found) != len(texts):
+            return {}
+        grouped: dict[str, list[list[float]]] = {}
+        index = 0
+        for label in labels:
+            size = len(self.bank[label])
+            grouped[label] = found[index : index + size]
+            index += size
+        return grouped
+
+    def scores(self, text: str) -> dict[str, float]:
+        """Label -> similarity; `{}` when the bank or the embedder is unavailable."""
+        body = str(text or "").strip()
+        if not body:
+            return {}
+        if not self._vectors:
+            self._vectors = self._embed_bank()
+        if not self._vectors:
+            return {}
+        query = embed.encode([body])
+        if not query:
+            return {}
+        return {
+            label: max(embed.cosine(query[0], vector) for vector in group)
+            for label, group in self._vectors.items()
+        }
 
 
 def _clamp(value: float) -> float:
@@ -70,19 +152,17 @@ def advance(state: VibeState, now: float, config: VibeConfig) -> None:
 
 
 class VibeRunner:
-    """EmoSense-ID classifier + per-chat vibe dynamics; a heartbeat keeps the decay running."""
+    """Prototype scorer + per-chat vibe dynamics; a heartbeat keeps the decay running."""
 
     def __init__(self, db: Database, config: VibeConfig, classifier=None):
         self.config = config
         self._db = db
         self._classifier = classifier
+        self._source = PrototypeSource()
         self._states: dict[str, VibeState] = self._load()
         self._lock = asyncio.Lock()
         self._running = False
         self._task: asyncio.Task | None = None
-        self._tokenizer = None
-        self._model = None
-        self._torch = None
         self._failed = False
 
     # ------------------------------------------------------------------ lifecycle
@@ -91,42 +171,15 @@ class VibeRunner:
         """True when vibe is ready; False means disabled (fail-open, no exception)."""
         if self._running:
             return True
-        if self._classifier is None and self._model is None:
-            log.info("vibe: loading model %s", self.config.model)
-            try:
-                await asyncio.to_thread(self._load_model)
-            except Exception:
-                log.warning("vibe: model %s failed to load; vibe disabled", self.config.model)
-                log.debug("vibe: model load failure detail", exc_info=True)
+        if self._classifier is None:
+            ready = await asyncio.to_thread(self._source.scores, "ok")
+            if not ready:
+                log.warning("vibe: embedder unavailable; vibe disabled")
                 self._failed = True
                 return False
         self._running = True
         self._task = asyncio.create_task(self._heartbeat())
         return True
-
-    def _load_model(self) -> None:
-        import torch
-        from transformers import AutoModelForSequenceClassification, AutoTokenizer
-
-        self._torch = torch
-        self._tokenizer = AutoTokenizer.from_pretrained(self.config.model)
-        self._model = AutoModelForSequenceClassification.from_pretrained(self.config.model)
-        self._model.eval()
-
-    def _classify(self, text: str) -> dict[str, float]:
-        inputs = self._tokenizer(
-            text,
-            return_tensors="pt",
-            truncation=True,
-            max_length=int(self.config.max_length),
-        )
-        with self._torch.no_grad():
-            logits = self._model(**inputs).logits[0]
-            probs = self._torch.softmax(logits, dim=-1).tolist()
-        labels = getattr(self._model.config, "id2label", None) or {}
-        if not labels:
-            raise RuntimeError("model has no id2label")
-        return {str(labels[index]).strip().lower(): float(value) for index, value in enumerate(probs)}
 
     async def close(self) -> None:
         self._running = False
@@ -149,9 +202,14 @@ class VibeRunner:
     # ------------------------------------------------------------------ per chat
 
     @staticmethod
-    def vad(probs: dict | None, floor: float) -> list[float] | None:
-        """Label distribution -> one VAD point; below `floor` it counts as neutral (None)."""
-        if not probs or max(probs.values()) < floor:
+    def vad(probs: dict | None) -> list[float] | None:
+        """Label scores -> one VAD point; a weak or ambiguous top label counts as neutral."""
+        if not probs:
+            return None
+        ranked = sorted(float(value) for value in probs.values())
+        if ranked[-1] < PROTOTYPE_FLOOR:
+            return None
+        if len(ranked) > 1 and ranked[-1] - ranked[-2] < PROTOTYPE_MARGIN:
             return None
         total = 0.0
         acc = [0.0, 0.0, 0.0]
@@ -174,8 +232,8 @@ class VibeRunner:
             if self._classifier is not None:
                 probs = self._classifier(text)
             else:
-                probs = await asyncio.to_thread(self._classify, text)
-            target = self.vad(probs, float(self.config.neutral_floor))
+                probs = await asyncio.to_thread(self._source.scores, text)
+            target = self.vad(probs)
             if target is None:
                 return await self.describe(chat_id)
             async with self._lock:

@@ -51,11 +51,11 @@ def test_invalid_engine_value_does_not_change_document(tmp_path, monkeypatch) ->
     env = make_runtime(tmp_path, monkeypatch, settings_approval=False)
     before = env.documents.get("engine")
 
-    result = run(env, "set", file="engine", path="memory.backend", value="bogus")
+    result = run(env, "set", file="engine", path="approval.mode", value="bogus")
 
     assert result.startswith("error:")
     assert env.documents.get("engine") == before
-    assert env.agent.config.memory.backend == "mem0"
+    assert env.agent.config.approval.mode == "yolo"
 
 
 def test_write_soul_changes_prompt_and_mirror(tmp_path, monkeypatch) -> None:

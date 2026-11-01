@@ -1,4 +1,4 @@
-"""Entrypoint: `eidesoul run|console|init|config|db|memory|selftest|backfill`."""
+"""Entrypoint: `eidesoul run|console|init|config|db|memory|selftest|backfill|library`."""
 
 from __future__ import annotations
 
@@ -10,6 +10,8 @@ import shutil
 import sys
 from datetime import datetime
 from pathlib import Path
+
+import yaml
 
 from .engine.config import Config, ConfigError, load_config, load_env, load_host, resolve_database_url
 
@@ -542,6 +544,46 @@ def _config_import(args: argparse.Namespace) -> int:
     return 0
 
 
+def _library_dispatch(args: argparse.Namespace) -> int:
+    if args.library_command == "resolve":
+        return _library_resolve(args)
+    build_parser().print_help()
+    return 2
+
+
+def _library_resolve(args: argparse.Namespace) -> int:
+    """Resolve `style` from the soul text; the DB document still needs `config import`."""
+    from .admin import library
+
+    _, paths = load_host(args.config)
+    soul_path = paths.soul_yaml
+    try:
+        body = yaml.safe_load(soul_path.read_text(encoding="utf-8")) or {}
+    except FileNotFoundError:
+        print(f"eidesoul: soul file not found: {soul_path}", file=sys.stderr, flush=True)
+        return 2
+    except (OSError, yaml.YAMLError) as exc:
+        print(f"eidesoul: soul file is invalid: {exc}", file=sys.stderr, flush=True)
+        return 2
+    if not args.force and isinstance(body, dict) and body.get("style") is not None:
+        print("style already set; use --force to re-resolve", flush=True)
+        return 0
+    try:
+        text, candidates = library.resolve_soul(soul_path, use_embedding=True)
+    except ValueError as exc:
+        print(f"eidesoul: {exc}", file=sys.stderr, flush=True)
+        return 2
+    soul_path.write_text(text, encoding="utf-8")
+    print("note: soul.yaml is rewritten from its parsed keys; comments are not preserved")
+    if args.explain:
+        for candidate in candidates:
+            print(
+                f"{candidate.pack} {candidate.kind} {candidate.score:.3f} {candidate.reason}"
+            )
+    print("next: eidesoul config import", flush=True)
+    return 0
+
+
 def _init(args: argparse.Namespace) -> int:
     from .admin import init as admin_init
 
@@ -578,6 +620,13 @@ def build_parser() -> argparse.ArgumentParser:
     database_sub.add_parser("upgrade", help="create and seed the database schema")
     db_check = database_sub.add_parser("check", help="schema and database content summary")
     db_check.add_argument("--json", action="store_true", help="emit JSON")
+    library = sub.add_parser("library", help="character library operations")
+    library_sub = library.add_subparsers(dest="library_command")
+    resolve = library_sub.add_parser(
+        "resolve", help="write soul.yaml style from the soul's own text"
+    )
+    resolve.add_argument("--explain", action="store_true", help="print the evidence per pack")
+    resolve.add_argument("--force", action="store_true", help="re-resolve an existing style")
     db_backup = database_sub.add_parser("backup", help="pg_dump / copy SQLite")
     db_backup.add_argument("--out", required=True, help="target file")
     db_restore = database_sub.add_parser("restore", help="restore from a backup")
@@ -600,6 +649,8 @@ def main(argv: list[str] | None = None) -> int:
             return _config_export(args)
         if args.command == "config" and args.config_command == "import":
             return _config_import(args)
+        if args.command == "library":
+            return _library_dispatch(args)
         if args.command == "db":
             handlers = {
                 "upgrade": _db_upgrade,

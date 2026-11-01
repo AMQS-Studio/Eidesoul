@@ -27,10 +27,6 @@ language: id
 pronouns: aku
 gender: unspecified
 role: assistant
-roles:
-  - assistant
-  - companion
-  - advisor
 locale: id-ID
 
 # background: |
@@ -41,17 +37,6 @@ background: ""
 #   ## Personality
 #   ...
 persona: ""
-
-style:
-  patterns: []
-  facts: []
-  registers: []
-  max_patterns: 0
-  max_facts: 0
-
-# examples:
-#   - user: "..."
-#     soul: "..."
 """
 
 
@@ -79,6 +64,24 @@ class Soul:
     style: SoulStyle = field(default_factory=SoulStyle)
     examples: tuple[dict[str, str], ...] = ()
     source: Path | None = None
+
+
+def _flow(values: tuple[str, ...]) -> str:
+    return "[" + ", ".join(values) + "]" if values else "[]"
+
+
+def style_block(style: SoulStyle) -> str:
+    """The `style:` YAML fragment written by `library resolve` and `init`."""
+    return "\n".join(
+        [
+            "style:",
+            f"  patterns: {_flow(style.patterns)}",
+            f"  facts: {_flow(style.facts)}",
+            f"  registers: {_flow(style.registers)}",
+            f"  max_patterns: {style.max_patterns}",
+            f"  max_facts: {style.max_facts}",
+        ]
+    )
 
 
 def language_line(soul: Soul) -> str:
@@ -156,7 +159,7 @@ def render_persona(soul: Soul) -> str:
     if soul.description:
         lines.append(soul.description)
     lines.append(f"Active role: {soul.role}")
-    if soul.roles:
+    if len(soul.roles) > 1:
         lines.append(f"Available roles: {', '.join(soul.roles)}")
     if soul.locale:
         lines.append(f"Locale: {soul.locale}")
@@ -207,7 +210,7 @@ def load_soul(
     role = _text(raw.get("role")) or "assistant"
     roles = tuple(_text(item) for item in raw.get("roles") or () if _text(item))
     if not roles:
-        roles = ("assistant",)
+        roles = (role,)
     if role not in roles:
         roles = (role, *roles)
     style = _style(raw.get("style"))
