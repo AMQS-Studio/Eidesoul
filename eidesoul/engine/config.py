@@ -69,11 +69,21 @@ class Documents(Protocol):
 class LLMConfig:
     provider: str = "opencode"
     base_url: str = "https://opencode.ai/inference/go/openai/v1"
-    model: str = "deepseek-v4.1-flash"
+    model: str = ""  # chosen by the operator at init; never filled from a provider default
     api_key_env: str = "OPENCODE_GO_API_KEY"
+    reasoning_effort: str = ""  # "" = the provider's own default
+    session_header: str = ""
+    api_key_optional: bool = False
+    models_url: str = ""  # "" = {base_url}/models
     timeout_seconds: float = 120.0
     temperature: float = 0.9
     run_budget_seconds: int = 240
+
+    def session_headers(self, session: str) -> dict[str, str]:
+        """Per-request headers for a session; empty when the provider wants none."""
+        if not self.session_header or not session:
+            return {}
+        return {self.session_header: session}
 
 
 @dataclass(frozen=True)
@@ -303,12 +313,12 @@ class Config:
     guard: GuardConfig = field(default_factory=GuardConfig)
 
     def api_key(self) -> str:
-        """The key for this provider; a local Ollama endpoint accepts any non-empty string."""
+        """The key for this provider; a local endpoint accepts any non-empty string."""
         found = os.environ.get(self.llm.api_key_env)
         if found:
             return found
-        if self.llm.provider == "ollama":
-            return "ollama"
+        if self.llm.api_key_optional:
+            return "local"
         return os.environ[self.llm.api_key_env]
 
     def database_url(self) -> str:
@@ -621,6 +631,7 @@ def load_config(
     *,
     documents: Documents | None = None,
     require_key: bool = True,
+    require_model: bool = True,
     require_gateway: bool = False,
 ) -> Config:
     host, paths = load_host(path)
@@ -632,16 +643,21 @@ def load_config(
     engine = _engine(raw, documents)
     llm_raw = _section(engine, "llm")
     try:
-        provider, base_url, api_key_env, model = resolve(
+        provider, defaults = resolve(
             str(llm_raw.get("provider") or "opencode"),
             str(llm_raw.get("base_url") or ""),
             str(llm_raw.get("api_key_env") or ""),
-            str(llm_raw.get("model") or ""),
         )
     except ValueError as exc:
         raise ConfigError(str(exc)) from exc
-    if require_key and provider != "ollama" and not os.environ.get(api_key_env):
-        raise ConfigError(f"env {api_key_env} is not set (put it in .env)")
+    model = str(llm_raw.get("model") or "").strip()
+    if require_model and not model:
+        raise ConfigError(
+            "engine.llm.model is required; list ids with `eidesoul models` and set one with "
+            "`eidesoul init --model <id>` or by editing config.yaml"
+        )
+    if require_key and not defaults.api_key_optional and not os.environ.get(defaults.api_key_env):
+        raise ConfigError(f"env {defaults.api_key_env} is not set (put it in .env)")
     default_role = str(engine.get("default_role") or "").strip()
     if not default_role:
         raise ConfigError("engine.default_role is required")
@@ -707,9 +723,13 @@ def load_config(
         documents=documents,
         llm=LLMConfig(
             provider=provider,
-            base_url=base_url,
+            base_url=defaults.base_url,
             model=model,
-            api_key_env=api_key_env,
+            api_key_env=defaults.api_key_env,
+            reasoning_effort=str(llm_raw.get("reasoning_effort") or "").strip(),
+            session_header=defaults.session_header,
+            api_key_optional=defaults.api_key_optional,
+            models_url=defaults.models_url,
             timeout_seconds=_num(llm_raw.get("timeout_seconds"), 120.0),
             temperature=_num(llm_raw.get("temperature"), 0.9),
             run_budget_seconds=int(_num(llm_raw.get("run_budget_seconds"), 240)),

@@ -2,9 +2,14 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
+from dataclasses import replace
+from types import SimpleNamespace
 
-from eidesoul.engine.llm import parse_digest
+from support import build_config
+
+from eidesoul.engine.llm import LLM, parse_digest
 
 
 def test_parse_digest_keeps_known_kinds_and_rejects_others() -> None:
@@ -56,3 +61,44 @@ def test_parse_digest_rejects_garbage() -> None:
         "unresolved": [],
     }
     assert parse_digest('{"facts": "salah", "keywords": [1, "", "ok"]}')["keywords"] == ["ok"]
+
+
+class FakeClient:
+    """Stand-in for AsyncOpenAI: records the request and answers one text choice."""
+
+    def __init__(self) -> None:
+        self.kwargs: dict = {}
+        self.chat = SimpleNamespace(completions=self)
+
+    async def create(self, **kwargs):
+        self.kwargs = kwargs
+        return SimpleNamespace(
+            choices=[
+                SimpleNamespace(
+                    message=SimpleNamespace(content="ok"), finish_reason="stop"
+                )
+            ]
+        )
+
+
+def make_llm(tmp_path, monkeypatch, *, effort: str = "") -> tuple[LLM, FakeClient]:
+    monkeypatch.setenv("K", "key")
+    config = build_config(tmp_path)
+    llm = LLM(replace(config, llm=replace(config.llm, reasoning_effort=effort)))
+    client = FakeClient()
+    llm.client = client
+    return llm, client
+
+
+def test_complete_omits_reasoning_effort_so_the_provider_default_applies(tmp_path, monkeypatch):
+    llm, client = make_llm(tmp_path, monkeypatch)
+
+    assert asyncio.run(llm.complete("system", "user")) == "ok"
+    assert "reasoning_effort" not in client.kwargs
+
+
+def test_complete_sends_the_configured_reasoning_effort(tmp_path, monkeypatch):
+    llm, client = make_llm(tmp_path, monkeypatch, effort="low")
+
+    assert asyncio.run(llm.complete("system", "user")) == "ok"
+    assert client.kwargs["reasoning_effort"] == "low"

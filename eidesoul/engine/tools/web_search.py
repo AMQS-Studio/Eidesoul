@@ -15,7 +15,7 @@ from . import ToolContext, _int
 log = logging.getLogger(__name__)
 
 WEB_BACKENDS = ("wikipedia", "yahoo", "startpage", "brave")
-USER_AGENT = "eidesoul/0.1"
+USER_AGENT = "eidesoul"
 
 
 def searx_hits(payload: dict, limit: int) -> list[dict]:

@@ -277,6 +277,7 @@ workspace: ".eidesoul/workspace"
 engine:
   llm:
     api_key_env: EIDESOUL_TEST_KEY
+    model: test-model
   default_role: owner
 gateways: {{}}
 soul:

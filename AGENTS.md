@@ -19,9 +19,21 @@ Hard rules for changes in this repo.
 - Core lives in `eidesoul/engine/` and must not import `eidesoul.gateways` or `neonize`.
   Root `eidesoul/` only holds `__main__.py`, `admin/`, `gateways/`, `library/`, `lang/`, `providers/`,
   `vendor/`.
-- Core may import `eidesoul.providers`: that package holds client, auth, and default-model facts for
-  the selectable AI providers and nothing else, and it never imports an engine module. Select a
-  provider by name in `engine.llm.provider`; explicit `base_url`/`api_key_env`/`model` stay overrides.
+- Core may import `eidesoul.providers`: that package holds endpoint and auth facts for the
+  selectable AI providers and nothing else, and it never imports an engine module. Select a
+  provider by name in `engine.llm.provider`; explicit `base_url`/`api_key_env` stay overrides.
+  Provider facts live one module per endpoint format (`openai.py`, `gemini.py`, `anthropic.py`).
+  Quirks are fields on `ProviderDefaults` (`session_header`, `api_key_optional`, `models_url`),
+  never provider-name comparisons in the engine. A different wire protocol needs an adapter in
+  `eidesoul/providers/` plus a seam in `llm.py`, never a data entry.
+- Never pin a model id in code: `engine.llm.model` is the operator's choice, written by
+  `eidesoul init --model` (list ids with `eidesoul models`) and required by the loader. Reasoning
+  effort is the same: `engine.llm.reasoning_effort` empty means the provider's own default, and no
+  internal call may force a value.
+- Versioning stays honest about churn: while nothing is released, `pyproject.toml` carries a PEP 440
+  dev version (`0.0.0.devN`), never a release-looking one; `uv.lock` mirrors it. The first release
+  starts at `0.1.0`, then semver `MAJOR.MINOR.PATCH` with `aN`/`bN`/`rcN` pre-release suffixes.
+  HTTP user agents carry no version.
 - Guard modules live only under `eidesoul/engine/guard/` (`patterns.py`, `policy.py`, `sandbox.py`);
   callers import the package (`from .guard import ...`), never a module path inside it.
 - Eidesoul is a soul engine, not an agent product and not an assistant template. Assistant is one

@@ -406,11 +406,6 @@ installs; the last column says what Eidesoul uses it for.
 | pytest-cov | MIT | pytest-cov authors | https://github.com/pytest-dev/pytest-cov | dev |
 | ruff | MIT | Astral | https://github.com/astral-sh/ruff | dev |
 
-Thanks to the discussion groups and testers referenced during development (see `references/`), and to
-everyone who tried the early builds and reported what broke. No raw transcripts from those
-conversations are shipped: the character library contains authored exemplars and sourced facts, not
-chat logs.
-
 ## License
 
 Eidesoul is released under the [Apache License 2.0](LICENSE). Copyright 2026 Abdul Muqsith.

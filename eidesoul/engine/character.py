@@ -121,7 +121,6 @@ async def polish(
             polish_payload(body, latest=latest, recent=recent, is_dm=is_dm, tone=tone),
             max_tokens=config.character.max_tokens,
             temperature=config.character.temperature,
-            reasoning_effort="minimal",
             session=session or "eidesoul-character",
         )
     except Exception:
@@ -309,7 +308,6 @@ async def regulate(
             ),
             max_tokens=config.character.max_tokens,
             temperature=0.4,
-            reasoning_effort="minimal",
             session=session or "eidesoul-character",
         )
     except Exception:

@@ -170,7 +170,7 @@ def test_regulate_rewrites_an_over_level_reply_once(tmp_path) -> None:
 
     assert reply == "yaelah, gitu doang"
     assert llm.calls == 1
-    assert llm.kwargs["reasoning_effort"] == "minimal"
+    assert "reasoning_effort" not in llm.kwargs
     assert llm.kwargs["temperature"] == 0.4
 
 

@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+import copy
+
 import yaml
 
 from ..engine.config import DEFAULT_SENSITIVE_COMMANDS
 from ..engine.soul import DEFAULT_SOUL_YAML, load_soul, style_block
+from ..providers import PROVIDERS
 from . import library
 
 HOST: dict = {
@@ -39,8 +42,9 @@ ENGINE: dict = {
     "llm": {
         "provider": "opencode",
         "base_url": "https://opencode.ai/inference/go/openai/v1",
-        "model": "deepseek-v4.1-flash",
+        "model": "",
         "api_key_env": "OPENCODE_GO_API_KEY",
+        "reasoning_effort": "",
         "timeout_seconds": 120,
         "temperature": 0.9,
         "run_budget_seconds": 240,
@@ -230,10 +234,24 @@ def soul_yaml() -> str:
     return DEFAULT_SOUL_YAML + style_block(style)
 
 
-def files() -> dict[str, str]:
-    """Every scaffold file: relative path -> content."""
+def files(*, provider: str = "opencode", model: str = "") -> dict[str, str]:
+    """Every scaffold file: relative path -> content.
+
+    `provider` and `model` are the operator's pick; the scaffold never ships a model id of
+    its own, so a fresh config fails loudly until one is chosen.
+    """
+    if provider not in PROVIDERS:
+        known = ", ".join(sorted(PROVIDERS))
+        raise ValueError(f"unknown provider '{provider}'; available: {known}")
+    defaults = PROVIDERS[provider]
+    config = copy.deepcopy(CONFIG)
+    llm = config["engine"]["llm"]
+    llm["provider"] = provider
+    llm["base_url"] = defaults.base_url
+    llm["api_key_env"] = defaults.api_key_env
+    llm["model"] = model
     return {
-        "config.yaml": dump(CONFIG),
+        "config.yaml": dump(config),
         "roles.yaml": dump({"roles": ROLES}),
         "soul.yaml": soul_yaml(),
         ".env": ENV,

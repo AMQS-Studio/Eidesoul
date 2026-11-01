@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import re
 import sys
+from dataclasses import replace
 from types import SimpleNamespace
 
 import pytest
@@ -44,9 +45,7 @@ def test_config_dict_maps_providers(tmp_path, monkeypatch) -> None:
     assert body["embedder"]["config"]["embedding_dims"] == 384
 
 
-def test_ready_sets_opencode_session_header(tmp_path, monkeypatch) -> None:
-    backend, _fake = make_backend(tmp_path, monkeypatch)
-
+def patch_mem0(monkeypatch) -> None:
     class FakeAsyncMemory:
         def __init__(self) -> None:
             self.llm = SimpleNamespace(client=None)
@@ -56,10 +55,31 @@ def test_ready_sets_opencode_session_header(tmp_path, monkeypatch) -> None:
             return cls()
 
     monkeypatch.setitem(sys.modules, "mem0", SimpleNamespace(AsyncMemory=FakeAsyncMemory))
+
+
+def test_ready_sends_the_provider_session_header(tmp_path, monkeypatch) -> None:
+    backend, _fake = make_backend(tmp_path, monkeypatch)
+    backend.config = replace(
+        backend.config,
+        llm=replace(backend.config.llm, session_header="x-opencode-session"),
+    )
+    patch_mem0(monkeypatch)
+
     asyncio.run(backend.ready())
 
     client = backend._memory.llm.client
     assert client.default_headers["x-opencode-session"] == "eidesoul-mem0"
+    client.close()
+
+
+def test_ready_sends_no_session_header_without_one(tmp_path, monkeypatch) -> None:
+    backend, _fake = make_backend(tmp_path, monkeypatch)
+    patch_mem0(monkeypatch)
+
+    asyncio.run(backend.ready())
+
+    client = backend._memory.llm.client
+    assert "x-opencode-session" not in (client.default_headers or {})
     client.close()
 
 

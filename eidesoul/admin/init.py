@@ -6,6 +6,7 @@ import contextlib
 import os
 from pathlib import Path
 
+from ..providers import PROVIDERS
 from . import templates
 
 PRIVATE_FILES = (".env", "roles.yaml")
@@ -22,14 +23,20 @@ def _write(path: Path, content: str, *, force: bool, mode: int | None = None) ->
     return True
 
 
-def init(folder: str | Path, *, force: bool = False) -> tuple[list[Path], list[Path]]:
-    """Write the scaffold; return (written, skipped)."""
+def init(
+    folder: str | Path,
+    *,
+    force: bool = False,
+    provider: str = "opencode",
+    model: str = "",
+) -> tuple[list[Path], list[Path]]:
+    """Write the scaffold; return (written, skipped). `model` stays the operator's pick."""
     base = Path(folder).expanduser().resolve()
     base.mkdir(parents=True, exist_ok=True)
     (base / ".eidesoul" / "workspace").mkdir(parents=True, exist_ok=True)
     written: list[Path] = []
     skipped: list[Path] = []
-    for name, content in templates.files().items():
+    for name, content in templates.files(provider=provider, model=model).items():
         path = base / name
         mode = 0o600 if name in PRIVATE_FILES else None
         if _write(path, content, force=force, mode=mode):
@@ -39,20 +46,29 @@ def init(folder: str | Path, *, force: bool = False) -> tuple[list[Path], list[P
     return written, skipped
 
 
-def report(base: str | Path, written: list[Path], skipped: list[Path]) -> str:
+def report(
+    base: str | Path,
+    written: list[Path],
+    skipped: list[Path],
+    *,
+    provider: str = "opencode",
+    model: str = "",
+) -> str:
     lines = [f"Eidesoul scaffold: {Path(base).expanduser().resolve()}"]
     for path in written:
         lines.append(f"  wrote  {path}")
     for path in skipped:
         lines.append(f"  kept   {path} (already exists; --force to overwrite)")
-    lines.extend(
-        [
-            "Next steps:",
-            "  1. fill .env (OPENCODE_GO_API_KEY, EIDESOUL_DATABASE_URL)",
-            "  2. eidesoul db upgrade",
-            "  3. eidesoul run",
-        ]
-    )
+    key_env = PROVIDERS[provider].api_key_env if provider in PROVIDERS else "the provider key"
+    steps = [f"fill .env ({key_env}, EIDESOUL_DATABASE_URL)"]
+    if not model:
+        steps.append(
+            "choose a model: `eidesoul models` lists the ids the provider serves, then set "
+            "engine.llm.model (rerun `eidesoul init --model <id> --force` or edit config.yaml)"
+        )
+    steps.extend(["eidesoul db upgrade", "eidesoul run"])
+    lines.append("Next steps:")
+    lines.extend(f"  {index}. {step}" for index, step in enumerate(steps, start=1))
     return "\n".join(lines)
 
 

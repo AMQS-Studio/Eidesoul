@@ -425,11 +425,6 @@ yang dipasang lock file; kolom terakhir menjelaskan untuk apa Eidesoul memakainy
 | pytest-cov | MIT | pytest-cov authors | https://github.com/pytest-dev/pytest-cov | dev |
 | ruff | MIT | Astral | https://github.com/astral-sh/ruff | dev |
 
-Terima kasih kepada grup diskusi dan para penguji yang dirujuk selama pengembangan (lihat
-`references/`), serta semua yang mencoba build awal dan melaporkan apa yang rusak. Tidak ada
-transkrip mentah dari percakapan itu yang dikirim: pustaka karakter berisi contoh yang ditulis
-sendiri dan fakta bersumber, bukan log chat.
-
 <a id="license"></a>
 ## Lisensi
 

@@ -60,8 +60,15 @@ Eidesoul checklist. Every item is done when the listed surface exists and works 
 ## v2 spine
 
 - [x] `eidesoul/providers/` selects an OpenAI-compatible endpoint by name (`opencode`, `openai`,
-      `google`, `openrouter`, `groq`, `deepseek`, `ollama`, `custom`); explicit
-      `base_url`/`api_key_env`/`model` stay overrides and `custom` requires a `base_url`.
+      `google`, `anthropic`, `openrouter`, `groq`, `deepseek`, `ollama`, `custom`), one module per
+      endpoint format (`openai.py`, `gemini.py`, `anthropic.py`); it carries no model id, explicit
+      `base_url`/`api_key_env` stay overrides, and `custom` requires a `base_url`.
+- [x] The model is the operator's choice: `eidesoul init --model <id>` writes `engine.llm.model`,
+      `eidesoul models` lists what the provider serves, and the loader rejects a blank model.
+      `engine.llm.reasoning_effort` empty means the provider default; no internal call pins one.
+- [x] Versioning is honest about churn: `pyproject.toml` carries `0.0.0.dev0` (PEP 440 dev, not a
+      release), `uv.lock` mirrors it, the wheel builds as `eidesoul-0.0.0.dev0`, and HTTP user
+      agents carry no version.
 - [x] `eidesoul/engine/guard/` owns `patterns.py`, `policy.py`, and `sandbox.py`; the package
       re-exports the public symbols and no caller imports a module path inside it.
 - [x] One embedder (`eidesoul/engine/embed.py`, MiniLM, 384 dim) serves patterns, facts, affect

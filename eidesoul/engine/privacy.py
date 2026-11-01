@@ -61,7 +61,6 @@ this should stay; otherwise "".
 ASSESS_TOKENS_MIN = 800  # enough for the system prompt + reasoning of a sensitive turn
 ASSESS_TOKENS_MAX = 4000  # per-call cost ceiling, not a target
 ASSESS_CHARS_PER_EXTRA_TOKEN = 8  # long venting turns get more reasoning room
-ASSESS_REASONING = "medium"
 
 ANSWER_PROMPT = """Classify the sender's answer to a pending confirmation.
 Reply ONLY with JSON: {"kind":"yes|no|level|unclear","level":0,"reason":""}
@@ -285,16 +284,12 @@ class PrivacyService:
         user = f"Turn:\n{text}\n\nSoul language: {self._lang}"
         budget = assess_budget(user)
         body = None
-        for tokens, effort in ((budget, ASSESS_REASONING), (budget * 2, "")):
-            raw = await self.agent.llm.complete(
-                ASSESS_PROMPT, user, max_tokens=tokens, reasoning_effort=effort
-            )
+        for tokens in (budget, budget * 2):
+            raw = await self.agent.llm.complete(ASSESS_PROMPT, user, max_tokens=tokens)
             body = _json(raw)
             if body is not None:
                 break
-            log.warning(
-                "privacy assess returned no JSON (max_tokens=%s effort=%s)", tokens, effort or "-"
-            )
+            log.warning("privacy assess returned no JSON (max_tokens=%s)", tokens)
         if body is None:
             return None
         try:

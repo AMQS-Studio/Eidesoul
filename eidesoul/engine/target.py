@@ -143,7 +143,6 @@ async def classify(llm, raw: bytes, mime: str, *, locale: str = "id-ID") -> tupl
             payload,
             max_tokens=8,
             temperature=0.0,
-            reasoning_effort="minimal",
             session="eidesoul-avatar",
         )
     except (OSError, RuntimeError, ValueError):  # endpoint without vision: stay unknown

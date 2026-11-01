@@ -587,8 +587,28 @@ def _library_resolve(args: argparse.Namespace) -> int:
 def _init(args: argparse.Namespace) -> int:
     from .admin import init as admin_init
 
-    written, skipped = admin_init.init(args.dir, force=args.force)
-    print(admin_init.report(args.dir, written, skipped), flush=True)
+    try:
+        written, skipped = admin_init.init(
+            args.dir, force=args.force, provider=args.provider, model=args.model
+        )
+    except ValueError as exc:
+        print(f"eidesoul: {exc}", file=sys.stderr, flush=True)
+        return 2
+    print(
+        admin_init.report(args.dir, written, skipped, provider=args.provider, model=args.model),
+        flush=True,
+    )
+    return 0
+
+
+def _models(args: argparse.Namespace) -> int:
+    from .admin import models
+
+    config = load_config(args.config, require_key=False, require_model=False)
+    ids = models.list_models(config)
+    print(f"{config.llm.provider}: {len(ids)} models from {models.models_url(config)}", flush=True)
+    for model_id in ids:
+        print(f"  {model_id}", flush=True)
     return 0
 
 
@@ -611,6 +631,11 @@ def build_parser() -> argparse.ArgumentParser:
     init = sub.add_parser("init", help="scaffold config.yaml, roles.yaml, soul.yaml, and .env")
     init.add_argument("--dir", default=".", help="target directory")
     init.add_argument("--force", action="store_true", help="overwrite existing files")
+    init.add_argument("--provider", default="opencode", help="provider name (default: opencode)")
+    init.add_argument(
+        "--model", default="", help="model id to write; omitted leaves it for the operator"
+    )
+    sub.add_parser("models", help="list the model ids the configured provider serves")
     config = sub.add_parser("config", help="config operations")
     config_sub = config.add_subparsers(dest="config_command")
     config_sub.add_parser("export", help="write the file mirrors from the DB documents")
@@ -645,6 +670,8 @@ def main(argv: list[str] | None = None) -> int:
     try:
         if args.command == "init":
             return _init(args)
+        if args.command == "models":
+            return _models(args)
         if args.command == "config" and args.config_command == "export":
             return _config_export(args)
         if args.command == "config" and args.config_command == "import":

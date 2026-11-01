@@ -52,7 +52,7 @@ def _fresh(path: Path, now: float) -> bool:
 
 
 def _download(url: str) -> bytes:
-    request = urllib.request.Request(url, headers={"User-Agent": "eidesoul/0.1"})
+    request = urllib.request.Request(url, headers={"User-Agent": "eidesoul"})
     with urllib.request.urlopen(request, timeout=AVATAR_TIMEOUT) as response:
         return response.read(AVATAR_MAX_BYTES + 1)
 

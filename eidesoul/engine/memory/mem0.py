@@ -199,7 +199,7 @@ class Mem0Backend:
         llm.client = OpenAI(
             api_key=self.config.api_key(),
             base_url=self.config.llm.base_url,
-            default_headers={"x-opencode-session": MEM0_SESSION},
+            default_headers=self.config.llm.session_headers(MEM0_SESSION),
         )
 
     def configure_limits(self, memory) -> None:

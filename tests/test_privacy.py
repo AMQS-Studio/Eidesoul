@@ -244,8 +244,8 @@ def test_capture_retries_assess_with_a_bigger_budget(tmp_path) -> None:
     assert env.memory.captures[0]["confirmed"] is True
     assert len(env.agent.llm.assess_calls) == 2
     first, retry = env.agent.llm.assess_calls
-    assert first["reasoning_effort"] == "medium"
-    assert retry["reasoning_effort"] == ""
+    assert "reasoning_effort" not in first
+    assert "reasoning_effort" not in retry
     assert first["max_tokens"] >= 800
     assert retry["max_tokens"] == first["max_tokens"] * 2
 

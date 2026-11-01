@@ -172,7 +172,6 @@ class SandboxGuard:
                     model=self.config.model,
                     max_tokens=120,
                     temperature=0,
-                    reasoning_effort="minimal",
                     session="eidesoul-guard",
                 ),
                 float(self.config.timeout_seconds),

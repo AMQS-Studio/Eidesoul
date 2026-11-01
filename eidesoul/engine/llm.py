@@ -17,7 +17,7 @@ from .tools import ToolContext, execute
 log = logging.getLogger(__name__)
 
 BUDGET_TEXT = "Time is up. Write the best answer from the tool results you already have; do not call tools again."
-USER_AGENT = "eidesoul/0.1"
+USER_AGENT = "eidesoul"
 IMAGE_LOST = "[Image could not be attached to the model; use the path above with sandbox.]"
 DIGEST_PROMPT = """You summarize a chat group. Summarize the topic and extract explicit facts.
 Reply ONLY with JSON:
@@ -142,6 +142,11 @@ class LLM:
             for spec in specs
         ]
 
+    def _effort(self) -> dict[str, str]:
+        """The configured reasoning effort, or nothing so the provider default applies."""
+        effort = self.config.llm.reasoning_effort
+        return {"reasoning_effort": effort} if effort else {}
+
     async def run(
         self,
         system: str,
@@ -168,7 +173,8 @@ class LLM:
                         model=self.config.llm.model,
                         messages=messages,
                         temperature=float(self.config.llm.temperature),
-                        extra_headers={"x-opencode-session": session or USER_AGENT},
+                        extra_headers=self.config.llm.session_headers(session or USER_AGENT),
+                        **self._effort(),
                     )
                 except (APIError, TimeoutError):
                     log.exception("LLM failed")
@@ -178,7 +184,8 @@ class LLM:
                 "model": self.config.llm.model,
                 "messages": messages,
                 "temperature": float(self.config.llm.temperature),
-                "extra_headers": {"x-opencode-session": session or USER_AGENT},
+                "extra_headers": self.config.llm.session_headers(session or USER_AGENT),
+                **self._effort(),
             }
             if tools:
                 kwargs["tools"] = tools
@@ -221,7 +228,8 @@ class LLM:
                             },
                         ],
                         temperature=float(self.config.llm.temperature),
-                        extra_headers={"x-opencode-session": session or USER_AGENT},
+                        extra_headers=self.config.llm.session_headers(session or USER_AGENT),
+                        **self._effort(),
                     )
                 except (APIError, TimeoutError):
                     log.warning("send confirmation failed, keeping the original answer")
@@ -254,7 +262,6 @@ class LLM:
         max_tokens: int = 300,
         temperature: float = 0.2,
         session: str = "",
-        reasoning_effort: str = "",
         model: str = "",
     ) -> str:
         """One tool-free call for decisions/summaries; failure yields an empty string."""
@@ -267,10 +274,9 @@ class LLM:
             "messages": messages,
             "max_tokens": max(1, int(max_tokens)),
             "temperature": float(temperature),
-            "extra_headers": {"x-opencode-session": session or f"{USER_AGENT}-bg"},
+            "extra_headers": self.config.llm.session_headers(session or f"{USER_AGENT}-bg"),
+            **self._effort(),
         }
-        if reasoning_effort:
-            kwargs["reasoning_effort"] = reasoning_effort
         try:
             response = await self.client.chat.completions.create(**kwargs)
         except (APIError, TimeoutError, OSError) as exc:  # background paths are best-effort

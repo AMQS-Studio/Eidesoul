@@ -1,10 +1,11 @@
-"""Provider contract: a name fills client defaults, explicit values win, unknown names fail."""
+"""Provider contract: a name fills the endpoint, the model is the operator's, unknown names fail."""
 
 from __future__ import annotations
 
 import pytest
 import yaml
 
+from eidesoul.admin import templates
 from eidesoul.engine.config import ConfigError, load_config
 from eidesoul.providers import PROVIDERS, resolve
 
@@ -27,58 +28,140 @@ def write_folder(tmp_path, llm: dict) -> None:
 
 
 def test_google_defaults_use_the_openai_compatible_endpoint():
-    assert resolve("google", "", "", "") == (
-        "google",
-        "https://generativelanguage.googleapis.com/v1beta/openai/",
-        "GEMINI_API_KEY",
-        "gemini-2.0-flash",
-    )
+    name, defaults = resolve("google", "", "")
+
+    assert name == "google"
+    assert defaults.base_url == "https://generativelanguage.googleapis.com/v1beta/openai/"
+    assert defaults.api_key_env == "GEMINI_API_KEY"
+    assert defaults.session_header == ""
+    assert defaults.api_key_optional is False
 
 
 def test_explicit_values_win_over_the_provider_defaults():
-    assert resolve("groq", "http://proxy/v1", "MY_KEY", "my-model") == (
-        "groq",
-        "http://proxy/v1",
-        "MY_KEY",
-        "my-model",
-    )
+    name, defaults = resolve("groq", "http://proxy/v1", "MY_KEY")
+
+    assert name == "groq"
+    assert defaults.base_url == "http://proxy/v1"
+    assert defaults.api_key_env == "MY_KEY"
 
 
 def test_partial_override_keeps_the_rest_from_the_provider():
-    assert resolve("openai", "", "AZURE_KEY", "") == (
-        "openai",
-        PROVIDERS["openai"].base_url,
-        "AZURE_KEY",
-        PROVIDERS["openai"].model,
-    )
+    name, defaults = resolve("openai", "", "AZURE_KEY")
+
+    assert name == "openai"
+    assert defaults.base_url == PROVIDERS["openai"].base_url
+    assert defaults.api_key_env == "AZURE_KEY"
+
+
+def test_anthropic_uses_its_openai_compatibility_layer():
+    name, defaults = resolve("anthropic", "", "")
+
+    assert name == "anthropic"
+    assert defaults.base_url == "https://api.anthropic.com/v1/"
+    assert defaults.api_key_env == "ANTHROPIC_API_KEY"
+
+
+def test_opencode_lists_models_outside_its_chat_base_url():
+    name, defaults = resolve("opencode", "", "")
+
+    assert name == "opencode"
+    assert defaults.models_url == "https://opencode.ai/inference/v1/models"
+    assert defaults.base_url not in defaults.models_url
 
 
 def test_custom_requires_an_explicit_base_url():
     with pytest.raises(ValueError, match="requires llm.base_url"):
-        resolve("custom", "", "", "")
+        resolve("custom", "", "")
 
 
 def test_unknown_provider_lists_the_available_names():
-    with pytest.raises(ValueError, match="unknown provider 'nope'; available: custom, deepseek"):
-        resolve("nope", "", "", "")
+    with pytest.raises(
+        ValueError,
+        match=(
+            "unknown provider 'nope'; available: anthropic, custom, deepseek, google, groq, "
+            "ollama, openai, opencode, openrouter"
+        ),
+    ):
+        resolve("nope", "", "")
+
+
+def test_the_model_comes_from_config_only(tmp_path, monkeypatch):
+    monkeypatch.setenv("OPENCODE_GO_API_KEY", "key")
+    write_folder(tmp_path, {"provider": "opencode", "model": "chosen-by-operator"})
+
+    config = load_config(tmp_path / "config.yaml")
+
+    assert config.llm.model == "chosen-by-operator"
+
+
+def test_a_missing_model_is_a_config_error(tmp_path, monkeypatch):
+    monkeypatch.setenv("OPENCODE_GO_API_KEY", "key")
+    write_folder(tmp_path, {"provider": "opencode"})
+
+    with pytest.raises(ConfigError, match="engine.llm.model is required"):
+        load_config(tmp_path / "config.yaml")
+
+
+def test_reasoning_effort_is_empty_until_the_operator_sets_it(tmp_path, monkeypatch):
+    monkeypatch.setenv("OPENCODE_GO_API_KEY", "key")
+    write_folder(tmp_path, {"provider": "opencode", "model": "m"})
+    assert load_config(tmp_path / "config.yaml").llm.reasoning_effort == ""
+
+    write_folder(tmp_path, {"provider": "opencode", "model": "m", "reasoning_effort": " low "})
+    assert load_config(tmp_path / "config.yaml").llm.reasoning_effort == "low"
+
+
+def test_session_header_follows_the_provider(tmp_path, monkeypatch):
+    monkeypatch.setenv("OPENCODE_GO_API_KEY", "key")
+    write_folder(tmp_path, {"provider": "opencode", "model": "m"})
+    config = load_config(tmp_path / "config.yaml")
+    assert config.llm.session_headers("chat-1") == {"x-opencode-session": "chat-1"}
+
+    monkeypatch.setenv("GEMINI_API_KEY", "key")
+    write_folder(tmp_path, {"provider": "google", "model": "m"})
+    config = load_config(tmp_path / "config.yaml")
+    assert config.llm.session_header == ""
+    assert config.llm.session_headers("chat-1") == {}
 
 
 def test_ollama_needs_no_api_key(tmp_path, monkeypatch):
     monkeypatch.delenv("OLLAMA_API_KEY", raising=False)
-    write_folder(tmp_path, {"provider": "ollama"})
+    write_folder(tmp_path, {"provider": "ollama", "model": "m"})
     config = load_config(tmp_path / "config.yaml")
     assert config.llm.base_url == PROVIDERS["ollama"].base_url
-    assert config.api_key() == "ollama"
+    assert config.api_key() == "local"
 
 
 def test_missing_key_for_a_hosted_provider_fails(tmp_path, monkeypatch):
     monkeypatch.delenv("GEMINI_API_KEY", raising=False)
-    write_folder(tmp_path, {"provider": "google"})
+    write_folder(tmp_path, {"provider": "google", "model": "m"})
     with pytest.raises(ConfigError, match="GEMINI_API_KEY"):
         load_config(tmp_path / "config.yaml")
 
 
 def test_unknown_provider_becomes_a_config_error(tmp_path):
-    write_folder(tmp_path, {"provider": "mystery"})
+    write_folder(tmp_path, {"provider": "mystery", "model": "m"})
     with pytest.raises(ConfigError, match="unknown provider 'mystery'"):
         load_config(tmp_path / "config.yaml")
+
+
+def test_the_scaffold_writes_the_operator_choice():
+    body = yaml.safe_load(templates.files(provider="groq", model="operator-model")["config.yaml"])
+    llm = body["engine"]["llm"]
+
+    assert llm["provider"] == "groq"
+    assert llm["base_url"] == PROVIDERS["groq"].base_url
+    assert llm["api_key_env"] == "GROQ_API_KEY"
+    assert llm["model"] == "operator-model"
+    assert llm["reasoning_effort"] == ""
+
+
+def test_the_scaffold_ships_no_model_of_its_own():
+    body = yaml.safe_load(templates.files()["config.yaml"])
+
+    assert body["engine"]["llm"]["model"] == ""
+
+
+def test_unknown_provider_is_rejected_by_the_scaffold():
+    with pytest.raises(ValueError, match="unknown provider 'nope'"):
+        templates.files(provider="nope")
