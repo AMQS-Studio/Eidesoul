@@ -7,15 +7,21 @@ Hard rules for changes in this repo.
 - English is the default for all code, comments, docstrings, log messages, internal `error:`
   strings, CLI help, prompt scaffolding, model-facing payloads, config comments, tests, and docs.
 - Non-English is allowed only in these data surfaces: `eidesoul/lang/<code>.yaml` (chat catalogs),
-  `soul.yaml` persona content, `eidesoul/library/**` character/fact packs, and `README.id.md`.
+  `soul.yaml` persona content, `eidesoul/library/**` character/fact packs, `README.id.md`, and the
+  Indonesian ADR copies in `docs/v*/adr/id/**` (the ADRs themselves are English in `docs/v*/adr/`).
 - No hardcoded chat-visible string in code: call `t()` from `eidesoul/engine/i18n.py` and let the
   catalog supply the text. English code strings are internal diagnostics, never chat replies.
 
 ## Shape
 
-- Python only. No HTTP gateway, no Node/Baileys, no bridge, no extra server.
-- Tracked docs are `TASK.md`, `README.md`, `README.id.md`, `LOG.md`, `AGENTS.md`, and `soul.yaml`.
-  Do not create other tracked `.md` files.
+- Python only. The engine is not a server: no HTTP gateway, no Node/Baileys, no bridge. The web panel
+  is a separate operator app at the repo root (`panel/`), a different process that `eidesoul/engine/`
+  never imports (ADR-0027).
+- Tracked docs are `TASK.md`, `README.md`, `README.id.md`, `LOG.md`, `AGENTS.md`, `soul.yaml`, and
+  the ADR home `docs/v*/README.md` + `docs/v*/adr/**` (ADR-0009). An ADR sits at the ADR home root
+  (cross-cutting), under `engine/`, or under `web/`; each folder keeps its Indonesian copies in its own
+  `id/` subfolder. Do not create other tracked `.md` files. The ADR gate is
+  `python scripts/adr.py --check`.
 - Core lives in `eidesoul/engine/` and must not import `eidesoul.gateways` or `neonize`.
   Root `eidesoul/` only holds `__main__.py`, `admin/`, `gateways/`, `library/`, `lang/`, `providers/`,
   `vendor/`.
@@ -73,8 +79,11 @@ Hard rules for changes in this repo.
 - Permissions come only from roles (`role:<name>` documents / the `roles.yaml` mirror). No handler
   has default permissions. A missing `tools`/`commands` entry denies everything. Tool permission is
   checked only at `eidesoul/engine/tools/__init__.py:execute`.
-- Semantic memory only through Mem0 (`eidesoul/engine/memory/mem0.py`, `mem0ai`). Never revive
-  `MemoryStore`/custom reflection. The action ledger stays `ActionLedger`; transcripts stay per chat.
+- Semantic memory only through Mem0 (`eidesoul/engine/memory/mem0.py`, `mem0ai`). The single write
+  port is `MemoryStore` (ADR-0001): canonical writes go through it, reads go through
+  `memories_readable`. It is not the pre-v1 store and must not grow a second semantic path —
+  derivation stays in Mem0/reflection (ADR-0010). The action ledger stays `ActionLedger`;
+  transcripts stay per chat.
 
 ## Config and soul
 
@@ -91,7 +100,12 @@ Hard rules for changes in this repo.
   any pre-v1 runtime data directory are never committed.
 - Storage: SQLAlchemy Core + `psycopg` to Postgres; one `Database` (`eidesoul/engine/db.py`) and one
   `MetaData` (`eidesoul/engine/schema.py`). No `sqlite3`, `PRAGMA`, FTS5, or state files in stores;
-  SQLite is only a test URL. `SCHEMA_VERSION` starts at 1 for a fresh install.
+  SQLite is only a test URL. A library cache under the workspace (currently Mem0's
+  `mem0_history.db`, ADR-0001) is derived: never read by the engine for truth, safe to lose.
+  A gateway session file (`gateways/whatsapp` `session_db`, default `.eidesoul/whatsapp.db`) is a
+  host-local protocol artifact: one per instance, never shared, never read by the engine (contact
+  import is read-only), and losing it costs a re-pair, not data. `SCHEMA_VERSION` starts at 1.
+  Message history is never there: it lives in Postgres (`messages`, `chats`, `chat_people`).
 - Any `pyproject.toml` change ships with a regenerated `uv.lock` in the same commit: the image runs
   `uv sync --locked`, which fails on a stale lock even when only the `dev` extra moved.
 
@@ -124,8 +138,12 @@ Hard rules for changes in this repo.
 ## Safety
 
 - The sandbox guard is mandatory: the deterministic layer always runs and the small fast LLM
-  classifier only sees what the first layer cannot classify. Non-approver roles are denied, never
-  parked in a pending approval. `approved=True` (`/approve`) bypasses both layers.
+  classifier only sees what the first layer cannot classify. Sensitivity decides whether an action
+  needs approval; the target decides the class: own scope (`scratch/<chat>`, own memory, own DM)
+  → `consent` (requester approves), shared or outside (`public/`, other rooms, host config,
+  credentials) → `authorization` (approver role). `scope_proof` is computed at request and re-checked
+  at execution, so a widened role reopens the approval. `approved=True` (`/approve`) bypasses both layers.
+- `administrator` is the protected top role (ADR-0022): it must exist with `tools: "*"`, `memory_admin`, and `approve`; it cannot be deleted or renamed, only its `label` (address) may change, and only through `roles.yaml` + `eidesoul config import`.
 - Sensitive actions (`shell`, `sandbox`) and internal changes (`settings`) must pass
   `SafetyPolicy`/`approvals` and `/approve`. Default mode `yolo`; `off` disables approval (document
   the risk). `/approve` never calls the LLM and re-checks role permissions.
@@ -150,14 +168,22 @@ Hard rules for changes in this repo.
 
 - Chat-visible strings live only in `eidesoul/lang/<code>.yaml`; `soul.language` selects the catalog,
   so adding a language means adding one YAML file with the same `messages:` keys. `/language <code>`
-  (owner-only) writes the soul and its `soul.yaml` mirror.
+  (administrator-only) writes the soul and its `soul.yaml` mirror.
 
-## Optional integrations
+## Optional integrations and distribution
 
-- Google is an optional extra (`--extra google`) with lazy imports; without it the `google` tool
-  returns a clear `error:` and stays inert.
-- WhatsApp is an optional gateway extra (`--extra whatsapp`). Default config never enables it, core
-  never imports it eagerly, and the default member role does not receive WhatsApp-only `send`.
+- **Clean by default.** A `gateway`, a `tool`, and a `plugin` are three different things and none of
+  them is another: a gateway is a body (transport), a tool is a capability the engine calls, a plugin
+  is an installable bundle fetched when enabled (ADR-0027, ADR-0028). All three are off until an
+  operator enables them, and only the spine is always on. Enabling fetches the code by digest; with no
+  network the enable fails explicitly and changes nothing.
+- The published image is the spine plus the core tools only (`EXTRAS` empty, ADR-0027). It carries no
+  gateway and no plugin dependency; the panel is enabled by default once it is finished, and
+  `web.enabled: false` switches it off without stopping the engine.
+- Google is a **plugin** (`google`), not a core tool and not an extra: its code is fetched when the
+  plugin is enabled, and while it is absent the capability is reported `unavailable`, never fabricated.
+- WhatsApp is an optional gateway (its own install, not a plugin). Default config never enables it,
+  core never imports it eagerly, and the default member role does not receive WhatsApp-only `send`.
 
 ## Verify
 

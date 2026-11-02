@@ -1,5 +1,96 @@
 # LOG
 
+## 2026-11-03 — ADR home gains folders; distribution and plugins decided
+
+**Folders** — the ADR home is now categorised: cross-cutting decisions at `docs/v0.1.0/adr/` (the
+foundations ADR **ADR-0000**, the ADR home itself `0009`, and the two new distribution ADRs `0027`/`0028`),
+engine decisions under `adr/engine/` (25 files, numbers unchanged), and `adr/web/` for the panel surface,
+created empty. Numbers stay **chronological and unique across the whole home** (a move leaves a gap —
+`engine/` has no `0009` — and a number is never reused), so the root looks sparse on purpose. Every
+folder keeps its Indonesian copies in its own `id/` subfolder (`adr/id/`, `adr/engine/id/`), so a copy
+always sits beside its source folder.
+
+**Gate** — `scripts/adr.py` is folder-aware: it scans the root plus `engine/` and `web/`, refuses a
+number used twice anywhere in the home, refuses a reference that does not resolve (the explicit
+`ADR-<folder>/NNNN` form is accepted but no longer needed), checks each footer against the file's own
+relative path, mirrors the `id/` copy per folder, and scaffolds with
+`--new "<title>" [--dir root|engine|web]`. The register gained the distribution vocabulary (`gateway`,
+`tool`, `plugin`, `plugin manifest`, `components`, `digest`, `panel`, `clean by default`,
+`operator action`) and the register row for `send` was restored after a bad edit.
+
+**ADR-0027 (distribution, web-first config)** — one image published to `ghcr.io` with `EXTRAS` empty
+(spine + core tools only), the web panel as the primary init/configuration surface (a separate process
+at the repo root, same config-import path, no second source of truth), **clean by default** for gateway,
+tool, and plugin with the code fetched by digest at enable time, and the panel enabled by default once
+finished with `web.enabled: false` as the switch. It amends `AGENTS.md` §Shape: the engine is not a
+server, the panel is a separate operator app.
+
+**ADR-0028 (plugin model)** — a plugin is an installable unit (`components/<name>/plugin.yaml` +
+code, dependencies inside the plugin folder), fetched when enabled, loaded by one engine module through
+the existing registries; install/enable/disable/remove are operator actions in the `authorization`
+class. Google becomes the first plugin (out of `tools/` and out of `pyproject.toml`'s extras). The three
+categories stay distinct: a gateway is a body, a tool is a capability, a plugin is a bundle — none of
+them is another, and all three are off by default.
+
+**State** — 29 ADRs (`root=4`, `engine=25`, `web=0`), gate `29/29`, copies `29/29` fresh, `pytest
+tests/test_adr.py` 15 passed, `ruff` clean. Still documentation only: no engine file changed.
+
+## 2026-11-03 — ADR home moves into the repo, with an implementation status and a gate
+
+**Home** — the decision set (26 ADRs, `0001`–`0026`) moved out of the working directory into
+`docs/v0.1.0/adr/`, indexed by `docs/v0.1.0/README.md`. `AGENTS.md` now lists that home as a tracked
+doc and allows the Indonesian copies (each folder keeps them in its own `id/`). ADR-0001 §14 stopped
+being a second queue and points at the index; every ADR's footer names its own path.
+
+**Status** — each ADR carries `- **Implementation:** implemented|partial|draft` plus concrete evidence
+or the remaining work, so "already done" is verifiable instead of remembered
+(`implemented=1 partial=9 draft=16` at the time; `draft=19` after ADR-0027/0028 and the foundations ADR
+joined the set).
+
+**Language pass** — every ADR was then read file by file and its English repaired (7 parallel reviewers,
+one slice each): literal mistranslations (`Provence` → `provenance`, `refraction` → `reflection`,
+`pen` → `the requester`, "model bathing" → `model batching`), word order, articles/tenses, mangled
+bold and brackets, broken table rows, and lost checklist markers. 131 comment/example lines inside
+code fences were translated too. Invariants were checked mechanically: fenced **code** (comments
+stripped) and every backticked identifier/YAML key are byte-identical to the pre-pass snapshot, the
+`id/` copies were untouched apart from their hash line, and heading numbers, footers, `ADR-XXXX`/`§N`
+references and `Implementation` values are unchanged. What deliberately stays Indonesian: data literals
+(prototype sentences, injection examples, Indonesian predicate pairs) and the register's own literal
+tokens (`(untuk memories)`, `baris prosa`) that the gate matches.
+
+**Foundations** — **ADR-0000** (initial invariants, at the ADR home root) gathers the three rules that
+must precede any new body: surface shape (new trees live outside `eidesoul/`; the package keeps its six
+subpackages), language data (per-language lexicon pack under `library/lexicon/`, pronoun default from the
+catalog, fixtures out of the package), and the embodiment-neutral seam (`Percept`/`Action` with
+body-declared `hints`, the mechanical `chat_id`→`thread_id` rename, and `send`/`chat_history` moving into
+a gateway). The gate enforces the folder layout, global chronological numbering, and resolvable
+references; the register owns the new terms (`Percept`, `Action`, `body`, `hints`, `lexicon`,
+`thread_id`). Status is `draft`: nothing in the engine changed.
+
+**Gate and translator** — `scripts/adr.py` enforces the ADR-0009 §4.4 contract (canonical English
+sections, monotonic numbering, fence-aware headings, resolvable `§` references, register synonyms
+scoped to definition lines, footer path, `Implementation` enum), scaffolds the next number, and writes
+the Indonesian copy inside the source folder's own `id/`. Two backends: `glossary` (default) translates structure only and
+counts the content it leaves alone (`konten 0/N`); `opus` translates content with a local NMT model.
+The NMT stack is dev tooling, never a package dependency — `pyproject.toml` and `uv.lock` are
+untouched, and a missing stack fails with an install hint instead of emitting a half-translated file.
+Code fences and inline spans are never sent to the translator; markers (`###`, `>`, `1.`, `-`), table
+column counts, and header labels survive, header values are content, and the output cap follows the
+model's `max_length` so long paragraphs are not cut off. Measured on the laptop CPU build: one ADR
+takes ~70 s with a 1.5 GB peak RSS (four threads, batches of eight pieces) — before those bounds the
+same run peaked at 7.5 GB, which is what forced the change. On the CUDA build (`torch 2.15.0+cu132`,
+RTX 4060) all 26 ADRs take 3 m 27 s (~8 s each) at a 1.9 GB RSS and 2.9 GB VRAM. An earlier CUDA run
+aborted with `indexSelectSmallIndex` because the output cap exceeded the model's 512 positions; the cap
+now follows `model.config.max_length` and long paragraphs are split per sentence.
+
+**Language flip** — English became the ADR source (`adr/NNNN-slug.md`) and the human Indonesian text
+moved to `adr/id/NNNN-slug.md`, each copy recording its source hash. The English came from
+`opus-mt-id-en` with per-piece verification: 5 705 pieces translated, 31 kept their Indonesian source
+because the model left them broken. Residue: 416 of 6 652 lines (~6%) still carry Indonesian words
+(mostly `Amendments` entries), placeholder/bracket junk at zero, and `--translate-check` keeps every
+copy honest. `tests/test_adr.py` runs the gate and proves it rejects a banned synonym, an extra
+section after `Code references`, a stale copy, and any attempt to send fenced lines to the backend.
+
 ## 2026-11-01 — identity is runtime state, context is assembled state (`/reset` deleted)
 
 **Identity** — `people` keeps the person and the new `person_links` table maps `(gateway, address)`
