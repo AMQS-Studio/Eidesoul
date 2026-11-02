@@ -64,6 +64,7 @@ failure cannot come back silently.
 | [0009](adr/0009-adr-home.md) | ADR Home, Versioned Documents Folder & Guards | root | implemented |
 | [0027](adr/0027-distribution-web-config.md) | Distribution and Web-First Configuration — One Core Image, Default-Off Capabilities | root | draft |
 | [0028](adr/0028-plugin-model.md) | Plugin Model — One Installable Unit for Fetched Capability | root | draft |
+| [0029](adr/0029-test-store.md) | Test Store Is the Real Store — Postgres+pgvector, One Test Database, Truncate per Test | root | draft |
 | [0001](adr/engine/0001-memory-source-of-truth.md) | Memory Source of Truth — Postgres Canonical, Mem0 as Memory Intelligence | engine | partial |
 | [0002](adr/engine/0002-capture-trigger.md) | Capture Trigger — Deterministic Gate, Novelty Check, Batch Assess | engine | partial |
 | [0003](adr/engine/0003-cognition-worker.md) | Cognition Worker & Model Batching — Gate vs Label Boundary | engine | draft |
@@ -93,7 +94,7 @@ failure cannot come back silently.
 ADRs are grouped by folder: cross-cutting decisions at the `adr/` root, engine decisions under
 `adr/engine/`, web/panel decisions under `adr/web/`. Numbers are chronological and unique across the
 whole home, so a folder may look sparse (`engine/` has no `0009`, the root holds `0000`, `0009`,
-`0027`, `0028`): a move leaves a gap on purpose and a number is never reused. Each folder keeps its
+`0027`-`0029`): a move leaves a gap on purpose and a number is never reused. Each folder keeps its
 Indonesian copies in its own `id/` subfolder.
 
 ## Status

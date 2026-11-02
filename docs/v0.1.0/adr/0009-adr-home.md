@@ -334,6 +334,10 @@ This table is the source, and a canonical term enters it in the same commit in w
 | `panel` | the web operator surface: a separate process at the repo root that reuses the config import path | 0027 | `dashboard` (prosa), `admin ui` (prosa) |
 | `clean by default` | gateway, tool, and plugin are each off until enabled; the spine is the only exception | 0027 | `opt-in` (prosa), `default off` (prosa) |
 | `operator action` | a human-initiated install/enable/disable/remove, recorded in `config_changes` and the ledger | 0027 | `manual step` (prosa) |
+| `test store` | the suite runs on the shipped store (Postgres+pgvector); SQLite is not a store | 0029 | `in-memory store` (prosa), `sqlite` (prosa) |
+| `EIDESOL_TEST_DATABASE_URL` | DSN of the throwaway test database; unset means the suite fails with instructions | 0029 | `TEST_DB` (prosa), `DATABASE_URL_TEST` (prosa) |
+| `truncate per test` | isolation rule: one DDL per session, `TRUNCATE ... RESTART IDENTITY CASCADE` per test | 0029 | `rollback` (prosa, as the isolation rule), `recreate schema` (prosa) |
+| `stub embedder` | the deterministic 384-dimension embedder used inside tests only | 0029 | `fake model` (prosa), `dummy encoder` (prosa) |
 | `rooms_of(person_id)` | the set of rooms in which the asker is a member; the basis of **read** permission (sending has its own class, §4.5) | 0007 | `user_rooms` |
 | `cross_send` | cross-room send class (`send.class=cross`); attribution is mandatory; the default in a room is `send.class=room` | 0007 | `blind_send`, `anonymous_send` |
 | `cross_read` | **invariant**: there is no cross-room read capability; `rooms_of` is rejected, with no override (enterprise privacy requirement) | 0007 | `allow_cross_read`, `cross_read_enabled` |

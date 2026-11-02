@@ -1,4 +1,4 @@
-> Terjemahan turunan — jangan sunting; sumber: 0009-adr-home.md (sha256: ca8029b6a3fa)
+> Terjemahan turunan — jangan sunting; sumber: 0009-adr-home.md (sha256: f1173720a82d)
 > Teks ini ditulis manusia; baris yang tidak bisa diterjemahkan mesin disalin apa adanya ke sumber English, jadi sumber bercampur dua bahasa.
 
 # ADR-0009: Rumah ADR, Folder Dokumen Berversi & Penjaganya
@@ -337,6 +337,10 @@ Tabel ini sumbernya, dan istilah kanonik baru masuk di commit yang sama saat ia 
 | `panel` | permukaan operator web: proses terpisah di akar repo yang memakai jalur import config | 0027 | `dashboard` (prosa), `admin ui` (prosa) |
 | `clean by default` | gateway, tool, dan plugin masing-masing mati sampai diaktifkan; spine satu-satunya pengecualian | 0027 | `opt-in` (prosa), `default off` (prosa) |
 | `operator action` | install/enable/disable/remove yang dimulai manusia, tercatat di `config_changes` dan ledger | 0027 | `manual step` (prosa) |
+| `test store` | suite jalan di store yang dikirim (Postgres+pgvector); SQLite bukan store | 0029 | `in-memory store` (prosa), `sqlite` (prosa) |
+| `EIDESOL_TEST_DATABASE_URL` | DSN database tes sekali pakai; kosong berarti suite gagal dengan instruksi | 0029 | `TEST_DB` (prosa), `DATABASE_URL_TEST` (prosa) |
+| `truncate per test` | aturan isolasi: satu DDL per sesi, `TRUNCATE ... RESTART IDENTITY CASCADE` per tes | 0029 | `rollback` (prosa, sebagai aturan isolasi), `recreate schema` (prosa) |
+| `stub embedder` | embedder deterministik 384 dimensi yang dipakai hanya di dalam tes | 0029 | `fake model` (prosa), `dummy encoder` (prosa) |
 | `rooms_of(person_id)` | himpunan room tempat penanya menjadi anggota; dasar izin **baca** (kirim punya kelasnya sendiri, §4.5) | 0007 | `user_rooms` |
 | `cross_send` | kelas kiriman lintas room (`send.class=cross`); atribusi wajib; default di room bernilai `send.class=room` | 0007 | `blind_send`, `anonymous_send` |
 | `cross_read` | **invarian**: tidak ada kapabilitas baca lintas room; ditolak `rooms_of`, tanpa override (syarat privasi enterprise) | 0007 | `allow_cross_read`, `cross_read_enabled` |

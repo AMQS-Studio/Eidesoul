@@ -1,5 +1,18 @@
 # LOG
 
+## 2026-11-03 — Test store is the real store (ADR-0029)
+
+The suite runs on SQLite today, so pgvector/Mem0, the dialect-specific upsert branch, real `db upgrade`
+DDL, `JSONB` operators, and row-lock behaviour were **simulated rather than tested** (evidence table in
+ADR-0029 §1). New **ADR-0029** records the decision: the suite runs on Postgres+pgvector, one throwaway
+test database, `CREATE EXTENSION vector` plus the production migration path once per session,
+`TRUNCATE ... RESTART IDENTITY CASCADE` per test, a deterministic 384-dimension stub embedder, and
+**SQLite removed** together with its dialect branches — a missing test database fails loudly with the
+compose command instead of falling back. `Implementation: draft`: the harness switch, compose
+parameterisation (`POSTGRES_DB`/`POSTGRES_PORT`), and the `AGENTS.md` storage/verify rule change follow in
+a separate change. Gate 30/30, copies 30/30, ADR tests 16 passed. Documentation only: no engine or test
+code changed.
+
 ## 2026-11-03 — Defaults, not examples
 
 `config.example.yaml` and `.env.example` were **deleted**: `eidesoul/admin/templates.py` already is the
