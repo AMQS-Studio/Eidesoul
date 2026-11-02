@@ -1,4 +1,4 @@
-> Terjemahan turunan — jangan sunting; sumber: 0027-distribution-web-config.md (sha256: 07649af6e3aa)
+> Terjemahan turunan — jangan sunting; sumber: 0027-distribution-web-config.md (sha256: c4b52fc32a50)
 > Ditulis tangan (bukan mesin), mengikuti sumber English baris demi baris.
 
 # ADR-0027: Distribusi dan Konfigurasi Web-First — Satu Image Core, Kapabilitas Clean by Default
@@ -136,6 +136,28 @@ Bind di luar loopback menuntut host eksplisit, pernyataan listener eksplisit di 
 - Tanpa kapabilitas diam-diam: tidak ada yang diaktifkan, dipasang, atau di-upgrade tanpa aksi operator
   eksplisit yang tercatat di `config_changes` dan ledger.
 
+### 4.6 Default, bukan contoh
+
+Berkas yang kita kirim harus bisa dipakai apa adanya; berkas yang hanya mendemonstrasikan dihapus.
+Defaultnya hidup di kode, `eidesoul init` satu-satunya penulis berkas host, dan panel menulis lewat
+jalur yang sama (§4.2).
+
+- `eidesoul/admin/templates.py` adalah satu-satunya sumber: `config.yaml`, `roles.yaml`, `soul.yaml`, dan
+  `.env` dihasilkan dari situ, dengan `.env` dan `roles.yaml` bermode `0600` dan tidak pernah ditimpa
+  kecuali `--force`. `.env` membawa **nama dengan nilai kosong** (`EIDESOL_DATABASE_URL=`,
+  `POSTGRES_PASSWORD=`) tanpa rahasia placeholder, jadi berkas yang baru terisi separuh tidak bisa
+  disangka berkas yang sudah jalan.
+- Tidak ada berkas `*.example` yang dikirim. `config.example.yaml` dan `.env.example` menduplikasi
+  `templates.py` dan sudah dihapus: kunci yang ditambahkan ke template kini sampai ke setiap install yang
+  menjalankan ulang `init`, bukan melenceng dari salinan yang dipelihara tangan.
+- Kunci opsional jatuh ke default kode saat tidak ada (`pool_size=5`, `pool_timeout=30`,
+  `timeout_seconds=120`, `pids_limit=256`), jadi berkas hanya membawa apa yang operator putuskan.
+- Nilai yang memang pilihan operator ditanyakan, tidak pernah diberi default: provider, model id, dan URL
+  database. `init --provider` wajib, `init --model` opsional, dan tidak ada model id yang dipin di kode.
+- `compose.yaml` juga default yang nyata: ia jalan apa adanya, mengambil `POSTGRES_PASSWORD` dari `.env`,
+  membangun image core (`EXTRAS: ""`), dan menaruh proxy sandbox di balik profil `sandbox` pada jaringan
+  egress mandiri, bukan menuntut jaringan eksternal.
+
 ## 5. Konfigurasi
 
 | Kunci (bagian host) | Default | Arti |
@@ -160,6 +182,8 @@ Rahasia hanya di `.env` (`WEB_TOKEN`, kunci provider); YAML memuat nama, bukan n
 | Perubahan tanpa baris `config_changes` | 0 |
 | Rahasia tertulis ke YAML oleh panel | 0 (test) |
 | Mengaktifkan di mesin tanpa jaringan | gagal eksplisit, tanpa perubahan state (test) |
+| Berkas yang dikirim berisi contoh alih-alih default | 0 |
+| Berkas yang dikirim membawa rahasia placeholder (`CHANGE_ME`) | 0 |
 
 ## 7. Acceptance criteria
 
@@ -173,6 +197,9 @@ Rahasia hanya di `.env` (`WEB_TOKEN`, kunci provider); YAML memuat nama, bukan n
 - [ ] `web.enabled: false` menghentikan panel dan membiarkan engine beserta gateway-nya tetap jalan.
 - [ ] Tidak ada nilai rahasia di `config.yaml`, `roles.yaml`, atau `soul.yaml` sesudah sesi panel (test).
 - [ ] `AGENTS.md` §Shape menyatakan engine bukan server sementara panel adalah aplikasi operator terpisah; `docs/**` masuk daftar dokumen tracked.
+- [ ] Tidak ada berkas `*.example` yang di-track, dan `templates.files()` menulis tepat `config.yaml`, `roles.yaml`, `soul.yaml`, dan `.env`.
+- [ ] `compose.yaml` menyalakan Postgres hanya dengan `POSTGRES_PASSWORD` di `.env`, dan tidak ada literal `CHANGE_ME` yang ikut dikirim.
+- [ ] Kunci yang ditambahkan ke `eidesoul/admin/templates.py` sampai ke berkas yang ditulis `init`, tanpa salinan kedua yang harus diperbarui.
 
 ## 8. Risiko dan mitigasi
 

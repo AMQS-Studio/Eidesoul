@@ -132,6 +132,30 @@ secret in `.env`; the panel never enables remote access on its own.
 - No silent capability: nothing is enabled, installed, or upgraded without an explicit operator action
   recorded in `config_changes` and the ledger.
 
+### 4.6 Defaults, not examples
+
+A file we ship must be usable as it stands; a file that only demonstrates is deleted. The default
+lives in code, `eidesoul init` is the only writer of the host files, and the panel writes through the
+same path (§4.2).
+
+- `eidesoul/admin/templates.py` is the single source: `config.yaml`, `roles.yaml`, `soul.yaml`, and
+  `.env` are generated from it, with `.env` and `roles.yaml` written `0600` and never overwritten
+  unless `--force`. `.env` carries **names with empty values** (`EIDESOL_DATABASE_URL=`,
+  `POSTGRES_PASSWORD=`) and no placeholder secret, so a half-filled file cannot be mistaken for a
+  working one.
+- No `*.example` file is shipped. `config.example.yaml` and `.env.example` duplicated `templates.py` and
+  were removed: a key added to the template now reaches every install that re-runs `init`, instead of
+  drifting away from a hand-kept copy.
+- Optional keys resolve to code defaults when absent (`pool_size=5`, `pool_timeout=30`,
+  `timeout_seconds=120`, `pids_limit=256`), so the file carries what the operator decided and nothing
+  else.
+- Values that are the operator's choice are asked, never defaulted: the provider, the model id, and the
+  database URL. `init --provider` is required, `init --model` stays optional, and no model id is pinned
+  in code.
+- `compose.yaml` is a real default too: it runs as it stands, takes `POSTGRES_PASSWORD` from `.env`,
+  builds the core image (`EXTRAS: ""`), and keeps the sandbox proxy behind a `sandbox` profile on a
+  self-contained egress network instead of demanding an external one.
+
 ## 5. Configuration
 
 | Key (host section) | Default | Meaning |
@@ -156,6 +180,8 @@ Secrets live in `.env` only (`WEB_TOKEN`, provider keys); YAML carries names, ne
 | Changes without a `config_changes` row | 0 |
 | Secrets written into YAML by the panel | 0 (test) |
 | Enable on a machine without network | explicit failure, no state change (test) |
+| Shipped files that are examples rather than defaults | 0 |
+| Shipped files carrying a placeholder secret (`CHANGE_ME`) | 0 |
 
 ## 7. Acceptance criteria
 
@@ -169,6 +195,9 @@ Secrets live in `.env` only (`WEB_TOKEN`, provider keys); YAML carries names, ne
 - [ ] `web.enabled: false` stops the panel and leaves the engine and its gateways running.
 - [ ] No secret value appears in `config.yaml`, `roles.yaml`, or `soul.yaml` after a panel session (test).
 - [ ] `AGENTS.md` §Shape states that the engine is not a server while the panel is a separate operator app; `docs/**` joins the tracked document list.
+- [ ] No `*.example` file is tracked, and `templates.files()` writes exactly `config.yaml`, `roles.yaml`, `soul.yaml`, and `.env`.
+- [ ] `compose.yaml` starts Postgres with only `POSTGRES_PASSWORD` set in `.env`, and no `CHANGE_ME` literal ships anywhere.
+- [ ] A key added to `eidesoul/admin/templates.py` reaches the file `init` writes, with no second copy to update.
 
 ## 8. Risks and mitigations
 
@@ -200,6 +229,9 @@ Secrets live in `.env` only (`WEB_TOKEN`, provider keys); YAML carries names, ne
 - `pyproject.toml` `[project.optional-dependencies]` — `whatsapp`, `google`, `dev` extras.
 - `eidesoul/engine/tools/google.py`, `eidesoul/engine/tools/chat_history.py` — capabilities to move out of the core.
 - `eidesoul/__main__.py` — `init`, `models`, `config import`, `selftest` (the CLI parity surface).
+- `eidesoul/admin/templates.py:1,151,253` — the single default source for the four host files.
+- `eidesoul/admin/init.py:26-46` — the only writer (`0600` for `.env`/`roles.yaml`, `--force` to overwrite).
+- `compose.yaml`, `.dockerignore` — the real deployment default, kept out of the image.
 - `eidesoul/engine/config.py`, `eidesoul/engine/documents.py` — the configuration path the panel reuses.
 - `eidesoul/engine/schema.py` — `config_changes` ledger.
 - `panel/` — new tree at the repository root (proposal, not created yet).

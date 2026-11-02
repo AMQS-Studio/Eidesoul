@@ -1,0 +1,63 @@
+# Eidesoul deployment: Postgres+pgvector as the soul database, Eidesoul as the primary.
+# Defaults only — everything here is meant to run as is. The single file you write is `.env`,
+# which `eidesoul init --provider <name>` scaffolds along with config.yaml, roles.yaml, and
+# soul.yaml. Never commit `.env`; it is the only place a secret lives.
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: eidesoul
+      POSTGRES_USER: eidesoul
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+    volumes:
+      - eidesoul-pg:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U eidesoul -d eidesoul"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  eidesoul:
+    build:
+      context: .
+      args:
+        # the image stays core: no gateway and no plugin is bundled (ADR-0027)
+        EXTRAS: ""
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    env_file: .env
+    environment:
+      EIDESOUL_DATABASE_URL: postgresql+psycopg://eidesoul:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}@postgres:5432/eidesoul
+    volumes:
+      - ./config.yaml:/app/config.yaml
+      - ./roles.yaml:/app/roles.yaml
+      - ./soul.yaml:/app/soul.yaml
+      - ./.eidesoul:/app/.eidesoul
+      # The sandbox runs containers on the host, so it needs the docker socket. Uncomment together
+      # with the `sandbox` profile below when you turn `sandbox.runtime` on.
+      # - /var/run/docker.sock:/var/run/docker.sock
+
+  # Outbound proxy for the sandbox network (which is internal). Off by default: start it with
+  # `podman compose --profile sandbox up -d`.
+  sandbox-proxy:
+    image: ubuntu/squid:latest
+    restart: unless-stopped
+    profiles: ["sandbox"]
+    volumes:
+      - ./deploy/sandbox-proxy/squid.conf:/etc/squid/squid.conf:ro
+    networks:
+      - eidesoul-sandbox
+      - eidesoul-egress
+
+volumes:
+  eidesoul-pg:
+
+networks:
+  eidesoul-sandbox:
+    name: eidesoul-sandbox
+    internal: true
+  # The sandbox proxy's way out; replace it with your own external network if the host has one.
+  eidesoul-egress:

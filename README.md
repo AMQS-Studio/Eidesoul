@@ -90,20 +90,19 @@ Requirements: Python 3.12, Postgres 14+ with `pgvector`, and a reachable OpenAI-
 endpoint. The container image already pins Python 3.12; running from source on 3.11+ works too.
 
 ```bash
-# 1. One database for one soul
-cp compose.example.yaml compose.yaml          # set a real password
-podman compose -f compose.yaml up -d postgres
-
-# 2. Scaffold config.yaml, roles.yaml, soul.yaml, and .env; the provider is the operator's pick
+# 1. Scaffold config.yaml, roles.yaml, soul.yaml, and .env; the provider is the operator's pick
 eidesoul init --provider openai
 
-# 3. Make it this soul, not the default one
+# 2. Make it this soul, not the default one
 $EDITOR soul.yaml
 
-# 4. Point it at the database and the model
-#    .env:
-#      EIDESOUL_DATABASE_URL=postgresql+psycopg://eidesoul:CHANGE_ME@127.0.0.1:5432/eidesoul
+# 3. Fill .env: the provider key, the database URL, and POSTGRES_PASSWORD for compose
+#      EIDESOUL_DATABASE_URL=postgresql+psycopg://eidesoul:<password>@127.0.0.1:5432/eidesoul
+#      POSTGRES_PASSWORD=<same password>
 #      OPENAI_API_KEY=...
+
+# 4. One database for one soul; compose.yaml reads POSTGRES_PASSWORD from .env
+podman compose up -d postgres
 
 # 5. Create the schema and seed the host files into it
 eidesoul db upgrade

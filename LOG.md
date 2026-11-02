@@ -1,5 +1,22 @@
 # LOG
 
+## 2026-11-03 — Defaults, not examples
+
+`config.example.yaml` and `.env.example` were **deleted**: `eidesoul/admin/templates.py` already is the
+single default source (`init` writes `config.yaml`, `roles.yaml`, `soul.yaml`, and `.env`, the last two
+`0600`), and the two example files only duplicated it — a key added to the template would drift away
+from a hand-kept copy. `compose.example.yaml` became a real **`compose.yaml`**: it runs as it stands,
+takes `POSTGRES_PASSWORD` from `.env`, builds the core image (`EXTRAS: ""`), and keeps the sandbox proxy
+behind a `sandbox` profile on a self-contained egress network instead of demanding `dokploy-network`.
+
+The `.env` seed no longer ships a placeholder password: `EIDESOL_DATABASE_URL=` and `POSTGRES_PASSWORD=`
+are written as empty names, so a half-filled file cannot look like a working one. ADR-0027 §4.6 records
+the rule ("a file we ship must be usable as it stands: the default lives in code, `init` is the only
+writer, the panel writes through the same path"), with its own metrics and acceptance criteria; README
+and README.id.md were reordered so `init` comes first and the database comes up from `.env`. New guard:
+`tests/test_defaults.py` (4 tests) — it caught the placeholder password in the template, which was then
+fixed in the same change. Full suite: 541 passed.
+
 ## 2026-11-03 — ADR home gains folders; distribution and plugins decided
 
 **Folders** — the ADR home is now categorised: cross-cutting decisions at `docs/v0.1.0/adr/` (the

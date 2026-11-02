@@ -225,7 +225,11 @@ ROLES: dict[str, dict] = {
     },
 }
 
-ENV_TAIL = """EIDESOUL_DATABASE_URL=postgresql+psycopg://eidesoul:CHANGE_ME@127.0.0.1:5432/eidesoul
+ENV_TAIL = """# Values, never placeholders: `eidesoul init` writes the names, you fill the values.
+# Postgres for this soul. The password is the same one `compose.yaml` reads.
+EIDESOL_DATABASE_URL=
+POSTGRES_PASSWORD=
+# Optional Google plugin credentials; leave empty while the plugin is off.
 GOOGLE_SERVICE_ACCOUNT_PATH=
 GOOGLE_OAUTH_CLIENT_ID=
 GOOGLE_OAUTH_CLIENT_SECRET=

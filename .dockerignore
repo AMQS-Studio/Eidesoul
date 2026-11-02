@@ -15,5 +15,5 @@ tests
 *.log
 # the host soul stays outside the image; mount it at run time
 soul.yaml
-compose.example.yaml
+compose.yaml
 config.yaml.bak-*
