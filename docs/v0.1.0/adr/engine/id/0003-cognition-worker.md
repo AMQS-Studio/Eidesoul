@@ -1,10 +1,10 @@
-> Terjemahan turunan — jangan sunting; sumber: engine/0003-cognition-worker.md (sha256: 043576e44e88)
+> Terjemahan turunan — jangan sunting; sumber: engine/0003-cognition-worker.md (sha256: c511be6dae02)
 > Teks ini ditulis manusia; baris yang tidak bisa diterjemahkan mesin disalin apa adanya ke sumber English, jadi sumber bercampur dua bahasa.
 
 # ADR-0003: Cognition Worker & Model Batching — Batas Gate vs Label
 
 - **Status:** accepted
-- **Implementasi:** draft — belum ada `cognition_jobs`/`kind` di skema maupun worker
+- **Implementasi:** implemented — bukti: `cognition_jobs` (revisi 5), antrean + worker `eidesoul/engine/cognition.py`, klaim `FOR UPDATE SKIP LOCKED`, reaper, backoff + dead-letter, enqueue intake dalam transaksi yang sama, siklus supervisor, `tests/test_cognition.py`
 - **Tanggal:** 2026-11-01
 - **Deciders:** Muqsith (owner), omp (reviewer)
 - **Konteks:** lanjutan ADR-0001 (canonical + Mem0 adapter) dan ADR-0002 (gate capture + assess batch); rencana memori default-on

@@ -512,7 +512,7 @@ def test_t3_quarantine_and_tombstone_invisibility(tmp_path) -> None:
     assert asyncio.run(memory.search("kopi", person_id="628111", thread_id="t")) == []
     assert asyncio.run(memory.list(scope="person", person_id="628111")) == []
     assert asyncio.run(
-        memory.context(person_id="628111", thread_id="t", query="kopi")
+        memory.context(person_id="628111", thread_id="t", query="kopi", direct=True)
     ).text == ""
     tomb = memory.db.fetch_one(
         text("SELECT * FROM memory_tombstones WHERE id=:id"), {"id": live}

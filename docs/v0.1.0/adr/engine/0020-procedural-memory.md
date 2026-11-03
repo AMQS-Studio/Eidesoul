@@ -1,7 +1,7 @@
 # ADR-0020: Derivative Procedure — Skill as Soul Growth, Not a Tool
 
 - **Status:** accepted
-- **Implementation:** partial — exists: `skills`/`skill_files`/`skill_usage` + the tool `skill`; rest: episode, `distill`, `skill_revisions`, retrieval
+- **Implementation:** partial — present: `episodes` + six closure signals, `distill` (one revision per episode), `skill_revisions`, scope-aware retrieval + `uses`/`last_used`, global refused without T0/approval, `/skill` owner surface, `tests/test_episodes.py`; remaining: §4.8/§4.9 efficiency comparison + automation ladder (needs `llm_calls`, W6); the model-facing `skill` tool is deleted per §4.1
 - **Date:** 2026-11-03
 - **Deciders:** Muqsith (owner), omp (reviewer)
 - **Context:** the tool `skill` is explicitly unused, yet it charges an index of ±3000 characters on every prompt for every role that holds it; the `skills` schema without scope/provenance/version turns it into a global instruction channel that the model can write — the path ADR-0008 closes for memory

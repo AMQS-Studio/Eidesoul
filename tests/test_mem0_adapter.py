@@ -224,7 +224,7 @@ def test_context_timeout_returns_empty(tmp_path, monkeypatch) -> None:
 
     backend._memory = Slow()
     assert asyncio.run(
-        backend.context(person_id="1", thread_id="c", query="apa")
+        backend.context(person_id="1", thread_id="c", query="apa", direct=True)
     ).text == ""
 
 

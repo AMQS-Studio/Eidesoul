@@ -1,10 +1,10 @@
-> Terjemahan turunan — jangan sunting; sumber: engine/0006-group-privacy.md (sha256: 919662affe75)
+> Terjemahan turunan — jangan sunting; sumber: engine/0006-group-privacy.md (sha256: 6d3225d30e15)
 > Teks ini ditulis manusia; baris yang tidak bisa diterjemahkan mesin disalin apa adanya ke sumber English, jadi sumber bercampur dua bahasa.
 
 # ADR-0006: Privasi Grup & Pre-Filter — Ceiling Sebelum Prompt, Capture Diri-Sendiri
 
 - **Status:** accepted
-- **Implementasi:** sebagian — ada: guard cross-chat (`privacy.py`, buffer `quoted_refs`); sisa: level + veto subjek + `rooms_of`
+- **Implementasi:** implemented — bukti: corong `MemoryStore.context(direct=)` + `PrivacyPolicy.show`, `threads_of`, `veto_subject`, plafon grup, verdict disclosure sebelum render, `tests/test_memory_cross_chat.py`, `tests/test_privacy.py`
 - **Tanggal:** 2026-11-02
 - **Deciders:** Muqsith (owner), omp (reviewer)
 - **Konteks:** lanjutan ADR-0001 (canonical + Mem0 adapter), ADR-0002 (gate capture), ADR-0004 (labeling fallback), ADR-0005 (retention)

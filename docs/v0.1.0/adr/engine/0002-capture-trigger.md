@@ -1,7 +1,7 @@
 # ADR-0002: Capture Trigger — Deterministic Gate, Novelty Check, Batch Assess
 
 - **Status:** accepted
-- **Implementation:** partial — present: `privacy.capture_turn`/`_assess` + `memory.auto_capture`; remaining: the MiniLM novelty check, the full structural gate
+- **Implementation:** implemented — evidence: `memory/gate.py` (structural gate + dedupe), `memory/assess.py` (batch assess), `memory/store.py` novelty on the shared 384-d embedder, intake seam wired to `cognition_jobs`, `tests/test_cognition.py`; gate result: `pytest -q` 648 passed
 - **Date:** 2026-11-01
 - **Deciders:** Muqsith (owner), omp (reviewer)
 - **Context:** follow-up to ADR-0001 (Postgres canonical + Mem0 as `MemoryExtractor`/`MemoryIndex`) and the default-on memory plan

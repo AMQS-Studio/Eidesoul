@@ -14,11 +14,11 @@ import re
 from collections.abc import Sequence
 from dataclasses import dataclass
 
-from . import guard, lexicon
+from . import lexicon
 from .config import PrivacyConfig
 from .i18n import t
 from .memory import MemoryHit
-from .memory.privacy import AuditResult, PrivacyPolicy, PrivacyVerdict, clamp_level
+from .memory.privacy import AuditResult, PrivacyPolicy, clamp_level
 
 log = logging.getLogger(__name__)
 
@@ -39,29 +39,6 @@ LEVEL_WORDS = (
     ("publik", 0),
     ("public", 0),
 )
-
-ASSESS_PROMPT = """You label the privacy of one chat turn for a personal assistant.
-Reply ONLY with JSON:
-{"level":0,"subject":"","ask":false,"question":"","reason":""}
-Levels:
-- 0 public: anything already shareable with anyone (event info, jokes, general facts).
-- 1 team: internal committee logistics that are fine inside the group.
-- 2 personal: ordinary personal facts, preferences, habits, light feelings.
-- 3 sensitive: genuinely embarrassing content, aib, or something that could damage group
-  harmony if repeated.
-- 4 secret: a grave secret that must not circulate.
-Calibration: most turns are 0-2. Never label ordinary preferences, event details, committee
-logistics, jokes, or light teasing as 3/4. Ask only when the level is 4 and the text does not
-already state how private it is.
-"subject": the person the fact is about, only when their name is explicit in the turn;
-otherwise "".
-"question": when "ask" is true, one short question in the soul's language asking how private
-this should stay; otherwise "".
-"reason": at most 80 characters, never quoting a secret."""
-
-ASSESS_TOKENS_MIN = 800  # enough for the system prompt + reasoning of a sensitive turn
-ASSESS_TOKENS_MAX = 4000  # per-call cost ceiling, not a target
-ASSESS_CHARS_PER_EXTRA_TOKEN = 8  # long venting turns get more reasoning room
 
 ANSWER_PROMPT = """Classify the sender's answer to a pending confirmation.
 Reply ONLY with JSON: {"kind":"yes|no|level|unclear","level":0,"reason":""}
@@ -99,18 +76,6 @@ def _json(text: str) -> dict | None:
     except json.JSONDecodeError:
         return None
     return body if isinstance(body, dict) else None
-
-
-def assess_budget(user: str) -> int:
-    """max_tokens from the turn length: ASSESS_TOKENS_MIN plus 1 per extra ASSESS token chunk."""
-    extra = len(str(user or "")) // ASSESS_CHARS_PER_EXTRA_TOKEN
-    return min(ASSESS_TOKENS_MAX, ASSESS_TOKENS_MIN + extra)
-
-
-def _flag(value: object) -> bool:
-    if isinstance(value, bool):
-        return value
-    return str(value or "").strip().lower() in {"true", "yes", "1"}
 
 
 class PrivacyService:
@@ -216,131 +181,6 @@ class PrivacyService:
             reply=str(body.get("reply") or "").strip(),
             question=str(body.get("question") or "").strip(),
             reason=str(body.get("reason") or "")[:120],
-        )
-
-    # ------------------------------------------------------------- capture
-
-    async def capture_turn(
-        self, inbound, reply: str, gateway, reply_ids: tuple[str, ...] = ()
-    ) -> None:
-        message = inbound.payload
-        text = str(message.text or "").strip()
-        if not text or guard.SENSITIVE.search(text):
-            return
-        refs = (str(message.id or ""),)
-        memory = self.agent.memory
-        if self.config.enabled and self.agent.llm is not None:
-            verdict = await self._assess(f"{text}\n{reply}")
-            if verdict is None or not verdict.valid:
-                # ADR-0004: drop the candidate; never guess a level from a partial answer.
-                log.warning("privacy assess failed; candidate dropped chat=%s", inbound.thread)
-                drop = getattr(memory, "drop_candidate", None)
-                if drop is not None:
-                    await drop(inbound.thread, refs, reason="labeling failed")
-                return
-            if not verdict.worth:
-                discard = getattr(memory, "discard_candidate", None)
-                if discard is not None:
-                    await discard(
-                        inbound.thread, refs, state="not_worth", reason="not worth"
-                    )
-                return
-        else:
-            verdict = PrivacyVerdict(level=self.config.default_level, ask=False)
-        owner = inbound.actor or self.agent._sender(inbound)
-        subject = owner
-        if verdict.subject and self.agent.affect is not None:
-            try:
-                subject = self.agent.affect.person_by_name(
-                    inbound.thread, verdict.subject
-                ) or owner
-            except Exception:
-                log.debug("subject lookup failed", exc_info=True)
-        level = clamp_level(verdict.level, self.config.default_level)
-        targets = (message.id, *reply_ids)
-        try:
-            self.agent.windows.set_visibility(inbound.thread, targets, level)
-            self.agent.history.set_visibility(inbound.thread, targets, level)
-        except Exception:
-            log.debug("failed to set chat visibility chat=%s", inbound.thread, exc_info=True)
-        ids = await memory.capture(
-            [
-                {"role": "user", "content": text},
-                {"role": "assistant", "content": reply or ""},
-            ],
-            person_id=owner,
-            thread_id=inbound.thread,
-            audience="private" if bool(inbound.hints.get("dm")) else "group",
-            source="turn",
-            level=level,
-            owner_id=owner,
-            subject_id=subject,
-            confirmed=not verdict.ask,
-            refs=refs,
-            category=verdict.category,
-            durability=verdict.durability,
-            language=str(self._lang),
-        )
-        if not (verdict.ask and ids):
-            return
-        question = verdict.question or self._text("ask_level")
-        approval = await self.agent.approvals.create(
-            kind="privacy",
-            thread_id=inbound.thread,
-            sender=self.agent._sender(inbound),
-            gateway=getattr(gateway, "name", "") or "",
-            tool="memory",
-            args={"memory_ids": ids},
-            payload={"level": verdict.level, "question": question},
-            summary=question,
-        )
-        log.info("privacy pending chat=%s approval=%s", inbound.thread, approval.id)
-        await self.agent.send_text(inbound.thread, question, gateway=gateway)
-
-    async def _assess(self, text: str) -> PrivacyVerdict | None:
-        """Label the privacy of one turn; None when the model gives no JSON twice.
-
-        A JSON body without a usable level is returned as `valid=False` (partial output):
-        ADR-0004 never lets it become an `ok` row or fall back to `default_level`.
-        """
-        user = f"Turn:\n{text}\n\nSoul language: {self._lang}"
-        budget = assess_budget(user)
-        body = None
-        for tokens in (budget, budget * 2):
-            raw = await self.agent.llm.complete(ASSESS_PROMPT, user, max_tokens=tokens)
-            body = _json(raw)
-            if body is not None:
-                break
-            log.warning("privacy assess returned no JSON (max_tokens=%s)", tokens)
-        if body is None:
-            return None
-        worth = _flag(body.get("worth")) if "worth" in body else True
-        common = {
-            "subject": " ".join(str(body.get("subject") or "").split())[:60],
-            "question": " ".join(str(body.get("question") or "").split()),
-            "reason": " ".join(str(body.get("reason") or "").split())[:120],
-            "worth": worth,
-        }
-        if not worth:
-            return PrivacyVerdict(level=self.config.default_level, ask=False, **common)
-        raw_level = body.get("level")
-        try:
-            level = int(raw_level)
-        except (TypeError, ValueError):
-            return PrivacyVerdict(valid=False, **common)
-        if not 0 <= level <= 4:
-            return PrivacyVerdict(valid=False, **common)
-        category = " ".join(str(body.get("category") or "").split())[:20]
-        durability = str(body.get("durability") or "").strip().lower()
-        if durability not in {"core", "durable", "episodic", "normal"}:
-            durability = ""
-        ask = _flag(body.get("ask")) and level >= self.config.ask_level
-        return PrivacyVerdict(
-            level=level,
-            ask=ask,
-            category=category,
-            durability=durability,
-            **common,
         )
 
     # ------------------------------------------------------------- pending

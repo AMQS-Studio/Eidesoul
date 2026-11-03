@@ -1,7 +1,7 @@
 # ADR-0010: Reflection, Contradiction & Status `disputed`
 
 - **Status:** accepted
-- **Implementation:** draft — there are neither scheduled reflections nor `dispute_state`
+- **Implementation:** partial — present: scheduled reflection (`cognition.py`), `dispute_state` + `mark_disputed`/`resolve_dispute`/`stale_disputes`, one-level `derived_from` at T2, dispute hides rows, `tests/test_reflection.py`; remaining: the `questions_per_day` cap on dispute questions
 - **Date:** 2026-11-02
 - **Deciders:** Muqsith (owner), omp (reviewer)
 - **Context:** paying off the ADR-0008 §4.9C debt (`disputed` was deferred to here) and closing the last slot in the ADR-0001 §14 queue

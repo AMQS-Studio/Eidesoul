@@ -19,6 +19,8 @@ SCOPE_KEYS = {"person": "scope_person", "thread": "scope_chat", "global": "scope
 
 def _line(hit: MemoryHit, lang: str) -> str:
     mark = "" if hit.confirmed else "?"
+    if str(hit.metadata.get("dispute_state") or "") == "open":
+        mark += "!"
     scope = t(f"command.memori.{SCOPE_KEYS[hit.scope]}", lang)
     return t(
         "command.memori.line", lang, scope=scope, level=hit.level, mark=mark, text=hit.text

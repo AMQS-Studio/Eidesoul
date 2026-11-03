@@ -81,7 +81,7 @@ async def build_runtime(config_path: str | None, *, console: bool = False):
     history = HistoryStore(db, config.workspace)
     windows = WorkingMemory(store=history)
     ledger = ActionLedger(db)
-    skills = SkillStore(db, config.skills.max_index_chars)
+    skills = SkillStore(db, config.skills)
     recipes = RecipeStore(db)
     memory = await build_memory(config, db=db)
     affect = (
@@ -301,7 +301,7 @@ async def selftest(config: Config) -> int:
     ledger = ActionLedger(db)
     affect = AffectStore(db, config.affect, soul=config.soul.persona)
     style = StyleStore(db, config.style)
-    skills = SkillStore(db, config.skills.max_index_chars)
+    skills = SkillStore(db, config.skills)
     recipes = RecipeStore(db)
     memory = await build_memory(config, db=db)
     results: list[bool] = []
@@ -389,8 +389,8 @@ async def selftest(config: Config) -> int:
         )
 
         skills.save("selftest", "Selftest check.", "Selftest steps.\n", overwrite=True)
-        passed = "selftest: Selftest check." in skills.index()
-        results.append(_report("skill", "PASS" if passed else "FAIL", "" if passed else skills.index()[:120]))
+        passed = "Selftest check." in skills.catalog()
+        results.append(_report("skill", "PASS" if passed else "FAIL", "" if passed else skills.catalog()[:120]))
 
         recipes.save(
             "selftest",

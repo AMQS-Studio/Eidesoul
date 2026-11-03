@@ -1,7 +1,7 @@
 # ADR-0006: Group Privacy & Pre-Filter — Ceiling Before Prompt, Self-Capture
 
 - **Status:** accepted
-- **Implementation:** partial — exists: guard cross-chat (`privacy.py`, buffer `quoted_refs`); rest: level+veto subject + `rooms_of`
+- **Implementation:** implemented — evidence: `MemoryStore.context(direct=)` + `PrivacyPolicy.show` funnel, `threads_of`, `veto_subject`, group ceiling, disclosure verdict before render, `tests/test_memory_cross_chat.py`, `tests/test_privacy.py`
 - **Date:** 2026-11-02
 - **Deciders:** Muqsith (owner), omp (reviewer)
 - **Context:** follows from ADR-0001 (canonical + Mem0 adapter), ADR-0002 (gate capture), ADR-0004 (labeling fallback), ADR-0005 (retention)

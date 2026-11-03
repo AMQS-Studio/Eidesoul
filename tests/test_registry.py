@@ -63,7 +63,6 @@ def test_builtin_handlers_discovered() -> None:
         "sandbox",
         "settings",
         "shell",
-        "skill",
         "web_search",
         "write",
     }

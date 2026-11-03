@@ -14,6 +14,7 @@ import signal
 
 from sqlalchemy import text
 
+from .cognition import CognitionWorker
 from .lease import Lease
 
 log = logging.getLogger(__name__)
@@ -40,6 +41,18 @@ class Supervisor:
         self.stopping = False
         self._first = True
         self.agent.lease = lease
+        self.cognition = CognitionWorker(
+            getattr(agent, "db", None),
+            agent.config,
+            getattr(agent, "memory", None),
+            llm=getattr(agent, "llm", None),
+            skills=getattr(agent, "skills", None),
+            history=getattr(agent, "history", None),
+            language=getattr(getattr(agent, "soul", None), "language", "id"),
+            known_tools=tuple(getattr(getattr(agent, "tools", None), "by_name", {}) or ()),
+            ask=getattr(agent, "ask_memory", None),
+        )
+        self.agent.cognition = self.cognition
 
     # ------------------------------------------------------------ lifecycle
 
@@ -112,6 +125,8 @@ class Supervisor:
             await self.agent.recover()
         except Exception:
             log.exception("recovery pass failed; serving anyway")
+        self.cognition.start()
+        runtime.cognition = self.cognition.status()
 
     async def serve(self) -> None:
         tasks = {
@@ -135,6 +150,7 @@ class Supervisor:
                     break
                 if self.lease.renew():
                     failures = 0
+                    self.agent.runtime.cognition = self.cognition.status()
                     continue
                 failures += 1
                 log.warning("lease renew failed (%d/%d)", failures, RENEW_FAILURES)
@@ -147,6 +163,7 @@ class Supervisor:
                 task.cancel()
             if tasks:
                 await asyncio.gather(*tasks, return_exceptions=True)
+            await self.cognition.stop()
             await self.agent.stop_reaper()
 
     async def shutdown(self) -> None:
@@ -171,6 +188,7 @@ class Supervisor:
         except Exception:
             log.exception("shutdown phases failed; stopping anyway")
         finally:
+            await self.cognition.stop(close_episodes=True)
             await self._stop_everything()
             self.agent.runtime.phase = "stopped"
             log.info(
@@ -188,6 +206,7 @@ class Supervisor:
         # The gate is lowered first: no send may slip out after the lease moves on.
         self.agent.mode = "standby"
         self.agent.runtime.mode = "standby"
+        await self.cognition.stop()
         for gateway in self.gateways:
             try:
                 await gateway.stop()

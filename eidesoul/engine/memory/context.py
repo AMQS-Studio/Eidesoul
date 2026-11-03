@@ -96,6 +96,8 @@ def render(hits: list, *, max_items: int, max_chars: int) -> str:
         label = f"{scope}/{stamp}" if stamp else scope
         level = int(getattr(hit, "level", 2) or 0)
         mark = "" if getattr(hit, "confirmed", True) else "?"
+        if str(getattr(hit, "metadata", {}).get("dispute_state") or "") == "open":
+            mark += "!"
         trust = int(getattr(hit, "trust", 1) if getattr(hit, "trust", 1) is not None else 1)
         kind = str(getattr(hit, "kind", "fact") or "fact")
         short = str(getattr(hit, "id", "") or "").replace("-", "")[:8]
@@ -118,10 +120,13 @@ async def build(
     person_id: str,
     thread_id: str,
     query: str,
+    direct: bool,
+    policy,
     max_items: int = 12,
     max_chars: int = 3000,
     scopes: tuple[str, ...] = SCOPES,
 ) -> MemoryContext:
+    """ADR-0006 §4.1: drop above-ceiling and vetoed hits before render and before `hits`."""
     hits = [
         hit
         for hit in await gather(
@@ -133,6 +138,7 @@ async def build(
             scopes=scopes,
         )
         if not getattr(hit, "vetoed", False)
+        and policy.show(hit, direct=bool(direct))
     ]
     text = render(hits, max_items=max_items, max_chars=max_chars)
     return MemoryContext(text=text, hits=tuple(hit for hit in hits if getattr(hit, "text", "")))

@@ -1,8 +1,9 @@
-"""Database-backed local skills: procedures with progressive disclosure.
+"""Derived procedures (ADR-0020): retrieval, append-only revisions, and usage-based decay.
 
-The system prompt only carries the name + description (the index). The full body is loaded
-through the `skill` tool when a task matches. The frontmatter format follows Hermes; the
-minimal index follows L1 GenericAgent. Supporting files live in the `skill_files` table.
+A skill is not a tool and never enters the prompt as an index: `retrieve()` injects at most
+`max_chars` of procedures that the requester may read in this scope and whose tools the role
+actually holds. Every write appends a `skill_revisions` row, so the previous version can be
+restored; `global` is refused unless the source is T0 or an approval marked it.
 """
 
 from __future__ import annotations
@@ -11,20 +12,24 @@ import logging
 import re
 import time
 from dataclasses import dataclass
-from datetime import datetime
 from pathlib import PurePosixPath
 
 import yaml
-from sqlalchemy import select, update
+from sqlalchemy import delete, select, update
 
+from .. import embed
 from ..db import Database
-from ..schema import skill_files, skill_usage, skills
+from ..guard import SENSITIVE, is_injection
+from ..schema import skill_files, skill_revisions, skills
 
 log = logging.getLogger(__name__)
 
 NAME = re.compile(r"^[a-z0-9][a-z0-9_-]{0,63}$")
 MAX_CONTENT = 18_000
 MAX_DESCRIPTION = 200
+SCOPES = ("thread", "person", "global")
+TRUST = ("T0", "T1", "T2", "T3")
+DAY = 86400.0
 
 
 def _clip(text: str, limit: int) -> str:
@@ -53,12 +58,20 @@ class Skill:
     name: str
     description: str
     body: str
+    scope: str = "thread"
+    trust: str = "T2"
+    revision: int = 1
+    uses: int = 0
+    last_used: float | None = None
+    stated_by: str = ""
+    source_episode: str = ""
 
 
 class SkillStore:
-    def __init__(self, db: Database, max_index_chars: int = 3000):
+    def __init__(self, db: Database, config=None):
         self.db = db
-        self.max_index_chars = max(200, int(max_index_chars))
+        self.config = config
+        self._vectors: dict[tuple[str, int], list[float]] = {}
 
     # ------------------------------------------------------------ query
 
@@ -72,72 +85,171 @@ class SkillStore:
         slug = str(name or "").strip().lower()
         if not slug:
             return None
-        row = self.db.fetch_one(
-            select(skills.c.name, skills.c.description, skills.c.body).where(
-                skills.c.name == slug, skills.c.archived.is_(False)
-            )
-        )
-        if row is None:
+        row = self.db.fetch_one(select(skills).where(skills.c.name == slug))
+        if row is None or bool(row["archived"]):
             return None
         return Skill(
             name=str(row["name"]),
             description=str(row["description"] or ""),
             body=str(row["body"] or ""),
+            scope=str(row["scope"] or "thread"),
+            trust=str(row["trust"] or "T2"),
+            revision=int(row["revision"] or 1),
+            uses=int(row["uses"] or 0),
+            last_used=float(row["last_used"]) if row["last_used"] is not None else None,
+            stated_by=str(row["stated_by"] or ""),
+            source_episode=str(row["source_episode"] or ""),
         )
 
-    def index(self) -> str:
+    def catalog(self) -> str:
+        """Owner-facing listing; never part of a prompt."""
         rows = self.db.fetch_all(
-            select(skills.c.name, skills.c.description)
+            select(skills.c.name, skills.c.description, skills.c.scope, skills.c.uses)
             .where(skills.c.archived.is_(False))
             .order_by(skills.c.name)
         )
         if not rows:
             return ""
-        usage = self._usage()
-        lines: list[str] = []
-        total = 0
-        for row in rows:
-            name = str(row["name"])
-            line = f"- {name}: {_clip(row['description'], 120)}{self._usage_note(usage.get(name))}"
-            if total + len(line) + 1 > self.max_index_chars:
-                lines.append("- ...")
-                break
-            lines.append(line)
-            total += len(line) + 1
-        return "Local skills (procedures; load the full body with tool skill action=view):\n" + "\n".join(
-            lines
-        )
-
-    # ----------------------------------------------------------- usage
-
-    def _usage(self) -> dict[str, dict]:
-        rows = self.db.fetch_all(select(skill_usage.c.skill, skill_usage.c.uses, skill_usage.c.last))
-        return {
-            str(row["skill"]): {"uses": int(row["uses"] or 0), "last": float(row["last"] or 0.0)}
+        lines = [
+            f"- {row['name']} [{row['scope']}] {_clip(row['description'], 120)}"
             for row in rows
-        }
+        ]
+        return "Procedures:\n" + "\n".join(lines)
+
+    # ----------------------------------------------------------- retrieval
+
+    def _visible(self, skill: Skill, *, thread_id: str, person_id: str) -> bool:
+        """ADR-0006 ceiling for procedures: this thread, this person, or global."""
+        if skill.scope == "global":
+            return True
+        if skill.scope == "thread":
+            return not skill.stated_by or skill.stated_by == thread_id
+        return bool(person_id) and skill.stated_by == person_id
 
     @staticmethod
-    def _usage_note(item) -> str:
-        if not isinstance(item, dict) or not int(item.get("uses") or 0):
+    def _skill_row(row) -> Skill:
+        return Skill(
+            name=str(row["name"]),
+            description=str(row["description"] or ""),
+            body=str(row["body"] or ""),
+            scope=str(row["scope"] or "thread"),
+            trust=str(row["trust"] or "T2"),
+            revision=int(row["revision"] or 1),
+            uses=int(row["uses"] or 0),
+            last_used=float(row["last_used"]) if row["last_used"] is not None else None,
+            stated_by=str(row["stated_by"] or ""),
+            source_episode=str(row["source_episode"] or ""),
+        )
+
+    def _mentions(self, body: str, known: tuple[str, ...]) -> set[str]:
+        found: set[str] = set()
+        for name in known:
+            if re.search(rf"\b{re.escape(name)}\b", body):
+                found.add(name)
+        return found
+
+    def _vector(self, skill: Skill) -> list[float]:
+        key = (skill.name, skill.revision)
+        found = self._vectors.get(key)
+        if found is not None:
+            return found
+        vectors = embed.encode([f"{skill.description}\n{skill.body[:800]}"])
+        vector = vectors[0] if vectors else []
+        self._vectors[key] = vector
+        return vector
+
+    def retrieve(
+        self,
+        query: str,
+        *,
+        thread_id: str = "",
+        person_id: str = "",
+        held_tools: tuple[str, ...] = (),
+        catalog_tools: tuple[str, ...] = (),
+        max_chars: int = 800,
+        limit: int = 3,
+    ) -> str:
+        """ADR-0020 §4.6: relevance inside the readable scope, bounded by `max_chars`."""
+        if self.db is None or not str(query or "").strip():
             return ""
-        try:
-            when = datetime.fromtimestamp(float(item.get("last") or 0)).strftime("%Y-%m-%d")
-        except (OSError, OverflowError, ValueError):
-            when = "?"
-        return f" (used {int(item['uses'])}x, last {when})"
+        rows = self.db.fetch_all(select(skills).where(skills.c.archived.is_(False)))
+        if not rows:
+            return ""
+        held = set(held_tools) if held_tools else None
+        known = tuple(catalog_tools)
+        vector = embed.encode([query])
+        if not vector:
+            return ""
+        scored: list[tuple[float, Skill]] = []
+        for row in rows:
+            skill = self._skill_row(row)
+            if not self._visible(skill, thread_id=thread_id, person_id=person_id):
+                continue
+            if known:
+                needed = self._mentions(skill.body, known)
+                if held is not None and not needed <= held:
+                    continue
+            skill_vector = self._vector(skill)
+            if not skill_vector:
+                continue
+            scored.append((embed.cosine(vector[0], skill_vector), skill))
+        return self._inject(scored, max_chars=max_chars, limit=limit)
+
+    def _inject(self, scored: list[tuple[float, Skill]], *, max_chars: int, limit: int) -> str:
+        scored.sort(key=lambda item: (item[0], item[1].uses), reverse=True)
+        lines: list[str] = []
+        used = 0
+        for score, skill in scored[: max(1, int(limit))]:
+            if score <= 0:
+                continue
+            block = f"### {skill.name}\n{skill.body.strip()}"
+            if used + len(block) + 2 > max_chars:
+                continue
+            lines.append(block)
+            used += len(block) + 2
+            self._record_use(skill.name)
+        if not lines:
+            return ""
+        return "Relevant procedures (reference, not permission):\n" + "\n\n".join(lines)
+
+    # ------------------------------------------------------------- usage
 
     def _record_use(self, name: str) -> None:
-        """Record a use so the archive decision has evidence, not a guess."""
+        """Injection raises `uses`/`last_used`; the TTL renewal signal of ADR-0005."""
         now = time.time()
         with self.db.connect() as conn:
-            self.db.upsert(
-                conn,
-                skill_usage,
-                [{"skill": name, "uses": 1, "last": now}],
-                ["skill"],
-                {"uses": skill_usage.c.uses + 1, "last": now},
+            conn.execute(
+                update(skills)
+                .where(skills.c.name == str(name))
+                .values(
+                    uses=skills.c.uses + 1,
+                    last_used=now,
+                    updated_at=now,
+                )
             )
+
+    def decay(self, *, days: float | None = None, now: float | None = None) -> int:
+        """Unused procedures pass `use_renewal_days` and are archived (restorable)."""
+        limit_days = float(days if days is not None else self._setting("use_renewal_days", 30))
+        if limit_days <= 0:
+            return 0
+        moment = time.time() if now is None else float(now)
+        cutoff = moment - limit_days * DAY
+        with self.db.connect() as conn:
+            result = conn.execute(
+                update(skills)
+                .where(
+                    skills.c.archived.is_(False),
+                    skills.c.trust != "T0",
+                    (skills.c.last_used.is_(None)) | (skills.c.last_used <= cutoff),
+                    skills.c.created_at <= cutoff,
+                )
+                .values(archived=True, updated_at=moment)
+            )
+        return int(result.rowcount or 0)
+
+    def _setting(self, key: str, default):
+        return getattr(self.config, key, default) if self.config is not None else default
 
     # ------------------------------------------------------------- api
 
@@ -174,7 +286,17 @@ class SkillStore:
             raise ValueError(f"file too large: {relative}")
         return f"{clean}:\n{content.decode('utf-8', errors='replace')}"
 
-    def save(self, name: str, description: str, body: str, *, overwrite: bool = False) -> str:
+    def _check(
+        self,
+        name: str,
+        description: str,
+        body: str,
+        *,
+        scope: str,
+        trust: str,
+        stated_by: str,
+        approved: bool,
+    ) -> tuple[str, str, str, str, str]:
         slug = str(name or "").strip().lower()
         if not NAME.fullmatch(slug):
             raise ValueError("a skill name must be lowercase [a-z0-9_-], max 64 chars")
@@ -182,15 +304,55 @@ class SkillStore:
         text = str(body or "").strip()
         if not desc or not text:
             raise ValueError("description and body are required")
-        if len(text) > MAX_CONTENT:
+        limit = int(self._setting("max_body_chars", MAX_CONTENT))
+        if len(text) > limit:
             raise ValueError("skill body is too large")
+        if SENSITIVE.search(text) or SENSITIVE.search(desc):
+            raise ValueError("a procedure never contains a secret/credential")
+        if is_injection(text):
+            raise ValueError("a procedure never contains an instruction to the system")
+        wanted = str(scope or "thread").strip().lower()
+        if wanted not in SCOPES:
+            raise ValueError(f"unknown scope: {scope}")
+        tier = str(trust or "T2").strip().upper()
+        if tier not in TRUST:
+            tier = "T2"
+        if wanted == "global" and tier != "T0" and not approved:
+            raise ValueError("global needs a T0 source or an approval (ADR-0020 §4.4)")
+        return slug, desc, text, wanted, tier
+
+    def save(
+        self,
+        name: str,
+        description: str,
+        body: str,
+        *,
+        overwrite: bool = False,
+        scope: str = "thread",
+        via: str = "command",
+        stated_by: str = "",
+        trust: str = "T2",
+        source_episode: str = "",
+        approved: bool = False,
+    ) -> str:
+        """Owner/import write: one row plus one append-only revision, never a silent overwrite."""
+        slug, desc, text, wanted, tier = self._check(
+            name,
+            description,
+            body,
+            scope=scope,
+            trust=trust,
+            stated_by=stated_by,
+            approved=approved,
+        )
         now = time.time()
         with self.db.connect() as conn:
             existing = conn.execute(
-                select(skills.c.archived).where(skills.c.name == slug)
+                select(skills.c.archived, skills.c.revision).where(skills.c.name == slug)
             ).mappings().first()
             if existing is not None and not existing["archived"] and not overwrite:
                 raise FileExistsError(f"skill already exists: {slug} (use overwrite=true)")
+            revision = int(existing["revision"] or 0) + 1 if existing is not None else 1
             self.db.upsert(
                 conn,
                 skills,
@@ -202,6 +364,14 @@ class SkillStore:
                         "archived": False,
                         "created_at": now,
                         "updated_at": now,
+                        "scope": wanted,
+                        "via": str(via or "command"),
+                        "stated_by": str(stated_by or "") or None,
+                        "source_episode": str(source_episode or "") or None,
+                        "uses": 0,
+                        "last_used": None,
+                        "revision": revision,
+                        "trust": tier,
                     }
                 ],
                 ["name"],
@@ -210,12 +380,81 @@ class SkillStore:
                     "body": text,
                     "archived": False,
                     "updated_at": now,
+                    "scope": wanted,
+                    "via": str(via or "command"),
+                    "stated_by": str(stated_by or "") or None,
+                    "source_episode": str(source_episode or "") or None,
+                    "revision": revision,
+                    "trust": tier,
                 },
             )
+            conn.execute(
+                skill_revisions.insert().values(
+                    skill=slug,
+                    revision=revision,
+                    description=desc,
+                    body=text,
+                    created_at=now,
+                    source_episode=str(source_episode or "") or None,
+                )
+            )
+        self._vectors.pop((slug, revision - 1), None)
         return slug
 
+    def revise(
+        self,
+        name: str,
+        description: str,
+        body: str,
+        *,
+        source_episode: str = "",
+        scope: str = "thread",
+        stated_by: str = "",
+        trust: str = "T2",
+    ) -> str:
+        """A derived update: the new revision is appended, the old one stays readable."""
+        return self.save(
+            name,
+            description,
+            body,
+            overwrite=True,
+            scope=scope,
+            via="reflection",
+            stated_by=stated_by,
+            trust=trust,
+            source_episode=source_episode,
+        )
+
+    def revisions(self, name: str) -> list[dict]:
+        rows = self.db.fetch_all(
+            select(skill_revisions)
+            .where(skill_revisions.c.skill == str(name or "").strip().lower())
+            .order_by(skill_revisions.c.revision.desc())
+        )
+        return [dict(row) for row in rows]
+
+    def restore(self, name: str, revision: int) -> str:
+        """Roll back to a stored revision by appending it again (never a destructive update)."""
+        slug = str(name or "").strip().lower()
+        row = self.db.fetch_one(
+            select(skill_revisions).where(
+                skill_revisions.c.skill == slug,
+                skill_revisions.c.revision == int(revision),
+            )
+        )
+        if row is None:
+            raise KeyError(f"revision not found: {slug}@{revision}")
+        return self.save(
+            slug,
+            str(row["description"] or ""),
+            str(row["body"] or ""),
+            overwrite=True,
+            via="command",
+            source_episode=str(row["source_episode"] or ""),
+        )
+
     def archive(self, name: str) -> str:
-        """Mark a skill as retired (reversible); the AI decides a skill is no longer useful."""
+        """Retire a procedure (reversible); the owner can restore it."""
         skill = self.get(name)
         if skill is None:
             raise KeyError(f"skill not found: {name}")
@@ -226,6 +465,41 @@ class SkillStore:
                 .values(archived=True, updated_at=time.time())
             )
         return skill.name
+
+    def restore_archived(self, name: str) -> str:
+        slug = str(name or "").strip().lower()
+        with self.db.connect() as conn:
+            result = conn.execute(
+                update(skills)
+                .where(skills.c.name == slug)
+                .values(archived=False, updated_at=time.time())
+            )
+        if not int(result.rowcount or 0):
+            raise KeyError(f"skill not found: {slug}")
+        return slug
+
+    def pin(self, name: str) -> str:
+        """Only the owner pins: a T0 procedure stops decaying."""
+        slug = str(name or "").strip().lower()
+        with self.db.connect() as conn:
+            result = conn.execute(
+                update(skills)
+                .where(skills.c.name == slug)
+                .values(trust="T0", updated_at=time.time())
+            )
+        if not int(result.rowcount or 0):
+            raise KeyError(f"skill not found: {slug}")
+        return slug
+
+    def forget(self, name: str) -> str:
+        """Delete a procedure and its revisions; the files go with it."""
+        slug = str(name or "").strip().lower()
+        with self.db.connect() as conn:
+            conn.execute(delete(skill_files).where(skill_files.c.skill == slug))
+            result = conn.execute(delete(skills).where(skills.c.name == slug))
+        if not int(result.rowcount or 0):
+            raise KeyError(f"skill not found: {slug}")
+        return slug
 
     def close(self) -> None:
         """No handle needs closing; provided for lifecycle symmetry."""

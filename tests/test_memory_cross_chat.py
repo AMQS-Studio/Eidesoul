@@ -73,7 +73,12 @@ def test_context_renders_scopes_trust_and_dates(tmp_path) -> None:
 
     block = asyncio.run(
         memory.context(
-            person_id="628111", thread_id=GROUP_B, query="kopi", max_items=10, max_chars=2000
+            person_id="628111",
+            thread_id=GROUP_B,
+            query="kopi",
+            direct=False,
+            max_items=10,
+            max_chars=2000,
         )
     )
 
@@ -90,7 +95,14 @@ def test_context_respects_char_budget(tmp_path) -> None:
     asyncio.run(memory.add("x" * 200, scope="global", thread_id=DM))
 
     block = asyncio.run(
-        memory.context(person_id="628111", thread_id=GROUP_B, query="x", max_items=10, max_chars=60)
+        memory.context(
+            person_id="628111",
+            thread_id=GROUP_B,
+            query="x",
+            direct=False,
+            max_items=10,
+            max_chars=60,
+        )
     )
     assert block.text == ""
 
@@ -126,5 +138,43 @@ def test_veto_hides_a_row_from_every_read_path(tmp_path) -> None:
     assert asyncio.run(memory.search("sensitif", person_id="628111", thread_id=DM)) == []
     assert asyncio.run(memory.list(scope="person", person_id="628111")) == []
     assert asyncio.run(
-        memory.context(person_id="628111", thread_id=DM, query="sensitif")
+        memory.context(person_id="628111", thread_id=DM, query="sensitif", direct=True)
     ).text == ""
+
+
+def test_group_ceiling_drops_l3_l4_before_render_and_hits(tmp_path) -> None:
+    memory = store(tmp_path)
+    add(
+        memory,
+        "rahasia mendalam tentang tiket konser",
+        scope="person",
+        person_id="628111",
+        thread_id=DM,
+        level=4,
+    )
+
+    group = asyncio.run(
+        memory.context(
+            person_id="628111",
+            thread_id=GROUP_B,
+            query="tiket",
+            direct=False,
+            max_items=10,
+            max_chars=2000,
+        )
+    )
+    direct = asyncio.run(
+        memory.context(
+            person_id="628111",
+            thread_id=DM,
+            query="tiket",
+            direct=True,
+            max_items=10,
+            max_chars=2000,
+        )
+    )
+
+    assert "tiket konser" not in group.text
+    assert all(hit.level <= 2 for hit in group.hits)
+    assert "tiket konser" in direct.text
+    assert any(hit.level == 4 for hit in direct.hits)

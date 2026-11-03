@@ -17,22 +17,27 @@ import uuid
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 
-from sqlalchemy import String, and_, case, cast, delete, func, or_, select, text
+from sqlalchemy import String, and_, case, cast, delete, func, or_, select, text, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from .. import io
+from ..config import PrivacyConfig
 from ..db import Database
 from ..guard import SENSITIVE, is_crisis, is_injection
 from ..schema import (
     memories,
+    messages,
     memories_readable,
     memory_events,
     memory_index,
     memory_tombstones,
     memory_uses,
+    thread_people,
 )
 from . import MemoryContext, MemoryHit
 from . import context as memory_context
+from . import gate
+from .privacy import PrivacyPolicy
 from .integrity import (
     TRUST_INFERENCE,
     TRUST_UNLABELED,
@@ -58,7 +63,7 @@ AUDIENCES = ("private", "group", "shared")
 TRANSITIONS = {
     "pending": {"ok", "failed", "not_worth"},
     "staged": {"ok", "failed", "not_worth"},
-    "ok": {"superseded"},
+    "ok": {"superseded", "staged"},
     "failed": set(),
     "not_worth": set(),
     "superseded": set(),
@@ -137,6 +142,10 @@ def _digest(text: str) -> str:
     return hashlib.sha256(str(text or "").encode("utf-8")).hexdigest()
 
 
+def _marked_supersede(row: Mapping) -> bool:
+    return any(str(item).startswith("supersede:") for item in row.get("refs") or [])
+
+
 def _hit(row: Mapping) -> MemoryHit:
     level = row.get("level")
     confirmed = row.get("confirmed")
@@ -156,6 +165,7 @@ def _hit(row: Mapping) -> MemoryHit:
             "category": str(row.get("category") or "general"),
             "durability": str(row.get("durability") or "normal"),
             "refs": row.get("refs") or [],
+            "dispute_state": str(row.get("dispute_state") or "none"),
         },
         level=int(level) if level is not None else 0,
         owner_id=str(row.get("owner_id") or ""),
@@ -653,14 +663,31 @@ class MemoryStore:
     ) -> MemoryCandidate | None:
         """Write `memory_events` + `memories(pending, level NULL)` on an open intake connection.
 
-        Hard exclusion (ADR-0004 §3) runs before either row: a credential/crisis/injection
-        candidate is never journalled. The caller owns the transaction; a failure here must
-        roll the message and turn back too.
+        The deterministic gate (ADR-0002 §4 stage 1) and the hard exclusion run before either
+        row: a non-candidate, a credential/crisis/injection turn, or a candidate already
+        journalled for this message never reaches the journal. The caller owns the transaction;
+        a failure here must roll the message and turn back too.
         """
-        body = _flat(text)
-        if not body or SENSITIVE.search(body) or is_crisis(body):
+        capture = getattr(self._limits, "capture", None)
+        decision = gate.structural(
+            text,
+            kind=kind,
+            mode=getattr(capture, "mode", "balanced"),
+            min_chars=getattr(capture, "min_chars", 8),
+            language=language,
+        )
+        if not decision.admit:
+            log.debug("capture gate: %s", decision.reason)
             return None
-        if is_injection(body, language):
+        body = _flat(text)
+        digest = gate.content_hash(body)
+        if gate.already_journalled(
+            conn,
+            thread_id=thread_id,
+            message_id=message_id,
+            kind=kind,
+            digest=digest,
+        ):
             return None
         now = time.time()
         memory_id = str(uuid.uuid4())
@@ -717,7 +744,7 @@ class MemoryStore:
                 message_id=str(message_id or ""),
                 kind="message",
                 content=body,
-                content_hash=_digest(body),
+                content_hash=digest,
                 created_at=now,
             )
         )
@@ -1180,8 +1207,26 @@ class MemoryStore:
                 log.warning("memory extraction skipped: %s: %s", type(exc).__name__, exc)
             else:
                 if facts:
-                    return await self._store_facts(facts, ctx)
-        return await self._fallback_capture(user, ctx)
+                    ids = await self._store_facts(facts, ctx)
+                    if ids:
+                        await io.run(self._raise_visibility, ctx.refs, ctx.level)
+                    return ids
+        ids = await self._fallback_capture(user, ctx)
+        if ids:
+            await io.run(self._raise_visibility, ctx.refs, ctx.level)
+        return ids
+
+    def _raise_visibility(self, refs: Sequence[str], level: int) -> None:
+        """The stored level raises the turn's visibility so later reads respect it."""
+        if self.db is None or not refs:
+            return
+        with self.db.connect() as conn:
+            conn.execute(
+                update(messages)
+                .where(messages.c.msg_id.in_([str(item) for item in refs]))
+                .where(messages.c.visibility < int(level))
+                .values(visibility=int(level))
+            )
 
     def _drop_pending(
         self,
@@ -1665,9 +1710,10 @@ class MemoryStore:
         if self.db is None:
             return []
         rows = self.db.fetch_all(
-            select(memories_readable).order_by(memories_readable.c.created_at.desc()).limit(
-                max(1, int(limit))
-            )
+            select(memories_readable)
+            .where(memories_readable.c.dispute_state != "open")
+            .order_by(memories_readable.c.created_at.desc())
+            .limit(max(1, int(limit)))
         )
         return [_hit(row) for row in rows]
 
@@ -1722,6 +1768,7 @@ class MemoryStore:
         if clause is None:
             return []
         statement = select(memories_readable).where(clause)
+        statement = statement.where(memories_readable.c.dispute_state != "open")
         for term in re.findall(r"\w+", str(query or ""), re.UNICODE):
             pattern = f"%{term}%"
             statement = statement.where(
@@ -1776,7 +1823,10 @@ class MemoryStore:
         if not resolved:
             return None
         found = self.db.fetch_one(
-            select(memories_readable).where(memories_readable.c.id == resolved)
+            select(memories_readable).where(
+                memories_readable.c.id == resolved,
+                memories_readable.c.dispute_state != "open",
+            )
         )
         return _hit(found) if found else None
 
@@ -1803,19 +1853,30 @@ class MemoryStore:
         person_id: str,
         thread_id: str,
         query: str,
+        direct: bool | None = None,
         mood=None,
         max_items: int | None = None,
         max_chars: int | None = None,
     ) -> MemoryContext:
+        """ADR-0006 §4.1: the ceiling is applied here, before anything is rendered.
+
+        `direct` is required: a caller that does not say which audience it is building for
+        cannot obtain a block, so a new read path cannot forget the ceiling.
+        """
+        if direct is None:
+            raise ValueError("memory context needs direct (ADR-0006 §4.1)")
         limits = self._limits
         items = max_items or int(getattr(limits, "max_items", 12) or 12)
         chars = max_chars or int(getattr(limits, "max_chars", 3000) or 3000)
+        policy = PrivacyPolicy(getattr(limits, "privacy", None) or PrivacyConfig())
         try:
             return await memory_context.build(
                 self,
                 person_id=person_id,
                 thread_id=thread_id,
                 query=query,
+                direct=bool(direct),
+                policy=policy,
                 max_items=items,
                 max_chars=chars,
             )
@@ -1838,3 +1899,598 @@ class MemoryStore:
         if thread_id:
             statement = statement.where(memories.c.thread_id == thread_id)
         return self.db.fetch_all(statement)
+    # ------------------------------------------------------------ cognition worker
+
+    def candidate_by_event(self, event_id: str) -> dict | None:
+        """The pending canonical row behind a `capture` job (`payload_ref` = event id)."""
+        if self.db is None or not str(event_id or "").strip():
+            return None
+        return self.db.fetch_one(
+            select(memories)
+            .join(memory_events, memory_events.c.memory_id == memories.c.id)
+            .where(memory_events.c.id == str(event_id))
+            .limit(1)
+        )
+
+    def fail_candidate(self, memory_id: str, reason: str = "labeling failed") -> bool:
+        """A failed assess item drops its candidate; it never guesses a level (ADR-0004)."""
+        return self.transition(memory_id, "failed", reason=reason)
+
+    def defer_candidate(self, memory_id: str, *, reason: str = "", days: float = 7.0) -> bool:
+        """Hold a candidate without labeling it (a group ask, a third party the lever denies)."""
+        if self.db is None:
+            return False
+        resolved = self._resolve_id(memory_id)
+        if not resolved:
+            return False
+        moment = time.time()
+        with self.db.connect() as conn:
+            result = conn.execute(
+                memories.update()
+                .where(memories.c.id == resolved, memories.c.state == "pending")
+                .values(
+                    label_after=moment + max(1.0, float(days)) * DAY,
+                    last_error=_flat(reason, 200),
+                    updated_at=moment,
+                )
+            )
+        return int(result.rowcount or 0) > 0
+
+    def count_staged(self, *, scope: str = "") -> int:
+        if self.db is None:
+            return 0
+        statement = (
+            select(func.count())
+            .select_from(memories)
+            .where(memories.c.state == "staged")
+        )
+        statement = self._apply_scope(statement, scope)
+        return int(self.db.scalar(statement) or 0)
+
+    def resolve_supersede_candidate(self, memory_id: str, source_id: str) -> bool:
+        """The novelty stage said "same topic": the new statement replaces the old row."""
+        if self.db is None:
+            return False
+        row = self._base_row(memory_id)
+        source = self._base_row(source_id)
+        if row is None or source is None:
+            return False
+        if str(row.get("state")) != "pending" or str(source.get("state")) != "ok":
+            return False
+        if str(source.get("via")) == "reflection":
+            return False
+        try:
+            self.write(
+                str(row.get("text") or ""),
+                scope=str(source.get("scope") or "person"),
+                kind=str(source.get("kind") or "fact"),
+                person_id=str(row.get("person_id") or ""),
+                thread_id=str(row.get("thread_id") or ""),
+                audience=str(row.get("audience") or ""),
+                via="turn",
+                source="turn",
+                refs=list(row.get("refs") or []),
+                level=max(int(row.get("level") or 0), int(source.get("level") or 0)),
+                owner_id=str(row.get("owner_id") or ""),
+                subject_id=str(row.get("subject_id") or ""),
+                confirmed=False,
+                supersedes=source_id,
+                change="contradiction",
+                category=str(row.get("category") or "general"),
+                durability=str(row.get("durability") or "normal"),
+            )
+        except ValueError as exc:
+            log.debug("supersede candidate refused: %s", exc)
+            return False
+        self._drop_pending(
+            str(row.get("thread_id") or ""),
+            [item for item in row.get("refs") or [] if not str(item).startswith("supersede:")],
+            state="not_worth",
+            reason="superseded",
+        )
+        return True
+
+    def scopes(self, *, limit: int = 200) -> list[str]:
+        """Scopes that hold a live row: the reflection schedule input."""
+        if self.db is None:
+            return []
+        rows = self.db.fetch_all(
+            select(memories.c.scope, memories.c.person_id, memories.c.thread_id)
+            .where(memories.c.state.in_(("ok", "staged")))
+            .distinct()
+            .limit(max(1, int(limit)))
+        )
+        found: list[str] = []
+        for row in rows:
+            scope = str(row["scope"] or "")
+            if scope == "person" and row["person_id"]:
+                found.append(f"person:{row['person_id']}")
+            elif scope == "thread" and row["thread_id"]:
+                found.append(f"thread:{row['thread_id']}")
+            elif scope == "global":
+                found.append("global")
+        return sorted(set(found))
+
+    def count_rows_since(self, *, scope: str = "", after: float = 0.0) -> int:
+        if self.db is None:
+            return 0
+        statement = (
+            select(func.count())
+            .select_from(memories)
+            .where(memories.c.state == "ok", memories.c.created_at > float(after))
+        )
+        statement = self._apply_scope(statement, scope)
+        return int(self.db.scalar(statement) or 0)
+
+    def pending_candidates(
+        self, *, scope: str = "", limit: int = 20, now: float | None = None
+    ) -> list[dict]:
+        """Unlabeled candidates of one scope, oldest first (ADR-0002 stage 3 input)."""
+        if self.db is None:
+            return []
+        moment = time.time() if now is None else float(now)
+        statement = (
+            select(memories)
+            .where(
+                memories.c.state == "pending",
+                memories.c.label_after <= moment,
+            )
+            .order_by(memories.c.created_at)
+            .limit(max(1, int(limit)))
+        )
+        statement = self._apply_scope(statement, scope)
+        rows = self.db.fetch_all(statement)
+        return [row for row in rows if not _marked_supersede(row)]
+
+    def _apply_scope(self, statement, scope: str):
+        kind, _, value = str(scope or "").partition(":")
+        if kind == "person" and value:
+            return statement.where(memories.c.scope == "person", memories.c.person_id == value)
+        if kind == "thread" and value:
+            return statement.where(memories.c.scope == "thread", memories.c.thread_id == value)
+        if kind == "global":
+            return statement.where(memories.c.scope == "global")
+        return statement
+
+    def novelty_pool(
+        self,
+        *,
+        scope: str,
+        person_id: str = "",
+        thread_id: str = "",
+        limit: int = 200,
+    ) -> list[dict]:
+        """Readable rows in the candidate's own scopes: global + person + this thread."""
+        if self.db is None:
+            return []
+        clauses = [memories_readable.c.scope == "global"]
+        if person_id:
+            clauses.append(
+                and_(
+                    memories_readable.c.scope == "person",
+                    memories_readable.c.person_id == person_id,
+                    or_(
+                        memories_readable.c.audience != "group",
+                        memories_readable.c.thread_id == thread_id,
+                    ),
+                )
+            )
+        if thread_id:
+            clauses.append(
+                and_(
+                    memories_readable.c.scope == "thread",
+                    memories_readable.c.thread_id == thread_id,
+                )
+            )
+        rows = self.db.fetch_all(
+            select(memories_readable.c.id, memories_readable.c.text)
+            .where(or_(*clauses))
+            .where(memories_readable.c.dispute_state != "open")
+            .order_by(memories_readable.c.created_at.desc())
+            .limit(max(1, int(limit)))
+        )
+        return [dict(row) for row in rows]
+
+    def label_candidate(
+        self,
+        memory_id: str,
+        *,
+        level: int,
+        confirmed: bool,
+        subject_id: str = "",
+        category: str = "",
+        durability: str = "",
+        kind: str = "",
+        text: str = "",
+    ) -> bool:
+        """Label one pending candidate from a validated assess item; never a guessed level."""
+        if self.db is None:
+            return False
+        resolved = self._resolve_id(memory_id)
+        if not resolved:
+            return False
+        now = time.time()
+        with self.db.connect() as conn:
+            row = (
+                conn.execute(select(memories).where(memories.c.id == resolved).with_for_update())
+                .mappings()
+                .first()
+            )
+            if row is None or str(row.get("state") or "") != "pending":
+                return False
+            merged = {
+                **dict(row),
+                "subject_id": str(subject_id or row.get("subject_id") or ""),
+                "category": str(category or row.get("category") or "general"),
+                "durability": str(durability or row.get("durability") or "normal"),
+                "kind": str(kind or row.get("kind") or "fact"),
+            }
+            values = self._transition_values(
+                merged, "ok", level=int(level), confirmed=bool(confirmed), reason="", now=now
+            )
+            extra: dict = {
+                "subject_id": merged["subject_id"],
+                "category": merged["category"],
+                "durability": merged["durability"],
+                "kind": merged["kind"],
+                "label_attempts": memories.c.label_attempts + 1,
+            }
+            body = _flat(text)
+            if body and SENSITIVE.search(body):
+                return False
+            if body:
+                extra["text"] = body
+            conn.execute(memories.update().where(memories.c.id == resolved).values(**extra))
+            conn.execute(memories.update().where(memories.c.id == resolved).values(**values))
+            refs = [
+                str(item).split(":", 1)[1]
+                for item in row.get("refs") or []
+                if str(item).startswith("message:") and ":" in str(item)
+            ]
+            if refs:
+                conn.execute(
+                    update(messages)
+                    .where(messages.c.msg_id.in_(refs))
+                    .where(messages.c.visibility < int(level))
+                    .values(visibility=int(level))
+                )
+        return True
+
+    def mark_supersede_candidate(self, memory_id: str, source_id: str) -> bool:
+        """Stage 2 says "known, same topic": keep the candidate for reflection, not the LLM."""
+        if self.db is None:
+            return False
+        resolved = self._resolve_id(memory_id)
+        if not resolved or not str(source_id or "").strip():
+            return False
+        with self.db.connect() as conn:
+            row = (
+                conn.execute(select(memories).where(memories.c.id == resolved).with_for_update())
+                .mappings()
+                .first()
+            )
+            if row is None or str(row.get("state") or "") != "pending":
+                return False
+            refs = list(row.get("refs") or [])
+            marker = f"supersede:{source_id}"
+            if marker not in refs:
+                refs.append(marker)
+            conn.execute(
+                memories.update()
+                .where(memories.c.id == resolved)
+                .values(refs=refs, updated_at=time.time())
+            )
+        return True
+
+    def supersede_candidates(self, *, scope: str = "", limit: int = 20) -> list[dict]:
+        """Pending rows marked by the novelty stage; reflection resolves them (ADR-0010)."""
+        if self.db is None:
+            return []
+        statement = (
+            select(memories)
+            .where(memories.c.state == "pending")
+            .order_by(memories.c.created_at)
+            .limit(max(1, int(limit)))
+        )
+        statement = self._apply_scope(statement, scope)
+        return [row for row in self.db.fetch_all(statement) if _marked_supersede(row)]
+
+    def reflection_rows(self, *, scope: str = "global", limit: int = 200) -> list[dict]:
+        """Worker read of the base table: only `ok`/`staged` rows of one scope."""
+        if self.db is None:
+            return []
+        statement = (
+            select(memories)
+            .where(memories.c.state.in_(("ok", "staged")))
+            .order_by(memories.c.created_at)
+            .limit(max(1, int(limit)))
+        )
+        statement = self._apply_scope(statement, scope)
+        return [dict(row) for row in self.db.fetch_all(statement)]
+
+    # ------------------------------------------------------------ reflection
+
+    def apply_reflection(
+        self,
+        text: str,
+        *,
+        refs: Sequence[str],
+        sources: Sequence[Mapping],
+        scope: str,
+        kind: str = "fact",
+        person_id: str = "",
+        thread_id: str = "",
+        level: int | None = None,
+        owner_id: str = "",
+        subject_id: str = "",
+        category: str = "general",
+        durability: str = "normal",
+        supersede: bool = False,
+    ) -> str:
+        """ADR-0010 §4.3/§4.9: the only derivative write, with mandatory sources."""
+        if self.db is None:
+            raise ValueError("memory store has no database")
+        wanted = [str(item) for item in refs if str(item or "").strip()]
+        if not wanted:
+            raise ValueError("reflection needs refs")
+        if not sources:
+            raise ValueError("reflection needs its source rows")
+        for source in sources:
+            if str(source.get("state") or "") != "ok":
+                raise ValueError("reflection reads only state=ok rows")
+            if str(source.get("via") or "") == "reflection":
+                raise ValueError("derive_depth 1: a derivative never derives another")
+            if str(source.get("scope") or "") != str(scope):
+                raise ValueError("reflection must stay in one scope")
+            if str(scope) == "person" and str(source.get("person_id") or "") != str(person_id):
+                raise ValueError("another person's scope is never read")
+            if str(scope) == "thread" and str(source.get("thread_id") or "") != str(thread_id):
+                raise ValueError("another thread's scope is never read")
+        levels = [int(source.get("level") or 0) for source in sources]
+        ceiling = max(levels)
+        final = ceiling if level is None else int(level)
+        if final < ceiling:
+            raise ValueError("a derivative never lowers the level")
+        strongest = next(
+            source for source in sources if int(source.get("level") or 0) == ceiling
+        )
+        owner = str(owner_id or strongest.get("owner_id") or "")
+        subject = str(subject_id or strongest.get("subject_id") or "")
+        memory_id = self.write(
+            text,
+            scope=scope,
+            kind=str(kind or strongest.get("kind") or "fact"),
+            person_id=person_id,
+            thread_id=thread_id,
+            audience=str(strongest.get("audience") or ""),
+            via="reflection",
+            source="reflection",
+            refs=wanted,
+            level=final,
+            owner_id=owner,
+            subject_id=subject,
+            confirmed=True,
+            category=category or str(strongest.get("category") or "general"),
+            durability=durability or str(strongest.get("durability") or "normal"),
+            state="ok",
+        )
+        if supersede:
+            self._merge_sources([str(source.get("id") or "") for source in sources], memory_id)
+        return memory_id
+
+    def _merge_sources(self, source_ids: Sequence[str], new_id: str) -> int:
+        wanted = [item for item in source_ids if item]
+        if self.db is None or not wanted:
+            return 0
+        now = time.time()
+        with self.db.connect() as conn:
+            result = conn.execute(
+                memories.update()
+                .where(
+                    memories.c.id.in_(wanted),
+                    memories.c.state == "ok",
+                )
+                .values(
+                    state="superseded",
+                    superseded_by=new_id,
+                    pinned=False,
+                    expires_at=self._policy.superseded_expiry(now),
+                    updated_at=now,
+                )
+            )
+        return int(result.rowcount or 0)
+
+    def mark_disputed(
+        self,
+        left_id: str,
+        right_id: str,
+        *,
+        reason: str = "deterministic:contradiction",
+        now: float | None = None,
+    ) -> bool:
+        """`dispute_state='open'` on both rows; no new `state` value (ADR-0010 §4.6)."""
+        if self.db is None:
+            return False
+        left, right = self._resolve_id(left_id), self._resolve_id(right_id)
+        if not left or not right or left == right:
+            return False
+        moment = time.time() if now is None else float(now)
+        with self.db.connect() as conn:
+            rows = (
+                conn.execute(
+                    select(memories)
+                    .where(memories.c.id.in_((left, right)))
+                    .with_for_update()
+                )
+                .mappings()
+                .all()
+            )
+            if len(rows) != 2 or any(str(row.get("state")) != "ok" for row in rows):
+                return False
+            for row, other in ((rows[0], right), (rows[1], left)):
+                conn.execute(
+                    memories.update()
+                    .where(memories.c.id == row["id"])
+                    .values(
+                        dispute_state="open",
+                        disputed_with=other,
+                        dispute_reason=str(reason or "deterministic:contradiction")[:120],
+                        disputed_at=moment,
+                        updated_at=moment,
+                    )
+                )
+        return True
+
+    def resolve_dispute(
+        self,
+        left_id: str,
+        right_id: str,
+        *,
+        winner: str | None = None,
+        reason: str = "dispute_resolved",
+    ) -> bool:
+        """The subject's answer: a winner supersedes the loser, or both survive as resolved."""
+        if self.db is None:
+            return False
+        left, right = self._resolve_id(left_id), self._resolve_id(right_id)
+        if not left or not right:
+            return False
+        chosen = self._resolve_id(winner) if winner else ""
+        if chosen and chosen not in {left, right}:
+            return False
+        now = time.time()
+        with self.db.connect() as conn:
+            for memory_id, other in ((left, right), (right, left)):
+                values: dict = {
+                    "dispute_state": "resolved",
+                    "dispute_reason": str(reason or "dispute_resolved")[:120],
+                    "updated_at": now,
+                }
+                if chosen and chosen != memory_id:
+                    values.update(
+                        state="superseded",
+                        superseded_by=chosen,
+                        pinned=False,
+                        expires_at=self._policy.superseded_expiry(now),
+                    )
+                conn.execute(
+                    memories.update().where(memories.c.id == memory_id).values(**values)
+                )
+        return True
+
+    def stale_disputes(self, *, ttl_days: float = 30, now: float | None = None) -> int:
+        """ADR-0010 §4.7: an unanswered dispute goes `stale`; the weaker side drops to staged."""
+        if self.db is None or float(ttl_days) <= 0:
+            return 0
+        moment = time.time() if now is None else float(now)
+        cutoff = moment - float(ttl_days) * DAY
+        with self.db.connect() as conn:
+            rows = (
+                conn.execute(
+                    select(memories)
+                    .where(
+                        memories.c.dispute_state == "open",
+                        memories.c.disputed_at <= cutoff,
+                    )
+                    .with_for_update()
+                )
+                .mappings()
+                .all()
+            )
+            for row in rows:
+                values: dict = {"dispute_state": "stale", "updated_at": moment}
+                partner = self._resolve_id(str(row.get("disputed_with") or ""))
+                other = None
+                if partner:
+                    other = (
+                        conn.execute(select(memories).where(memories.c.id == partner))
+                        .mappings()
+                        .first()
+                    )
+                if other is not None and int(row.get("trust") or 0) > int(
+                    other.get("trust") or 0
+                ):
+                    values.update(
+                        state="staged",
+                        confirmed=None,
+                        pinned=False,
+                        expires_at=self._policy.unlabeled_expiry(moment),
+                    )
+                conn.execute(
+                    memories.update().where(memories.c.id == row["id"]).values(**values)
+                )
+        return len(rows)
+
+    def promote_staged(self, *, limit: int = 20) -> int:
+        """ADR-0010 §4.8: a staged row with ≥2 `ok` sources in its refs is promoted."""
+        if self.db is None:
+            return 0
+        promoted = 0
+        for row in self.pending(limit=limit):
+            if str(row.get("state") or "") != "staged":
+                continue
+            refs = [str(item) for item in row.get("refs") or []]
+            if len(refs) < 2:
+                continue
+            alive = self.db.fetch_all(
+                select(memories.c.id).where(
+                    memories.c.id.in_(refs), memories.c.state == "ok"
+                )
+            )
+            if len(alive) < 2:
+                continue
+            if self.transition(str(row["id"]), "ok"):
+                promoted += 1
+        return promoted
+
+    # ------------------------------------------------------------ group privacy
+
+    def threads_of(self, person_id: str) -> set[str]:
+        """The threads a person is a member of: the membership source for group retrieval."""
+        if self.db is None or not str(person_id or "").strip():
+            return set()
+        rows = self.db.fetch_all(
+            select(thread_people.c.thread_id).where(
+                thread_people.c.person_id == str(person_id)
+            )
+        )
+        return {str(row["thread_id"]) for row in rows}
+
+    def veto_subject(self, subject_id: str, *, by: str = "") -> int:
+        """A subject veto wins across every scope: the rows disappear from retrieval."""
+        if self.db is None or not str(subject_id or "").strip():
+            return 0
+        now = time.time()
+        with self.db.connect() as conn:
+            result = conn.execute(
+                memories.update()
+                .where(
+                    memories.c.subject_id == str(subject_id),
+                    memories.c.vetoed.is_(False),
+                )
+                .values(
+                    vetoed=True,
+                    vetoed_by=str(by or subject_id),
+                    vetoed_at=now,
+                    dispute_state="resolved",
+                    updated_at=now,
+                )
+            )
+        return int(result.rowcount or 0)
+
+    # ------------------------------------------------------------ maintenance
+
+    async def backfill_index(self, *, limit: int = 200) -> int:
+        """ADR-0003 slow lane: re-attach readable rows that lost their derived index entry."""
+        if self.db is None or not self._has_index:
+            return 0
+        rows = self.db.fetch_all(
+            select(memories_readable.c.id)
+            .where(~memories_readable.c.id.in_(select(memory_index.c.memory_id)))
+            .limit(max(1, int(limit)))
+        )
+        added = 0
+        for row in rows:
+            await self._index_row(str(row["id"]))
+            added += 1
+        return added

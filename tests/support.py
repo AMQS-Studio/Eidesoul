@@ -449,7 +449,7 @@ def make_agent(
         or {
             "member": Role(
                 "member",
-                tools=("read", "memory", "chat_history", "skill", "recipe", "send"),
+                tools=("read", "memory", "chat_history", "recipe", "send"),
                 commands=("*",),
             )
         },
@@ -467,7 +467,7 @@ def make_agent(
     history = HistoryStore(db, config.workspace)
     windows = WorkingMemory(store=history)
     ledger = ActionLedger(db)
-    skills = SkillStore(db, config.skills.max_index_chars)
+    skills = SkillStore(db, config.skills)
     recipes = RecipeStore(db)
     affect_store = AffectStore(db, config.affect, soul=config.soul.persona) if affect else None
     style = StyleStore(db, config.style) if config.style.enabled else None
@@ -613,7 +613,7 @@ def make_runtime(
         history=history,
         memory=memory,
         ledger=ActionLedger(db),
-        skills=SkillStore(db, config.skills.max_index_chars),
+        skills=SkillStore(db, config.skills),
         recipes=RecipeStore(db),
         gateways=(gateway,),
         documents=documents,

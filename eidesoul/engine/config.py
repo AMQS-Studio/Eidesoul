@@ -204,6 +204,15 @@ class WebSearchConfig:
 
 
 @dataclass(frozen=True)
+class GroupCaptureConfig:
+    """ADR-0006 §4.2: in a group only the speaker's own statements are captured."""
+
+    self_only: bool = True
+    third_party: str = "drop"  # drop | deny
+    ask_in_group: bool = False
+
+
+@dataclass(frozen=True)
 class PrivacyConfig:
     """Disclosure policy limits: level 0-4, group vs DM ceilings, optional auditor."""
 
@@ -213,18 +222,60 @@ class PrivacyConfig:
     group_max_level: int = 2
     dm_max_level: int = 4
     auditor: bool = True
+    group_capture: GroupCaptureConfig = field(default_factory=GroupCaptureConfig)
+
+
+@dataclass(frozen=True)
+class CaptureConfig:
+    """ADR-0002 §5: the deterministic gate knobs; no per-language vocabulary."""
+
+    mode: str = "balanced"  # off | conservative | balanced | eager
+    min_chars: int = 8
+    novelty_threshold: float = 0.88
+
+
+@dataclass(frozen=True)
+class CognitionConfig:
+    """ADR-0003 §6 worker C: one queue, retry/backoff, dead-letter, queue cap."""
+
+    tick_seconds: float = 1.0
+    concurrency: int = 2
+    capture_max_items: int = 20
+    consolidation_every_seconds: float = 60.0
+    audit_every_seconds: float = 86400.0
+    queue_cap: int = 5000
+    retry: WorkerRetryConfig = field(default_factory=WorkerRetryConfig)
+
+
+@dataclass(frozen=True)
+class ReflectionConfig:
+    """ADR-0010 §5: one scope per pass, bounded writes, hourly by default."""
+
+    enabled: bool = True
+    every_minutes: int = 60
+    idle_minutes: int = 30
+    min_new_rows: int = 25
+    min_candidates: int = 1
+    scopes_per_pass: int = 1
+    items_per_pass: int = 40
+    writes_per_pass: int = 20
+    seconds_per_pass: float = 60.0
+    passes_per_day: int = 24
+    derive_depth: int = 1
+    dispute_ttl_days: float = 30.0
 
 
 @dataclass(frozen=True)
 class MemoryConfig:
     auto_capture: bool = True
-    capture_min_chars: int = 8
+    capture: CaptureConfig = field(default_factory=CaptureConfig)
     max_items: int = 12
     max_chars: int = 3000
     collection: str = "eidesoul_memories"
     extraction_model: str = ""  # empty = llm.model
     telemetry: bool = False
     privacy: PrivacyConfig = field(default_factory=PrivacyConfig)
+    worker: CognitionConfig = field(default_factory=CognitionConfig)
 
 
 @dataclass(frozen=True)
@@ -238,7 +289,15 @@ class ApprovalConfig:
 
 @dataclass(frozen=True)
 class SkillsConfig:
-    max_index_chars: int = 3000
+    """ADR-0020 §5: procedures are retrieved, never indexed; unused ones decay."""
+
+    enabled: bool = True
+    task_idle_minutes: float = 10.0
+    idle_after_send_minutes: float = 3.0
+    per_episode: int = 1
+    max_chars: int = 800
+    max_body_chars: int = 18000
+    use_renewal_days: float = 30.0
 
 
 @dataclass(frozen=True)
@@ -394,6 +453,7 @@ class Config:
     web_search: WebSearchConfig = field(default_factory=WebSearchConfig)
     memory: MemoryConfig = field(default_factory=MemoryConfig)
     skills: SkillsConfig = field(default_factory=SkillsConfig)
+    reflection: ReflectionConfig = field(default_factory=ReflectionConfig)
     prompt: PromptConfig = field(default_factory=PromptConfig)
     humanize: HumanizeConfig = field(default_factory=HumanizeConfig)
     style: StyleConfig = field(default_factory=StyleConfig)
@@ -862,6 +922,78 @@ def _worker_config(raw: Mapping) -> WorkerConfig:
     )
 
 
+def _capture_config(raw: Mapping) -> CaptureConfig:
+    mode = str(raw.get("mode") or "balanced").strip().lower()
+    if mode not in {"off", "conservative", "balanced", "eager"}:
+        mode = "balanced"
+    return CaptureConfig(
+        mode=mode,
+        min_chars=max(1, int(_num(raw.get("min_chars"), 8))),
+        novelty_threshold=_num_clamped(raw.get("novelty_threshold"), 0.88, 0.0, 1.0),
+    )
+
+
+def _cognition_config(raw: Mapping) -> CognitionConfig:
+    retry = _section(raw, "retry")
+    return CognitionConfig(
+        tick_seconds=max(0.1, _num(raw.get("tick_seconds"), 1.0)),
+        concurrency=_clamped(raw.get("concurrency"), 2, 1, 16),
+        capture_max_items=_clamped(raw.get("capture_max_items"), 20, 1, 200),
+        consolidation_every_seconds=max(
+            1.0, _num(raw.get("consolidation_every_seconds"), 60.0)
+        ),
+        audit_every_seconds=max(60.0, _num(raw.get("audit_every_seconds"), 86400.0)),
+        queue_cap=_clamped(raw.get("queue_cap"), 5000, 1, 1_000_000),
+        retry=WorkerRetryConfig(
+            attempts=max(1, int(_num(retry.get("attempts"), 5))),
+            backoff_seconds=max(0.0, _num(retry.get("backoff_seconds"), 2.0)),
+            dead_letter_after=max(1, int(_num(retry.get("dead_letter_after"), 5))),
+        ),
+    )
+
+
+def _reflection_config(raw: Mapping) -> ReflectionConfig:
+    return ReflectionConfig(
+        enabled=_bool(raw.get("enabled"), True),
+        every_minutes=_clamped(raw.get("every_minutes"), 60, 1, 1440),
+        idle_minutes=_clamped(raw.get("idle_minutes"), 30, 1, 1440),
+        min_new_rows=_clamped(raw.get("min_new_rows"), 25, 0, 10000),
+        min_candidates=_clamped(raw.get("min_candidates"), 1, 0, 1000),
+        scopes_per_pass=_clamped(raw.get("scopes_per_pass"), 1, 1, 32),
+        items_per_pass=_clamped(raw.get("items_per_pass"), 40, 1, 1000),
+        writes_per_pass=_clamped(raw.get("writes_per_pass"), 20, 0, 1000),
+        seconds_per_pass=_num_clamped(raw.get("seconds_per_pass"), 60.0, 1.0, 3600.0),
+        passes_per_day=_clamped(raw.get("passes_per_day"), 24, 0, 1440),
+        derive_depth=_clamped(raw.get("derive_depth"), 1, 1, 1),
+        dispute_ttl_days=_num_clamped(raw.get("dispute_ttl_days"), 30.0, 0.0, 3650.0),
+    )
+
+
+def _skills_config(raw: Mapping) -> SkillsConfig:
+    return SkillsConfig(
+        enabled=_bool(raw.get("enabled"), True),
+        task_idle_minutes=_num_clamped(raw.get("task_idle_minutes"), 10.0, 1.0, 1440.0),
+        idle_after_send_minutes=_num_clamped(
+            raw.get("idle_after_send_minutes"), 3.0, 0.0, 1440.0
+        ),
+        per_episode=_clamped(raw.get("per_episode"), 1, 0, 10),
+        max_chars=_clamped(raw.get("max_chars"), 800, 0, 20000),
+        max_body_chars=_clamped(raw.get("max_body_chars"), 18000, 100, 100000),
+        use_renewal_days=_num_clamped(raw.get("use_renewal_days"), 30.0, 0.0, 3650.0),
+    )
+
+
+def _group_capture(raw: Mapping) -> GroupCaptureConfig:
+    third = str(raw.get("third_party") or "drop").strip().lower()
+    if third not in {"drop", "deny"}:
+        third = "drop"
+    return GroupCaptureConfig(
+        self_only=_bool(raw.get("self_only"), True),
+        third_party=third,
+        ask_in_group=_bool(raw.get("ask_in_group"), False),
+    )
+
+
 def load_config(
     path: str | Path | None = None,
     *,
@@ -943,7 +1075,12 @@ def load_config(
         group_max_level=_level("group_max_level", 2),
         dm_max_level=_level("dm_max_level", 4),
         auditor=_bool(privacy_raw.get("auditor"), True),
+        group_capture=_group_capture(_section(privacy_raw, "group_capture")),
     )
+    capture = _capture_config(_section(memory_raw, "capture"))
+    cognition = _cognition_config(_section(memory_raw, "worker"))
+    reflection = _reflection_config(_section(engine, "reflection"))
+    skills = _skills_config(skills_raw)
 
     return Config(
         paths=paths,
@@ -971,7 +1108,7 @@ def load_config(
         web_search=host.web_search,
         memory=MemoryConfig(
             auto_capture=_bool(memory_raw.get("auto_capture"), True),
-            capture_min_chars=int(_num(memory_raw.get("capture_min_chars"), 8)),
+            capture=capture,
             max_items=int(_num(memory_raw.get("max_items"), 12)),
             max_chars=int(_num(memory_raw.get("max_chars"), 3000)),
             collection=str(memory_raw.get("collection") or "eidesoul_memories").strip()
@@ -979,10 +1116,10 @@ def load_config(
             extraction_model=str(memory_raw.get("extraction_model") or "").strip(),
             telemetry=_bool(memory_raw.get("telemetry"), False),
             privacy=privacy,
+            worker=cognition,
         ),
-        skills=SkillsConfig(
-            max_index_chars=int(_num(skills_raw.get("max_index_chars"), 3000))
-        ),
+        skills=skills,
+        reflection=reflection,
         prompt=PromptConfig(
             salience=_bool(prompt_raw.get("salience"), True),
             max_chars=int(_num(prompt_raw.get("max_chars"), 9000)),

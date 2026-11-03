@@ -1,7 +1,7 @@
 # ADR-0003: Cognition Worker & Model Batching — Gate vs Label Boundary
 
 - **Status:** accepted
-- **Implementation:** draft — no `cognition_jobs`/`kind` in the schema or the worker
+- **Implementation:** implemented — evidence: `cognition_jobs` (revision 5), `eidesoul/engine/cognition.py` queue + worker, `FOR UPDATE SKIP LOCKED` claim, reaper, backoff + dead-letter, intake enqueue in the same transaction, supervisor lifecycle, `tests/test_cognition.py`
 - **Date:** 2026-11-01
 - **Deciders:** Muqsith (owner), omp (reviewer)
 - **Context:** follow-up to ADR-0001 (canonical + Mem0 adapter) and ADR-0002 (capture gate + assess batch); the default-on memory plan

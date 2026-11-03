@@ -911,6 +911,36 @@ class Agent:
         suffix = f" ({len(chunks)} parts)" if len(chunks) > 1 else ""
         return f"ok: text sent to {name or thread_id}{suffix}"
 
+    async def ask_memory(
+        self,
+        thread_id: str,
+        person_id: str,
+        memory_ids: list[str],
+        level: int,
+        question: str = "",
+    ) -> None:
+        """ADR-0004/0006: a DM confirmation for a memory the assess left unconfirmed."""
+        if not thread_id or not memory_ids:
+            return
+        gateway = self._turn_gateways.get(thread_id) or (
+            self.gateways[0] if self.gateways else None
+        )
+        if gateway is None:
+            return
+        text = question or t("privacy.ask_level", self.soul.language)
+        approval = await self.approvals.create(
+            kind="privacy",
+            thread_id=thread_id,
+            sender=person_id,
+            gateway=getattr(gateway, "name", "") or "",
+            tool="memory",
+            args={"memory_ids": list(memory_ids)},
+            payload={"level": int(level), "question": text},
+            summary=text,
+        )
+        log.info("privacy pending thread=%s approval=%s", thread_id, approval.id)
+        await self.send_text(thread_id, text, gateway=gateway)
+
     async def send_file(
         self, thread_id: str, path: Path, caption: str = "", *, gateway: GatewayCore | None
     ) -> str:
@@ -1330,7 +1360,6 @@ class Agent:
                         getattr(decision, "addressed", "-"),
                     )
                     reply: str | None = None
-                    can_memory = False
                     memory_ctx = MemoryContext()
                     if skip_draft:
                         reply = resume_reply
@@ -1346,7 +1375,6 @@ class Agent:
                         )
                     else:
                         specs = self._specs(roles)
-                        can_memory = any(spec.name == "memory" for spec in specs)
                         cross_send = any(spec.name == "send_to" for spec in specs)
                         mood = None
                         if emotion is not None:
@@ -1361,6 +1389,7 @@ class Agent:
                                 person_id=inbound.actor,
                                 thread_id=thread_id,
                                 query=message.text,
+                                direct=bool(inbound.hints.get("dm")),
                                 mood=mood,
                                 max_items=self.config.memory.max_items,
                                 max_chars=self.config.memory.max_chars,
@@ -1377,13 +1406,18 @@ class Agent:
                                     "failed to read the action ledger chat=%s", thread_id
                                 )
                         skill_block = ""
-                        if self.skills is not None and any(
-                            spec.name == "skill" for spec in specs
-                        ):
+                        if self.skills is not None:
                             try:
-                                skill_block = self.skills.index()
+                                skill_block = self.skills.retrieve(
+                                    message.text,
+                                    thread_id=thread_id,
+                                    person_id=inbound.actor,
+                                    held_tools=tuple(spec.name for spec in specs),
+                                    catalog_tools=tuple(self.tools.by_name),
+                                    max_chars=int(self.config.skills.max_chars),
+                                )
                             except Exception:
-                                log.exception("failed to read the skill index")
+                                log.exception("failed to retrieve procedures")
                         if self.affect is not None:
                             try:
                                 topic_block = self.affect.topic_block(thread_id)
@@ -1750,22 +1784,6 @@ class Agent:
                         )
                     self.runtime.pending_approvals = self.approvals.count_pending()
                     self.approvals.expire()
-                    capture = (
-                        reply
-                        and not is_command
-                        and not crisis
-                        and can_memory
-                        and self.config.memory.auto_capture
-                        and len(str(message.text or "").strip())
-                        >= int(self.config.memory.capture_min_chars)
-                        and not guard.is_injection(message.text, self.soul.language)
-                    )
-                    if capture and not resuming:
-                        self.spawn(
-                            self.privacy.capture_turn(
-                                inbound, reply or "", gateway, tuple(sent_ids)
-                            )
-                        )
                 finally:
                     typing.cancel()
                     with contextlib.suppress(asyncio.CancelledError):
@@ -1892,7 +1910,7 @@ class Agent:
         if self.llm is not None and loaded.llm != old_llm:
             self.llm = LLM(loaded)
         if self.skills is not None:
-            self.skills.max_index_chars = max(200, int(loaded.skills.max_index_chars))
+            self.skills.config = loaded.skills
         if self.style is not None:
             self.style.config = loaded.style
         if self.affect is not None:

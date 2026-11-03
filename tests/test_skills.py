@@ -1,9 +1,11 @@
-"""Skill contract: frontmatter, index, progressive disclosure, support files, and save."""
+"""Derived-procedure contract (ADR-0020): retrieval, revisions, scope, decay, owner command."""
 
 from __future__ import annotations
 
 import asyncio
+import time
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 from support import build_config, database, role
@@ -15,13 +17,15 @@ from eidesoul.engine.db import Database
 from eidesoul.engine.schema import skill_files
 from eidesoul.engine.stores.skills import SkillStore, parse_frontmatter
 from eidesoul.engine.tools import REGISTRY as TOOLS
-from eidesoul.engine.tools import ToolContext, execute
 
-SKILL_BODY = """# Deploy aman
+BODY = """# Deploy aman
 
 1. Jalankan test.
 2. Deploy.
 """
+
+OWNER = (role("owner", memory_admin=True),)
+MEMBER = (role("member"),)
 
 
 def make_config(root: Path) -> Config:
@@ -49,7 +53,7 @@ def add_file(db: Database, skill: str, path: str, content: str) -> None:
 
 def test_parse_frontmatter_and_empty_store(tmp_path: Path) -> None:
     data, body = parse_frontmatter(
-        "---\nname: deploy-aman\ndescription: Deploy service.\n---\n\n" + SKILL_BODY
+        "---\nname: deploy-aman\ndescription: Deploy service.\n---\n\n" + BODY
     )
     assert data["name"] == "deploy-aman"
     assert body.startswith("# Deploy aman")
@@ -57,98 +61,139 @@ def test_parse_frontmatter_and_empty_store(tmp_path: Path) -> None:
 
     store = SkillStore(database())
     assert store.names() == []
-    assert store.index() == ""
+    assert store.catalog() == ""
 
 
-def test_index_view_read_and_usage(tmp_path: Path) -> None:
+def test_save_view_read_and_revision(tmp_path: Path) -> None:
     db = database()
     store = SkillStore(db)
-    store.save("deploy-aman", "Deploy service dengan cek test dan rollback.", SKILL_BODY)
+    store.save("deploy-aman", "Deploy service dengan cek test.", BODY)
     add_file(db, "deploy-aman", "references/checklist.md", "cek dulu")
 
-    assert "deploy-aman: Deploy service" in store.index()
-    assert "used" not in store.index()
+    assert "deploy-aman" in store.catalog()
     assert "# Deploy aman" in store.view("deploy-aman")
-    assert "used 1x" in store.index()
     assert "cek dulu" in store.read("deploy-aman", "references/checklist.md")
     with pytest.raises(PermissionError):
         store.read("deploy-aman", "../secret.txt")
     with pytest.raises(FileNotFoundError):
         store.read("deploy-aman", "references/missing.md")
 
-    store.save("lain", "Skill kedua.", "# Lain\n")
-    assert set(store.names()) == {"deploy-aman", "lain"}
-
-
-def test_index_clips_at_budget(tmp_path: Path) -> None:
-    store = SkillStore(database(), max_index_chars=200)
-    for index in range(12):
-        store.save(f"skill-{index}", f"Prosedur nomor {index}.", f"# {index}\n")
-    text = store.index()
-    assert "- ..." in text
-    assert len(text.splitlines()) < 13
+    store.save("deploy-aman", "Versi dua.", "# Dua\n", overwrite=True)
+    revisions = store.revisions("deploy-aman")
+    assert [row["revision"] for row in revisions] == [2, 1]
+    assert "# Deploy aman" in revisions[1]["body"]
+    store.restore("deploy-aman", 1)
+    assert "# Deploy aman" in store.get("deploy-aman").body
+    assert len(store.revisions("deploy-aman")) == 3
 
 
 def test_save_duplicate_and_overwrite(tmp_path: Path) -> None:
     store = SkillStore(database())
     assert store.save("deploy", "Deploy aman.", "# Deploy\n") == "deploy"
-    assert "deploy" in store.names()
     with pytest.raises(FileExistsError):
         store.save("deploy", "Lagi.", "# Lagi\n")
     store.save("deploy", "Versi dua.", "# Dua\n", overwrite=True)
-    assert "Versi dua." in store.index()
+    assert "Versi dua." in store.catalog()
     with pytest.raises(ValueError):
         store.save("../escape", "x", "y")
+    with pytest.raises(ValueError):
+        store.save("secret", "api_key=abc", "# x\n")
 
 
-def test_skill_tool_autonomous_lifecycle(tmp_path: Path) -> None:
+def test_global_needs_t0_or_approval(tmp_path: Path) -> None:
+    store = SkillStore(database())
+    with pytest.raises(ValueError, match="global"):
+        store.save("global-proc", "Shared.", "# Shared\n", scope="global")
+    assert store.save(
+        "global-proc", "Shared.", "# Shared\n", scope="global", trust="T0"
+    ) == "global-proc"
+    with pytest.raises(ValueError, match="global"):
+        store.save("other-proc", "Shared.", "# Shared\n", scope="global", trust="T1")
+
+
+def test_retrieval_is_scoped_and_updates_uses(tmp_path: Path) -> None:
+    store = SkillStore(database())
+    store.save(
+        "deploy", "Deploy service to production.", "# Steps\n1. Run sandbox.\n",
+        scope="thread", stated_by="chat-a",
+    )
+    store.save("notes", "Write meeting notes.", "# Notes\n1. read the file.\n")
+
+    inside = store.retrieve(
+        "deploy production",
+        thread_id="chat-a",
+        person_id="628111",
+        held_tools=("sandbox", "read"),
+        catalog_tools=("sandbox", "read"),
+    )
+    assert "deploy" in inside
+    outside = store.retrieve(
+        "deploy production",
+        thread_id="chat-b",
+        person_id="628111",
+        held_tools=("sandbox", "read"),
+        catalog_tools=("sandbox", "read"),
+    )
+    assert "deploy" not in outside
+    row = store.get("deploy")
+    assert row.uses >= 1 and row.last_used is not None
+
+    assert store.retrieve(
+        "deploy production",
+        thread_id="chat-a",
+        held_tools=("read",),
+        catalog_tools=("sandbox", "read"),
+    ) == ""
+
+
+def test_retrieval_budget_and_decay(tmp_path: Path) -> None:
+    store = SkillStore(database())
+    store.save("long", "A long procedure.", "# " + "x" * 500 + "\n")
+    assert store.retrieve("long procedure", max_chars=100) == ""
+
+    store.save("old", "Old procedure.", "# Old\n")
+    with store.db.connect() as conn:
+        from sqlalchemy import text as sql
+
+        conn.execute(
+            sql("UPDATE skills SET created_at = :ts, last_used = NULL WHERE name = 'old'"),
+            {"ts": time.time() - 90 * 86400},
+        )
+    assert store.decay(days=30) == 1
+    assert "old" not in store.names()
+    store.restore_archived("old")
+    assert "old" in store.names()
+
+
+def test_pin_and_forget(tmp_path: Path) -> None:
     store = SkillStore(database())
     store.save("deploy", "Deploy aman.", "# Deploy\n")
-    ctx = ToolContext(
-        make_config(tmp_path), role("member"), ("skill",), thread_id="chat", skills=store
-    )
-
-    async def call(args: dict) -> str:
-        return await execute(TOOLS.by_name, "skill", args, ctx)
-
-    assert "deploy: Deploy aman." in asyncio.run(call({"action": "list"}))
-    assert "# Deploy" in asyncio.run(call({"action": "view", "name": "deploy"}))
-    assert "skill saved" in asyncio.run(
-        call({"action": "save", "name": "lain", "description": "Lain.", "body": "# Lain\n"})
-    )
-    assert "skill saved" in asyncio.run(
-        call(
-            {
-                "action": "save",
-                "name": "deploy",
-                "description": "Deploy v2.",
-                "body": "# V2\n",
-                "overwrite": True,
-            }
-        )
-    )
-    assert "Deploy v2." in store.index()
-    assert "archived" in asyncio.run(call({"action": "archive", "name": "lain"}))
-    assert "lain" not in store.names()
+    assert store.pin("deploy") == "deploy"
+    assert store.get("deploy").trust == "T0"
+    assert store.forget("deploy") == "deploy"
+    assert store.names() == []
+    assert store.revisions("deploy") == []
 
 
-def test_skill_command_list_view_and_read(tmp_path: Path) -> None:
+def test_skill_tool_is_not_in_the_catalog() -> None:
+    assert "skill" not in TOOLS.names()
+
+
+def test_skill_command_owner_surface(tmp_path: Path) -> None:
     db = database()
     store = SkillStore(db)
     store.save("deploy", "Deploy aman.", "# Deploy\n")
     add_file(db, "deploy", "refs/x.md", "detail")
 
-    from types import SimpleNamespace
-
     class FakeApp:
         skills = store
         soul = SimpleNamespace(language="id")
 
-    def out(args: str) -> str:
+    def out(args: str, roles=OWNER) -> str:
         ctx = CommandContext(
             agent=FakeApp(),
             gateway=None,
-            roles=(role("owner"),),
+            roles=roles,
             thread_id="chat",
             args=args,
             commands=(),
@@ -156,6 +201,12 @@ def test_skill_command_list_view_and_read(tmp_path: Path) -> None:
         )
         return asyncio.run(SKILLCMD.fn(ctx))
 
-    assert "deploy: Deploy aman." in out("")
+    assert "deploy" in out("")
     assert "# Deploy" in out("deploy")
     assert "detail" in out("read deploy refs/x.md")
+    assert out("pin deploy")
+    assert store.get("deploy").trust == "T0"
+    assert out("forget deploy", roles=MEMBER)
+    assert store.get("deploy") is not None
+    assert out("forget deploy")
+    assert store.get("deploy") is None

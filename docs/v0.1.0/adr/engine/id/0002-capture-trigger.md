@@ -1,10 +1,10 @@
-> Terjemahan turunan — jangan sunting; sumber: engine/0002-capture-trigger.md (sha256: 148a9f42f5be)
+> Terjemahan turunan — jangan sunting; sumber: engine/0002-capture-trigger.md (sha256: bd152b394606)
 > Teks ini ditulis manusia; baris yang tidak bisa diterjemahkan mesin disalin apa adanya ke sumber English, jadi sumber bercampur dua bahasa.
 
 # ADR-0002: Pemicu Capture — Gate Deterministik, Cek Kebaruan, Assess Batch
 
 - **Status:** accepted
-- **Implementasi:** sebagian — ada: `privacy.capture_turn`/`_assess` + `memory.auto_capture`; sisa: cek kebaruan MiniLM, gate struktural penuh
+- **Implementasi:** implemented — bukti: `memory/gate.py` (gate struktural + dedupe), `memory/assess.py` (assess batch), kebaruan di `memory/store.py` memakai embedder 384-d bersama, seam intake terhubung ke `cognition_jobs`, `tests/test_cognition.py`; hasil gate: `pytest -q` 648 lulus
 - **Tanggal:** 2026-11-01
 - **Deciders:** Muqsith (owner), omp (reviewer)
 - **Konteks:** lanjutan ADR-0001 (Postgres canonical + Mem0 sebagai `MemoryExtractor`/`MemoryIndex`) dan rencana memori default-on

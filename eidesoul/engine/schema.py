@@ -221,6 +221,7 @@ person_link_codes = Table(
     Column("used_at", Float, nullable=False, default=0.0),
 )
 
+# ADR-0020 §4.5 / ADR-0016 §4.7: a procedure carries scope, provenance, trust, and a revision.
 skills = Table(
     "skills",
     metadata,
@@ -230,7 +231,37 @@ skills = Table(
     Column("archived", Boolean, nullable=False, default=False),
     Column("created_at", Float, nullable=False),
     Column("updated_at", Float, nullable=False),
+    Column("scope", String(20), nullable=False, server_default="thread"),
+    Column("via", String(20), nullable=False, server_default="reflection"),
+    Column("stated_by", String(80), nullable=True),
+    Column("source_episode", String(160), nullable=True),
+    Column("uses", Integer, nullable=False, server_default="0"),
+    Column("last_used", Float, nullable=True),
+    Column("revision", Integer, nullable=False, server_default="1"),
+    Column("trust", String(8), nullable=False, server_default="T2"),
+    CheckConstraint("scope IN ('thread','person','global')", name="ck_skills_scope"),
+    CheckConstraint("trust IN ('T0','T1','T2','T3')", name="ck_skills_trust"),
 )
+Index("ix_skills_scope", skills.c.scope)
+
+# Append-only history (ADR-0020 §4.5): a save/merge never destroys the previous version.
+skill_revisions = Table(
+    "skill_revisions",
+    metadata,
+    Column(
+        "skill",
+        String(80),
+        ForeignKey("skills.name", ondelete="CASCADE"),
+        nullable=False,
+    ),
+    Column("revision", Integer, nullable=False),
+    Column("description", String(400), nullable=False, server_default=""),
+    Column("body", Text, nullable=False),
+    Column("created_at", Float, nullable=False),
+    Column("source_episode", String(160), nullable=True),
+    PrimaryKeyConstraint("skill", "revision", name="pk_skill_revisions"),
+)
+Index("ix_skill_revisions_skill", skill_revisions.c.skill, skill_revisions.c.revision.desc())
 
 skill_files = Table(
     "skill_files",
@@ -242,13 +273,8 @@ skill_files = Table(
     PrimaryKeyConstraint("skill", "path", name="pk_skill_files"),
 )
 
-skill_usage = Table(
-    "skill_usage",
-    metadata,
-    Column("skill", String(80), primary_key=True),
-    Column("uses", Integer, nullable=False, default=0),
-    Column("last", Float, nullable=False, default=0.0),
-)
+# `skill_usage` is retired: ADR-0020 §4.5 moved `uses`/`last_used` onto the `skills` row, so the
+# old counter table has no reader. Revision 5 drops it (ADR-0016 §4.3 rule 3 note in the migration).
 
 recipes = Table(
     "recipes",
@@ -500,6 +526,69 @@ memory_index = Table(
     UniqueConstraint("backend", "external_id", name="uq_memory_index_external"),
 )
 Index("ix_memory_index_external", memory_index.c.backend, memory_index.c.external_id)
+
+# ---------------------------------------------------------------- cognition
+# ADR-0003 §5.4: one queue for every label/batch job; `kind` names the work, `scope` the
+# isolation unit (`global`, `person:<id>`, `thread:<id>`). Canonical writes still go through
+# `MemoryStore`; this table only holds the work order.
+
+COGNITION_KINDS = ("capture", "consolidate", "reflect", "backfill", "audit", "distill")
+COGNITION_STATUSES = ("queued", "claimed", "done", "failed", "dead")
+
+cognition_jobs = Table(
+    "cognition_jobs",
+    metadata,
+    Column("id", Uuid(as_uuid=False), primary_key=True),
+    Column("kind", String(20), nullable=False),
+    Column("scope", String(160), nullable=False, server_default="global"),
+    Column("payload_ref", Text, nullable=False, server_default=""),
+    Column("status", String(20), nullable=False, server_default="queued"),
+    Column("claimed_by", Text, nullable=False, server_default=""),
+    Column("lease_until", Float, nullable=False, server_default="0"),
+    Column("attempts", Integer, nullable=False, server_default="0"),
+    Column("next_attempt_at", Float, nullable=False, server_default="0"),
+    Column("result_ref", Text, nullable=False, server_default=""),
+    Column("idempotency_key", Text, nullable=False),
+    Column("created_at", Float, nullable=False),
+    Column("updated_at", Float, nullable=False),
+    CheckConstraint(
+        "kind IN ('capture','consolidate','reflect','backfill','audit','distill')",
+        name="ck_cognition_jobs_kind",
+    ),
+    CheckConstraint(
+        "status IN ('queued','claimed','done','failed','dead')",
+        name="ck_cognition_jobs_status",
+    ),
+    UniqueConstraint("idempotency_key", name="uq_cognition_jobs_key"),
+)
+Index("ix_cognition_jobs_claim", cognition_jobs.c.status, cognition_jobs.c.next_attempt_at)
+Index("ix_cognition_jobs_kind", cognition_jobs.c.kind, cognition_jobs.c.status)
+Index("ix_cognition_jobs_scope", cognition_jobs.c.scope)
+
+# ADR-0020 §4.2: the recorded result of an episode (id = the first turn); the signals are
+# computed from `turns`/`turn_steps`/`outbound_messages`, only the closure is stored.
+EPISODE_STATUSES = ("open", "closed")
+EPISODE_SIGNALS = ("idle", "marker", "topic", "commitment", "shutdown", "artifact")
+
+episodes = Table(
+    "episodes",
+    metadata,
+    Column("id", String(160), primary_key=True),
+    Column("thread_id", String(120), nullable=False, server_default=""),
+    Column("person_id", String(80), nullable=False, server_default=""),
+    Column("status", String(20), nullable=False, server_default="open"),
+    Column("close_signal", String(20), nullable=False, server_default=""),
+    Column("signature", Text, nullable=False, server_default=""),
+    Column("turns", Integer, nullable=False, server_default="0"),
+    Column("tool_calls", Integer, nullable=False, server_default="0"),
+    Column("refs", JSONB, nullable=False, server_default=text("'[]'::jsonb")),
+    Column("distilled_at", Float, nullable=False, server_default="0"),
+    Column("started_at", Float, nullable=False),
+    Column("closed_at", Float, nullable=True),
+    CheckConstraint("status IN ('open','closed')", name="ck_episodes_status"),
+)
+Index("ix_episodes_thread", episodes.c.thread_id, episodes.c.status)
+Index("ix_episodes_closed", episodes.c.status, episodes.c.closed_at)
 
 # ---------------------------------------------------------------- turns
 # ADR-0013 §6: one row per incoming message, message id is the idempotency key.

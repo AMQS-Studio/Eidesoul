@@ -115,29 +115,43 @@ def test_stale_burst_is_not_answered_twice(tmp_path) -> None:
 
 
 def test_auto_capture_runs_for_memory_role(tmp_path) -> None:
-    import json
+    """The turn no longer captures; intake enqueues the job and the worker claims it."""
+    from datetime import datetime
 
-    class AssessLLM(FakeLLM):
-        """The decision fake must also answer the privacy assess prompt."""
+    from support import build_config, database
 
-        async def complete(self, system, user, **kwargs):
-            if "privacy of one chat turn" in system:
-                return json.dumps({"level": 2, "subject": "", "ask": False})
-            return await super().complete(system, user, **kwargs)
+    from eidesoul.engine.cognition import CognitionWorker
+    from eidesoul.engine.context import Message
+    from eidesoul.engine.memory.store import MemoryStore
+    from eidesoul.engine.stores.history import HistoryStore
 
     memory = FakeMemory()
     env = make_agent(tmp_path, memory=memory)
-    env.agent.llm = AssessLLM()
 
     handle(env, inbound_message("aku suka kopi tanpa gula", thread=DM))
-    if env.agent.tasks:
-        asyncio.run(asyncio.gather(*env.agent.tasks))
+    assert memory.captures == []
 
-    assert memory.captures
-    call = memory.captures[0]
-    assert call["person_id"] == env.agent.identity.resolve("fake", "628111")
-    assert call["thread_id"] == DM
-    assert call["audience"] == "private"
+    config = build_config(tmp_path)
+    db = database()
+    store = MemoryStore(db, config)
+    worker = CognitionWorker(db, config, store)
+    history = HistoryStore(db, config.workspace, memories=store, job_sink=worker.queue)
+    person = env.agent.identity.resolve("fake", "628111")
+    message = Message(
+        id="m-capture",
+        sender_name="Budi",
+        sender_id="628111",
+        when=datetime.now(),
+        text="aku suka kopi tanpa gula",
+        sender_address="628111@s.whatsapp.net",
+    )
+    assert history.intake(DM, message, person) is True
+
+    claimed = worker.queue.claim(worker="t", limit=1)
+    assert [job.kind for job in claimed] == ["capture"]
+    assert claimed[0].scope == f"person:{person}"
+    assert claimed[0].payload_ref
+    assert worker.queue.claim(worker="u", limit=1) == []
 
 
 def test_memory_block_and_runtime_reach_prompt(tmp_path) -> None:

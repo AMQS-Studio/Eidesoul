@@ -71,6 +71,19 @@ async def status(ctx: CommandContext) -> str:
     from ..memory import memory_status
 
     lines.append(t("command.status.memory", lang, value=memory_status(agent.memory)))
+    cognition = getattr(agent.runtime, "cognition", {}) or {}
+    if cognition:
+        lines.append(
+            t(
+                "command.status.cognition",
+                lang,
+                queued=cognition.get("queue.queued", 0),
+                claimed=cognition.get("queue.claimed", 0),
+                done=cognition.get("queue.done", 0),
+                dead=cognition.get("queue.dead", 0),
+                age=cognition.get("queue.queued_age_seconds", 0),
+            )
+        )
     lines.append(t("command.status.approvals", lang, value=agent.approvals.count_pending()))
     if agent.runtime.notice_failed:
         lines.append(

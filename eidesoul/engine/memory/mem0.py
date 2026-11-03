@@ -25,7 +25,7 @@ from ..embed import DIM, MODEL
 from ..guard import SENSITIVE
 from . import MemoryContext, MemoryHit
 from . import context as memory_context
-from .privacy import MAX_LEVEL, clamp_level
+from .privacy import MAX_LEVEL, PrivacyPolicy, clamp_level
 
 log = logging.getLogger(__name__)
 
@@ -556,10 +556,13 @@ class Mem0Backend:
         person_id: str,
         thread_id: str,
         query: str,
+        direct: bool | None = None,
         mood=None,
         max_items: int | None = None,
         max_chars: int | None = None,
     ) -> MemoryContext:
+        if direct is None:
+            raise ValueError("memory context needs the audience (ADR-0006 §4.1)")
         try:
             return await asyncio.wait_for(
                 memory_context.build(
@@ -567,11 +570,15 @@ class Mem0Backend:
                     person_id=person_id,
                     thread_id=thread_id,
                     query=query,
+                    direct=bool(direct),
+                    policy=PrivacyPolicy(self._limits.privacy),
                     max_items=max_items or self._limits.max_items,
                     max_chars=max_chars or self._limits.max_chars,
                 ),
                 timeout=memory_context.TIMEOUT,
             )
+        except ValueError:
+            raise
         except Exception as exc:  # slow/broken retrieval must not hold the reply
             log.debug("memory context skipped: %s", exc)
             return MemoryContext()

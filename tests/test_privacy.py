@@ -4,16 +4,21 @@ from __future__ import annotations
 
 import asyncio
 import json
+from datetime import datetime
 from types import SimpleNamespace
 
-from support import FakeLLM, FakeMem0, build_config, inbound_message, make_agent
+from support import FakeLLM, FakeMem0, build_config, database, inbound_message, make_agent
 
+from eidesoul.engine.cognition import CognitionWorker
 from eidesoul.engine.config import DatabaseConfig, PrivacyConfig
+from eidesoul.engine.context import Message
 from eidesoul.engine.memory import MemoryHit
+from eidesoul.engine.memory.assess import assess_budget
 from eidesoul.engine.memory.mem0 import Mem0Backend
 from eidesoul.engine.memory.privacy import PrivacyPolicy
-from eidesoul.engine.privacy import assess_budget
+from eidesoul.engine.memory.store import MemoryStore
 from eidesoul.engine.roles import Role
+from eidesoul.engine.stores.history import HistoryStore
 
 
 def policy() -> PrivacyPolicy:
@@ -53,38 +58,100 @@ def test_level_matrix_group_and_dm() -> None:
 
 
 class ScriptLLM(FakeLLM):
-    """FakeLLM with scripted audit/assess/answer JSON."""
+    """FakeLLM with scripted audit/answer JSON."""
 
-    def __init__(self, *, audit=None, assess=None, answer=None, text: str = "halo"):
+    def __init__(self, *, audit=None, answer=None, text: str = "halo"):
         super().__init__(answer=text)
         self.audit = audit or {"mentions": [], "verdict": "allow", "reply": "", "question": ""}
-        self.assess = assess or {"level": 2, "subject": "", "ask": False, "question": ""}
         self.answer_payload = answer or {"kind": "unclear", "level": 0}
 
     async def complete(self, system, user, **kwargs):
         self.decisions += 1
         if "audit" in system.lower():
             return json.dumps(self.audit)
-        if "privacy of one chat turn" in system:
-            return json.dumps(self.assess)
         if "Classify the sender" in system:
             return json.dumps(self.answer_payload)
         return await super().complete(system, user, **kwargs)
 
 
-class SequencedLLM(FakeLLM):
-    """Sequential assess answers; "" means the model ran out of budget."""
+class CaptureLLM(FakeLLM):
+    """The worker's assess call: one scripted item per attempt; `None` means no JSON."""
 
-    def __init__(self, replies: list[str]):
+    def __init__(self, replies: list[dict | None]):
         super().__init__()
         self.replies = list(replies)
-        self.assess_calls: list[dict] = []
+        self.calls: list[dict] = []
 
     async def complete(self, system, user, **kwargs):
-        if "privacy of one chat turn" in system:
-            self.assess_calls.append(kwargs)
-            return self.replies.pop(0) if self.replies else ""
-        return await super().complete(system, user, **kwargs)
+        if "long-term memory" not in system:
+            return await super().complete(system, user, **kwargs)
+        self.calls.append({"system": system, "max_tokens": kwargs.get("max_tokens")})
+        scripted = self.replies.pop(0) if self.replies else None
+        if scripted is None:
+            return ""
+        wanted = json.loads(user)["items"][0]["id"]
+        return json.dumps({"items": [{"id": wanted, **scripted}]})
+
+
+def capture_env(tmp_path, replies: list[dict | None], *, ask=None) -> SimpleNamespace:
+    """The real intake seam: MemoryStore + HistoryStore + CognitionQueue, no gateway."""
+    config = build_config(tmp_path)
+    db = database()
+    store = MemoryStore(db, config)
+    worker = CognitionWorker(
+        db, config, store, llm=CaptureLLM(replies), language="id", ask=ask
+    )
+    history = HistoryStore(db, config.workspace, memories=store, job_sink=worker.queue)
+    return SimpleNamespace(
+        config=config, db=db, store=store, worker=worker, history=history, llm=worker.llm
+    )
+
+
+def capture(
+    env: SimpleNamespace,
+    text: str,
+    *,
+    thread: str = "628111@s.whatsapp.net",
+    person: str = "628111",
+    message_id: str = "m1",
+    audience: str = "private",
+) -> dict[str, str]:
+    message = Message(
+        id=message_id,
+        sender_name="Budi",
+        sender_id=person,
+        when=datetime.now(),
+        text=text,
+        sender_address=f"{person}@s.whatsapp.net",
+    )
+    assert env.history.intake(thread, message, person, audience=audience) is True
+    return asyncio.run(env.worker.drain(kind="capture", limit=10))
+
+
+def row(env: SimpleNamespace, table: str = "memories") -> dict | None:
+    from sqlalchemy import text as sql
+
+    return env.db.fetch_one(sql(f"SELECT * FROM {table} ORDER BY created_at LIMIT 1"))
+
+
+def counted(env: SimpleNamespace, table: str) -> int:
+    from sqlalchemy import text as sql
+
+    return int(env.db.scalar(sql(f"SELECT count(*) FROM {table}")) or 0)
+
+
+def assess(level: int, *, subject: str = "", ask: bool = False) -> dict:
+    return {
+        "worth": True,
+        "level": level,
+        "subject": subject,
+        "kind": "fact",
+        "text": "fakta",
+        "supersedes": None,
+        "category": "general",
+        "durability": "normal",
+        "ask": ask,
+    }
 
 
 def review(env, inbound, reply, hits):
@@ -182,47 +249,47 @@ def test_other_sender_cannot_confirm(tmp_path) -> None:
     assert env.agent.approvals.get(1).status == "pending"
 
 
-def test_capture_level_4_asks_and_stores_unconfirmed(tmp_path) -> None:
-    env = make_agent(tmp_path)
-    env.agent.llm = ScriptLLM(
-        assess={"level": 4, "subject": "", "ask": True, "question": "seberapa rahasia?"}
-    )
-    inbound = inbound_message("aku pernah melakukan hal memalukan", thread="628111@s.whatsapp.net")
+def test_capture_level_4_stores_unconfirmed_and_asks(tmp_path) -> None:
+    asked: list[tuple] = []
 
-    asyncio.run(env.agent.privacy.capture_turn(inbound, "oke", env.gateway))
+    async def ask(thread_id, person_id, ids, level, question):
+        asked.append((thread_id, person_id, ids, level))
 
-    call = env.memory.captures[0]
-    assert call["level"] == 4 and call["confirmed"] is False
-    assert call["owner_id"] == "628111"
-    approval = env.agent.approvals.latest("628111@s.whatsapp.net", "628111")
-    assert approval.kind == "privacy"
-    assert env.gateway.sent[-1][1] == "seberapa rahasia?"
+    env = capture_env(tmp_path, [assess(4, ask=True)], ask=ask)
+    capture(env, "aku pernah melakukan hal memalukan")
+
+    found = row(env)
+    assert found["state"] == "ok" and int(found["level"]) == 4
+    assert found["confirmed"] is False and found["via"] == "turn"
+    assert asked and asked[0][1] == "628111" and asked[0][3] == 4
 
 
 def test_capture_level_3_is_stored_without_a_question(tmp_path) -> None:
-    env = make_agent(tmp_path)
-    env.agent.llm = ScriptLLM(assess={"level": 3, "subject": "", "ask": False})
-    inbound = inbound_message("aku lagi banyak pikiran", thread="628111@s.whatsapp.net")
+    env = capture_env(tmp_path, [assess(3)])
 
-    asyncio.run(env.agent.privacy.capture_turn(inbound, "oke", env.gateway))
+    capture(env, "aku lagi banyak pikiran")
 
-    assert env.memory.captures[0]["level"] == 3
-    assert env.memory.captures[0]["confirmed"] is True
-    assert env.agent.approvals.latest("628111@s.whatsapp.net", "628111") is None
+    found = row(env)
+    assert int(found["level"]) == 3 and found["confirmed"] is True
 
 
-def test_capture_skips_credentials_and_resolves_subject(tmp_path) -> None:
-    env = make_agent(tmp_path)
-    env.agent.llm = ScriptLLM()
-    insecure = inbound_message("api_key=abc123", thread="628111@s.whatsapp.net")
-    asyncio.run(env.agent.privacy.capture_turn(insecure, "ok", env.gateway))
-    assert env.memory.captures == []
+def test_capture_skips_credentials_before_the_journal(tmp_path) -> None:
+    env = capture_env(tmp_path, [assess(2)])
 
-    env.agent.llm = ScriptLLM(assess={"level": 3, "subject": "Budi", "ask": False})
-    env.agent.affect = SimpleNamespace(person_by_name=lambda thread_id, name: "628999")
-    named = inbound_message("budi baru pindah kerja", thread="628111@s.whatsapp.net")
-    asyncio.run(env.agent.privacy.capture_turn(named, "oh", env.gateway))
-    assert env.memory.captures[0]["subject_id"] == "628999"
+    assert capture(env, "api_key=abc123") == {}
+
+    assert counted(env, "memory_events") == 0
+    assert counted(env, "memories") == 0
+
+
+def test_capture_drops_a_third_party_fact_in_a_group(tmp_path) -> None:
+    env = capture_env(tmp_path, [assess(2, subject="Budi")])
+
+    capture(env, "budi baru pindah kerja", thread="111@g.us", audience="group")
+
+    found = row(env)
+    assert found["state"] == "not_worth"
+    assert found["level"] is None
 
 
 def test_assess_budget_grows_with_the_turn_and_stays_capped() -> None:
@@ -232,47 +299,44 @@ def test_assess_budget_grows_with_the_turn_and_stays_capped() -> None:
 
 
 def test_capture_retries_assess_with_a_bigger_budget(tmp_path) -> None:
-    env = make_agent(tmp_path)
-    env.agent.llm = SequencedLLM(
-        ["", json.dumps({"level": 3, "subject": "", "ask": False})]
-    )
-    inbound = inbound_message("aku lagi banyak pikiran", thread="628111@s.whatsapp.net")
+    env = capture_env(tmp_path, [None, assess(3)])
 
-    asyncio.run(env.agent.privacy.capture_turn(inbound, "oke", env.gateway))
+    capture(env, "aku lagi banyak pikiran")
 
-    assert env.memory.captures[0]["level"] == 3
-    assert env.memory.captures[0]["confirmed"] is True
-    assert len(env.agent.llm.assess_calls) == 2
-    first, retry = env.agent.llm.assess_calls
-    assert "reasoning_effort" not in first
-    assert "reasoning_effort" not in retry
+    found = row(env)
+    assert int(found["level"]) == 3 and found["confirmed"] is True
+    assert len(env.llm.calls) == 2
+    first, retry = env.llm.calls
     assert first["max_tokens"] >= 800
     assert retry["max_tokens"] == first["max_tokens"] * 2
 
 
-def test_capture_is_skipped_when_assess_returns_nothing(tmp_path) -> None:
-    env = make_agent(tmp_path)
-    env.agent.llm = SequencedLLM(["", ""])
-    inbound = inbound_message("halo apa kabar semuanya", thread="628111@s.whatsapp.net")
+def test_capture_is_dropped_when_assess_returns_nothing(tmp_path) -> None:
+    env = capture_env(tmp_path, [None, None])
 
-    asyncio.run(env.agent.privacy.capture_turn(inbound, "baik", env.gateway))
+    capture(env, "halo apa kabar semuanya")
 
-    assert env.memory.captures == []
-    assert env.agent.approvals.latest("628111@s.whatsapp.net", "628111") is None
-    assert len(env.agent.llm.assess_calls) == 2
+    found = row(env)
+    assert found["state"] == "failed" and found["level"] is None
+    assert len(env.llm.calls) == 2
 
 
 def test_privacy_confirmation_sets_level_and_confirmation(tmp_path) -> None:
     env = make_agent(tmp_path)
-    env.agent.llm = ScriptLLM(
-        assess={"level": 4, "subject": "", "ask": True, "question": "seberapa rahasia?"},
-        answer={"kind": "level", "level": 4},
+    env.agent.llm = ScriptLLM(answer={"kind": "level", "level": 4})
+    approval = asyncio.run(
+        env.agent.approvals.create(
+            kind="privacy",
+            thread_id="628111@s.whatsapp.net",
+            sender="628111",
+            tool="memory",
+            args={"memory_ids": ["m1"]},
+            payload={"level": 4, "question": "seberapa rahasia?"},
+            summary="seberapa rahasia?",
+        )
     )
-    inbound = inbound_message("aku pernah melakukan hal memalukan", thread="628111@s.whatsapp.net")
-    asyncio.run(env.agent.privacy.capture_turn(inbound, "oke", env.gateway))
-    memory_id = env.agent.approvals.latest("628111@s.whatsapp.net", "628111").args["memory_ids"][0]
-    env.memory.hits[memory_id] = MemoryHit(
-        id=memory_id, text="hal memalukan", level=4, owner_id="628111", confirmed=False
+    env.memory.hits["m1"] = MemoryHit(
+        id="m1", text="hal memalukan", level=4, owner_id="628111", confirmed=False
     )
 
     handled = asyncio.run(
@@ -284,9 +348,9 @@ def test_privacy_confirmation_sets_level_and_confirmation(tmp_path) -> None:
     )
 
     assert handled is True
-    hit_after = env.memory.hits[memory_id]
+    hit_after = env.memory.hits["m1"]
     assert hit_after.level == 4 and hit_after.confirmed is True
-    assert env.agent.approvals.get(1).status == "approved"
+    assert env.agent.approvals.get(approval.id).status == "approved"
 
 
 def test_unclear_answer_keeps_pending(tmp_path) -> None:
@@ -391,36 +455,17 @@ def test_vetoed_memory_is_excluded_from_context(tmp_path) -> None:
 
     assert asyncio.run(memory.veto(memory_id, subject_id="2")) is False
     assert asyncio.run(memory.veto(memory_id, subject_id="1")) is True
-    context = asyncio.run(memory.context(person_id="1", thread_id="c", query="rahasia"))
+    context = asyncio.run(
+        memory.context(person_id="1", thread_id="c", query="rahasia", direct=True)
+    )
     assert context.text == ""
     assert context.hits == ()
 
 
-def test_capture_raises_visibility_of_the_turn_and_delivered_reply(tmp_path) -> None:
-    from datetime import datetime
+def test_capture_raises_visibility_of_the_turn(tmp_path) -> None:
+    env = capture_env(tmp_path, [assess(3)])
 
-    from eidesoul.engine.context import Message
+    capture(env, "aku lagi banyak pikiran", message_id="m-capture")
 
-    env = make_agent(tmp_path)
-    env.agent.llm = ScriptLLM(assess={"level": 3, "subject": "", "ask": False})
-    inbound = inbound_message(
-        "aku lagi banyak pikiran", thread="628111@s.whatsapp.net", message_id="m-capture"
-    )
-    env.history.add(inbound.thread, inbound.payload)
-    env.history.add(
-        inbound.thread,
-        Message(
-            id="r1",
-            sender_name="eidesoul",
-            sender_id="628567770837",
-            when=datetime.now(),
-            text="oke",
-            author="bot",
-        ),
-    )
-
-    asyncio.run(env.agent.privacy.capture_turn(inbound, "oke", env.gateway, ("r1",)))
-
-    assert env.history.find(inbound.thread, "m-capture").visibility == 3
-    assert env.history.find(inbound.thread, "r1").visibility == 3
-    assert env.memory.captures[0]["level"] == 3
+    assert env.history.find("628111@s.whatsapp.net", "m-capture").visibility == 3
+    assert int(row(env)["level"]) == 3
