@@ -6,7 +6,7 @@
 - **Context:** follows ADR-0000 (the `Percept`/`Action` seam), ADR-0018 (the gateway contract), ADR-0014 (durable routing), ADR-0007 (approval classes), ADR-0031 (this decision lands after the engine split)
 - **Supersedes:** —
 - **Related:** ADR-0023 (relay consent), ADR-0025 (stable prompt prefix), ADR-0027 (a gateway is a body), ADR-0028 (plugin unit)
-- **Implementation:** draft — every call site below still sends through its own body, `send_text` is still mandatory, and no tool index exists per body. The evidence line is replaced when the door lands.
+- **Implementation:** implemented — one door (`Agent.dispatch`); bodies expose `dispatch` and `GatewayCore` requires no chat member; receipts land in `outbound_messages` keyed by `action.id`; `Address`/`Address.find` resolve a target; the tool index is per body; a second body claiming a thread is refused before any row is written. The turn path no longer quotes the triggering message: quoting is chat-only work the body may add on its own.
 - **Location note:** an engine decision (it defines how the engine addresses any body and what it may ask of one), so it sits under `adr/engine/`. The Indonesian copy is `docs/v0.1.0/adr/engine/id/0032-address-and-command.md`.
 
 ---

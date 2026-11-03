@@ -1,4 +1,4 @@
-> Terjemahan turunan — jangan sunting; sumber: 0000-initial-invariants.md (sha256: aa4e32c7a55f)
+> Terjemahan turunan — jangan sunting; sumber: 0000-initial-invariants.md (sha256: e30f7e9ca1ce)
 > Ditulis tangan (bukan mesin), mengikuti sumber English baris demi baris.
 
 # ADR-0000: Invarian Awal — Bentuk Permukaan, Data Bahasa, Seam Netral Embodiment
@@ -8,6 +8,7 @@
 - **Deciders:** Muqsith (owner), omp (reviewer)
 - **Konteks:** tiga fondasi diputuskan setelah set ADR pertama ditulis: di mana permukaan baru boleh hidup, di mana data bahasa tinggal, dan apakah core boleh mengasumsikan chat. Ketiganya satu paket karena masing-masing mengunci setiap fitur sesudahnya — termasuk robot, harness, dan body editing yang direncanakan pemilik.
 - **Supersedes:** —
+- **Amendemen:** 2026-11-03 — `Action` membawa `id` (id korelasi) dan `address`, per ADR-0032 §4.1–4.3.
 - **Terkait:** ADR-0001 (memori), ADR-0007 (teks kapabilitas & approval), ADR-0009 (rumah ADR & penjaganya), ADR-0015 (payload), ADR-0016 (pemilik skema), ADR-0018 (kontrak gateway), ADR-0020 (episode), ADR-0021 (keluaran tool), ADR-0022 (`administrator` dan `label`)
 - **Order:** foundational — dijalankan sebelum body gateway baru mana pun, sebelum dashboard, dan sebelum pemindahan string/lexicon yang bergantung padanya.
 - **Implementasi:** implemented — bukti: §4.2 pack lexicon + pronoun + help hanya katalog, §4.3 `Percept`/`Action` + hint, §4.4 cutover rename, §4.5 `send`/`chat_history` di gateway, body harness, `tests/test_architecture.py`, §7 kotak 8 di `AGENTS.md` (`docs/`, `scripts/`, `tests/`, `panel/`, `apps/` di luar paket)
@@ -89,8 +90,8 @@ Engine mengonsumsi percept dan mengeluarkan action; tidak ada yang di `engine/` 
 ```
 Percept  = source (nama body), thread (id opaque), actor (person_id),
            kind, payload, hints (fakta yang dideklarasikan body), raw (event transport)
-Action   = capability (nama tool), target (thread atau alamat), payload,
-           approval_class (consent | authorization)
+Action   = address (Address: body + thread), capability (nama tool), payload,
+           approval_class (consent | authorization), id (id korelasi)
 ```
 
 - `hints` membawa semantik body (`dm`, `mention`, `reply`, `group`, `presence`) sebagai **fakta dari

@@ -2,44 +2,93 @@
 
 
 import copy
+from dataclasses import asdict
+from pathlib import Path
 
 import yaml
 
-from ..engine.config import DEFAULT_SENSITIVE_COMMANDS
+from ..engine.config import (
+    DEFAULT_SENSITIVE_COMMANDS,
+    DatabaseConfig,
+    HostConfig,
+    PluginSettings,
+    SandboxConfig,
+    WebSearchConfig,
+)
 from ..engine.soul import DEFAULT_SOUL_YAML, load_soul, style_block
 from ..providers import PROVIDERS
 from . import library
 
-HOST: dict = {
-    "database": {
-        "url_env": "EIDESOUL_DATABASE_URL",
-        "url": "",
-        "pool_size": 5,
-        "pool_timeout": 30,
-    },
-    "workspace": ".eidesoul/workspace",
-    "roles_file": "roles.yaml",
-    "soul_file": "soul.yaml",
-    "sync_documents": True,
-    "sandbox": {
-        "runtime": "",
-        "image": "docker.io/library/python:3.14-slim",
-        "timeout_seconds": 120,
-        "network": "eidesoul-sandbox",
-        "host_workspace": None,
-        "env": [],
-        "proxy": "http://sandbox-proxy:3128",
-        "pids_limit": 256,
-        "memory": "512m",
-        "cpus": 1.0,
-    },
-    "web_search": {"base_url": "", "timeout_seconds": 10},
-    "mcp": {"servers": {}},
-    # Clean by default (ADR-0027/0028): nothing is installed or enabled. An empty root means
-    # `<workspace>/plugins`; enabling a plugin fetches its code by digest.
-    "plugin": {"root": "", "fetch": True, "source": ""},
-    "plugins": {"google": {"enabled": False, "digest": ""}},
+# The operator surface of `config.yaml`: the order and the keys the file shows. The values come
+# from the dataclass tree below, so a default can never drift between the code and the template
+# (ADR-0031 §4.6); a nested section the file does not expose (`web_search.fetch`) is dropped here.
+HOST_KEYS: dict[str, tuple[str, ...]] = {
+    "database": ("url_env", "url", "pool_size", "pool_timeout"),
+    "workspace": (),
+    "roles_file": (),
+    "soul_file": (),
+    "sync_documents": (),
+    "sandbox": (
+        "runtime",
+        "image",
+        "timeout_seconds",
+        "network",
+        "host_workspace",
+        "env",
+        "proxy",
+        "pids_limit",
+        "memory",
+        "cpus",
+    ),
+    "web_search": ("base_url", "timeout_seconds"),
+    "mcp": ("servers",),
+    "plugin": ("root", "fetch", "source"),
+    "plugins": (),
 }
+
+
+def host_defaults() -> dict:
+    """The host block of `config.yaml`, derived from the dataclass tree (ADR-0031 §4.6)."""
+    raw = asdict(
+        HostConfig(
+            database=DatabaseConfig(),
+            workspace=Path(".eidesoul/workspace"),
+            # Compose ships the sandbox on its own network with the proxy sidecar (compose.yaml).
+            sandbox=SandboxConfig(
+                network="eidesoul-sandbox", proxy="http://sandbox-proxy:3128"
+            ),
+            web_search=WebSearchConfig(),
+            mcp={},
+            roles_file=Path("roles.yaml"),
+            soul_file=Path("soul.yaml"),
+            sync_documents=True,
+        )
+    )
+    # The operator document wraps the server map, and an empty root means `<workspace>/plugins`.
+    raw["mcp"] = {"servers": raw.get("mcp") or {}}
+    raw["plugin"] = {**raw["plugin"], "root": ""}
+    raw["plugins"] = {"google": asdict(PluginSettings())}
+    host: dict = {}
+    for key, fields in HOST_KEYS.items():
+        value = raw[key]
+        if fields:
+            value = {name: value[name] for name in fields}
+            value = {
+                name: int(item)
+                if isinstance(item, float) and item.is_integer() and name != "cpus"
+                else item
+                for name, item in value.items()
+            }
+        if isinstance(value, (str, int, float, bool)) or value is None or isinstance(value, dict):
+            host[key] = value
+        else:
+            host[key] = str(value)
+    for key in ("workspace", "roles_file", "soul_file"):
+        host[key] = Path(host[key]).as_posix()
+    return host
+
+
+HOST: dict = host_defaults()
 
 ENGINE: dict = {
     "llm": {

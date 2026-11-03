@@ -1,4 +1,4 @@
-> Terjemahan turunan — jangan sunting; sumber: engine/0032-address-and-command.md (sha256: 06ff783227ee)
+> Terjemahan turunan — jangan sunting; sumber: engine/0032-address-and-command.md (sha256: aad4a118cd23)
 > Ditulis tangan (bukan mesin), mengikuti sumber English baris demi baris.
 
 # ADR-0032: Satu Alamat, Satu Command — Keluaran Netral terhadap Body, Menolak daripada Menebak
@@ -9,7 +9,7 @@
 - **Konteks:** lanjutan ADR-0000 (seam `Percept`/`Action`), ADR-0018 (kontrak gateway), ADR-0014 (routing durabel), ADR-0007 (kelas persetujuan), ADR-0031 (keputusan ini mendarat setelah pemecahan engine)
 - **Supersedes:** —
 - **Terkait:** ADR-0023 (persetujuan relay), ADR-0025 (prefix prompt stabil), ADR-0027 (gateway adalah body), ADR-0028 (unit plugin)
-- **Implementasi:** draft — setiap call site di bawah ini masih mengirim lewat bodynya sendiri, `send_text` masih wajib, dan belum ada indeks tool per body. Baris bukti diganti saat pintunya mendarat.
+- **Implementasi:** implemented — satu pintu (`Agent.dispatch`); body mengekspos `dispatch` dan `GatewayCore` tidak mewajibkan anggota chat; receipt mendarat di `outbound_messages` dengan kunci `action.id`; `Address`/`Address.find` me-resolve target; indeks tool per body; body kedua yang mengklaim sebuah thread ditolak sebelum ada baris ditulis. Jalur turn tidak lagi mengutip pesan pemicu: kutipan adalah kerja khusus chat yang boleh ditambahkan body sendiri.
 - **Catatan lokasi:** keputusan engine (mendefinisikan bagaimana engine mengalamati body mana pun dan apa yang boleh ia minta), jadi ia duduk di bawah `adr/engine/`. Salinan Indonesia di `docs/v0.1.0/adr/engine/id/0032-address-and-command.md`.
 
 ---

@@ -220,6 +220,8 @@ Hard rules for changes in this repo.
 ## Verify
 
 - `pytest -q` (with `EIDESOL_TEST_DATABASE_URL` set to the throwaway Postgres+pgvector store),
-  `python -m eidesoul selftest`, `python scripts/adr.py --check`, `python scripts/adr.py
-  --translate-check`, and `python scripts/selfcheck.py --check`. For gateway/lease changes also smoke
-  `eidesoul console --takeover`.
+  `ruff check eidesoul scripts tests plugins migrations`, `python -P scripts/types.py --check`
+  (the pyright ratchet; `-P` keeps `scripts/` off `sys.path`), `python -m eidesoul selftest`,
+  `python scripts/adr.py --check`, `python scripts/adr.py --translate-check` (then `--stamp` after
+  editing an English ADR), and `python scripts/selfcheck.py --check` (which also enforces the
+  ADR-0031 size caps). For gateway/lease changes also smoke `eidesoul console --takeover`.

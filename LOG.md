@@ -1,5 +1,43 @@
 # LOG
 
+## 2026-11-03 — ADR-0031 and ADR-0032 implemented
+
+Both drafts are now code, on the same day they were accepted. Measured after the landing: the engine
+top level is **15 files** (from 41), **25 modules** sit in `turn/`, `character/`, `access/`, `jobs/`,
+`ablate.py` left for `scripts/ablate_engine.py`, and the three concentrated modules are
+`memory/store.py` 2,399 (from 2,785), `agent.py` 1,800 (from 2,215), `jobs/automation.py` 1,953
+(from 2,106). `scripts/selfcheck.py --check` now fails when any of those caps or the 800-line module
+ceiling is exceeded.
+
+**Toolchain** — `requires-python = ">=3.14"` (image, `config.yaml`, installer, both READMEs),
+`from __future__ import annotations` removed from 249 files and banned by a structure test, PEP 735
+`[dependency-groups] dev` replaces the `dev` extra, ruff gained `RUF`/`ASYNC`/`PT`/`FA` (per-file
+ignores record the pre-existing complexity debt instead of hiding it globally), and
+`scripts/types.py --check` gates pyright against a committed per-package baseline (163/11/15/7 errors
+today; the ratchet lowers, never raises).
+
+**One door** — `Agent.dispatch(subject, address, action, *, origin, reason)` is the only engine
+function that reaches a body: policy, approval row, ledger (`intent` → `sent`/`unknown`, keyed by
+`action.id`), then `body.dispatch(action)`. The turn, automation, privacy, relay, `/approve`, and the
+WhatsApp `send_to` tool all go through it; the three thread→body resolvers are one
+(`Agent.address_of`); `GatewayCore` no longer requires `send_text`/`render` (they moved to the
+optional `Chat` protocol), and the CLI, harness, WhatsApp, and a dispatch-only robot all pass
+`ensure_core`. Tools are indexed per body (`ToolIndex`), so two bodies may share a name, a qualified
+`<body>__<tool>` reaches another one, and the prompt lists the current body's tools plus one line
+naming the others.
+
+**Behaviour notes** — engine-chunked replies no longer quote the triggering message: quoting is
+chat-only work the ADR keeps out of the door, and a body may add it on its own. A send whose target
+has no route is refused (`no body owns thread '<id>'`) instead of falling back to the first body; an
+automation's `owner_dm` resolves the owner's DM thread and refuses when there is none. A second body
+claiming an existing thread raises `RouteConflict` before any row is written, with one log line.
+
+**Register and home** — `dispatch` and `receipt` join the §4.12 register; ADR-0000 §4.3 amends
+`Action` to `address/capability/payload/approval_class/id`; both headers carry `implemented` with the
+numbers above. ADR home: 33 files (`root=7`, `engine=26`), `implemented=31 partial=2 draft=0`, both
+gates clean (`--check`, `--translate-check`), and `adr.py --stamp` now rewrites the Indonesian copy's
+hash after an English edit.
+
 ## 2026-11-03 — Two draft ADRs: engine structure and one delivery door
 
 ADR-0031 and ADR-0032 are accepted as decisions and recorded as `draft`: no engine file has moved and

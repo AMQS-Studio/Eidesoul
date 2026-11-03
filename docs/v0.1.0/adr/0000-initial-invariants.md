@@ -5,6 +5,7 @@
 - **Deciders:** Muqsith (owner), omp (reviewer)
 - **Context:** three foundations were decided after the first ADR set was written: where new surfaces may live, where language data lives, and whether the core may assume chat. They belong together because each one constrains every later feature — including the robot, harness, and editing bodies the owner plans.
 - **Supersedes:** —
+- **Amendments:** 2026-11-03 — `Action` carries `id` (correlation id) and `address`, per ADR-0032 §4.1–4.3.
 - **Related:** ADR-0001 (memory), ADR-0007 (capability text and approval), ADR-0009 (ADR home and its gate), ADR-0015 (payload), ADR-0016 (schema owner), ADR-0018 (gateway contract), ADR-0020 (episode), ADR-0021 (tool output), ADR-0022 (`administrator` and `label`)
 - **Order:** foundational — implement before any new body gateway, before the dashboard, and before any string or lexicon move that depends on it.
 - **Implementation:** implemented — evidence: §4.2 lexicon packs + pronoun + catalog-only help, §4.3 `Percept`/`Action` + hint keys, §4.4 rename cutover, §4.5 `send`/`chat_history` in gateways, harness body, `tests/test_architecture.py`, §7 box 8 in `AGENTS.md` (`docs/`, `scripts/`, `tests/`, `panel/`, `apps/` outside the package)
@@ -86,8 +87,8 @@ The engine consumes a percept and emits actions; nothing in `engine/` tests for 
 ```
 Percept  = source (body name), thread (opaque id), actor (person_id),
            kind, payload, hints (body-declared facts), raw (transport event)
-Action   = capability (tool name), target (thread or address), payload,
-           approval_class (consent | authorization)
+Action   = address (Address: body + thread), capability (tool name), payload,
+           approval_class (consent | authorization), id (correlation id)
 ```
 
 - `hints` carry body semantics (`dm`, `mention`, `reply`, `group`, `presence`) as **facts from the

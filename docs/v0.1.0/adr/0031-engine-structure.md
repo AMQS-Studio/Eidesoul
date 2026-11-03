@@ -6,7 +6,7 @@
 - **Context:** follows ADR-0009 (the ADR home and its gate), ADR-0016 (schema and migration form), ADR-0027 (distribution and default-off capability), ADR-0028 (plugin unit)
 - **Supersedes:** —
 - **Related:** ADR-0000 (surface shape), ADR-0001 (one memory port), ADR-0032 (the delivery door lands after this split)
-- **Implementation:** draft — no engine file has moved and no toolchain key has changed. The measured inventory and the staged plan in §4 are the work; the evidence line is replaced when the first folder lands.
+- **Implementation:** implemented — top level 15 files; 25 modules in `turn/`, `character/`, `access/`, `jobs/`; `ablate.py` moved out; `agent.py` 1,800 lines, `automation.py` 1,953, `memory/store.py` 2,399; Python floor 3.14 everywhere; 0 `from __future__ import annotations`; `[dependency-groups] dev`; ruff `RUF/ASYNC/PT/FA`; the pyright baseline is committed (`scripts/types-baseline.json`).
 - **Location note:** cross-cutting (it governs every engine surface), so it sits at the root of the ADR home. The Indonesian copy is `docs/v0.1.0/adr/id/0031-engine-structure.md`.
 
 ---

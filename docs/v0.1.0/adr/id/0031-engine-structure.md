@@ -1,4 +1,4 @@
-> Terjemahan turunan — jangan sunting; sumber: 0031-engine-structure.md (sha256: 009268a58c6b)
+> Terjemahan turunan — jangan sunting; sumber: 0031-engine-structure.md (sha256: 128034e2ec89)
 > Ditulis tangan (bukan mesin), mengikuti sumber English baris demi baris.
 
 # ADR-0031: Struktur Engine — Tata Letak, Anggaran Pertumbuhan, dan Baseline Toolchain
@@ -9,7 +9,7 @@
 - **Konteks:** lanjutan ADR-0009 (rumah ADR dan gate-nya), ADR-0016 (bentuk skema dan migrasi), ADR-0027 (distribusi dan kapabilitas clean by default), ADR-0028 (unit plugin)
 - **Supersedes:** —
 - **Terkait:** ADR-0000 (bentuk permukaan), ADR-0001 (satu port memori), ADR-0032 (pintu pengiriman mendarat setelah pemecahan ini)
-- **Implementasi:** draft — belum ada berkas engine yang pindah dan belum ada kunci toolchain yang berubah. Inventaris terukur dan rencana bertahap di §4 adalah pekerjaannya; baris bukti diganti saat folder pertama mendarat.
+- **Implementasi:** implemented — level atas 15 berkas; 25 modul di `turn/`, `character/`, `access/`, `jobs/`; `ablate.py` pindah keluar; `agent.py` 1.800 baris, `automation.py` 1.953, `memory/store.py` 2.399; floor Python 3.14 di semua tempat; 0 `from __future__ import annotations`; `[dependency-groups] dev`; ruff `RUF/ASYNC/PT/FA`; baseline pyright di-commit (`scripts/types-baseline.json`).
 - **Catatan lokasi:** lintas-potong (mengatur setiap permukaan engine), jadi ia duduk di akar rumah ADR. Salinan Indonesia di `docs/v0.1.0/adr/id/0031-engine-structure.md`.
 
 ---
