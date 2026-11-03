@@ -30,6 +30,7 @@ from .inbound import (
     CONSENT,
     MESSAGE,
     Action,
+    Address,
     GatewayCore,
     Percept,
     StandbyError,
@@ -1233,10 +1234,11 @@ class Agent:
                         if label:
                             actions.append(
                                 Action(
+                                    address=Address(gateway.name, thread_id),
                                     capability="send_sticker",
-                                    target=thread_id,
                                     payload=label,
                                     approval_class=CONSENT,
+                                    id=f"turn:{turn_id}:sticker",
                                 )
                             )
                         self._finish(turn_id)

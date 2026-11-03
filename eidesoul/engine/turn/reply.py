@@ -19,6 +19,7 @@ from ..inbound import (
     AUTHORIZATION,
     CONSENT,
     Action,
+    Address,
     GatewayError,
     Percept,
     Rich,
@@ -383,12 +384,13 @@ class Delivery:
             sent_ids.append(provider)
             actions.append(
                 Action(
+                    address=Address(gateway.name, thread_id),
                     capability="send_text",
-                    target=thread_id,
                     payload=chunk,
                     approval_class=(
                         CONSENT if thread_id == inbound.thread else AUTHORIZATION
                     ),
+                    id=f"turn:{turn_id}:{index}",
                 )
             )
             if pace and index < len(chunks) - 1:

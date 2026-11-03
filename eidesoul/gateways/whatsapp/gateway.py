@@ -18,7 +18,7 @@ from neonize.utils.enum import ChatPresence, ChatPresenceMedia
 from neonize.utils.jid import build_jid
 
 from ...engine.config import Config, GatewaySettings, secure_db
-from ...engine.inbound import GatewayError, Percept
+from ...engine.inbound import Action, GatewayError, Percept
 from ...engine.registry import Handler, discover
 from ...engine.tools import FAMILIES
 from ...engine.turn.context import Message, human_size
@@ -263,6 +263,29 @@ class WhatsAppGateway:
             return f"@{digits}"
 
         return MENTION_NAME.sub(name, MENTION_TOKEN.sub(number, text)), mentions
+
+    async def dispatch(self, action: Action) -> str:
+        """Message Dispatcher: this body's verbs, one refusal for anything else."""
+        thread = action.address.thread
+        match action.capability:
+            case "send_text":
+                return await self.send_text(thread, str(action.payload or ""))
+            case "send_file":
+                payload = action.payload if isinstance(action.payload, dict) else {}
+                return await self.send_file(
+                    thread,
+                    Path(str(payload.get("path") or "")),
+                    str(payload.get("caption") or ""),
+                )
+            case "send_sticker":
+                return await self.send_sticker(thread, str(action.payload or "")) or ""
+            case "typing":
+                await self.typing(thread, bool(action.payload))
+                return ""
+            case _:
+                raise GatewayError(
+                    f"body '{self.name}' does not support '{action.capability}'"
+                )
 
     async def send_text(
         self, thread: str, text: str, *, reply: Percept | None = None

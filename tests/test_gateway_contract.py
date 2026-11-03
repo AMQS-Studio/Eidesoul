@@ -22,6 +22,7 @@ from support import (
 
 from eidesoul.engine.config import ConfigError, GatewaySettings
 from eidesoul.engine.inbound import (
+    Chat,
     Directory,
     GatewayCore,
     Rich,
@@ -79,7 +80,7 @@ def test_core_only_gateway_runs_a_full_text_turn(tmp_path) -> None:
     assert gateway.sent
     assert gateway.sent[0][1]
     assert [action.capability for action in actions] == ["send_text"]
-    assert actions[0].target == "chat"
+    assert actions[0].address.thread == "chat"
     assert actions[0].approval_class == "consent"
     assert not hasattr(gateway, "typing")
 
@@ -169,11 +170,8 @@ def test_a_body_without_core_fails_at_boot_naming_the_method() -> None:
         async def stop(self):
             return None
 
-        async def send_text(self, thread, text, *, reply=None):
+        async def dispatch(self, action):
             return "x"
-
-        def render(self, text):
-            return text
 
         def prompt_hints(self):
             return ""
@@ -209,11 +207,8 @@ def test_build_gateways_logs_capabilities_and_refuses_a_broken_body(
         async def stop(self):
             return None
 
-        async def send_text(self, thread, text, *, reply=None):
+        async def dispatch(self, action):
             return "x"
-
-        def render(self, text):
-            return text
 
         def prompt_hints(self):
             return ""
@@ -232,7 +227,7 @@ def test_build_gateways_logs_capabilities_and_refuses_a_broken_body(
     assert [item.name for item in found] == ["boot"]
     assert any("gateway_capabilities" in record.getMessage() for record in caplog.records)
     report = capability_report(found)
-    assert report["boot"] == {"rich": True, "directory": True}
+    assert report["boot"] == {"chat": True, "rich": True, "directory": True}
 
     monkeypatch.setattr(gateway_package, "load_gateway", lambda name: Incomplete)
     with pytest.raises(ConfigError, match="self_handles"):
@@ -248,9 +243,9 @@ def test_capability_report_marks_the_optional_surfaces() -> None:
         ]
     )
     assert report == {
-        "core": {"rich": False, "directory": False},
-        "rich": {"rich": True, "directory": False},
-        "directory": {"rich": False, "directory": True},
+        "core": {"chat": True, "rich": False, "directory": False},
+        "rich": {"chat": True, "rich": True, "directory": False},
+        "directory": {"chat": True, "rich": False, "directory": True},
     }
 
 
@@ -280,6 +275,7 @@ def test_core_imports_without_neonize() -> None:
 
 def test_core_gateway_meets_only_core() -> None:
     assert isinstance(FakeGateway(), GatewayCore)
+    assert isinstance(FakeGateway(), Chat)
     assert not isinstance(FakeGateway(), Rich)
     assert not isinstance(FakeGateway(), Directory)
 

@@ -10,6 +10,7 @@ import pytest
 from eidesoul.engine.inbound import (
     CORE_MEMBERS,
     Action,
+    Address,
     CoreDefaults,
     Directory,
     GatewayCore,
@@ -148,9 +149,14 @@ def test_percept_is_exactly_the_seam() -> None:
     fields = [item.name for item in Percept.__dataclass_fields__.values()]
     assert fields == ["source", "thread", "actor", "kind", "payload", "hints", "raw"]
     action = [item.name for item in Action.__dataclass_fields__.values()]
-    assert action == ["capability", "target", "payload", "approval_class"]
+    assert action == ["address", "capability", "payload", "approval_class", "id"]
     with pytest.raises(ValueError, match="approval_class must be one of"):
-        Action(capability="send_text", target="t", payload="p", approval_class="magic")
+        Action(
+            address=Address("fake", "t"),
+            capability="send_text",
+            payload="p",
+            approval_class="magic",
+        )
 
 
 def test_the_three_protocols_accept_the_right_fakes() -> None:
@@ -186,7 +192,7 @@ def test_core_defaults_labels_a_thread_by_its_id() -> None:
         pass
 
     assert Bare().chat_name("thread-1") == "thread-1"
-    assert set(CORE_MEMBERS) >= {"name", "send_text", "tools", "commands", "run", "stop"}
+    assert set(CORE_MEMBERS) >= {"name", "dispatch", "tools", "commands", "run", "stop"}
 
 
 def test_no_blocking_db_block_inside_an_async_def() -> None:

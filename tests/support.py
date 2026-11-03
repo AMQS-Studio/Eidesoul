@@ -22,7 +22,7 @@ from eidesoul.engine.config import (
     StyleConfig,
 )
 from eidesoul.engine.db import Database
-from eidesoul.engine.inbound import CoreDefaults
+from eidesoul.engine.inbound import CoreDefaults, GatewayError
 from eidesoul.engine.memory import MemoryContext, MemoryHit
 from eidesoul.engine.soul import Soul, SoulStyle
 
@@ -199,6 +199,7 @@ class FakeGateway(CoreDefaults):
         self.name = name
         self.backlog_seconds = backlog_seconds
         self.sent: list[tuple[str, str, object]] = []
+        self.dispatched: list[object] = []
         self._tools = list(tools)
         self._commands = list(commands)
 
@@ -213,6 +214,17 @@ class FakeGateway(CoreDefaults):
 
     async def stop(self):
         return None
+
+    async def dispatch(self, action) -> str:
+        """Message Dispatcher: the fake body records what the door asked for."""
+        self.dispatched.append(action)
+        match action.capability:
+            case "send_text":
+                return await self.send_text(action.address.thread, str(action.payload or ""))
+            case _:
+                raise GatewayError(
+                    f"body '{self.name}' does not support '{action.capability}'"
+                )
 
     async def send_text(self, thread: str, text: str, *, reply=None) -> str:
         self.sent.append((thread, text, reply))
@@ -254,6 +266,32 @@ class RichFakeGateway(FakeGateway):
 
     async def prepare_media(self, thread: str, message) -> None:
         self.media.append((thread, message.id))
+
+    async def dispatch(self, action) -> str:
+        """Message Dispatcher: files, stickers, and presence in addition to text."""
+        thread = action.address.thread
+        match action.capability:
+            case "send_text":
+                return await super().dispatch(action)
+            case "send_file":
+                payload = action.payload if isinstance(action.payload, dict) else {}
+                self.dispatched.append(action)
+                return await self.send_file(
+                    thread,
+                    Path(str(payload.get("path") or "")),
+                    str(payload.get("caption") or ""),
+                )
+            case "send_sticker":
+                self.dispatched.append(action)
+                return await self.send_sticker(thread, str(action.payload or "")) or ""
+            case "typing":
+                self.dispatched.append(action)
+                await self.typing(thread, bool(action.payload))
+                return ""
+            case _:
+                raise GatewayError(
+                    f"body '{self.name}' does not support '{action.capability}'"
+                )
 
 
 class DirectoryFakeGateway(FakeGateway):

@@ -8,7 +8,7 @@ import sys
 import time
 from datetime import datetime
 
-from ...engine.inbound import MESSAGE, CoreDefaults, Percept
+from ...engine.inbound import MESSAGE, Action, CoreDefaults, GatewayError, Percept
 from ...engine.registry import Handler
 from ...engine.turn.context import Message
 from .config import CliSettings
@@ -87,6 +87,16 @@ class CliGateway(CoreDefaults):
 
     async def stop(self) -> None:
         self.stopped = True
+
+    async def dispatch(self, action: Action) -> str:
+        """Message Dispatcher: this body's own verbs, one refusal for anything else."""
+        match action.capability:
+            case "send_text":
+                return await self.send_text(action.address.thread, str(action.payload or ""))
+            case _:
+                raise GatewayError(
+                    f"body '{self.name}' does not support '{action.capability}'"
+                )
 
     async def send_text(self, thread: str, text: str, *, reply: Percept | None = None) -> str:
         self.counter += 1
