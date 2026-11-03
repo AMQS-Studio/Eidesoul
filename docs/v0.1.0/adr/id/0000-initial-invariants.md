@@ -1,4 +1,4 @@
-> Terjemahan turunan — jangan sunting; sumber: 0000-initial-invariants.md (sha256: b6103d2b628d)
+> Terjemahan turunan — jangan sunting; sumber: 0000-initial-invariants.md (sha256: 04fdf95a6aff)
 > Ditulis tangan (bukan mesin), mengikuti sumber English baris demi baris.
 
 # ADR-0000: Invarian Awal — Bentuk Permukaan, Data Bahasa, Seam Netral Embodiment
@@ -10,7 +10,7 @@
 - **Supersedes:** —
 - **Terkait:** ADR-0001 (memori), ADR-0007 (teks kapabilitas & approval), ADR-0009 (rumah ADR & penjaganya), ADR-0015 (payload), ADR-0016 (pemilik skema), ADR-0018 (kontrak gateway), ADR-0020 (episode), ADR-0021 (keluaran tool), ADR-0022 (`administrator` dan `label`)
 - **Order:** foundational — dijalankan sebelum body gateway baru mana pun, sebelum dashboard, dan sebelum pemindahan string/lexicon yang bergantung padanya.
-- **Implementasi:** partial — ada: §4.2 pack lexicon + pronoun + help hanya katalog, §4.3 `Percept`/`Action` + hint, §4.4 cutover rename, §4.5 `send`/`chat_history` di gateway, body harness, `tests/test_architecture.py`; sisa: §7 kotak 8 (wording AGENTS untuk `panel/`/`apps/`, menyusul di ADR-0027)
+- **Implementasi:** implemented — bukti: §4.2 pack lexicon + pronoun + help hanya katalog, §4.3 `Percept`/`Action` + hint, §4.4 cutover rename, §4.5 `send`/`chat_history` di gateway, body harness, `tests/test_architecture.py`, §7 kotak 8 di `AGENTS.md` (`docs/`, `scripts/`, `tests/`, `panel/`, `apps/` di luar paket)
 - **Catatan lokasi:** ini dokumen fondasi lintas-potong, jadi ia duduk di akar rumah ADR (`docs/v0.1.0/adr/`);
   salinan Indonesia di `docs/v0.1.0/adr/id/0001-initial-invariants.md`. ADR engine hidup di
   `docs/v0.1.0/adr/engine/`, ADR web/panel di `docs/v0.1.0/adr/web/`.

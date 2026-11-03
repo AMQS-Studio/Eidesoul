@@ -7,7 +7,7 @@
 - **Supersedes:** —
 - **Related:** ADR-0001 (memory), ADR-0007 (capability text and approval), ADR-0009 (ADR home and its gate), ADR-0015 (payload), ADR-0016 (schema owner), ADR-0018 (gateway contract), ADR-0020 (episode), ADR-0021 (tool output), ADR-0022 (`administrator` and `label`)
 - **Order:** foundational — implement before any new body gateway, before the dashboard, and before any string or lexicon move that depends on it.
-- **Implementation:** partial — present: §4.2 lexicon packs + pronoun + catalog-only help, §4.3 `Percept`/`Action` + hint keys, §4.4 rename cutover, §4.5 `send`/`chat_history` in gateways, harness body, `tests/test_architecture.py`; remaining: §7 box 8 (AGENTS wording for `panel/`/`apps/`, which lands with ADR-0027)
+- **Implementation:** implemented — evidence: §4.2 lexicon packs + pronoun + catalog-only help, §4.3 `Percept`/`Action` + hint keys, §4.4 rename cutover, §4.5 `send`/`chat_history` in gateways, harness body, `tests/test_architecture.py`, §7 box 8 in `AGENTS.md` (`docs/`, `scripts/`, `tests/`, `panel/`, `apps/` outside the package)
 - **Location note:** this is the cross-cutting foundations document, so it sits at the root of the ADR home
   (`docs/v0.1.0/adr/`); the Indonesian copy is `docs/v0.1.0/adr/id/0001-initial-invariants.md`. Engine ADRs
   live under `docs/v0.1.0/adr/engine/`, web/panel ADRs under `docs/v0.1.0/adr/web/`.

@@ -22,8 +22,8 @@ Hard rules for changes in this repo.
   (cross-cutting), under `engine/`, or under `web/`; each folder keeps its Indonesian copies in its own
   `id/` subfolder. Do not create other tracked `.md` files. The ADR gate is
   `python scripts/adr.py --check`.
-- Allowed root trees are `docs/`, `scripts/`, `tests/`, `migrations/`, `plugins/`, and `panel/`
-  (the operator app). Schema changes live only in `migrations/`; the engine may hold
+- Allowed root trees are `docs/`, `scripts/`, `tests/`, `migrations/`, `plugins/`, `panel/`
+  (the operator app), and `apps/` (any future application that imports the engine). Schema changes live only in `migrations/`; the engine may hold
   `components.py` (plugin loader) and `self_knowledge.py` (capability index) beside its other modules.
 - Core lives in `eidesoul/engine/` and must not import `eidesoul.gateways` or `neonize`.
   Root `eidesoul/` only holds `__main__.py`, `admin/`, `gateways/`, `library/`, `lang/`, `providers/`,

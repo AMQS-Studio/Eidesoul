@@ -1,10 +1,10 @@
-> Terjemahan turunan — jangan sunting; sumber: engine/0016-schema-migration.md (sha256: 361f2c5e14e2)
+> Terjemahan turunan — jangan sunting; sumber: engine/0016-schema-migration.md (sha256: e10f087d0ff6)
 > Teks ini ditulis manusia; baris yang tidak bisa diterjemahkan mesin disalin apa adanya ke sumber English, jadi sumber bercampur dua bahasa.
 
 # ADR-0016: Skema Kanonik & Migrasi — Satu DDL, Satu Baseline Alembic
 
 - **Status:** accepted
-- **Implementasi:** partial — ada: `migrations/` (baseline Alembic + `env.py`), `Database.upgrade` di bawah `pg_advisory_lock`, cek primary-only, konfigurasi `database.migrations`; sisa: revisi 2-9 (memori, fencing lease, turns, automation) dan set FK/CHECK/index P0-3
+- **Implementasi:** partial — ada: satu rantai Alembic (revisi 1-10: baseline, fencing lease, turns, spine memori, cognition/episodes/skills, relay, approval class, `llm_calls`, search, automation), baseline + `upgrade` primary-only; sisa: set FK/CHECK/index P0-3 §4.5 (FK `thread_people`/`person_links`/`skill_files`/`google_identity`/`thread_eras`, CHECK `visibility`, `message_media`)
 - **Tanggal:** 2026-11-03
 - **Deciders:** Muqsith (owner), omp (reviewer)
 - **Konteks:** audit 2026-11-03 menemukan DDL `memories` di ADR-0001 basi (tanpa kolom `state`, `level not null default 2`, `confirmed default true`), constraint ADR-0004 menabrak `state='superseded'` dari ADR-0008, dan tidak ada pemilik migrasi untuk kolom yang lahir di ADR-0005/0008/0010/0012/0013/0014.

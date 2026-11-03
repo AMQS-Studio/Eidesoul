@@ -1,4 +1,4 @@
-> Terjemahan turunan — jangan sunting; sumber: 0030-install-and-init.md (sha256: 56b6ba8a963a)
+> Terjemahan turunan — jangan sunting; sumber: 0030-install-and-init.md (sha256: 250efa224e71)
 > Ditulis tangan (bukan mesin), mengikuti sumber English baris demi baris.
 
 # ADR-0030: Install On-Machine dan Init Interaktif — Wizard Kita Sendiri, Satu Installer, Dua Stack
@@ -9,7 +9,7 @@
 - **Konteks:** lanjutan ADR-0027 (distribusi & konfigurasi web-first), ADR-0007 (kelas approval), ADR-0016 (migrasi), ADR-0022 (role `administrator` yang dilindungi), ADR-0029 (store tes)
 - **Supersedes:** —
 - **Terkait:** ADR-0009 (rumah dokumen), ADR-0015 (manifest kapabilitas), ADR-0019 (observability), ADR-0028 (plugin)
-- **Implementasi:** partial — ada: `install.sh` (tanpa sudo, digest uv dipin, `--dry-run`, log, signal, dua stack), `eidesoul init` interaktif/fail-closed dengan review/receipt dan `--non-interactive`, `tests/test_init.py`, `tests/test_install.py`; sisa: cabang panel di layar akhir menunggu `panel/` (ADR-0027); `--label`/`--stack` perlu amandemen ADR
+- **Implementasi:** partial — ada: `install.sh` (tanpa sudo, digest uv dipin, `--dry-run`, log, signal, dua stack), `eidesoul init` interaktif/fail-closed dengan review/receipt, `--label`/`--stack`/`--voice-layer`, `tests/test_init.py`, `tests/test_install.py`; sisa: cabang panel di layar akhir menunggu `panel/` (ADR-0027)
 - **Catatan lokasi:** ADR ini mengikat semua permukaan (ia menentukan bagaimana sebuah host lahir), jadi ia duduk di akar rumah ADR. Salinan Indonesia di `docs/v0.1.0/adr/id/0030-install-and-init.md`.
 - **Amandemen:** 2026-11-03 — versi pertama. 2026-11-03 — wizard menanyakan lapisan suara sekali (jawaban default tetap nyala) dan membawa `--voice-layer on|off` untuk paritas headless (ADR-0027 §4.3). 2026-11-03 — `--label` (alamat administrator) dan `--stack native|compose` masuk tabel flag: aturan §6 "langkah tanpa padanan flag = 0" menuntutnya.
 
