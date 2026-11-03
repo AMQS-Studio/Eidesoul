@@ -14,7 +14,7 @@ from eidesoul.admin.templates import ROLES
 from eidesoul.engine import components
 from eidesoul.engine.config import ComponentsConfig, PluginSettings
 from eidesoul.engine.roles import Role
-from eidesoul.engine.schema import google_identity
+from eidesoul.engine.schema import google_identity, people
 from eidesoul.engine.tools import REGISTRY as CORE_TOOLS
 from eidesoul.engine.tools import ToolContext
 from plugins.google.google_workspace.service import (
@@ -77,8 +77,11 @@ def test_login_requires_a_direct_message(tmp_path) -> None:
 
 
 def test_device_login_polls_until_verified(tmp_path, monkeypatch) -> None:
+    db = database()
+    with db.connect() as conn:
+        db.upsert(conn, people, [{"person_id": "p1", "name": ""}], ["person_id"])
     svc = GoogleWorkspace(
-        database(),
+        db,
         env={"GOOGLE_OAUTH_CLIENT_ID": "cid", "GOOGLE_OAUTH_CLIENT_SECRET": "sec"},
     )
 
@@ -391,6 +394,7 @@ def test_tool_routes_actions_with_a_linked_identity(tmp_path, monkeypatch, googl
 def test_identity_row_is_read_by_person(tmp_path) -> None:
     db = database()
     with db.connect() as conn:
+        db.upsert(conn, people, [{"person_id": "p1", "name": ""}], ["person_id"])
         db.upsert(
             conn,
             google_identity,

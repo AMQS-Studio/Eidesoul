@@ -75,7 +75,9 @@ messages = Table(
         ),
     ),
     UniqueConstraint("thread_id", "msg_id", name="uq_messages_thread_msg"),
+    CheckConstraint("visibility >= 0 AND visibility <= 4", name="ck_messages_visibility"),
 )
+Index("ix_messages_ts", messages.c.ts)
 Index("ix_messages_thread_ts", messages.c.thread_id, messages.c.ts, messages.c.id)
 Index("ix_messages_sender", messages.c.sender_address)
 Index("ix_messages_text_tsv", messages.c.text_tsv, postgresql_using="gin")
@@ -151,6 +153,14 @@ approvals = Table(
     ),
 )
 Index("ix_approvals_status", approvals.c.status, approvals.c.created_at)
+Index(
+    "ix_approvals_thread_sender_status_expires",
+    approvals.c.thread_id,
+    approvals.c.sender,
+    approvals.c.status,
+    approvals.c.expires_at,
+)
+Index("ix_approvals_status_expires", approvals.c.status, approvals.c.expires_at)
 
 # ADR-0019 / ADR-0016 §4.6: ids and numbers only, never prompt text; no FK so metrics never
 # block entity deletion, and a failure before a turn still leaves a row.
@@ -363,7 +373,12 @@ thread_eras = Table(
     "thread_eras",
     metadata,
     Column("id", BigInteger, primary_key=True, autoincrement=True),
-    Column("thread_id", String(120), nullable=False),
+    Column(
+        "thread_id",
+        String(120),
+        ForeignKey("threads.thread_id", ondelete="CASCADE", name="fk_thread_eras_thread"),
+        nullable=False,
+    ),
     Column("started_at", Float, nullable=False),
     Column("ended_at", Float, nullable=False),
     Column("summary", Text, nullable=False, default=""),
@@ -386,7 +401,12 @@ thread_people = Table(
     "thread_people",
     metadata,
     Column("thread_id", String(120), nullable=False),
-    Column("person_id", String(80), nullable=False),
+    Column(
+        "person_id",
+        String(80),
+        ForeignKey("people.person_id", ondelete="CASCADE", name="fk_thread_people_person"),
+        nullable=False,
+    ),
     Column("last_seen", Float, nullable=False, default=0.0),
     Column("interactions", Integer, nullable=False, default=0),
     PrimaryKeyConstraint("thread_id", "person_id", name="pk_thread_people"),
@@ -397,7 +417,12 @@ person_links = Table(
     metadata,
     Column("gateway", String(40), primary_key=True),
     Column("address", String(160), primary_key=True),
-    Column("person_id", String(80), nullable=False),
+    Column(
+        "person_id",
+        String(80),
+        ForeignKey("people.person_id", ondelete="CASCADE", name="fk_person_links_person"),
+        nullable=False,
+    ),
     Column("created_at", Float, nullable=False),
     Column("seen_at", Float, nullable=False, default=0.0),
     Column("linked_by", String(120), nullable=False, default=""),
@@ -446,7 +471,7 @@ skill_revisions = Table(
     Column(
         "skill",
         String(80),
-        ForeignKey("skills.name", ondelete="CASCADE"),
+        ForeignKey("skills.name", ondelete="CASCADE", name="fk_skill_revisions_skill"),
         nullable=False,
     ),
     Column("revision", Integer, nullable=False),
@@ -461,7 +486,12 @@ Index("ix_skill_revisions_skill", skill_revisions.c.skill, skill_revisions.c.rev
 skill_files = Table(
     "skill_files",
     metadata,
-    Column("skill", String(80), nullable=False),
+    Column(
+        "skill",
+        String(80),
+        ForeignKey("skills.name", ondelete="CASCADE", name="fk_skill_files_skill"),
+        nullable=False,
+    ),
     Column("path", String(300), nullable=False),
     Column("content", LargeBinary, nullable=False),
     Column("updated_at", Float, nullable=False),
@@ -863,7 +893,12 @@ outbound_messages = Table(
 google_identity = Table(
     "google_identity",
     metadata,
-    Column("person_id", String(160), primary_key=True),
+    Column(
+        "person_id",
+        String(160),
+        ForeignKey("people.person_id", ondelete="CASCADE", name="fk_google_identity_person"),
+        primary_key=True,
+    ),
     Column("email", String(320), nullable=False),
     Column("subject", String(128), nullable=False, default=""),
     Column("linked_at", Float, nullable=False),

@@ -5,6 +5,7 @@ from __future__ import annotations
 from datetime import datetime
 
 import pytest
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy import text as sql_text
 from support import database
 
@@ -165,13 +166,18 @@ def test_unknown_author_values_fall_back_to_unknown(tmp_path) -> None:
     store = HistoryStore(database())
     store.add("chat", message("a", "x"))
     with store.db.connect() as conn:
-        conn.execute(messages.update().values(author="weird", visibility=9))
+        conn.execute(messages.update().values(author="weird"))
 
     item = store.find("chat", "a")
 
     assert item is not None
     assert item.author == "unknown"
-    assert item.visibility == 4
+    assert item.visibility == 2
+
+    # ADR-0016 §4.5: the database rejects a visibility outside 0-4.
+    with pytest.raises(IntegrityError):
+        with store.db.connect() as conn:
+            conn.execute(messages.update().values(visibility=9))
 
 
 def test_mark_deleted_keeps_the_archived_text(tmp_path) -> None:

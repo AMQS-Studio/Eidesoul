@@ -1,7 +1,7 @@
 # ADR-0016: Canonical Schema & Migration Scheme, One DDL, One Alembic Baseline
 
 - **Status:** accepted
-- **Implementation:** partial — present: one Alembic chain (revisions 1-10: baseline, lease fencing, turns, memory spine, cognition/episodes/skills, relay, approval class, `llm_calls`, search, automation), baseline + primary-only `upgrade`; remaining: the §4.5 P0-3 FK/CHECK/index set (`thread_people`/`person_links`/`skill_files`/`google_identity`/`thread_eras` FKs, `visibility` CHECK, `message_media`)
+- **Implementation:** partial — present: one Alembic chain (revisions 1-11: baseline, lease fencing, turns, memory spine, cognition/episodes/skills, relay, approval class, `llm_calls`, search, automation, P0-3 FK/CHECK/index set), baseline + primary-only `upgrade`, the `threads` parent upsert on ingest and the write-side `visibility` clamp; remaining: the `message_media` split (media bytes still in `messages.media_ref`/`quote_media_ref`)
 - **Date:** 2026-11-03
 - **Deciders:** Muqsith (owner), omp (reviewer)
 - **Context:** the 2026-11-03 audit found the `memories` DDL in ADR-0001 stale (no `state` column, `level not null default 2`, `confirmed default true`), the ADR-0004 constraint clashing with `state='superseded'` from ADR-0008, and no migration owner for the columns born in ADR-0005/0008/0010/0012/0013/0014.

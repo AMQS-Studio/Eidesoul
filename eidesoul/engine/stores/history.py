@@ -131,7 +131,7 @@ class HistoryStore:
             "text": message.text or "",
             "outgoing": bool(message.outgoing),
             "author": message.author,
-            "visibility": message.visibility,
+            "visibility": clamp_visibility(message.visibility),
             "deleted": bool(message.deleted),
             "deleted_by": message.deleted_by or "",
             "deleted_admin": bool(message.deleted_admin),
@@ -198,6 +198,13 @@ class HistoryStore:
     def _upsert_messages(self, conn, rows: list[dict]) -> int:
         if not rows:
             return 0
+        # FK parent (ADR-0016 §4.5): every message's thread exists before its children land.
+        for thread_id in dict.fromkeys(str(row["thread_id"]) for row in rows):
+            conn.execute(
+                pg_insert(threads)
+                .values(thread_id=thread_id, name="", reset_ts=0.0)
+                .on_conflict_do_nothing(index_elements=["thread_id"])
+            )
         self.db.upsert(
             conn,
             messages,

@@ -35,6 +35,12 @@ def build(tmp_path):
     with gateway.db.connect() as conn:
         gateway.db.upsert(
             conn,
+            people,
+            [{"person_id": TO, "name": "A"}, {"person_id": FROM, "name": "Budi"}],
+            ["person_id"],
+        )
+        gateway.db.upsert(
+            conn,
             person_links,
             [
                 {"gateway": "whatsapp", "address": TARGET, "person_id": TO, "created_at": 1.0},
@@ -42,7 +48,6 @@ def build(tmp_path):
             ],
             ["gateway", "address"],
         )
-        gateway.db.upsert(conn, people, [{"person_id": FROM, "name": "Budi"}], ["person_id"])
     administrator = role("administrator", tools=("*",), commands=("*",), memory_admin=True)
     env = make_agent(
         tmp_path,

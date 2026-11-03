@@ -15,12 +15,13 @@ import threading
 import time
 
 from sqlalchemy import func, insert, select, update
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from ...vendor import emotion_engine as engine
 from .. import guard
 from ..config import AffectConfig
 from ..db import Database
-from ..schema import drives, people, state, thread_eras, thread_people, topics
+from ..schema import drives, people, state, thread_eras, thread_people, threads, topics
 
 log = logging.getLogger(__name__)
 
@@ -445,6 +446,11 @@ class AffectStore:
 
     def _touch_chat_person(self, conn, thread_id: str, person_id: str, moment: float) -> None:
         """Chat membership: who actually talks here, not globally."""
+        conn.execute(
+            pg_insert(people)
+            .values(person_id=person_id, name="")
+            .on_conflict_do_nothing(index_elements=["person_id"])
+        )
         self.db.upsert(
             conn,
             thread_people,
@@ -737,6 +743,11 @@ class AffectStore:
         clean_keywords = [str(item).strip() for item in keywords if str(item).strip()][:10]
         clean_pending = [str(item).strip() for item in unresolved if str(item).strip()][:5]
         with self._lock, self.db.connect() as conn:
+            conn.execute(
+                pg_insert(threads)
+                .values(thread_id=thread_id, name="", reset_ts=0.0)
+                .on_conflict_do_nothing(index_elements=["thread_id"])
+            )
             conn.execute(
                 insert(thread_eras).values(
                     thread_id=thread_id,
@@ -1163,28 +1174,34 @@ class AffectStore:
                 bucket["threads"][thread_id] = (max(seen, stamp), count + 1)
         with self._lock, self.db.connect() as conn:
             for person_id, bucket in grouped.items():
-                self._seed_chat_rows(conn, person_id, bucket["threads"])
-                if conn.execute(
-                    select(people.c.person_id).where(people.c.person_id == person_id)
-                ).first() is not None:
-                    continue
-                count = int(bucket["count"])
-                name = max(bucket["names"], key=bucket["names"].get) if bucket["names"] else ""
-                conn.execute(
-                    insert(people).values(
-                        person_id=person_id,
-                        name=name,
-                        role="member",
-                        stage=stage_for(count, 0.1, 0.0),
-                        trust=0.1,
-                        affection=0.0,
-                        respect=0.5,
-                        familiarity=min(1.0, count / 200.0),
-                        interactions=count,
-                        last_seen=bucket["last"],
-                        notes=[],
+                if (
+                    conn.execute(
+                        select(people.c.person_id).where(people.c.person_id == person_id)
+                    ).first()
+                    is None
+                ):
+                    count = int(bucket["count"])
+                    name = (
+                        max(bucket["names"], key=bucket["names"].get)
+                        if bucket["names"]
+                        else ""
                     )
-                )
+                    conn.execute(
+                        insert(people).values(
+                            person_id=person_id,
+                            name=name,
+                            role="member",
+                            stage=stage_for(count, 0.1, 0.0),
+                            trust=0.1,
+                            affection=0.0,
+                            respect=0.5,
+                            familiarity=min(1.0, count / 200.0),
+                            interactions=count,
+                            last_seen=bucket["last"],
+                            notes=[],
+                        )
+                    )
+                self._seed_chat_rows(conn, person_id, bucket["threads"])
             self._set_flag(conn, SEEDED_KEY)
         return len(grouped)
 
@@ -1242,6 +1259,11 @@ class AffectStore:
             threads[thread_id] = (max(seen, stamp), count + 1)
         with self._lock, self.db.connect() as conn:
             for person_id, threads in grouped.items():
+                conn.execute(
+                    pg_insert(people)
+                    .values(person_id=person_id, name="")
+                    .on_conflict_do_nothing(index_elements=["person_id"])
+                )
                 self._seed_chat_rows(conn, person_id, threads)
             self._set_flag(conn, THREAD_PEOPLE_SEEDED_KEY)
         return sum(len(threads) for threads in grouped.values())
