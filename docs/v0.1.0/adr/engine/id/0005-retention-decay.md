@@ -1,4 +1,4 @@
-> Terjemahan turunan — jangan sunting; sumber: engine/0005-retention-decay.md (sha256: c4d4d21baa2c)
+> Terjemahan turunan — jangan sunting; sumber: engine/0005-retention-decay.md (sha256: 6127172c81db)
 > Teks ini ditulis manusia; baris yang tidak bisa diterjemahkan mesin disalin apa adanya ke sumber English, jadi sumber bercampur dua bahasa.
 
 # ADR-0005: Retention & Decay — Hybrid TTL, Renewal Saat Dipakai, dan Pin Otomatis
@@ -261,7 +261,7 @@ memory:
 - `eidesoul/engine/memory/mem0.py:496-531` — `set_privacy`, `veto`.
 - `eidesoul/engine/memory/context.py:48-108` — retrieval dan render (titik sentuh “used”).
 - `eidesoul/engine/memory/rekey.py` — contoh migrasi metadata yang harus menghormati retention.
-- `eidesoul/engine/privacy.py:222-278` — capture dan level.
+- `eidesoul/engine/access/privacy.py:222-278` — capture dan level.
 - `eidesoul/engine/config.py:118-138` — `PrivacyConfig`, `MemoryConfig`.
 - `eidesoul/engine/db.py:112-145` — `upsert` untuk batch purge.
 

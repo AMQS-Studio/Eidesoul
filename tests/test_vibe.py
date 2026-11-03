@@ -9,8 +9,8 @@ from pathlib import Path
 import pytest
 from support import build_config, database, role
 
+from eidesoul.engine.access.roles import Role
 from eidesoul.engine.config import Config, VibeConfig
-from eidesoul.engine.roles import Role
 from eidesoul.engine.stores.vibe import (
     PrototypeSource,
     VibeRunner,

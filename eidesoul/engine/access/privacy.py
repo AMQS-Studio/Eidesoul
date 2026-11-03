@@ -13,11 +13,11 @@ import re
 from collections.abc import Sequence
 from dataclasses import dataclass
 
-from .character import lexicon
-from .config import PrivacyConfig
-from .i18n import t
-from .memory import MemoryHit
-from .memory.privacy import AuditResult, PrivacyPolicy, clamp_level
+from ..character import lexicon
+from ..config import PrivacyConfig
+from ..i18n import t
+from ..memory import MemoryHit
+from ..memory.privacy import AuditResult, PrivacyPolicy, clamp_level
 
 log = logging.getLogger(__name__)
 

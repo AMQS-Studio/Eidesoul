@@ -8,6 +8,7 @@ from types import SimpleNamespace
 
 from support import FakeLLM, FakeMem0, build_config, database, inbound_message, make_agent
 
+from eidesoul.engine.access.roles import Role
 from eidesoul.engine.cognition import CognitionWorker
 from eidesoul.engine.config import DatabaseConfig, PrivacyConfig
 from eidesoul.engine.memory import MemoryHit
@@ -15,7 +16,6 @@ from eidesoul.engine.memory.assess import assess_budget
 from eidesoul.engine.memory.mem0 import Mem0Backend
 from eidesoul.engine.memory.privacy import PrivacyPolicy
 from eidesoul.engine.memory.store import MemoryStore
-from eidesoul.engine.roles import Role
 from eidesoul.engine.stores.history import HistoryStore
 from eidesoul.engine.turn.context import Message
 

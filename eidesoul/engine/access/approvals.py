@@ -7,10 +7,10 @@ from dataclasses import dataclass, field
 
 from sqlalchemy import select, update
 
-from . import io
-from .config import ApprovalConfig
-from .db import Database
-from .schema import approvals
+from .. import io
+from ..config import ApprovalConfig
+from ..db import Database
+from ..schema import approvals
 
 
 @dataclass(frozen=True)

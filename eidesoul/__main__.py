@@ -54,6 +54,7 @@ def _role(config: Config):
 
 async def build_runtime(config_path: str | None, *, console: bool = False):
     """Required bootstrap: host -> DB -> documents -> config -> stores -> gateways -> agent."""
+    from .engine.access.roles import RoleError
     from .engine.agent import Agent
     from .engine.ambient import Ambient
     from .engine.config import load_host, resolve_database_url
@@ -63,7 +64,6 @@ async def build_runtime(config_path: str | None, *, console: bool = False):
     from .engine.mcp import Hub
     from .engine.memory import build_memory
     from .engine.memory.ledger import ActionLedger
-    from .engine.roles import RoleError
     from .engine.stores.affect import AffectStore
     from .engine.stores.currents import CurrentsStore
     from .engine.stores.documents import DocumentStore
@@ -283,6 +283,7 @@ async def backfill(config_path: str | None) -> int:
 async def selftest(config: Config) -> int:
     """Exercise stores, tools, and the LLM against the configured Postgres store."""
 
+    from .engine.access.permissions import commands_for, tool_patterns, tools_for
     from .engine.commands import REGISTRY as COMMANDS
     from .engine.db import Database
     from .engine.i18n import t
@@ -290,7 +291,6 @@ async def selftest(config: Config) -> int:
     from .engine.mcp import Hub
     from .engine.memory import MemoryHit, build_memory, memory_status
     from .engine.memory.ledger import ActionLedger
-    from .engine.permissions import commands_for, tool_patterns, tools_for
     from .engine.stores.affect import AffectStore
     from .engine.stores.documents import DocumentStore
     from .engine.stores.history import HistoryStore
@@ -606,7 +606,7 @@ def _config_export(args: argparse.Namespace) -> int:
 
 def _config_import(args: argparse.Namespace) -> int:
     from .admin.roles import migrate
-    from .engine.roles import RoleError
+    from .engine.access.roles import RoleError
 
     docs, db = _doc_store(args)
     try:

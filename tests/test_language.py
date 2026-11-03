@@ -17,8 +17,8 @@ import yaml
 from support import build_config, inbound_message, make_agent, make_runtime
 
 from eidesoul.engine import guard, i18n
+from eidesoul.engine.access.roles import Role
 from eidesoul.engine.character import lexicon
-from eidesoul.engine.roles import Role
 from eidesoul.engine.soul import Soul, load_soul, normalize_language
 from eidesoul.engine.turn import salience
 from eidesoul.engine.turn.prompts import character_block, system_prompt
@@ -34,7 +34,7 @@ WORD_LISTS = ("negations", "stopwords", "assistant_tells", "injection")
 ALLOWED_LITERALS = {
     "turn/context.py": {"ini"},
     "stores/style.py": {"aja", "deh", "kan", "kok", "loh", "sih"},
-    "target.py": {"deh"},
+    "access/target.py": {"deh"},
 }
 
 

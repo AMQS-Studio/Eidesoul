@@ -16,14 +16,13 @@ from support import build_config, database, inbound_message, make_agent
 
 from eidesoul.admin import templates
 from eidesoul.admin.roles import migrate
-from eidesoul.engine.commands import REGISTRY as COMMANDS
-from eidesoul.engine.permissions import (
+from eidesoul.engine.access.permissions import (
     command_allowed,
     command_patterns,
     tool_patterns,
     tools_for,
 )
-from eidesoul.engine.roles import (
+from eidesoul.engine.access.roles import (
     LABEL_MAX,
     PROTECTED,
     Role,
@@ -31,6 +30,7 @@ from eidesoul.engine.roles import (
     assert_protected_roles,
     load_roles,
 )
+from eidesoul.engine.commands import REGISTRY as COMMANDS
 from eidesoul.engine.schema import approvals, config_changes
 from eidesoul.engine.stores.documents import DocumentStore
 from eidesoul.engine.tools import REGISTRY as TOOLS
@@ -250,8 +250,8 @@ def test_no_owner_role_literal_in_the_role_surfaces() -> None:
     surfaces = (
         ROOT / "roles.yaml",
         ROOT / "eidesoul" / "admin" / "templates.py",
-        ROOT / "eidesoul" / "engine" / "roles.py",
-        ROOT / "eidesoul" / "engine" / "permissions.py",
+        ROOT / "eidesoul" / "engine" / "access" / "roles.py",
+        ROOT / "eidesoul" / "engine" / "access" / "permissions.py",
         ROOT / "eidesoul" / "engine" / "commands" / "whoami.py",
         ROOT / "eidesoul" / "engine" / "commands" / "approve.py",
     )

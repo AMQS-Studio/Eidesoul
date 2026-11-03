@@ -7,7 +7,7 @@
 - **Context:** paying off the ADR-0008 §4.9C debt (`disputed` was deferred to here) and closing the last slot in the ADR-0001 §14 queue
 - **Supersedes:** —
 - **Related:** ADR-0003 (worker & queue), ADR-0004 (state `staged`), ADR-0005 (TTL/renewal), ADR-0006 (group privacy), ADR-0007 (permission classes), ADR-0008 (integrity), ADR-0013 (turn lifecycle), ADR-0014 (automation), ADR-0015 (payload), ADR-0019 (`llm_calls`), ADR-0020 (derivative procedure)
-- **Amendments:** 2026-11-03 — audit: the reference path for `capture_turn` was corrected to `eidesoul/engine/privacy.py:222-303` (`memory/privacy.py` is 71 lines, only `show`/`disclose`). 2026-11-03 — the `staged` promotion threshold is stated as a row count (≥2 `ok` rows), distinguished from the day threshold `corroboration_days` (ADR-0008); the `state` list points to ADR-0004 §5.1 / the ADR-0016 enum. 2026-11-03 — audit: `refs`/`derive_depth`/`dispute_state` in §10 Code references are labeled as a proposal (not yet in the repo).
+- **Amendments:** 2026-11-03 — audit: the reference path for `capture_turn` was corrected to `eidesoul/engine/access/privacy.py:222-303` (`memory/privacy.py` is 71 lines, only `show`/`disclose`). 2026-11-03 — the `staged` promotion threshold is stated as a row count (≥2 `ok` rows), distinguished from the day threshold `corroboration_days` (ADR-0008); the `state` list points to ADR-0004 §5.1 / the ADR-0016 enum. 2026-11-03 — audit: `refs`/`derive_depth`/`dispute_state` in §10 Code references are labeled as a proposal (not yet in the repo).
 - **Location note:** ADR lives in `docs/v0.1.0/adr/engine/`; the Indonesian copy is `docs/v0.1.0/adr/engine/id/0010-reflection-disputed.md`.
 
 ---
@@ -355,7 +355,7 @@ sends a message" and the write shape `scope=chat, kind=note, source=ambient:<thr
 `idle_minutes`, `research_per_day`).
 - `eidesoul/engine/memory/mem0.py:340-392` — metadata path; `refs`, `derive_depth`, `dispute_state`
 **proposal** (not yet in the repo; the column in ADR-0016 §4.2). `:323-338` — proven supersede (exists).
-- `eidesoul/engine/privacy.py:222-303` — `capture_turn` (the entry path for the subject's answer);
+- `eidesoul/engine/access/privacy.py:222-303` — `capture_turn` (the entry path for the subject's answer);
 `eidesoul/engine/memory/privacy.py:52-71` — `show`/`disclose`.
 - `eidesoul/engine/memory/context.py:91-133` — `render`/`build` (where the dispute marker is rendered too).
 - `eidesoul/engine/commands/memori.py:15-23` — the `?` marker for unconfirmed rows (a display

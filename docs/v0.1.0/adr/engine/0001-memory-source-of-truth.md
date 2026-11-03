@@ -186,7 +186,7 @@ index, ADR-0009). The long list is no longer maintained in this section.
 - `eidesoul/engine/memory/mem0.py:496-531` — `set_privacy`, `veto`.
 - `eidesoul/engine/memory/rekey.py:15-62` — `RESERVED`, `_move`.
 - `eidesoul/engine/memory/context.py:127-131` — retrieval filter.
-- `eidesoul/engine/privacy.py:222-303` — capture and assess.
+- `eidesoul/engine/access/privacy.py:222-303` — capture and assess.
 - `eidesoul/engine/agent.py:614,906-921` — gate `can_memory` and spawn capture.
 - `eidesoul/engine/stores/affect.py` — a state-document pattern that can be copied for `memory_events`.
 

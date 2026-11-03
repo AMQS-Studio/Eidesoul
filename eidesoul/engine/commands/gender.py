@@ -1,9 +1,9 @@
 """Command /gender: manual target gender for toxicity rules and adult memes."""
 
 
+from ..access.target import parse_gender
 from ..i18n import t
 from ..registry import Handler
-from ..target import parse_gender
 from . import CommandContext
 
 

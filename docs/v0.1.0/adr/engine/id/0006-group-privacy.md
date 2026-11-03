@@ -1,4 +1,4 @@
-> Terjemahan turunan — jangan sunting; sumber: engine/0006-group-privacy.md (sha256: 03224bddd6cb)
+> Terjemahan turunan — jangan sunting; sumber: engine/0006-group-privacy.md (sha256: bb5444cdea67)
 > Teks ini ditulis manusia; baris yang tidak bisa diterjemahkan mesin disalin apa adanya ke sumber English, jadi sumber bercampur dua bahasa.
 
 # ADR-0006: Privasi Grup & Pre-Filter — Ceiling Sebelum Prompt, Capture Diri-Sendiri
@@ -36,17 +36,17 @@ Akibatnya L3/L4 bisa masuk prompt **grup**, dan `MemoryContext.hits` (yang dipak
 disclosure) memuat baris yang seharusnya tidak pernah terlihat di grup.
 
 **Capture grup tidak dibatasi “tentang diri sendiri”.** `capture_turn`
-(`eidesoul/engine/privacy.py:225-277`) menyimpan `[teks pengguna, balasan soul]` dengan
+(`eidesoul/engine/access/privacy.py:225-277`) menyimpan `[teks pengguna, balasan soul]` dengan
 `owner = person_id`, `subject = assess.subject atau owner`, `audience = "group"` — tanpa aturan bahwa
 di grup hanya fakta yang **pembicara nyatakan tentang dirinya** yang boleh disimpan.
 
 **Pertanyaan konfirmasi bocor di grup.** Jalur `verdict.ask` mengirim pertanyaan ke
-`inbound.thread` (`eidesoul/engine/privacy.py:267-277`), dan jalur disclosure melakukan hal yang
+`inbound.thread` (`eidesoul/engine/access/privacy.py:267-277`), dan jalur disclosure melakukan hal yang
 sama (`:150-172`). Di grup, pertanyaan itu mengungkap adanya fakta yang sedang dilindungi.
 
 **Yang sudah baik dan dipertahankan:**
 
-- Hard exclusion kredensial sebelum disimpan (`eidesoul/engine/privacy.py:225`,
+- Hard exclusion kredensial sebelum disimpan (`eidesoul/engine/access/privacy.py:225`,
   `eidesoul/engine/memory/mem0.py:354-356`).
 - Person memory ber-`audience="group"` tidak pernah dibawa ke chat lain
   (`eidesoul/engine/memory/mem0.py:425-433`).
@@ -196,7 +196,7 @@ memory:
 - `eidesoul/engine/memory/privacy.py:52-71` — `show`, `disclose`.
 - `eidesoul/engine/memory/context.py:40-86,88-133` — `gather`, `render`, `build`.
 - `eidesoul/engine/memory/mem0.py:340-380,425-433,536-557` — `capture`, pengecualian lintas-chat, `context()`.
-- `eidesoul/engine/privacy.py:133-140,141-172,222-281,282-309` — `_risky`, `review`, `capture_turn`, `_assess`.
+- `eidesoul/engine/access/privacy.py:133-140,141-172,222-281,282-309` — `_risky`, `review`, `capture_turn`, `_assess`.
 - `eidesoul/engine/agent.py:619-628,900-918` — pemanggil konteks dan spawn capture.
 - `eidesoul/engine/tools/memory.py:104-119,145-146` — pemakaian policy di tool.
 - `eidesoul/engine/commands/memori.py:58,76,104` — pemakaian policy di command.

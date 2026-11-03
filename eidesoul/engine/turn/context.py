@@ -10,8 +10,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from ..access.permissions import normalize
 from ..character import lexicon
-from ..permissions import normalize
 
 if TYPE_CHECKING:
     from ..config import Config

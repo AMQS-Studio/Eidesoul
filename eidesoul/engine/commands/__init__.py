@@ -5,8 +5,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from ..access.roles import Role
 from ..registry import Handler, Registry, discover
-from ..roles import Role
 
 
 @dataclass(frozen=True)

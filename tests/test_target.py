@@ -3,8 +3,8 @@
 
 from support import build_config, database
 
+from eidesoul.engine.access.target import combine, parse_gender, score_style
 from eidesoul.engine.stores.affect import AffectStore
-from eidesoul.engine.target import combine, parse_gender, score_style
 
 
 def test_style_marker_requires_hits_and_margin() -> None:

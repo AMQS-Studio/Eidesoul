@@ -1,4 +1,4 @@
-> Terjemahan turunan — jangan sunting; sumber: engine/0014-automation.md (sha256: 939d5fd5cdc2)
+> Terjemahan turunan — jangan sunting; sumber: engine/0014-automation.md (sha256: f026b929a0de)
 > Teks ini ditulis manusia; baris yang tidak bisa diterjemahkan mesin disalin apa adanya ke sumber English, jadi sumber bercampur dua bahasa.
 
 # ADR-0014: Automation — Event → Aksi, Wewenang Pemilik, dan Sandbox sebagai Langkah
@@ -509,7 +509,7 @@ automations:
 
 - `eidesoul/engine/tools/sandbox.py:33-80` — flag isolasi kontainer, env disaring, output dipotong.
 - `eidesoul/engine/tools/__init__.py:180-235` — satu pintu `execute` + pemeriksaan permission.
-- `eidesoul/engine/approvals.py` + `eidesoul/engine/commands/approve.py` — approval dan pemeriksaan ulang wewenang.
+- `eidesoul/engine/access/approvals.py` + `eidesoul/engine/commands/approve.py` — approval dan pemeriksaan ulang wewenang.
 - `eidesoul/engine/stores/recipes.py` — `run_recipe` sebagai langkah `recipe`.
 - `eidesoul/engine/ambient.py:1-4,103-160` — batas otonomi yang ada (tidak pernah menyapa lebih dulu).
 - `eidesoul/engine/memory/mem0.py:308-392` — metadata penulisan memori (`source`, `owner_id`, `subject_id`).

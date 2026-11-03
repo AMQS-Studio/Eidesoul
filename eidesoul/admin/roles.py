@@ -15,9 +15,7 @@ from pathlib import Path
 import yaml
 from sqlalchemy import select, update
 
-from ..engine.config import Paths
-from ..engine.db import Database
-from ..engine.roles import (
+from ..engine.access.roles import (
     LEGACY,
     MIGRATE,
     PROTECTED,
@@ -25,6 +23,8 @@ from ..engine.roles import (
     assert_protected_roles,
     parse_role,
 )
+from ..engine.config import Paths
+from ..engine.db import Database
 from ..engine.schema import approvals, config_changes
 from ..engine.stores.documents import DocumentStore
 

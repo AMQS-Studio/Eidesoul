@@ -11,9 +11,9 @@ import yaml
 from support import build_config
 
 from eidesoul.engine import plugins
+from eidesoul.engine.access.roles import Role
 from eidesoul.engine.config import PluginSettings
 from eidesoul.engine.registry import Registry
-from eidesoul.engine.roles import Role
 from eidesoul.engine.tools import REGISTRY as CORE_TOOLS
 from eidesoul.engine.tools import ToolContext, execute
 

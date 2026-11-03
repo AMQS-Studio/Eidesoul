@@ -308,7 +308,7 @@ memory:
 - `eidesoul/engine/guard/patterns.py:11-35,16-26` — `SENSITIVE`, `safe_text`, `INJECTION`.
 - `eidesoul/engine/guard/sandbox.py:139-192` — deterministic patterns + a small classifier.
 - `eidesoul/engine/agent.py:906-918` — the capture gate (injection, length, `can_memory`).
-- `eidesoul/engine/privacy.py:225-277,295-310` — the capture turn and `_assess`.
+- `eidesoul/engine/access/privacy.py:225-277,295-310` — the capture turn and `_assess`.
 - `eidesoul/engine/memory/mem0.py:308-392,323-338,527-530` — metadata, supersede, veto.
 - `eidesoul/engine/memory/context.py:91-133` — `render` (where id/kind are added) and `build`.
 - `eidesoul/engine/tools/memory.py:69-105,175-183,230-234` — `add`, `kind`, `supersedes`, `veto`.

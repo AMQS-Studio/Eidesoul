@@ -11,8 +11,8 @@ from support import build_config, database
 
 from eidesoul.admin.templates import ROLES
 from eidesoul.engine import plugins
+from eidesoul.engine.access.roles import Role
 from eidesoul.engine.config import PluginConfig, PluginSettings
-from eidesoul.engine.roles import Role
 from eidesoul.engine.schema import google_identity, people
 from eidesoul.engine.tools import REGISTRY as CORE_TOOLS
 from eidesoul.engine.tools import ToolContext

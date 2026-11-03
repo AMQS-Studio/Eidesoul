@@ -4,7 +4,7 @@
 import pytest
 from support import database
 
-from eidesoul.engine.identity import (
+from eidesoul.engine.access.identity import (
     CODE_ATTEMPTS,
     CODE_TTL,
     ID_PATTERN,

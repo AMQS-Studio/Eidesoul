@@ -34,10 +34,10 @@ from sqlalchemy import func, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from . import io
+from .access.relay import RelayStore
 from .config import AutomationConfig, parse_quiet_hours
 from .db import Database
 from .i18n import t
-from .relay import RelayStore
 from .schema import (
     AUTOMATION_STATES,
     AUTOMATION_STEP_KINDS,

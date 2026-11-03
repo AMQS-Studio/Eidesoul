@@ -246,7 +246,7 @@ The agreed default: **quick consolidation every 60 seconds, deep reflection ever
 ## 12. Code references
 
 - `eidesoul/engine/agent.py:917-921` — `spawn()` capture without retry.
-- `eidesoul/engine/privacy.py:141-214` — `review` (auditor) as the current gate.
+- `eidesoul/engine/access/privacy.py:141-214` — `review` (auditor) as the current gate.
 - `eidesoul/engine/guard/policy.py:200-213` — deterministic policy that stays inline.
 - `eidesoul/engine/tools/__init__.py:182-240` — the single tool execution door.
 - `eidesoul/engine/supervisor.py:36-129` — primary/standby lifecycle, the parent of worker C.

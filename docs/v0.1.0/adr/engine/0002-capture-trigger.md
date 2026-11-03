@@ -193,7 +193,7 @@ These numbers are an initial proposal; they are for tuning, not dogma.
 ## 11. Code references
 
 - `eidesoul/engine/agent.py:614,906-921` — gate `can_memory` and spawn capture.
-- `eidesoul/engine/privacy.py:222-303` — `capture_turn` and `_assess`.
+- `eidesoul/engine/access/privacy.py:222-303` — `capture_turn` and `_assess`.
 - `eidesoul/engine/memory/mem0.py:360-380` — `capture` guard.
 - `eidesoul/engine/memory/context.py:48-76` — `gather` and the retrieval scope.
 - `eidesoul/engine/embed.py:16-66` — the reused MiniLM 384-d.

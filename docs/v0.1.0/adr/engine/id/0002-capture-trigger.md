@@ -1,4 +1,4 @@
-> Terjemahan turunan — jangan sunting; sumber: engine/0002-capture-trigger.md (sha256: eaca7e5d6ab2)
+> Terjemahan turunan — jangan sunting; sumber: engine/0002-capture-trigger.md (sha256: 2652f49ae996)
 > Teks ini ditulis manusia; baris yang tidak bisa diterjemahkan mesin disalin apa adanya ke sumber English, jadi sumber bercampur dua bahasa.
 
 # ADR-0002: Pemicu Capture — Gate Deterministik, Cek Kebaruan, Assess Batch
@@ -196,7 +196,7 @@ Angka ini usulan awal; dipakai untuk tuning, bukan dogma.
 ## 11. Referensi kode
 
 - `eidesoul/engine/agent.py:614,906-921` — gate `can_memory` dan spawn capture.
-- `eidesoul/engine/privacy.py:222-303` — `capture_turn` dan `_assess`.
+- `eidesoul/engine/access/privacy.py:222-303` — `capture_turn` dan `_assess`.
 - `eidesoul/engine/memory/mem0.py:360-380` — guard `capture`.
 - `eidesoul/engine/memory/context.py:48-76` — `gather` dan retrieval scope.
 - `eidesoul/engine/embed.py:16-66` — MiniLM 384-d yang dipakai ulang.

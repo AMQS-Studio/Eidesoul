@@ -8,8 +8,8 @@ import yaml
 from support import build_config, database
 
 from eidesoul.admin import people as admin_people
+from eidesoul.engine.access.identity import IdentityStore, is_person_id
 from eidesoul.engine.config import DatabaseConfig
-from eidesoul.engine.identity import IdentityStore, is_person_id
 from eidesoul.engine.memory.rekey import rekey_memory
 from eidesoul.engine.memory.store import MemoryStore
 from eidesoul.engine.schema import people, state, thread_people

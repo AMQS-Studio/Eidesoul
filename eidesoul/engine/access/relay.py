@@ -17,9 +17,9 @@ from dataclasses import dataclass
 
 from sqlalchemy import select, update
 
-from .db import Database
-from .i18n import t
-from .schema import relay_grants
+from ..db import Database
+from ..i18n import t
+from ..schema import relay_grants
 
 MODES = ("full", "summary", "anonymous", "none")
 DEFAULT_EXPIRES_DAYS = 30.0

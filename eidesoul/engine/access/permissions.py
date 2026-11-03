@@ -1,7 +1,7 @@
 """Discord-style permissions: roles from numbers, glob patterns, permissions per role."""
 
 
-from .registry import Handler, Registry, allows
+from ..registry import Handler, Registry, allows
 
 __all__ = [
     "allows",

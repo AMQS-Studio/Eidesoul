@@ -512,8 +512,8 @@ def test_a_body_without_rich_or_directory_is_counted(tmp_path) -> None:
 
 
 def test_status_shows_the_gateway_capability_counters(tmp_path) -> None:
+    from eidesoul.engine.access.roles import Role
     from eidesoul.engine.commands.status import COMMAND as STATUS
-    from eidesoul.engine.roles import Role
 
     admin = Role("administrator", tools=("*",), commands=("*",), memory_admin=True)
     env = make_agent(tmp_path, roles={"administrator": admin}, default_role="administrator")

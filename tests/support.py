@@ -9,6 +9,7 @@ import uuid
 from dataclasses import replace
 from pathlib import Path
 
+from eidesoul.engine.access.roles import Role, RoleRegistry
 from eidesoul.engine.config import (
     AffectConfig,
     ApprovalConfig,
@@ -23,7 +24,6 @@ from eidesoul.engine.config import (
 from eidesoul.engine.db import Database
 from eidesoul.engine.inbound import CoreDefaults
 from eidesoul.engine.memory import MemoryContext, MemoryHit
-from eidesoul.engine.roles import Role, RoleRegistry
 from eidesoul.engine.soul import Soul, SoulStyle
 
 EMBED_DIM = 384
@@ -431,8 +431,8 @@ def make_agent(
     """Build a full Agent on the test store with the rich directory fake."""
     from types import SimpleNamespace
 
+    from eidesoul.engine.access.approvals import ApprovalStore
     from eidesoul.engine.agent import Agent
-    from eidesoul.engine.approvals import ApprovalStore
     from eidesoul.engine.memory.ledger import ActionLedger
     from eidesoul.engine.stores.affect import AffectStore
     from eidesoul.engine.stores.history import HistoryStore
@@ -557,8 +557,8 @@ def make_runtime(
     """Bootstrap like `eidesoul run` but without a real gateway/LLM."""
     from types import SimpleNamespace
 
+    from eidesoul.engine.access.approvals import ApprovalStore
     from eidesoul.engine.agent import Agent
-    from eidesoul.engine.approvals import ApprovalStore
     from eidesoul.engine.config import load_config, load_host
     from eidesoul.engine.memory.ledger import ActionLedger
     from eidesoul.engine.stores.documents import DocumentStore

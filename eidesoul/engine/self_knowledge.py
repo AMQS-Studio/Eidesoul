@@ -19,8 +19,8 @@ import re
 from dataclasses import fields, is_dataclass
 from pathlib import Path
 
+from .access.permissions import command_patterns, tool_patterns
 from .config import Config, resolve_database_url
-from .permissions import command_patterns, tool_patterns
 from .registry import Handler, allows
 from .schema import metadata
 

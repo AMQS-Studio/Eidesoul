@@ -1,4 +1,4 @@
-> Terjemahan turunan — jangan sunting; sumber: engine/0018-gateway-contract.md (sha256: d8ec25a0d1ae)
+> Terjemahan turunan — jangan sunting; sumber: engine/0018-gateway-contract.md (sha256: b296b5a70595)
 > Teks ini ditulis manusia; baris yang tidak bisa diterjemahkan mesin disalin apa adanya ke sumber English, jadi sumber bercampur dua bahasa.
 
 # ADR-0018: Kontrak Gateway — Core, Rich, Directory
@@ -130,7 +130,7 @@ Tidak ada kunci konfigurasi baru dalam ADR ini. Kapabilitas gateway adalah sifat
 - `eidesoul/engine/agent.py:763,977` — `prompt_hints` di payload.
 - `eidesoul/gateways/cli/gateway.py:88-140` — stub enam belas method (bukti biaya kontrak gemuk).
 - `eidesoul/gateways/whatsapp/gateway.py:348-356` — `send_reaction` yang mengirim sticker.
-- `eidesoul/engine/permissions.py:48` — `command_allowed` (gerbang command, tidak berubah).
+- `eidesoul/engine/access/permissions.py:48` — `command_allowed` (gerbang command, tidak berubah).
 
 ---
 

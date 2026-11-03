@@ -12,7 +12,7 @@ from dataclasses import dataclass, field
 
 import yaml
 
-from .registry import allows
+from ..registry import allows
 
 NAME = re.compile(r"^[a-z][a-z0-9_-]{0,31}$")
 

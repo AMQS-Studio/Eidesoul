@@ -16,8 +16,8 @@ from typing import Protocol
 import yaml
 
 from ..providers import resolve
+from .access.roles import RoleError, RoleRegistry, load_roles
 from .character import lexicon
-from .roles import RoleError, RoleRegistry, load_roles
 from .soul import Soul, load_soul
 
 log = logging.getLogger(__name__)

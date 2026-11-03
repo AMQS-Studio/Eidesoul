@@ -7,8 +7,8 @@ import re
 import yaml
 from sqlalchemy import select
 
+from ..engine.access.identity import IdentityStore, is_person_id
 from ..engine.db import Database
-from ..engine.identity import IdentityStore, is_person_id
 from ..engine.memory import build_memory
 from ..engine.memory.rekey import rekey_memory
 from ..engine.schema import google_device, google_identity, people, thread_people

@@ -18,6 +18,7 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+from eidesoul.engine.access.roles import RoleRegistry
 from eidesoul.engine.config import (
     ApprovalConfig,
     Config,
@@ -27,7 +28,6 @@ from eidesoul.engine.config import (
     SandboxConfig,
     SelfKnowledgeConfig,
 )
-from eidesoul.engine.roles import RoleRegistry
 from eidesoul.engine.self_knowledge import SelfKnowledge, check
 from eidesoul.engine.soul import Soul
 

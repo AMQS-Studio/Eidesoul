@@ -10,6 +10,8 @@ import pytest
 from sqlalchemy import select
 from support import inbound_message, make_agent
 
+from eidesoul.engine.access.relay import RelayStore
+from eidesoul.engine.access.roles import Role
 from eidesoul.engine.automation import (
     AutomationStore,
     AutomationWorker,
@@ -18,8 +20,6 @@ from eidesoul.engine.automation import (
     next_after,
     occurrence_key,
 )
-from eidesoul.engine.relay import RelayStore
-from eidesoul.engine.roles import Role
 from eidesoul.engine.schema import automation_runs, automations, outbound_messages
 
 OWNER = "628111"

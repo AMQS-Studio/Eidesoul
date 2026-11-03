@@ -1,4 +1,4 @@
-> Terjemahan turunan — jangan sunting; sumber: engine/0015-capability-manifest.md (sha256: 5f35d161d950)
+> Terjemahan turunan — jangan sunting; sumber: engine/0015-capability-manifest.md (sha256: 69b4ac0bdfae)
 > Teks ini ditulis manusia; baris yang tidak bisa diterjemahkan mesin disalin apa adanya ke sumber English, jadi sumber bercampur dua bahasa.
 
 # ADR-0015: Payload Bertingkat & Manifest Kapabilitas
@@ -463,7 +463,7 @@ engine:
 - `eidesoul/engine/turn/salience.py:38-60` — `JOIN`, `block_score`, `select` (tempat blok pinned dilewatkan).
 - `eidesoul/engine/llm.py:150-260` — loop tool: `tools`/`by_name`, `kwargs["tools"]`, `execute`, budget, guard “repeated call”.
 - `eidesoul/engine/tools/__init__.py:180-235` — `execute` (satu gerbang izin) dan pesan error yang sudah menyebut nama tool.
-- `eidesoul/engine/permissions.py:56` + `eidesoul/engine/commands/help.py` — `commands_for` (sumber daftar command).
+- `eidesoul/engine/access/permissions.py:56` + `eidesoul/engine/commands/help.py` — `commands_for` (sumber daftar command).
 - `eidesoul/engine/registry.py` — `Handler` (`name`, `description`, `usage`, `parameters`) sebagai sumber detail `info`.
 - `eidesoul/engine/turn/context.py:641-683` + `FOOTER` (`:55-58`) — format user content yang tidak berubah.
 - `eidesoul/engine/agent.py:279-283,759-788` — `_specs(roles)` dan perakitan `system_prompt`.

@@ -4,8 +4,8 @@
 import re
 import time
 
+from ..access.identity import mask_address
 from ..i18n import t
-from ..identity import mask_address
 from ..registry import Handler
 from ..runtime import human_duration
 from . import CommandContext

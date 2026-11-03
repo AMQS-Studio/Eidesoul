@@ -6,10 +6,10 @@ from pathlib import Path
 
 import pytest
 
+from eidesoul.engine.access.permissions import commands_for, tool_patterns, tools_for
+from eidesoul.engine.access.roles import Role
 from eidesoul.engine.commands import REGISTRY as COMMANDS
-from eidesoul.engine.permissions import commands_for, tool_patterns, tools_for
 from eidesoul.engine.registry import RegistryError, discover
-from eidesoul.engine.roles import Role
 from eidesoul.engine.tools import FAMILIES
 from eidesoul.engine.tools import REGISTRY as TOOLS
 

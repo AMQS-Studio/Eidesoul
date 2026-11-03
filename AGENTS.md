@@ -168,7 +168,7 @@ Hard rules for changes in this repo.
   is who it is about and only that subject may veto it. Level maths, veto precedence, and disclosure
   verdicts live in `eidesoul/engine/memory/privacy.py` (deterministic, no LLM). The LLM only labels a
   provisional level, phrases the confirmation question, and identifies which entries a draft
-  mentions; `eidesoul/engine/privacy.py` is the only agent-facing hook.
+  mentions; `eidesoul/engine/access/privacy.py` is the only agent-facing hook.
 - Disclosure policy: L0-L2 stay fluid everywhere; L3 in a group and L4 ask for confirmation through
   `approvals`; vetoed entries are never shown and never disclosed. The auditor pass runs only when a
   risky entry exists.

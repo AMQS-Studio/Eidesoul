@@ -13,7 +13,11 @@ from dataclasses import asdict, replace
 from pathlib import Path
 
 from . import guard, io, plugins
-from .approvals import ApprovalStore
+from .access.approvals import ApprovalStore
+from .access.identity import IdentityStore, display_target
+from .access.permissions import command_allowed, commands_for, tool_patterns, tools_for
+from .access.privacy import PrivacyService
+from .access.roles import Role
 from .character.character import effective_limits, polish, regulate
 from .character.knowledge import select_facts
 from .character.patterns import load_lexicon, room_register, select_patterns
@@ -22,7 +26,6 @@ from .commands import CommandContext
 from .config import Config
 from .guard import SafetyPolicy, SandboxGuard, build_safety
 from .i18n import reload_catalogs, t
-from .identity import IdentityStore, display_target
 from .inbound import (
     CONSENT,
     MESSAGE,
@@ -34,10 +37,7 @@ from .inbound import (
 from .llm import LLM, DeadlineExceeded
 from .memory import MemoryBackend, MemoryContext, intent, memory_status
 from .memory.ledger import OutboundLedger
-from .permissions import command_allowed, commands_for, tool_patterns, tools_for
-from .privacy import PrivacyService
 from .registry import Handler, Registry
-from .roles import Role
 from .runtime import ACTIVE_GENERATION as runtime_generation
 from .runtime import RuntimeFacts
 from .stores.turns import SIDE_EFFECTING, TurnStore, args_hash

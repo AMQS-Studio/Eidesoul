@@ -3,9 +3,9 @@
 
 from datetime import date
 
+from ..access.roles import Role
 from ..character import lexicon
 from ..config import Config
-from ..roles import Role
 from ..runtime import RuntimeFacts
 from ..soul import language_line
 from . import salience

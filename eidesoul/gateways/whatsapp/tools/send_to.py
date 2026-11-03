@@ -5,9 +5,9 @@ import logging
 import re
 from datetime import datetime
 
+from ....engine.access.relay import RelayStore
 from ....engine.inbound import Directory, directory_refusal
 from ....engine.registry import Handler
-from ....engine.relay import RelayStore
 from ....engine.tools import ToolContext, _resolve, cross_refusal
 from .. import directory
 

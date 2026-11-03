@@ -381,7 +381,7 @@ engine:
 - `eidesoul/engine/turn/salience.py:38-60` `JOIN`, `block_score`, `select` (where pinned blocks are passed through).
 - `eidesoul/engine/llm.py:150-260` the tool loop `execute`: `tools`/`by_name`, `kwargs["tools"]`, budget, repeated-call guard.
 - `eidesoul/engine/tools/__init__.py:180-235` `execute` (the one permission gate) and the error message that already names the tool.
-- `eidesoul/engine/permissions.py:56` + `eidesoul/engine/commands/help.py` `commands_for` (the command-list source).
+- `eidesoul/engine/access/permissions.py:56` + `eidesoul/engine/commands/help.py` `commands_for` (the command-list source).
 - `eidesoul/engine/registry.py` `Handler` (`name`, `description`, `usage`, `parameters`) as the `info` detail source.
 - `eidesoul/engine/turn/context.py:641-683` + `FOOTER` (`:55-58`) — the immutable user-content format.
 - `eidesoul/engine/agent.py:279-283,759-788` `_specs(roles)` and the `system_prompt` assembly.

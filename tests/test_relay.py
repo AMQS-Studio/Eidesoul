@@ -14,7 +14,7 @@ from sqlalchemy.exc import IntegrityError
 from support import inbound_message, make_agent, role
 from test_whatsapp_gateway import FakeClient, make_gateway
 
-from eidesoul.engine.relay import MODES, RelayRefused, RelayStore
+from eidesoul.engine.access.relay import MODES, RelayRefused, RelayStore
 from eidesoul.engine.schema import people, person_links, relay_grants
 from eidesoul.engine.tools import execute
 from eidesoul.gateways.whatsapp import directory

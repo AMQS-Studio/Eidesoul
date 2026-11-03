@@ -8,8 +8,8 @@ state. Every timestamp comes from `message.when` so the replay is deterministic.
 import dataclasses
 from dataclasses import dataclass
 
+from .access.roles import Role
 from .config import Config
-from .roles import Role
 from .turn import salience
 from .turn.context import AUTHOR_BOT, AUTHOR_MANUAL, Message, prompt_entry
 from .turn.decision import decide

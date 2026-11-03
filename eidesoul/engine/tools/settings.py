@@ -10,11 +10,11 @@ from pathlib import Path
 
 import yaml
 
+from ..access.roles import NAME as ROLE_NAME
 from ..config import ConfigError, load_config
 from ..db import redact_dsn
 from ..guard import ActionRequest, scope_proof
 from ..registry import Handler
-from ..roles import NAME as ROLE_NAME
 from ..schema import config_changes
 from . import ToolContext, workspace_roots
 

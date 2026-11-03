@@ -12,10 +12,10 @@ from statistics import median
 from sqlalchemy import text
 
 from .. import db as database
+from ..access.roles import PROTECTED
 from ..character.lexicon import warnings as lexicon_warnings
 from ..i18n import t
 from ..registry import Handler
-from ..roles import PROTECTED
 from ..runtime import human_duration
 from . import CommandContext
 

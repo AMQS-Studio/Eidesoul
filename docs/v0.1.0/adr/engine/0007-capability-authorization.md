@@ -436,7 +436,7 @@ role. The implementation follows in `chat_history`/`send` with one shared helper
 - `eidesoul/engine/commands/approve.py:20-80` — chat/sender/TTL binding and the re-run through `execute`.
 - `eidesoul/engine/guard/policy.py:105-215` — `sensitive_tools`, destructive actions, shell scans.
 - `eidesoul/engine/memory/mem0.py:476-530` — `forget`, `set_privacy`, `veto`.
-- `eidesoul/engine/roles.py:18-28,100-116` — `Role` (no room flag; membership is computed when used).
+- `eidesoul/engine/access/roles.py:18-28,100-116` — `Role` (no room flag; membership is computed when used).
 - `eidesoul/gateways/whatsapp/tools/chat_history.py` — reading another room + the `cross_reads` buffer for the leak guard.
 - `eidesoul/engine/tools/settings.py:294-413` — approval for internal changes.
 - `eidesoul/engine/stores/documents.py:137` — `export_to_files` (config document mirror).

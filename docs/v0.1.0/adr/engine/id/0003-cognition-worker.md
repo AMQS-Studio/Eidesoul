@@ -1,4 +1,4 @@
-> Terjemahan turunan — jangan sunting; sumber: engine/0003-cognition-worker.md (sha256: c511be6dae02)
+> Terjemahan turunan — jangan sunting; sumber: engine/0003-cognition-worker.md (sha256: f39cb28607a7)
 > Teks ini ditulis manusia; baris yang tidak bisa diterjemahkan mesin disalin apa adanya ke sumber English, jadi sumber bercampur dua bahasa.
 
 # ADR-0003: Cognition Worker & Model Batching — Batas Gate vs Label
@@ -250,7 +250,7 @@ Default yang disepakati: **konsolidasi cepat tiap 60 detik, deep reflection tiap
 ## 12. Referensi kode
 
 - `eidesoul/engine/agent.py:917-921` — `spawn()` capture tanpa retry.
-- `eidesoul/engine/privacy.py:141-214` — `review` (auditor) sebagai gate saat ini.
+- `eidesoul/engine/access/privacy.py:141-214` — `review` (auditor) sebagai gate saat ini.
 - `eidesoul/engine/guard/policy.py:200-213` — policy deterministik yang tetap inline.
 - `eidesoul/engine/tools/__init__.py:182-240` — satu pintu eksekusi tool.
 - `eidesoul/engine/supervisor.py:36-129` — lifecycle primary/standby yang menjadi induk worker C.

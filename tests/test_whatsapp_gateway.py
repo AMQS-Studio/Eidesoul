@@ -516,7 +516,7 @@ def test_the_whatsapp_gateway_is_core_rich_and_directory(tmp_path) -> None:
 
 
 def test_participants_proves_a_linked_dm_and_refuses_a_group(tmp_path) -> None:
-    from eidesoul.engine.identity import IdentityStore
+    from eidesoul.engine.access.identity import IdentityStore
 
     gateway = make_gateway(tmp_path)
     person = IdentityStore(gateway.db).resolve("whatsapp", "628999999999")

@@ -1,4 +1,4 @@
-> Terjemahan turunan — jangan sunting; sumber: engine/0004-labeling-fallback.md (sha256: 2b5fadf55bb7)
+> Terjemahan turunan — jangan sunting; sumber: engine/0004-labeling-fallback.md (sha256: a7c28f24c22e)
 > Teks ini ditulis manusia; baris yang tidak bisa diterjemahkan mesin disalin apa adanya ke sumber English, jadi sumber bercampur dua bahasa.
 
 # ADR-0004: Fallback Labeling — Provisional Canonical dengan `level NULL` sebagai Sentinel
@@ -194,8 +194,8 @@ memory:
 
 ## 11. Referensi kode
 
-- `eidesoul/engine/privacy.py:222-303` — `capture_turn`, `_assess`.
-- `eidesoul/engine/privacy.py:133-140` — `_risky` (level dan confirmed).
+- `eidesoul/engine/access/privacy.py:222-303` — `capture_turn`, `_assess`.
+- `eidesoul/engine/access/privacy.py:133-140` — `_risky` (level dan confirmed).
 - `eidesoul/engine/memory/privacy.py:52-71` — `show`, `disclose`.
 - `eidesoul/engine/memory/mem0.py:360-380` — guard `capture`.
 - `eidesoul/engine/config.py:118-126` — `PrivacyConfig` (default 2, group max 2).

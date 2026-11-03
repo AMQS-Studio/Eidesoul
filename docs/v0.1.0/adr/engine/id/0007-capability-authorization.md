@@ -1,4 +1,4 @@
-> Terjemahan turunan — jangan sunting; sumber: engine/0007-capability-authorization.md (sha256: da7e30a76951)
+> Terjemahan turunan — jangan sunting; sumber: engine/0007-capability-authorization.md (sha256: bcd3c443bd50)
 > Teks ini ditulis manusia; baris yang tidak bisa diterjemahkan mesin disalin apa adanya ke sumber English, jadi sumber bercampur dua bahasa.
 
 # ADR-0007: Capability vs Authorization — Tiga Kelas Izin dan Approval sebagai Kelanjutan Izin Tool
@@ -439,7 +439,7 @@ peran. Implementasi menyusul di `chat_history`/`send` dengan satu helper bersama
 - `eidesoul/engine/commands/approve.py:20-80` — binding chat/sender/TTL dan re-run lewat `execute`.
 - `eidesoul/engine/guard/policy.py:105-215` — `sensitive_tools`, destructive actions, shell scan.
 - `eidesoul/engine/memory/mem0.py:476-530` — `forget`, `set_privacy`, `veto`.
-- `eidesoul/engine/roles.py:18-28,100-116` — `Role` (tanpa flag room; keanggotaan dihitung saat dipakai).
+- `eidesoul/engine/access/roles.py:18-28,100-116` — `Role` (tanpa flag room; keanggotaan dihitung saat dipakai).
 - `eidesoul/gateways/whatsapp/tools/chat_history.py` — baca room lain + buffer `cross_reads` untuk guard kebocoran.
 - `eidesoul/engine/tools/settings.py:294-413` — approval untuk perubahan internal.
 - `eidesoul/engine/stores/documents.py:137` — `export_to_files` (mirror dokumen config).

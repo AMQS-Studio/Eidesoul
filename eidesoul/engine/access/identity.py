@@ -15,8 +15,8 @@ import time
 from sqlalchemy import delete, insert, select, update
 from sqlalchemy.exc import IntegrityError
 
-from .db import Database
-from .schema import (
+from ..db import Database
+from ..schema import (
     google_device,
     google_identity,
     people,

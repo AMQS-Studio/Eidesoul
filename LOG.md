@@ -299,7 +299,7 @@ section after `Code references`, a stale copy, and any attempt to send fenced li
 ## 2026-11-01 — identity is runtime state, context is assembled state (`/reset` deleted)
 
 **Identity** — `people` keeps the person and the new `person_links` table maps `(gateway, address)`
-to an opaque `per_…` id (ten base32 characters, `eidesoul/engine/identity.py`). `Inbound` carries
+to an opaque `per_…` id (ten base32 characters, `eidesoul/engine/access/identity.py`). `Inbound` carries
 `person_address` and the core fills `person_id` in `Agent.handle`; the WhatsApp ingress and the CLI
 gateway stopped computing an identity and `directory.resolve_person` is gone. `roles.*.users` holds
 only `per_…` ids (`RoleRegistry.for_person`), so no phone number lives in config any more.

@@ -127,7 +127,7 @@ There is no new configuration key in this ADR. Gateway capabilities are properti
 - `eidesoul/engine/agent.py:763,977` — `prompt_hints` in the payload.
 - `eidesoul/gateways/cli/gateway.py:88-140` — the sixteen-method stub (evidence of the fat contract's cost).
 - `eidesoul/gateways/whatsapp/gateway.py:348-356` — `send_reaction` that sends the sticker.
-- `eidesoul/engine/permissions.py:48` — `command_allowed` (command gate, unchanged).
+- `eidesoul/engine/access/permissions.py:48` — `command_allowed` (command gate, unchanged).
 
 ---
 

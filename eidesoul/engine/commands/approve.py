@@ -4,11 +4,11 @@
 import contextlib
 import time
 
+from ..access.permissions import command_allowed, tool_allowed
+from ..access.relay import MODES, RelayRefused, RelayStore
 from ..guard import ActionRequest, recheck_scope, scope_proof
 from ..i18n import t
-from ..permissions import command_allowed, tool_allowed
 from ..registry import Handler
-from ..relay import MODES, RelayRefused, RelayStore
 from ..tools import execute, resolve_for
 from . import CommandContext
 

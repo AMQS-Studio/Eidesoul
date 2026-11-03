@@ -1,4 +1,4 @@
-> Terjemahan turunan — jangan sunting; sumber: engine/0001-memory-source-of-truth.md (sha256: 522cee758fff)
+> Terjemahan turunan — jangan sunting; sumber: engine/0001-memory-source-of-truth.md (sha256: abaed6a68b14)
 > Teks ini ditulis manusia; baris yang tidak bisa diterjemahkan mesin disalin apa adanya ke sumber English, jadi sumber bercampur dua bahasa.
 
 # ADR-0001: Sumber Kebenaran Memori — Postgres Canonical, Mem0 sebagai Memory Intelligence
@@ -189,7 +189,7 @@ ADR, ADR-0009). Daftar panjang di bagian ini tidak lagi dirawat di sini.
 - `eidesoul/engine/memory/mem0.py:496-531` — `set_privacy`, `veto`.
 - `eidesoul/engine/memory/rekey.py:15-62` — `RESERVED`, `_move`.
 - `eidesoul/engine/memory/context.py:127-131` — filter retrieval.
-- `eidesoul/engine/privacy.py:222-303` — capture dan assess.
+- `eidesoul/engine/access/privacy.py:222-303` — capture dan assess.
 - `eidesoul/engine/agent.py:614,906-921` — gate `can_memory` dan spawn capture.
 - `eidesoul/engine/stores/affect.py` — pola state document yang bisa ditiru untuk `memory_events`.
 

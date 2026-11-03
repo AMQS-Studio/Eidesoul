@@ -256,7 +256,7 @@ memory:
 - `eidesoul/engine/memory/mem0.py:496-531` — `set_privacy`, `veto`.
 - `eidesoul/engine/memory/context.py:48-108` — retrieval and render (the “used” touch point).
 - `eidesoul/engine/memory/rekey.py` — an example metadata migration that must honor retention.
-- `eidesoul/engine/privacy.py:222-278` — capture and level.
+- `eidesoul/engine/access/privacy.py:222-278` — capture and level.
 - `eidesoul/engine/config.py:118-138` — `PrivacyConfig`, `MemoryConfig`.
 - `eidesoul/engine/db.py:112-145` — `upsert` for the batch phase.
 

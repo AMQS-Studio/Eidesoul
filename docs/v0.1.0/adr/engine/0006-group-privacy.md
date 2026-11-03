@@ -33,17 +33,17 @@ As a result, L3/L4 can enter a **group** prompt, and `MemoryContext.hits` (used 
 disclosure path) contains rows that should never be visible in a group.
 
 **Group capture is not restricted to "about oneself".** `capture_turn`
-(`eidesoul/engine/privacy.py:225-277`) stores `[user text, soul reply]` with
+(`eidesoul/engine/access/privacy.py:225-277`) stores `[user text, soul reply]` with
 `owner = person_id`, `subject = assess.subject or owner`, `audience = "group"` — with no rule that
 in a group only facts the **speaker states about himself** may be stored.
 
 **Confirmation questions leak in a group.** The `verdict.ask` path sends a question to
-`inbound.thread` (`eidesoul/engine/privacy.py:267-277`), and the disclosure path does the
+`inbound.thread` (`eidesoul/engine/access/privacy.py:267-277`), and the disclosure path does the
 same (`:150-172`). In a group, that question reveals the existence of a fact being protected.
 
 **What is already good and kept:**
 
-- Hard exclusion of credentials before storing (`eidesoul/engine/privacy.py:225`,
+- Hard exclusion of credentials before storing (`eidesoul/engine/access/privacy.py:225`,
 `eidesoul/engine/memory/mem0.py:354-356`).
 - Person memory with `audience="group"` is never carried to another chat
 (`eidesoul/engine/memory/mem0.py:425-433`).
@@ -193,7 +193,7 @@ memory:
 - `eidesoul/engine/memory/privacy.py:52-71` — `show`, `disclose`.
 - `eidesoul/engine/memory/context.py:40-86,88-133` — `gather`, `render`, `build`.
 - `eidesoul/engine/memory/mem0.py:340-380,425-433,536-557` — `capture`, the cross-chat exception, `context()`.
-- `eidesoul/engine/privacy.py:133-140,141-172,222-281,282-309` — `_risky`, `review`, `capture_turn`, `_assess`.
+- `eidesoul/engine/access/privacy.py:133-140,141-172,222-281,282-309` — `_risky`, `review`, `capture_turn`, `_assess`.
 - `eidesoul/engine/agent.py:619-628,900-918` — the context caller and the capture spawn.
 - `eidesoul/engine/tools/memory.py:104-119,145-146` — policy use in the tool.
 - `eidesoul/engine/commands/memori.py:58,76,104` — policy use in the command.

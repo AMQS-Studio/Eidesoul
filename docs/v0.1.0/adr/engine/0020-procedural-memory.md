@@ -255,7 +255,7 @@ The old `max_index_chars` key is removed along with the index.
 - `eidesoul/engine/schema.py` — tables `skills`, `skill_files`, `skill_usage` (new form in ADR-0016 §4.7); `turns`/`turn_steps` as the source of step counts.
 - `eidesoul/engine/llm.py:206-255` — the tool loop: the source of each episode's tool-chain signature (material for §4.8).
 - `eidesoul/engine/embed.py:53-62` — the embedder used by procedure retrieval.
-- `eidesoul/engine/approvals.py` — the approval path used by §4.9 automation proposals.
+- `eidesoul/engine/access/approvals.py` — the approval path used by §4.9 automation proposals.
 - `roles.yaml:8-14` — the `member` role holding the tool `skill` (revoked).
 
 ---

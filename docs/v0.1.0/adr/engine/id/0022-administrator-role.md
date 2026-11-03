@@ -1,4 +1,4 @@
-> Terjemahan turunan — jangan sunting; sumber: engine/0022-administrator-role.md (sha256: d312e93ce7b1)
+> Terjemahan turunan — jangan sunting; sumber: engine/0022-administrator-role.md (sha256: 33793601f7a6)
 > Teks ini ditulis manusia; baris yang tidak bisa diterjemahkan mesin disalin apa adanya ke sumber English, jadi sumber bercampur dua bahasa.
 
 # ADR-0022: Peran `administrator` — Nama, Proteksi, dan Sebutan
@@ -160,7 +160,7 @@ roles:
 - `eidesoul/engine/stores/recipes.py:29` — `DEFAULT_ROLES`.
 - `eidesoul/admin/templates.py:143,158-159` — template role default.
 - `eidesoul/engine/turn/prompts.py:141-147` — `roles_block` (tempat `label` dipakai).
-- `eidesoul/engine/permissions.py` — `normalize`/`allows` (nama role dinormalisasi di sini).
+- `eidesoul/engine/access/permissions.py` — `normalize`/`allows` (nama role dinormalisasi di sini).
 - `eidesoul/engine/config.py` — bagian `roles` (seed/import).
 - `eidesoul/engine/schema.py` — `people.name` (fallback alamat bila label kosong); tidak ada perubahan tabel role.
 - `AGENTS.md` — aturan role di bagian Safety (sebutan `administrator`).

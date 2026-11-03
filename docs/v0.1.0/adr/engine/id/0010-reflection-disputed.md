@@ -1,4 +1,4 @@
-> Terjemahan turunan — jangan sunting; sumber: engine/0010-reflection-disputed.md (sha256: 4596e4645850)
+> Terjemahan turunan — jangan sunting; sumber: engine/0010-reflection-disputed.md (sha256: 13b4c457a77c)
 > Teks ini ditulis manusia; baris yang tidak bisa diterjemahkan mesin disalin apa adanya ke sumber English, jadi sumber bercampur dua bahasa.
 
 # ADR-0010: Reflection, Kontradiksi & Status `disputed`
@@ -10,7 +10,7 @@
 - **Konteks:** melunasi utang ADR-0008 §4.9C (`disputed` ditunda ke sini) dan menutup slot terakhir antrean ADR-0001 §14
 - **Supersedes:** —
 - **Terkait:** ADR-0003 (worker & antrean), ADR-0004 (state `staged`), ADR-0005 (TTL/renewal), ADR-0006 (privasi grup), ADR-0007 (kelas izin), ADR-0008 (integritas), ADR-0013 (turn lifecycle), ADR-0014 (automation), ADR-0015 (payload), ADR-0019 (`llm_calls`), ADR-0020 (prosedur turunan)
-- **Amandemen:** 2026-11-03 — audit: path rujukan `capture_turn` diperbaiki menjadi `eidesoul/engine/privacy.py:222-303` (`memory/privacy.py` 71 baris, hanya `show`/`disclose`). 2026-11-03 — ambang promosi `staged` dinyatakan sebagai jumlah baris (≥2 baris `ok`), dibedakan dari ambang hari `corroboration_days` (ADR-0008); daftar `state` menunjuk ADR-0004 §5.1/enum ADR-0016. 2026-11-03 — audit: `refs`/`derive_depth`/`dispute_state` di §Referensi diberi label usulan (belum ada di repo).
+- **Amandemen:** 2026-11-03 — audit: path rujukan `capture_turn` diperbaiki menjadi `eidesoul/engine/access/privacy.py:222-303` (`memory/privacy.py` 71 baris, hanya `show`/`disclose`). 2026-11-03 — ambang promosi `staged` dinyatakan sebagai jumlah baris (≥2 baris `ok`), dibedakan dari ambang hari `corroboration_days` (ADR-0008); daftar `state` menunjuk ADR-0004 §5.1/enum ADR-0016. 2026-11-03 — audit: `refs`/`derive_depth`/`dispute_state` di §Referensi diberi label usulan (belum ada di repo).
 - **Catatan lokasi:** ADR hidup di `docs/v0.1.0/adr/engine/`; salinan Indonesia di `docs/v0.1.0/adr/engine/id/0010-reflection-disputed.md`.
 
 ---
@@ -358,7 +358,7 @@ Kunci ini bagian dari dokumen `engine` (seed `config.yaml`, mirror di DB); mengu
   `idle_minutes`, `research_per_day`).
 - `eidesoul/engine/memory/mem0.py:340-392` — jalur metadata; `refs`, `derive_depth`, `dispute_state`
   **usulan** (belum ada di repo; kolomnya di ADR-0016 §4.2). `:323-338` — supersede berbukti (ada).
-- `eidesoul/engine/privacy.py:222-303` — `capture_turn` (jalur masuk jawaban subjek);
+- `eidesoul/engine/access/privacy.py:222-303` — `capture_turn` (jalur masuk jawaban subjek);
   `eidesoul/engine/memory/privacy.py:52-71` — `show`/`disclose`.
 - `eidesoul/engine/memory/context.py:91-133` — `render`/`build` (tempat penanda dispute ikut dirender).
 - `eidesoul/engine/commands/memori.py:15-23` — penanda `?` untuk baris belum dikonfirmasi (konvensi

@@ -1,4 +1,4 @@
-> Terjemahan turunan — jangan sunting; sumber: engine/0008-memory-integrity.md (sha256: b15e6c889f86)
+> Terjemahan turunan — jangan sunting; sumber: engine/0008-memory-integrity.md (sha256: 474180c17e19)
 > Teks ini ditulis manusia; baris yang tidak bisa diterjemahkan mesin disalin apa adanya ke sumber English, jadi sumber bercampur dua bahasa.
 
 # ADR-0008: Integritas Memori — Provenance, Trust, Karantina Instruksi, Anti-Poisoning
@@ -311,7 +311,7 @@ memory:
 - `eidesoul/engine/guard/patterns.py:11-35,16-26` — `SENSITIVE`, `safe_text`, `INJECTION`.
 - `eidesoul/engine/guard/sandbox.py:139-192` — pola deterministik + klasifier kecil.
 - `eidesoul/engine/agent.py:906-918` — gerbang capture (injeksi, panjang, `can_memory`).
-- `eidesoul/engine/privacy.py:225-277,295-310` — capture turn dan `_assess`.
+- `eidesoul/engine/access/privacy.py:225-277,295-310` — capture turn dan `_assess`.
 - `eidesoul/engine/memory/mem0.py:308-392,323-338,527-530` — metadata, supersede, veto.
 - `eidesoul/engine/memory/context.py:91-133` — `render` (titik penambahan id/kind) dan `build`.
 - `eidesoul/engine/tools/memory.py:69-105,175-183,230-234` — `add`, `kind`, `supersedes`, `veto`.
