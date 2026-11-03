@@ -105,7 +105,11 @@ Metadata lives with the thing it describes: a tool declares `target` (`file`, `r
 
 ### 4.8 Delete specialization; do not deprecate
 
-Because nothing is released, specialization is removed rather than shimmed: `currents` (module pair, command, prompt block, state key), the gender inference in `access/target.py` together with its `gender_gate`, `LEGACY`/`LEGACY_GATEWAY`, and the shutdown compatibility hooks. The explicit identity data stays; only the heuristic guess and its gate go.
+Because nothing is released, specialization is removed rather than shimmed: `currents` (module pair, command, prompt block, state key), `LEGACY`/`LEGACY_GATEWAY`, and the shutdown compatibility hooks.
+
+Gender splits three ways. The soul's own `gender` (`soul.py:62`, read by the decision prompt) stays: it is identity data written by `soul.yaml` and `eidesoul init`. Everything that guesses or gates a **person's** gender goes: `access/target.py` in full, `identity.display_target` and its call site, the `/gender` command and its catalog keys, the `gender_gate`/`gender_confidence`/`gender_avatar` keys, the `people.gender*` columns with `affect.gender`/`set_gender`, and the gateway `avatar` signal — `gateways/whatsapp/profile.py` exists only for that guess.
+
+`gender_gate` is an unlock, not a net: `effective_limits` gives a target it believes male the configured `toxicity`/`adult_memes` while everyone else is clamped to `(1, 0)`. Its removal therefore ships its replacement in the same commit, never after: the register comes from the room's configuration, the "male target" precondition on the highest `adult_memes` level is deleted, and the prompt rule becomes target-independent ("no sexual or degrading material about a real person; an unclear target or room stays gentle"). The hard floor in `character.py` (minors, doxxing, credible threats, hate) is unchanged and remains the actual safety line.
 
 ### 4.9 Command names are English, with no localized aliases
 
@@ -188,6 +192,7 @@ It runs beside the existing gates: `pytest -q`, `ruff check eidesoul scripts tes
 - **Rename churn.** Mitigation: one commit per phase; tests, catalogs, role templates, and docstrings move in the same commit; nothing is released, so no shim is written.
 - **Banned-word gate false positives.** Mitigation: the gate prints the matched token and file; the non-ASCII scan is primary, the word list is curated and reviewed per phase.
 - **`Handler.target` touches every tool.** Mitigation: the field defaults to `""`, which means "no target", so a tool that does not declare one behaves as today and only loses episode matching.
+- **The register loosens when `gender_gate` goes.** Mitigation: the room configuration replaces the per-target unlock in the same commit, the gender-specific prompt rule is rewritten target-independent, and the tests assert that an unclear room still yields the gentle limits `(min(toxicity, 1), 0)`.
 - **Losing live context with `currents`.** Mitigation: `web_search` covers ad hoc lookups, facts packs cover durable knowledge, and a plugin can reintroduce a news feed without core changes.
 
 ## 9. Interaction with other ADRs
@@ -211,7 +216,13 @@ It runs beside the existing gates: `pytest -q`, `ruff check eidesoul scripts tes
 - `eidesoul/engine/guard/patterns.py:15-19` — the hardcoded crisis and sensitive patterns.
 - `eidesoul/engine/character/character.py:53,61,68,116` — the language defaults that shelter the hot-wired vocabulary.
 - `eidesoul/engine/character/character.py:188-211` — `SEVERITY`, seventeen Indonesian words.
-- `eidesoul/engine/access/target.py:22-26,111-155` — the second profanity list and the gender inference.
+- `eidesoul/engine/access/target.py:22-26,111-155` — the second profanity list and the gender inference, both deleted.
+- `eidesoul/engine/access/identity.py:461-500` — `display_target`, the signal combiner that feeds the gate.
+- `eidesoul/engine/commands/gender.py:1-31` — the `/gender` command that writes the label by hand.
+- `eidesoul/engine/stores/affect.py:933-975` — `gender`/`set_gender`, the storage the chain wrote to.
+- `eidesoul/gateways/whatsapp/profile.py:1-3` — the avatar classifier that exists only as a gender fallback.
+- `eidesoul/engine/character/character.py:227-235` — `effective_limits`, the unlock that removal must replace rather than drop.
+- `eidesoul/engine/turn/prompts.py:128-135` — the gender-specific register rule rewritten target-independent.
 - `eidesoul/engine/access/privacy.py:27,32-46` — `YES` and `LEVEL_WORDS`.
 - `eidesoul/engine/soul.py:60` — `language: str = "id"`.
 - `eidesoul/engine/i18n.py:50,59` — the `normalize_language` default and the `auto` alias.

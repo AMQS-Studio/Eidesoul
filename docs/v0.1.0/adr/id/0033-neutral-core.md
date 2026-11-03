@@ -1,4 +1,4 @@
-> Terjemahan turunan — jangan sunting; sumber: 0033-neutral-core.md (sha256: e5e4f12c0408)
+> Terjemahan turunan — jangan sunting; sumber: 0033-neutral-core.md (sha256: 992134fda9fe)
 > Ditulis tangan (bukan mesin), mengikuti sumber English baris demi baris.
 
 # ADR-0033: Core Netral, Tepi Terspesialisasi — Tanpa Budaya, Transport, atau Vendor di Dalam Mekanisme
@@ -108,7 +108,11 @@ Metadata hidup bersama hal yang dideskripsikannya: tool mendeklarasikan `target`
 
 ### 4.8 Hapus spesialisasi; jangan deprecate
 
-Karena belum ada rilis, spesialisasi dihapus alih-alih di-shim: `currents` (pasangan modul, command, blok prompt, state key), inferensi gender di `access/target.py` beserta `gender_gate`-nya, `LEGACY`/`LEGACY_GATEWAY`, dan shutdown compatibility hook. Data identitas eksplisit tetap; hanya tebakan heuristik dan gate-nya yang pergi.
+Karena belum ada rilis, spesialisasi dihapus alih-alih di-shim: `currents` (pasangan modul, command, blok prompt, state key), `LEGACY`/`LEGACY_GATEWAY`, dan shutdown compatibility hook.
+
+Gender terbagi tiga. `gender` milik soul sendiri (`soul.py:62`, dibaca prompt keputusan) tetap: itu data identitas yang ditulis `soul.yaml` dan `eidesoul init`. Semua yang menebak atau menggerbangi gender **seseorang** pergi: `access/target.py` sepenuhnya, `identity.display_target` dan pemanggilnya, command `/gender` beserta key katalognya, key `gender_gate`/`gender_confidence`/`gender_avatar`, kolom `people.gender*` beserta `affect.gender`/`set_gender`, dan sinyal `avatar` gateway — `gateways/whatsapp/profile.py` ada hanya untuk tebakan itu.
+
+`gender_gate` adalah pembuka, bukan jaring: `effective_limits` memberi target yang diyakininya male `toxicity`/`adult_memes` sesuai konfigurasi sementara yang lain dikunci ke `(1, 0)`. Karena itu penghapusannya mengirim penggantinya di commit yang sama, tidak pernah sesudahnya: register datang dari konfigurasi room, prasyarat "male target" pada level `adult_memes` tertinggi dihapus, dan aturan prompt menjadi target-independent ("no sexual or degrading material about a real person; an unclear target or room stays gentle"). Hard floor di `character.py` (minor, doxxing, ancaman kredibel, kebencian) tidak berubah dan tetap menjadi garis keselamatan yang sebenarnya.
 
 ### 4.9 Nama command berbahasa Inggris, tanpa alias lokal
 
@@ -191,6 +195,7 @@ Gate itu berjalan di samping gate yang sudah ada: `pytest -q`, `ruff check eides
 - **Churn penggantian nama.** Mitigasi: satu commit per fase; test, katalog, role template, dan docstring berpindah di commit yang sama; belum ada rilis, jadi tidak ada shim.
 - **Positif palsu di gate kata terlarang.** Mitigasi: gate mencetak token dan berkas yang cocok; pemindaian non-ASCII adalah yang utama, daftar kata dikurasi dan ditinjau per fase.
 - **`Handler.target` menyentuh setiap tool.** Mitigasi: field-nya default `""`, yang berarti "tanpa target", sehingga tool yang tidak mendeklarasikannya berperilaku seperti sekarang dan hanya kehilangan pencocokan episode.
+- **Register melonggar saat `gender_gate` pergi.** Mitigasi: konfigurasi room menggantikan pembukaan per-target di commit yang sama, aturan prompt khusus gender ditulis ulang target-independent, dan test memastikan room yang tidak jelas tetap menghasilkan limit lembut `(min(toxicity, 1), 0)`.
 - **Kehilangan konteks langsung bersama `currents`.** Mitigasi: `web_search` menutup pencarian ad hoc, facts pack menutup pengetahuan tahan lama, dan plugin dapat mengembalikan feed berita tanpa perubahan core.
 
 ## 9. Interaksi dengan ADR lain
@@ -214,7 +219,13 @@ Gate itu berjalan di samping gate yang sudah ada: `pytest -q`, `ruff check eides
 - `eidesoul/engine/guard/patterns.py:15-19` — pola krisis dan sensitif yang di-hardcode.
 - `eidesoul/engine/character/character.py:53,61,68,116` — default bahasa yang menaungi kosakata terpatri itu.
 - `eidesoul/engine/character/character.py:188-211` — `SEVERITY`, tujuh belas kata Indonesia.
-- `eidesoul/engine/access/target.py:22-26,111-155` — daftar kata kasar kedua dan inferensi gender.
+- `eidesoul/engine/access/target.py:22-26,111-155` — daftar kata kasar kedua dan inferensi gender, keduanya dihapus.
+- `eidesoul/engine/access/identity.py:461-500` — `display_target`, perakit sinyal yang memberi makan gate.
+- `eidesoul/engine/commands/gender.py:1-31` — command `/gender` yang menulis label secara manual.
+- `eidesoul/engine/stores/affect.py:933-975` — `gender`/`set_gender`, penyimpanan yang diisi rantai itu.
+- `eidesoul/gateways/whatsapp/profile.py:1-3` — pengklasifikasi avatar yang ada hanya sebagai fallback gender.
+- `eidesoul/engine/character/character.py:227-235` — `effective_limits`, pembukaan yang harus diganti penghapusannya, bukan dibuang.
+- `eidesoul/engine/turn/prompts.py:128-135` — aturan register khusus gender yang ditulis ulang target-independent.
 - `eidesoul/engine/access/privacy.py:27,32-46` — `YES` dan `LEVEL_WORDS`.
 - `eidesoul/engine/soul.py:60` — `language: str = "id"`.
 - `eidesoul/engine/i18n.py:50,59` — default `normalize_language` dan alias `auto`.
