@@ -13,53 +13,81 @@
 
 ## 1. Context
 
-The engine already has the right *shape* for data-driven behavior: chat strings live in `eidesoul/lang/<code>.yaml` (two catalogs, 249 keys each), character data lives in `eidesoul/library/`, and an extension declares itself in a manifest. What it does **not** have is the rule that keeps mechanism and data apart. Culture, geography, transport, and vendor are written into the mechanism itself, so a deployment outside one country or one transport must edit code. Measured on 2026-11-04:
+The engine already has the right *shape* for data-driven behavior: chat strings live in `eidesoul/lang/<code>.yaml` (two catalogs, 249 keys each), character data lives in `eidesoul/library/`, and an extension declares itself in a manifest. What it does **not** have is the rule that keeps mechanism and data apart. Culture, geography, transport, and vendor are written into the mechanism itself, so a deployment outside one country or one transport must edit code. Measured on 2026-11-04 by a full sweep of `eidesoul/engine`, `eidesoul/admin`, `__main__.py`, the shipped templates, the image, and `scripts/`.
 
-**Language and culture hot-wired into mechanism**
+### 1.1 Language is a default, twenty-five times over
 
-- Thirteen defaults force Indonesian: `language: str = "id"` on nine engine signatures (`character/character.py:53,61,68,116`, `guard/patterns.py:33,45,50`, `jobs/ambient.py:28`, `jobs/cognition.py:373`), plus `soul.py:60`, `i18n.py:50`, `i18n.ALIASES["auto"]`, and `llm.py:51`. Both catalogs carry the same 249 keys, so this is policy, not a capability limit.
-- Four word tables are code: `access/privacy.py:27` (`YES`), `access/privacy.py:32-46` (`LEVEL_WORDS`), `character/character.py:188-211` (`SEVERITY`, seventeen Indonesian words), and `access/target.py:22-26` (a second profanity list).
-- The safety net is culture-specific: `guard/patterns.py:15-19` hardcodes the crisis phrases (`bunuh diri`, `mau mati`, `gantung diri`, `overdosis`, …) and the sensitive-token regex includes `kredensial`, while its own module docstring claims those patterns are "language-independent". A French or Japanese deployment has no crisis detection at all.
-- The shipped character library is one country: `eidesoul/library/patterns/jawatimur.json` (72 patterns) and `eidesoul/library/facts/indonesia.json` (306 facts) are the only packs, both `language: id`, so `packs_for("en")` is empty and a non-Indonesian soul resolves to no patterns and no facts. `lexicon/`, `affect/`, and `intent/` are already bilingual.
+- Twenty-four signatures carry `language: str = "id"`: the nine first counted (`character/character.py:53,61,68,116`, `guard/patterns.py:33,45,50`, `jobs/ambient.py:28`, `jobs/cognition.py:373`) plus `turn/prompts.py:121`, `turn/context.py:317`, `turn/salience.py:49,62`, `memory/gate.py:63`, `memory/assess.py:133`, `memory/reflect.py:96,125,267`, `memory/store.py:681,1086`, `stores/affect.py:917`, `stores/history.py:280`.
+- Eight call sites fall back with `or "id"`: `agent.py:897`, `access/privacy.py:93`, `access/relay.py:218`, `commands/__init__.py:31`, `jobs/automation.py:1944`, `jobs/cognition.py:387`, `jobs/supervisor.py:270`, `turn/prompts.py:239,247`.
+- The module-level defaults match: `soul.py:60`, `i18n.py:50`, `i18n.ALIASES["auto"]`, `llm.py:51`, and `soul.py:82,251` which pass `"id"` into `normalize_language`.
+- `soul.py:106-111` has no catalog at all: `if language == "en": "Reply in English."` and every other language is told **"Reply in Indonesian (Bahasa Indonesia)"**.
+- Both catalogs carry the same 249 keys, so this is policy, not a capability limit.
 
-**Geography in mechanism**
+### 1.2 Culture is a word table, eight of them
 
-- `jobs/schedule.py:16` sets `DEFAULT_TZ = "Asia/Jakarta"`; `zone()` and `_next_occurrence` use it whenever a manifest omits `tz`, so every schedule without an explicit zone runs on Jakarta time.
-- `jobs/currents.py:18-31` carries one country's news topics (`pemerintah`, `ekonomi`, `rupiah`, `prabowo`, `sawit`, `surabaya`, `jawa timur`) and a query suffix `" Indonesia {YEAR} terbaru"`; `stores/currents.py` persists them under the `currents` state key, and `commands/konteks.py:1` documents itself as "the Indonesia (+62) context". `currents` also duplicates what the `web_search` tool and the facts packs already provide, and it binds the prompt to one country's news cycle.
+- `guard/patterns.py:15-19` hardcodes the crisis phrases (`bunuh diri`, `mau mati`, `gantung diri`, `overdosis`, …) and a sensitive-token regex that includes `kredensial`, while its own docstring claims those patterns are "language-independent".
+- `character/character.py:188-211` — `SEVERITY`, seventeen Indonesian words; `:31` also names `pantun` as a preserved form.
+- `access/target.py:22-26` — a second profanity list, with Indonesian markers at `:21-23,39-40`.
+- `access/privacy.py:27,32-46` — `YES` (`ya`, `oke`, `boleh`, `sip`, `gas`, `lanjut`, `silakan`) and `LEVEL_WORDS`.
+- `character/patterns.py:27` — `SERIOUS_REGISTERS = {"serious", "comfort", "soal"}`.
+- `stores/style.py` is the largest: `:22` `PLACEHOLDERS = ("[Stiker]","[Gambar]","[Dokumen]","[Video]","[Audio]")`, `:27` `LAUGH = (wkwk|awok|hehe|haha)`, `:29-32` `PARTICLES` (twenty-three Indonesian/Javanese particles), `:33,59` `EMOJIS`, and `:34-60` `SEED` (median 34, p90 130, particles, emojis). It is the baseline for **every** soul: `:343-357` seeds an English chat with Indonesian rhythm.
+- `self_knowledge.py:70-77` — `TOPIC_BEHAVIORS` keyed `ruangan`, `ingatan`, `izin`, `inisiatif`, `gagal`, `batas`; `:313-325` renders `## {key}` as a prompt heading and branches on `"izin"`, `"inisiatif"`, `"ingatan"`; `:462-465` falls back to `"id"` for a README name.
+- `config.py:388` — the same six Indonesian ids as a config default, so `selfcheck` prints `topics=ruangan, ingatan, izin, inisiatif, gagal, batas`.
+- `commands/memori.py:58,75,90,126` — the verb DSL is bilingual (`{daftar,list}`, `{cari,search}`, `{hapus,forget,lupakan}`, `{tambah,add,simpan}`), and `lang/en.yaml:121` leaks the Indonesian verbs into the **English** usage line.
 
-**Vendor and plugin in mechanism**
+### 1.3 Geography and the clock
 
-- `admin/templates.py:70` writes `plugins: {"google": …}` into every fresh host config, `admin/templates.py:335-345` grants the plugin tool `google` to the `member` and `guest` roles, and `admin/templates.py:389-397` writes three Google environment names into `.env` even though the plugin manifest declares only one (`plugins/google/plugin.yaml`, `secrets: [GOOGLE_SERVICE_ACCOUNT_PATH]`). The template is a stale hand copy of a manifest, and a hundred plugins would mean a hundred edits there.
-- `memory/episodes.py:149-161` maps tool names to target types in a constant, and two of those names belong to a plugin (`google`) and to a gateway (`send_to`, `chat_history`).
+- `jobs/schedule.py:16` sets `DEFAULT_TZ = "Asia/Jakarta"`, used by `zone()` and `_next_occurrence`, and `jobs/automation.py:155,1133` re-inject it while validating a manifest and while scheduling, so a manifest without `tz` silently runs on Jakarta time.
+- `Dockerfile:5` sets `TZ=Asia/Jakarta` for the whole process.
+- `soul.py:30,65,256` defaults `locale: id-ID` three times, `turn/prompts.py:178-191` defaults `research_block(locale="id-ID")` and prescribes "local government, economy, currency, energy, food prices, and public figures" — the `currents` topic list rewritten as prose, so deleting the module does not finish §4.4.
+- `access/target.py:126-133` builds a prompt that says "an Indonesian chat app" when the locale starts with `id`.
+- `tools/web_search.py:16` names four search engines in `WEB_BACKENDS` and `:64` leaves the ddgs engine at its `region="us-en"` default, so search is silently American.
+- Calendar work reads the container clock: `turn/prompts.py:498`, `jobs/automation.py:1539`, and `jobs/ambient.py:315` call `date.today()`; `memory/context.py:82`, `memory/ledger.py:25`, and `stores/affect.py:835` use `time.localtime`, while `memory/store.py:2216` uses `gmtime`, so two day boundaries coexist.
+- `tools/sandbox.py:17` and `config.py:250-259` forward the host `TZ` and `LANG` into sandbox and shell children.
+- `jobs/schedule.py:76-84` hardcodes Monday-first English weekday names and lowercases only the list branch, so `days: "Mon"` is refused while `days: ["mon"]` works.
+- `jobs/currents.py:18-31` carries one country's topics (`pemerintah`, `ekonomi`, `rupiah`, `prabowo`, `sawit`, `surabaya`), a query suffix `" Indonesia {YEAR} terbaru"`, `stores/currents.py` persists them, and `commands/konteks.py:1,72` documents itself as "the Indonesia (+62) context".
 
-**Transport in mechanism**
+### 1.4 Vendor and plugin
 
-- `access/relay.py` binds an approval to "the content owner's DM"; `stores/history.py:683` exposes `dm_thread`, called from `access/privacy.py:202`, `jobs/automation.py:1673`, and `jobs/cognition.py:1008`.
-- `llm.py:33` carries `DIGEST_PROMPT` ("You summarize a chat group") and `llm.py:648` a `digest(chat_name, …)` method; `inbound.py` defines a `Chat` protocol. A robot embodiment must pretend to be a chat to use the engine.
+- `admin/templates.py:70` writes `plugins: {"google": …}` into every fresh host config, `:335-345` grants the plugin tool `google` to the `member` and `guest` roles, and `:389-397` writes three Google environment names although the manifest declares one (`plugins/google/plugin.yaml`, `secrets: [GOOGLE_SERVICE_ACCOUNT_PATH]`).
+- `schema.py:927-946` defines `google_identity` and `google_device` in the **core** DDL, and core code reads them: `access/identity.py:22-23,345`, `admin/people.py:14,90`.
+- `admin/people.py:57-59` falls back to `("whatsapp", value)` when it meets a legacy id.
+- `memory/episodes.py:149-161` maps tool names to target types, including the plugin tool `google` and the gateway tools `send_to` and `chat_history`.
+- `tools/settings.py:33-37` closes the document kinds to `("engine","host","gateway","soul","role")`.
+- Spine dependencies are named in core by design (ADR-0001, ADR-0031): `embed.py:15` pins the MiniLM model, `memory/mem0.py:19,186-204,213,223` drives Mem0 through the `openai` and `huggingface` providers, and `llm.py:1,10,177` uses the OpenAI wire client. Those are the carve-out §4.12 has to write down, not violations.
 
-**Names and legacy**
+### 1.5 Transport
 
-- Four commands carry Indonesian names (`commands/cari.py`, `kirim.py`, `konteks.py`, `memori.py`), six command aliases and two tool aliases do the same (`tenang`, `bantuan`, `bahasa`, `tautkan`, `ingat`, `lepas`; `tools/web_search.py:107`, `tools/memory.py:201`), and 76 catalog keys are named after them.
+- `turn/prompts.py` uses chat vocabulary on fifty-two lines. The load-bearing ones: `:309` "You live in chat as {name}", `:319` "real mentions, DMs, and replies to your messages must be answered", `:347-350` "This chat is a direct message (DM)", `:360-372` "one soul across rooms … chat_history reads another archived room … human typing from the same number", `:379-384` deleted / `view-once` / `undecryptable` semantics, `:408-412` group-scoped quoting, `:427-432` animated stickers and voice notes, `:441-449` `send_to` as the only way to reach another room.
+- `turn/decision.py` uses twenty lines: `ACTS = {"reply","ignore","react"}` (`:51`), `bubbles` in the decision schema (`:40-45`), and a prompt block built on mentions, DMs, and sticker reactions.
+- `stores/style.py:22` renders media as `[Stiker]`, `[Gambar]`, `[Dokumen]`; `turn/context.py:506-513` renders quotes as `↳ replying to …`; both are body-side renderings in core.
+- The five first counted sit unchanged: `access/relay.py:1-10` binds an approval to "the content owner's DM", `stores/history.py:683` exposes `dm_thread` to `access/privacy.py:202`, `jobs/automation.py:1673`, and `jobs/cognition.py:1008`; `llm.py:33,648-655` summarizes a chat group; `inbound.py` defines a `Chat` protocol.
+
+### 1.6 Names, legacy, and the extension surface
+
+- Four commands carry Indonesian names (`commands/cari.py`, `kirim.py`, `konteks.py`, `memori.py`), six command aliases and two tool aliases do the same (`tenang`, `bantuan`, `bahasa`, `tautkan`, `ingat`, `lepas`; `tools/web_search.py:107`, `tools/memory.py:201`), 76 catalog keys are named after them, and `admin/templates.py:354-356,380` grants those names to roles.
 - `access/roles.py:20` keeps `LEGACY = "owner"` with a migration path in `admin/roles.py`, `admin/people.py:22` keeps `LEGACY_GATEWAY = "legacy"`, and `memory/ledger.py:104` and `stores/history.py:746` keep "shutdown compatibility hooks".
+- Extensibility is closed by name tables, not by metadata: `guard/policy.py:18` decides approval class from `AUTHORIZATION_TOOLS = {"shell","sandbox","settings","send","send_to"}`, `:108-111` from `DESTRUCTIVE_ACTIONS`, and `:289-356` from per-name branches; `tools/__init__.py:23` closes `FAMILIES` to six names and `plugins.py:508-511` validates a plugin's tool against that set, so a third-party tool cannot exist at all; `tools/__init__.py:349-367` reads `args["path"]` and special-cases `sandbox` by name.
 
-Two consequences follow. First, **safety is not portable**: the crisis net covers one language family. Second, **the core is not extensible**: every new country, transport, or plugin edits the mechanism, which is exactly the churn ADR-0031's growth budget was meant to prevent.
+Two consequences follow. First, **safety is not portable**: the crisis net covers one language family, the register gate rests on a guessed gender, and the approval class cannot describe a tool it has never heard of. Second, **the core is not extensible**: every new country, transport, plugin, or tool edits the mechanism, which is exactly the churn ADR-0031's growth budget was meant to prevent.
 
 ## 2. Decision drivers
 
 1. **Neutrality must be executable, not remembered.** A review checklist already failed: every item above survived multiple review passes because it "worked".
 2. **Safety cannot depend on a country.** Crisis detection is a spine behavior and must cover every language the engine claims to speak.
-3. **Install is the first impression.** `eidesoul init` must produce a host that mentions no vendor, no country, and no transport.
-4. **Extensions must not edit core.** A new plugin, gateway, or language adds data and manifests; it never touches `eidesoul/engine/**` or `eidesoul/admin/templates.py`.
-5. **Refusal over silent fallback.** A missing pack, timezone, or plugin is an explicit error naming what is missing — never an Indonesian, English, or Jakarta default chosen on the operator's behalf.
-6. **One gate, mechanical.** The rule lives in a script the suite runs, with a listed inventory, not in prose.
+3. **Safety cannot depend on a name table.** An approval class decided by tool name means a plugin tool is either uncategorizable or silently misclassified.
+4. **Install is the first impression.** `eidesoul init` must produce a host that mentions no vendor, country, transport, or language.
+5. **Extensions must not edit core.** A new plugin, gateway, tool, or language adds data and manifests; it never touches `eidesoul/engine/**` or `eidesoul/admin/templates.py`.
+6. **Refusal over silent fallback.** A missing pack, timezone, locale, or plugin is an explicit error naming what is missing — never an Indonesian, English, or Jakarta default chosen on the operator's behalf.
+7. **One gate, mechanical.** The rule lives in a script the suite runs, with a listed inventory, not in prose.
 
 ## 3. Options considered
 
 **A. Status quo plus review discipline.** Rejected: §1 is the evidence that review alone does not hold the line.
 
-**B. Configuration overrides.** Add `soul.language` and `engine.timezone` settings and document them. Rejected as insufficient: an override hides the default instead of removing it, and it does nothing for the word tables, the vendor names, or the crisis net.
+**B. Configuration overrides.** Add `soul.language` and `engine.timezone` settings and document them. Rejected as insufficient: an override hides the default instead of removing it, and it does nothing for the word tables, the vendor names, the name tables, or the crisis net.
 
-**C. Packs, manifests, tool metadata, and one mechanical gate (chosen).** Every cultural, geographic, transport, and vendor fact becomes data with an owner (`lang/*.yaml`, `library/<kind>/<lang>.json`, `plugin.yaml`, `config.yaml`), the core declares nothing by name, and a gate proves it.
+**C. Packs, manifests, tool metadata, and one mechanical gate (chosen).** Every cultural, geographic, transport, and vendor fact becomes data with an owner (`lang/*.yaml`, `library/<kind>/<lang>.json`, `plugin.yaml`, `config.yaml`), every handler declares its own metadata, and a gate proves it.
 
 **D. Move i18n and safety out into a plugin.** Rejected: `i18n.py` is one of the fifteen top-level engine modules (ADR-0031), and a soul engine must speak and detect crisis before any plugin is installed. Safety is a spine behavior (ADR-0000, ADR-0007).
 
@@ -67,66 +95,98 @@ Two consequences follow. First, **safety is not portable**: the crisis net cover
 
 ### 4.1 The neutral-core contract
 
-The engine must boot, pass its suite, and serve `/status` under this configuration: `plugins: {}`, no gateway registered, no library pack installed, `language: en`, and an empty database. Any data it needs and cannot find is an explicit refusal that names the missing thing. This is the operational definition of "neutral"; anything weaker is a slogan.
+The engine must boot, pass its suite, and serve `/status` under this configuration: `plugins: {}`, no **optional** gateway registered, no library pack installed, `language: en`, and an empty database. The body the engine ships for its own operator console (`eidesoul/gateways/cli`) is not an optional gateway; it is the default surface and counts as part of the neutral boot. Any data it needs and cannot find is an explicit refusal that names the missing thing. This is the operational definition of "neutral"; anything weaker is a slogan.
 
 ### 4.2 Culture is data
 
-Crisis and sensitive patterns, profanity severity, affirmation words, and level words live in per-language packs next to the existing ones:
+Crisis and sensitive patterns, profanity severity, affirmation words, level words, laughter, particles, and the style seed live in per-language packs next to the existing ones:
 
 - `eidesoul/library/safety/<lang>.json` — `crisis`, `sensitive` phrase lists.
 - `eidesoul/library/severity/<lang>.json` — word → `{kind, level}`.
-- `eidesoul/library/lexicon/<lang>.json` — gains `affirmations` and `level_words`, so the negative and positive sides are symmetric.
+- `eidesoul/library/lexicon/<lang>.json` — gains `affirmations`, `level_words`, `laughter`, `particles`.
+- `eidesoul/library/style/<lang>.json` — the style baseline (`seed_median`, `seed_p90`, `seed_lower`, `seed_emoji`, `particles`, `emojis`).
 
-`eidesoul/engine/**` carries no non-English literal and no language-specific word list. The only exception is the English safety net, which the gate records explicitly.
+`eidesoul/engine/**` carries no non-English literal and no language-specific word list. The only exception is the English safety net, which the gate records explicitly. A language without a style pack gets no style baseline, not an Indonesian one.
 
 ### 4.3 Language is a required value
 
-No `language: str = "id"` default survives in `eidesoul/engine/**`. `soul.language` is written by `eidesoul init`, every call site passes it explicitly, and catalog lookup falls back to `en` only. `"auto"` resolves to the operator's locale, never to a fixed country.
+No `language: str = "id"` default, no `or "id"` fallback, and no `normalize_language(..., "id")` argument survives in `eidesoul/engine/**`; `soul.language` is written by `eidesoul init`, every call site passes it explicitly, and catalog lookup falls back to `en` only. `"auto"` resolves to the operator's locale, never to a fixed country. `soul.language_line` stops branching in code: the instruction is a catalog key, so a French soul is told to reply in French or refused, never in Indonesian.
 
 ### 4.4 Geography is a required value
 
-An automation manifest must state `event.tz`; a missing `tz` is a `ManifestError`. No country's zone is a default, and no module names a country's news topics. `currents` is deleted in full — `jobs/currents.py`, `stores/currents.py`, the `/konteks` command, its prompt block, and its state key. Fresh facts come from the `web_search` tool; durable knowledge comes from facts packs grown by `scripts/grow.py`; a live-news capability is a plugin.
+An automation manifest must state `event.tz`; a missing `tz` is a `ManifestError` at validation time, and the scheduler reads the stored value instead of re-defaulting it. The image carries no `TZ`. `currents` is deleted in full — `jobs/currents.py`, `stores/currents.py`, `/konteks` with its flag description, its prompt block, its state key — **and** the topic list must leave `turn/prompts.py:178-191`, which currently repeats it as prose. Fresh facts come from the `web_search` tool; durable knowledge comes from facts packs grown by `scripts/grow.py`; a live-news capability is a plugin. Search is asked for a region explicitly or none at all; a vendor default such as `us-en` is not a default.
 
 ### 4.5 Transport lives in the seam
 
-`dm_thread`, the `Chat` protocol, `digest`, and group summaries leave the engine's own vocabulary: a body resolves its own threads and summarizes its own rooms. The engine speaks of people, threads, and actions. Where the engine needs "the private thread with this person", the body answers through the inbound seam (ADR-0018, ADR-0032).
+`dm_thread`, the `Chat` protocol, `digest`, group summaries, sticker and reaction semantics, quote rendering, media placeholders, message ids, delivery state, and "the model lives in chat" leave the engine's own vocabulary. The prompt names the body's declared acts and addressing hints; a body that has no rooms simply declares none. Where the engine needs "the private thread with this person", the body answers through the inbound seam (ADR-0018, ADR-0032).
 
-### 4.6 Vendor names are absent from core
+### 4.6 Vendor names are absent from core, spine excepted
 
-A plugin, gateway, or vendor identifier may appear only inside its own tree and its manifest. In particular:
+A plugin, gateway, or vendor identifier may appear only inside its own tree and its manifest, except for the spine named in §4.12. In particular:
 
 - `admin/templates.py` writes `plugins: {}` and grants role templates core tools only.
 - `.env` is generated from the core names, the chosen provider's key, and the union of `secrets` declared by the plugin manifests actually installed.
+- Plugin tables live with the plugin; `schema.py` does not define `google_identity` or `google_device`, and no core module reads them.
 - `memory/episodes.py` derives a target from the tool's own declaration, not from a name table.
 
 ### 4.7 Discovery over enumeration
 
-Metadata lives with the thing it describes: a tool declares `target` (`file`, `room`, `document`, `process`, or `""`) and keeps its `family`; a plugin declares `provides` and `secrets`; a pack declares `language`; a manifest declares `tz`. No central name → kind table exists in core.
+Metadata lives with the thing it describes: a tool declares `target` (`file`, `room`, `document`, `process`, or `""`) and keeps its `family`; a plugin declares `provides` and `secrets`; a pack declares `language`; a manifest declares `tz`; a handler declares its approval class (§4.11). No central name → kind table exists in core.
 
 ### 4.8 Delete specialization; do not deprecate
 
-Because nothing is released, specialization is removed rather than shimmed: `currents` (module pair, command, prompt block, state key), `LEGACY`/`LEGACY_GATEWAY`, and the shutdown compatibility hooks.
+Because nothing is released, specialization is removed rather than shimmed: `currents` (module pair, command, prompt prose, state key), `LEGACY`/`LEGACY_GATEWAY`, the shutdown compatibility hooks, and the `memori` verb DSL.
 
 Gender splits three ways. The soul's own `gender` (`soul.py:62`, read by the decision prompt) stays: it is identity data written by `soul.yaml` and `eidesoul init`. Everything that guesses or gates a **person's** gender goes: `access/target.py` in full, `identity.display_target` and its call site, the `/gender` command and its catalog keys, the `gender_gate`/`gender_confidence`/`gender_avatar` keys, the `people.gender*` columns with `affect.gender`/`set_gender`, and the gateway `avatar` signal — `gateways/whatsapp/profile.py` exists only for that guess.
 
-`gender_gate` is an unlock, not a net: `effective_limits` gives a target it believes male the configured `toxicity`/`adult_memes` while everyone else is clamped to `(1, 0)`. Its removal therefore ships its replacement in the same commit, never after: the register comes from the room's configuration, the "male target" precondition on the highest `adult_memes` level is deleted, and the prompt rule becomes target-independent ("no sexual or degrading material about a real person; an unclear target or room stays gentle"). The hard floor in `character.py` (minors, doxxing, credible threats, hate) is unchanged and remains the actual safety line.
+`gender_gate` is an unlock, not a net: `effective_limits` gives a target it believes male the configured `toxicity`/`adult_memes` while everyone else is clamped to `(1, 0)`, and `character/patterns.py:28,167-171` gates pattern selection on the same `TARGETS` axis. Its removal therefore ships its replacement in the same commit, never after: the register comes from the room's configuration, the "male target" precondition on the highest `adult_memes` level is deleted, `TARGETS`/`_eligible` lose the axis, and the prompt rule becomes target-independent ("no sexual or degrading material about a real person; an unclear target or room stays gentle"). The hard floor in `character.py` (minors, doxxing, credible threats, hate) is unchanged and remains the actual safety line.
 
 ### 4.9 Command names are English, with no localized aliases
 
-`cari`, `kirim`, and `memori` become `search`, `send`, and `memory`; `konteks` disappears with `currents`; the six Indonesian command aliases and two tool aliases are removed, and the catalog keys are renamed with them. A gateway or plugin may expose its own namespaced commands; core does not keep a localization layer for its own surface.
+`cari`, `kirim`, and `memori` become `search`, `send`, and `memory`; `konteks` disappears with `currents`; the six Indonesian command aliases, two tool aliases, and the eight localized verb branches in `commands/memori.py` are removed, and the catalog keys are renamed with them, including the leaked verbs in `lang/en.yaml:121`. A gateway or plugin may expose its own namespaced commands; core does not keep a localization layer for its own surface.
 
 ### 4.10 The gate is mechanical
 
 Section 6 lists the checks. They run in the suite, not in review.
+
+### 4.11 A handler declares its own metadata
+
+The registry carries facts, not names:
+
+```text
+TOOL = Handler(
+    name="read",
+    family="read",          # declared, validated by shape, never checked against a closed set
+    target="file",          # file | room | document | process | ""
+    approval_class="none",  # none | consent | authorization
+    destructive=(),         # the actions that destroy state, e.g. ("forget",)
+    path_arg="path",        # the argument that names a filesystem target
+    scan=(),                # the arguments a credential and injection scan must read
+)
+```
+
+`FAMILIES`, `AUTHORIZATION_TOOLS`, `DESTRUCTIVE_ACTIONS`, and the per-name branches in `guard/policy.py` and `tools/__init__.py` are deleted. A plugin's tool passes validation by declaring the same fields; core never learns its name.
+
+### 4.12 The spine is the only vendor allowlist
+
+The spine named by ADR-0001 and ADR-0031 is fixed and may be named in core: PostgreSQL with pgvector, Mem0, the shared MiniLM embedder, and the OpenAI-compatible wire client. Everything else is optional and stays out of `eidesoul/engine/**`: search engines and their regions, language-model vendors, cloud APIs, and plugin tables. The allowlist is a constant with one entry per spine component and a comment naming its ADR, so adding one is a reviewed change, never an accidental import.
+
+### 4.13 One clock, one locale
+
+`locale` and `timezone` are required soul values written by `eidesoul init`, not code defaults. Core reads the clock through one helper, `now(tz)`, and stores day buckets in that zone; `date.today()`, `time.localtime()`, and a mixed `gmtime`/`localtime` pair are forbidden in `eidesoul/engine/**`. The host `TZ` and `LANG` are not forwarded into sandbox or shell children. Weekday parsing accepts ISO numbers or case-insensitive names, and week start is stated, not assumed.
 
 ## 5. Configuration
 
 ```yaml
 soul:
   language: en            # written by `eidesoul init`; required, no default
+  locale: en-US           # required; drives formatting and search region
+  timezone: Europe/Berlin # required; the host's home zone for prompts and day buckets
 engine:
   safety:
     allow_degraded: false # true runs the English net when a language pack is absent
+  web_search:
+    region: ""            # empty means no region bias; never a vendor default
 automation:
   event:
     tz: Europe/Berlin     # required per manifest; no engine default
@@ -138,13 +198,8 @@ Pack layout:
 ```text
 eidesoul/library/safety/<lang>.json     {"version":1,"language":"en","crisis":[…],"sensitive":[…]}
 eidesoul/library/severity/<lang>.json   {"version":1,"language":"en","words":{"word":["kind",2]}}
-eidesoul/library/lexicon/<lang>.json    gains "affirmations" and "level_words"
-```
-
-Handler metadata (proposal):
-
-```text
-TOOL = Handler(name="read", family="read", target="file", …)
+eidesoul/library/style/<lang>.json      {"version":1,"language":"en","seed_median":34,"particles":[…],"emojis":[…]}
+eidesoul/library/lexicon/<lang>.json    gains "affirmations", "level_words", "laughter", "particles"
 ```
 
 ## 6. Metrics and gates
@@ -153,95 +208,110 @@ Counts to drive to zero, measured 2026-11-04:
 
 | Specialization | Count | Where |
 | --- | --- | --- |
-| language defaults | 13 | 9 signatures + 4 module/config defaults |
-| hardcoded word tables | 4 | `privacy` ×2, `character`, `target` |
-| country defaults | 2 | `Asia/Jakarta`, `currents` topic list |
-| vendor references | 4 | template `plugins`, role grant, `ENV_TAIL`, `TARGET_TYPES` |
-| transport references | 5 | `relay`, `dm_thread` ×3, `Chat`, `digest` |
-| non-English surface names | 12 | 4 commands, 6 command aliases, 2 tool aliases |
-| legacy markers | 4 | `LEGACY`, `LEGACY_GATEWAY`, compatibility hooks ×2 |
+| language defaults | 25 + 8 fallbacks | 24 signatures, `soul`/`i18n`/`llm` module defaults, 8 `or "id"` sites |
+| hardcoded word tables | 8 | `privacy` ×2, `character.SEVERITY`, `target`, `style` ×4, `patterns.SERIOUS_REGISTERS`, `self_knowledge` topics |
+| locale and country defaults | 9 | `Dockerfile` `TZ`, `locale` ×3, `research_block`, ddgs region, `Asia/Jakarta` ×3 |
+| vendor references | 13 + 2 tables | templates ×3, episodes, `schema.google_*`, `people.whatsapp`, `WEB_BACKENDS`, ddgs |
+| transport references | 72 lines | 52 in `turn/prompts.py`, 20 in `turn/decision.py`, plus `relay`, `dm_thread` ×3, `Chat`, `digest`, placeholders, quote rendering |
+| name tables that block extensions | 6 | `FAMILIES`, `AUTHORIZATION_TOOLS`, `DESTRUCTIVE_ACTIONS`, policy branches, `PROVIDES_KEYS`, `settings` document kinds |
+| clock sites | 6 | `date.today()` ×3, `localtime` ×3 against one `gmtime` |
+| non-English surface names | 20 | 4 commands, 6 command aliases, 2 tool aliases, 8 verb branches |
+| legacy markers | 6 | `LEGACY`, `LEGACY_GATEWAY`, `people.whatsapp`, compatibility hooks ×2 |
 
 The gate, `scripts/neutral.py --check` (new module), fails when:
 
-1. `eidesoul/engine/**` contains a non-ASCII character outside the explicit English safety allowlist.
-2. `eidesoul/engine/**` contains a token from the banned vocabulary list (Indonesian function words plus the words moved to packs).
-3. A vendor, gateway, or plugin identifier appears under `eidesoul/engine/**` (allowed only in `eidesoul/providers/`, `eidesoul/gateways/`, `plugins/`).
-4. `eidesoul/engine/**` contains a `language="id"` default, a `default="id"`, or a `"Asia/` literal.
+1. `eidesoul/engine/**`, `eidesoul/admin/**`, or the shipped templates contain a **non-ASCII letter** (Unicode category `L*`) outside the explicit English safety allowlist. Typographic punctuation and arrows (`§ — … → • ≥ ↳`) are structural, not culture; emoji and country or state symbols are refused in any user-visible string.
+2. The banned vocabulary list (Indonesian function words plus the words moved to packs) appears in that same scope.
+3. A vendor, gateway, or plugin identifier appears there outside the spine allowlist (§4.12), `eidesoul/providers/`, `eidesoul/gateways/`, and `plugins/`.
+4. A `language`/`locale`/`tz` default or fallback appears there: no `language="id"`, no `default="id"`, no `"id-ID"`, no `"Asia/`, no `TZ=` in the `Dockerfile`.
 5. A catalog language has neither a safety pack nor a refusal record.
-6. A `Handler` lacks `target`, or a shipped template names a plugin.
-7. The neutral smoke fails: `pytest -q` and `eidesoul selftest` run with `plugins: {}`, `language: en`, and no gateway.
+6. A `Handler` lacks `target` or `approval_class`, or a closed name table (`FAMILIES`, `AUTHORIZATION_TOOLS`, `DESTRUCTIVE_ACTIONS`, `PROVIDES_KEYS`) is found, or a name branch decides an approval class.
+7. A shipped template has a non-empty `plugins:` map, names a plugin tool in a role seed, or writes plugin credentials into `.env`.
+8. `date.today()`, `time.localtime()`, or `time.gmtime()` appears in `eidesoul/engine/**` instead of the `now(tz)` helper; or a host `TZ`/`LANG` is forwarded to a child process.
+9. The neutral smoke fails: `pytest -q` and `eidesoul selftest` run with `plugins: {}`, `language: en`, no optional gateway, and an empty database.
 
 It runs beside the existing gates: `pytest -q`, `ruff check eidesoul scripts tests plugins migrations`, `python -P scripts/types.py --check`, `python scripts/selfcheck.py --check`, `python scripts/adr.py --check`.
 
 ## 7. Acceptance criteria
 
-- `grep -Pn '[^\x00-\x7F]' eidesoul/engine` is empty apart from the allowlisted English safety net.
-- The banned-vocabulary and vendor scans under `eidesoul/engine/**` report zero hits.
-- `language` has no default anywhere in `eidesoul/engine/**`; every call site passes it.
-- A manifest without `tz` fails with `ManifestError`; no `Asia/` literal exists in the engine.
-- `currents` is gone: no `jobs/currents.py`, no `stores/currents.py`, no `/konteks`, no reader of the `currents` state key, no prompt block.
-- `packs_for(lang)` is non-empty for every language that ships a catalog, or the soul is refused with a message naming the gap.
-- `eidesoul init` on a clean host writes `plugins: {}` and a `.env` with no plugin's secrets; installing a plugin adds its declared `secrets` to the generated `.env` without editing `templates.py`.
-- Deleting every plugin and gateway still boots the engine and `eidesoul selftest` reports `safety: ok` for a language with a pack and `safety: degraded` only when `allow_degraded: true`.
-- Every command and tool name is English; no localized alias resolves through core.
+- The gate in §6 passes with zero hits, in the scope it names (`engine`, `admin`, `__main__.py`, templates, `Dockerfile`).
+- `language`, `locale`, and `timezone` have no default anywhere in `eidesoul/engine/**`; `eidesoul init` writes all three, and the seed `soul.yaml` carries none of them until it does.
+- A French soul is told to reply in French through the catalog, or refused; `language_line` carries no language branch in code.
+- A manifest without `tz` fails with `ManifestError`; no `Asia/` literal and no `TZ=` exist outside a deployment manifest.
+- `currents` is gone: no module, no command, no state key, no prose topic list in `turn/prompts.py`.
+- `stores/style.py` carries no particle, laughter, emoji, or seed constant; a language without a style pack gets no style block.
+- One day boundary: the same `now(tz)` helper feeds prompts, automation budgets, ambient stamps, and memory buckets.
+- `days: "Mon"` and `days: ["mon"]` both parse; the week start is documented.
+- A test plugin that declares a new family and a new `target` boots and its tool is classified without editing core; no `FAMILIES` or `AUTHORIZATION_TOOLS` set exists.
+- `schema.py` defines no plugin table; a plugin creates its own.
+- `plugins: {}` and a `.env` without plugin secrets; installing a plugin adds its declared `secrets` without editing `templates.py`.
+- Deleting every plugin and optional gateway still boots the engine; `eidesoul selftest` reports `safety: ok` for a language with a pack and `safety: degraded` only when `allow_degraded: true`.
+- Every command, tool, and verb name is English; no localized alias or verb branch resolves through core.
 
 ## 8. Risks and mitigations
 
 - **Safety regression while the crisis net moves to packs.** Mitigation: the English net stays compiled in as the last line, a language without a pack is refused unless `allow_degraded: true`, and `selftest` asserts one crisis phrase per shipped pack.
+- **Approval routing breaks when the name tables go.** Mitigation: `approval_class` becomes a declared field with a default of `authorization` for unknown handlers, so a forgotten declaration fails closed rather than open; the suite asserts every shipped handler declares one.
 - **Pack authoring cost.** Mitigation: `scripts/grow.py` already grows packs from a corpus, `--check` validates a pack's shape, and the first release ships `en` and `id` only.
 - **Rename churn.** Mitigation: one commit per phase; tests, catalogs, role templates, and docstrings move in the same commit; nothing is released, so no shim is written.
-- **Banned-word gate false positives.** Mitigation: the gate prints the matched token and file; the non-ASCII scan is primary, the word list is curated and reviewed per phase.
-- **`Handler.target` touches every tool.** Mitigation: the field defaults to `""`, which means "no target", so a tool that does not declare one behaves as today and only loses episode matching.
-- **The register loosens when `gender_gate` goes.** Mitigation: the room configuration replaces the per-target unlock in the same commit, the gender-specific prompt rule is rewritten target-independent, and the tests assert that an unclear room still yields the gentle limits `(min(toxicity, 1), 0)`.
+- **The gate becomes the enemy of prose.** Mitigation: it checks non-ASCII **letters**, not punctuation, so `§`, `—`, `→`, and `•` in docstrings stay legal while emoji and flags in user-visible strings do not.
+- **Spine allowlist drift.** Mitigation: the allowlist is one constant with an ADR citation per entry; the gate names the file and line of any addition.
+- **Clock migration.** Mitigation: one helper, one test that sets the host `TZ` to two different zones and expects identical day buckets.
 - **Losing live context with `currents`.** Mitigation: `web_search` covers ad hoc lookups, facts packs cover durable knowledge, and a plugin can reintroduce a news feed without core changes.
 
 ## 9. Interaction with other ADRs
 
 - **ADR-0000** already declares language data as catalogs and the seam as embodiment-neutral; this ADR makes both claims executable.
+- **ADR-0001** fixes the spine named in §4.12, including Mem0 and the shared embedder.
 - **ADR-0006** keeps the privacy ceiling; only the affirmative vocabulary moves into a pack.
-- **ADR-0007** is untouched: deleting the gender gate removes a heuristic, not an approval class.
+- **ADR-0007** owns the approval classes; §4.11 changes how a class is found, not what the classes mean.
 - **ADR-0009** owns the register and the ADR gate; the new gate follows its pattern.
 - **ADR-0014** gains a required `event.tz`; the automation state machine is unchanged.
-- **ADR-0018** keeps the contract, while `Chat` and `dm_thread` move out of core into bodies.
+- **ADR-0018** keeps the contract, while `Chat`, `dm_thread`, and the prompt's chat vocabulary move out of core into bodies.
 - **ADR-0019** reports safety mode in `/status` and in `selftest`.
 - **ADR-0022** keeps the protected role; only the legacy name path goes.
 - **ADR-0025** is unaffected: a required language is already part of the stable prefix.
 - **ADR-0027** is enforced here: clean by default means a template with no vendor block.
-- **ADR-0028** gains the rule that template `.env` is derived from a manifest's `secrets`.
+- **ADR-0028** gains the rule that template `.env` is derived from a manifest's `secrets`, and that a plugin owns its schema.
 - **ADR-0031** provides the gates this ADR extends and the module budget it must respect.
 - **ADR-0032** provides the door; this ADR removes the transport vocabulary that reached around it.
 
 ## 10. Code references
 
 - `eidesoul/engine/guard/patterns.py:15-19` — the hardcoded crisis and sensitive patterns.
-- `eidesoul/engine/character/character.py:53,61,68,116` — the language defaults that shelter the hot-wired vocabulary.
-- `eidesoul/engine/character/character.py:188-211` — `SEVERITY`, seventeen Indonesian words.
-- `eidesoul/engine/access/target.py:22-26,111-155` — the second profanity list and the gender inference, both deleted.
-- `eidesoul/engine/access/identity.py:461-500` — `display_target`, the signal combiner that feeds the gate.
-- `eidesoul/engine/commands/gender.py:1-31` — the `/gender` command that writes the label by hand.
-- `eidesoul/engine/stores/affect.py:933-975` — `gender`/`set_gender`, the storage the chain wrote to.
-- `eidesoul/gateways/whatsapp/profile.py:1-3` — the avatar classifier that exists only as a gender fallback.
-- `eidesoul/engine/character/character.py:227-235` — `effective_limits`, the unlock that removal must replace rather than drop.
-- `eidesoul/engine/turn/prompts.py:128-135` — the gender-specific register rule rewritten target-independent.
-- `eidesoul/engine/access/privacy.py:27,32-46` — `YES` and `LEVEL_WORDS`.
-- `eidesoul/engine/soul.py:60` — `language: str = "id"`.
-- `eidesoul/engine/i18n.py:50,59` — the `normalize_language` default and the `auto` alias.
-- `eidesoul/engine/jobs/schedule.py:16,30-36,136` — `DEFAULT_TZ` and its two uses.
-- `eidesoul/engine/jobs/currents.py:1,18-31` — the topics and the country query suffix.
-- `eidesoul/engine/stores/currents.py:1` — the `currents` state persistence.
-- `eidesoul/engine/commands/konteks.py:1,11,71-75` — the country context command and its refresh words.
-- `eidesoul/engine/commands/cari.py:48`, `eidesoul/engine/commands/kirim.py:30`, `eidesoul/engine/commands/memori.py:161` — Indonesian names and aliases.
-- `eidesoul/engine/tools/web_search.py:107`, `eidesoul/engine/tools/memory.py:201` — Indonesian tool aliases.
-- `eidesoul/admin/templates.py:70,335-345,389-397` — the plugin default, the role grant, and the `.env` tail.
-- `plugins/google/plugin.yaml` — the manifest whose `secrets` the template already contradicts.
+- `eidesoul/engine/character/character.py:31,188-211,227-235` — `pantun`, `SEVERITY`, and `effective_limits`.
+- `eidesoul/engine/access/target.py:21-26,39-40,50,111-155` — the second profanity list, the markers, the `TARGETS` axis, and the inference.
+- `eidesoul/engine/access/privacy.py:27,32-46,93` — `YES`, `LEVEL_WORDS`, and the `or "id"` fallback.
+- `eidesoul/engine/character/patterns.py:27,28,167-171` — `SERIOUS_REGISTERS`, `TARGETS`, `_eligible`.
+- `eidesoul/engine/stores/style.py:22,27,29-33,34-60,343-357` — placeholders, laughter, particles, emojis, seed, and the prompt baseline.
+- `eidesoul/engine/config.py:215-218,250-259,388` — search config, forwarded `TZ`/`LANG`, Indonesian topic ids.
+- `eidesoul/engine/self_knowledge.py:70-77,313-325,462-465` — topic keys, prompt headings, README fallback.
+- `eidesoul/engine/commands/memori.py:58,75,90,126` — the localized verb DSL; `eidesoul/lang/en.yaml:121` — the same verbs in the English catalog.
+- `eidesoul/engine/soul.py:22-44,60,65,82,106-111,251,256` — the seed document, `language`, `locale`, `language_line`, and both fallbacks.
+- `eidesoul/engine/i18n.py:50,59` — `normalize_language` default and the `auto` alias.
+- `eidesoul/engine/jobs/schedule.py:16,29-36,76-84,136` — `DEFAULT_TZ`, `zone`, weekday parsing.
+- `eidesoul/engine/jobs/automation.py:155,1133,1539` — the two `tz` re-defaults and the day key.
+- `eidesoul/engine/jobs/currents.py:1,18-31`, `eidesoul/engine/stores/currents.py:1`, `eidesoul/engine/commands/konteks.py:1,11,72` — the country context and its flag.
+- `eidesoul/engine/commands/cari.py:46-48`, `kirim.py:28-30`, `memori.py:159-161` — Indonesian names, aliases, emoji descriptions.
+- `eidesoul/engine/tools/web_search.py:16,64,107` — `WEB_BACKENDS`, the ddgs region default, the tool alias.
+- `eidesoul/engine/tools/sandbox.py:17,69-71` — forwarded `TZ`/`LANG`; `eidesoul/engine/tools/settings.py:33-37` — closed document kinds.
+- `eidesoul/engine/guard/policy.py:18,108-111,289-356` — the approval name tables and branches.
+- `eidesoul/engine/tools/__init__.py:23,349-367` — `FAMILIES` and the per-name door logic.
+- `eidesoul/engine/plugins.py:105-110,508-511` — `PROVIDES_KEYS` and plugin tools validated against core families.
+- `eidesoul/engine/schema.py:927-946`, `eidesoul/engine/access/identity.py:22-23,345`, `eidesoul/admin/people.py:14,22,57-59,90` — the plugin tables, their core readers, and the WhatsApp/legacy fallbacks.
+- `eidesoul/admin/templates.py:70,335-345,354-356,380,389-397` — plugin default, role grants, Indonesian command names, `.env` tail.
 - `eidesoul/engine/memory/episodes.py:149-161` — `TARGET_TYPES` naming a plugin and gateway tools.
-- `eidesoul/engine/access/relay.py:1-10` — the DM-bound relay approval.
-- `eidesoul/engine/stores/history.py:683` — `dm_thread`, called by `access/privacy.py:202`, `jobs/automation.py:1673`, `jobs/cognition.py:1008`.
-- `eidesoul/engine/llm.py:33,648-655` — the group digest prompt and method.
-- `eidesoul/engine/access/roles.py:20` — `LEGACY = "owner"`; `eidesoul/admin/people.py:22` — `LEGACY_GATEWAY`.
-- `eidesoul/engine/memory/ledger.py:104`, `eidesoul/engine/stores/history.py:746` — the compatibility hooks.
+- `eidesoul/engine/turn/prompts.py:61-84,121,138-159,178-191,239,247,309,319,329-332,347-350,360-372,379-384,408-412,427-432,441-449,498` — the chat vocabulary and the prose topic list.
+- `eidesoul/engine/turn/decision.py:13-51,343-345` — mentions, DMs, `ACTS`, `bubbles`, prompt labels.
+- `eidesoul/engine/turn/context.py:317,506-513` — language default and quote rendering.
+- `eidesoul/engine/access/relay.py:1-10,218`, `eidesoul/engine/stores/history.py:683,746` — the DM-bound relay, `dm_thread`, the compatibility hook.
+- `eidesoul/engine/llm.py:1,10,33,51,177,648-655` — the wire client, the digest prompt and method, the language default.
+- `eidesoul/engine/memory/mem0.py:19,186-204,213,223`, `eidesoul/engine/embed.py:15` — the spine components §4.12 allowlists.
+- `eidesoul/engine/memory/context.py:82`, `eidesoul/engine/memory/ledger.py:25,104`, `eidesoul/engine/stores/affect.py:835,917`, `eidesoul/engine/memory/store.py:2216` — the mixed day boundaries.
+- `eidesoul/engine/access/roles.py:20`, `eidesoul/engine/memory/ledger.py:104` — the legacy markers.
+- `Dockerfile:5` — `TZ=Asia/Jakarta`.
 - `eidesoul/library/patterns/jawatimur.json`, `eidesoul/library/facts/indonesia.json` — the only shipped packs, both `language: id`.
-- Proposed, not code yet: `eidesoul/library/safety/<lang>.json`, `eidesoul/library/severity/<lang>.json`, the `affirmations`/`level_words` lexicon keys, `Handler.target`, and `scripts/neutral.py`.
+- Proposed, not code yet: `eidesoul/library/{safety,severity,style}/<lang>.json`, the `affirmations`/`level_words`/`laughter`/`particles` lexicon keys, `Handler.target`/`approval_class`/`destructive`/`path_arg`/`scan`, `now(tz)`, `soul.timezone`, and `scripts/neutral.py`.
 
 ---
 

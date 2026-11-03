@@ -28,6 +28,19 @@ case `/status` and `selftest` report `degraded`.
 --check`) and the counts to drive to zero, and §7 is the acceptance list. The Indonesian copy is
 `docs/v0.1.0/adr/id/0033-neutral-core.md`; the register row is in `docs/v0.1.0/README.md`.
 
+**Amended after a full sweep.** A read-only audit of `engine`, `admin`, `__main__.py`, the
+templates, the image, and `scripts/` found the first inventory understated and six decisions
+incomplete, so §1 was rewritten with measured counts (25 language defaults plus 8 fallbacks, not
+13; 8 word tables, not 4; 72 transport lines, not 5; 13 vendor references plus two plugin tables
+in `schema.py`; 9 locale/country defaults, not 2; 6 clock sites) and three clauses were added:
+§4.11 a handler declares its own `family`/`target`/`approval_class`/`destructive`/`path_arg`/`scan`
+so a plugin tool is classifiable at all, §4.12 the spine is the only vendor allowlist, §4.13 one
+clock and one locale. §4.1 now states that the shipped CLI body is not an "optional gateway",
+§4.4 requires the `currents` topic list to leave `turn/prompts.py` as well, §4.8 covers the second
+gender gate in `character/patterns.py`, and §6's first check now reads "non-ASCII letter" rather
+than "non-ASCII character", because the old wording could never pass against `§`, `—`, `→`, and the
+emoji in command descriptions.
+
 ## 2026-11-04 — Pyright is clean: zero errors, and the ratchet has nothing left to permit
 
 `pyright` over `eidesoul`, `admin`, `gateways`, and `scripts` reports **0 errors**, so
