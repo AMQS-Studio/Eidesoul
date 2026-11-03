@@ -1,5 +1,34 @@
 # LOG
 
+## 2026-11-03 — Two draft ADRs: engine structure and one delivery door
+
+ADR-0031 and ADR-0032 are accepted as decisions and recorded as `draft`: no engine file has moved and
+no delivery call site has changed yet. They exist so the next wave has a written contract instead of
+a plan in a chat.
+
+**ADR-0031** — the measured inventory behind it: 100 engine modules, 32,835 lines, 41 flat top-level
+files, three modules above 2,000 lines, 84% code / 11% blank / 5% docstring, 21 repeated 8-line
+windows. The decision is a split in place (`agent.py` delivery to `reply.py`, counters to
+`runtime.py`, memory SQL to `memory/queries.py`), then 25 modules into four domain folders with the
+top level at 15, then a growth budget: an engine module is added when it replaces one, splits one,
+or its ADR names the reason. §4.7 adds the toolchain half: Python floor 3.14 (so
+`from __future__ import annotations` leaves every module and a structure test bans it again),
+PEP 735 dependency groups for dev tooling, `pyright` `basic` as a per-directory ratchet, ruff gains
+`RUF`/`ASYNC`/`PT`/`FA` while `C90`/`PLR0912` stay, `TaskGroup` only where sibling cancellation is
+wanted, and `slots=True` on the hot dataclasses. None of it has landed yet.
+
+**ADR-0032** — one `Address(gateway, thread)` built from the durable route, one `dispatch` that is the
+only caller of a body's outbound handler, and the approval class checked before the wire instead of
+recorded after it. The outbound message is a Command Message with a receipt (Request–Reply over the
+`outbound_messages` outbox, idempotent by `id`), `GatewayCore` stops requiring chat members, reads use
+the same address with membership proven by the target body first, and tools are indexed per body so
+two bodies can share a name. A second body claiming an existing thread is refused; an ambiguous name
+returns candidates, never a pick.
+
+**Register** — `Address` enters the §4.12 term register (owner ADR-0032); ADR-0009 and its Indonesian
+copy are re-stamped. ADR home is now 33 files (`root=7`, `engine=26`), `implemented=29 partial=2
+draft=2`; both gates clean.
+
 ## 2026-11-03 — Eight partial ADRs land, one schema revision
 
 ADR-0012, 0010, 0008, 0005, 0013, 0014, 0020, and 0001 were `partial` for code reasons; each now has

@@ -69,8 +69,9 @@ def test_check_rejects_a_section_that_is_not_the_last(tmp_path):
 def test_new_scaffold_appends_the_next_number_and_passes(tmp_path):
     root = _copy_home(tmp_path)
     adr = root / "docs" / "v0.1.0" / "adr"
-    before = sorted(p.name for p in adr.glob("*.md"))
-    highest = max(int(name[:4]) for name in before)
+    # `--new` numbers across the whole home (root, engine, web), not just the root folder.
+    before = [p for folder in (adr, adr / "engine", adr / "web") for p in folder.glob("*.md")]
+    highest = max(int(path.name[:4]) for path in before)
     result = _run("--new", "Scaffold smoke test", root=root)
     assert result.returncode == 0, result.stdout + result.stderr
     created_files = sorted(adr.glob("*-scaffold-smoke-test.md"))

@@ -34,6 +34,7 @@ re-stamp the hash. No machine translator ships with the repo.
 | [0028](adr/0028-plugin-model.md) | Plugin Model — One Installable Unit for Fetched Capability | root | implemented |
 | [0029](adr/0029-test-store.md) | Test Store Is the Real Store — Postgres+pgvector, One Test Database, Truncate per Test | root | implemented |
 | [0030](adr/0030-install-and-init.md) | On-Machine Install and Interactive Init — Our Own Wizard, One Installer, Two Stacks | root | partial |
+| [0031](adr/0031-engine-structure.md) | Engine Structure — Layout, Growth Budget, and Toolchain Baseline | root | draft |
 | [0001](adr/engine/0001-memory-source-of-truth.md) | Memory Source of Truth — Postgres Canonical, Mem0 as Memory Intelligence | engine | implemented |
 | [0002](adr/engine/0002-capture-trigger.md) | Capture Trigger — Deterministic Gate, Novelty Check, Batch Assess | engine | implemented |
 | [0003](adr/engine/0003-cognition-worker.md) | Cognition Worker & Model Batching — Gate vs Label Boundary | engine | implemented |
@@ -59,21 +60,22 @@ re-stamp the hash. No machine translator ships with the repo.
 | [0024](adr/engine/0024-tool-input-contract.md) | Tool Input Contract — Argument Validation, Async Handlers, and Shell `env` | engine | implemented |
 | [0025](adr/engine/0025-turn-cost.md) | Turn Cost — Stable Prefix, Gating `polish`, and Call Budgets | engine | implemented |
 | [0026](adr/engine/0026-search.md) | Full-Text Search of Messages, Trigrams, and Scope | engine | implemented |
+| [0032](adr/engine/0032-address-and-command.md) | One Address, One Command — Embodiment-Neutral Output, Refusal over Guessing | engine | draft |
 
 ADRs are grouped by folder: cross-cutting decisions at the `adr/` root, engine decisions under
 `adr/engine/`, web/panel decisions under `adr/web/`. Numbers are chronological and unique across the
 whole home, so a folder may look sparse (`engine/` has no `0009`, the root holds `0000`, `0009`,
-`0027`-`0030`): a move leaves a gap on purpose and a number is never reused. Each folder keeps its
+`0027`-`0031`): a move leaves a gap on purpose and a number is never reused. Each folder keeps its
 Indonesian copies in its own `id/` subfolder.
 
 ## Status
 
 ```
 python scripts/adr.py --check
-OK: 31/31 ADR lolos check; implemented=29 partial=2 draft=0; sinonim digerbang=111 baris prosa=42
+OK: 33/33 ADR lolos check; folder root=7, engine=26, web=0; implemented=29 partial=2 draft=2; sinonim digerbang=113 baris prosa=43
 
 python scripts/adr.py --translate-check
-TURUNAN 31 berkas, 0 masalah
+TURUNAN 33 berkas, 0 masalah
 ```
 
 Re-run both after any edit. The Indonesian copies carry the source hash, so `--translate-check` fails
