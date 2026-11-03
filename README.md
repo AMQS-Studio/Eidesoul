@@ -78,29 +78,76 @@ properties of that store, not of a prompt.
 
 ## What it tries to solve
 
-- **An assistant that forgets.** You explain the same things again in every new session.
-- **A conversation that outgrows the window.** A long chat gets compacted, and what was compacted is
-  gone — the memory never lived anywhere but the window.
-- **A character that drifts.** The same person behaves differently in each app, because each app keeps
-  its own prompt and its own history.
-- **A memory that leaks.** One chat's private facts surface in another, and the person they are about
-  has no say.
-- **An agent that acts without authority.** A loop with tools can touch things nobody approved.
-- **Two instances, one soul.** A second process answers the same message, or overwrites the first
-  one's work.
-- **A turn that dies halfway.** The process stops between the tool call and the reply, and nobody
-  knows what already happened.
-- **A guess that becomes a rule.** A one-turn inference is written down, then read back next turn as if
-  the operator had said it.
-- **A reply that invents what it does not know.** Without a knowledge layer, gaps get filled with
-  confident guesses.
-- **A reply that sounds like a machine.** Flat, formal, the same voice for everyone — no mood, no
-  timing, no character.
+Most agent products hit the same ten walls. Each paragraph says what usually happens, then what this
+engine does instead.
 
-Each of those is answered in the design, not in the prompt: a canonical store, one identity, privacy
-levels with a veto, roles and approvals, a single primary, crash-safe turns, a knowledge layer that
-selects facts per turn, and a trust gate on anything the soul writes about itself. A flat voice is a
-switch, not a requirement: emotion, pacing, and character can be turned off.
+**An assistant that forgets.** The usual build starts every session from an empty prompt: history is a
+transcript you paste back, and "memory" is whatever still fits. Here each turn writes its candidate
+facts into Postgres, the model labels them with a numeric privacy level, an owner, and a subject, and
+the next turn retrieves them by vector search through pgvector and Mem0, scoped to the person, the
+thread, or the whole soul. A question about a decision from last month depends on what was stored, not
+on what the window still holds.
+
+**A conversation that outgrows the window.** The usual answer is compaction: summarize the oldest turns,
+drop them, continue. What was dropped is gone, and the summary becomes the only trace. Here the archive
+is the record and the window is a view: every turn assembles a working set from the archive — the recent
+tail plus the quoted chain of the message being answered — under a character budget, then throws the
+working set away. A thread can run for months without the model holding all of it.
+
+**A character that drifts.** The usual build ships a system prompt per client: the WhatsApp bot has one
+personality, the web widget another, the CLI a third, each with its own history. Here one soul document
+is authoritative in the database and mirrored to disk; every body reads the same document and the same
+memory, so a terminal, a chat app, a device, and a robot speak as one person. A body adds a transport
+and its own actions; it never adds a personality.
+
+**A memory that leaks.** The usual vector store is one index per bot: retrieval returns whatever is most
+similar, including a private fact from another room. Here every entry carries a privacy level from 0 to
+4, the owner who stated it, and the subject it is about; retrieval queries only global, this person, and
+this thread; a group caps the level; the subject can veto an entry; and the disclosure decision is
+deterministic, made before any model sees the text. The model is asked only to label a provisional level
+and to phrase the confirmation question.
+
+**An agent that acts without authority.** The usual loop either auto-approves everything or drowns the
+operator in prompts. Here permissions come only from roles — a missing entry denies — and a sensitive
+action passes a deterministic guard first; only what that layer cannot classify reaches a small, fast
+model. The target decides the class: own scope asks the requester, shared or outside scope asks an
+approver role, and the scope proof is recomputed at execution, so a role that widened reopens the
+approval.
+
+**Two instances, one soul.** The usual deployment scales to two replicas, both answer, both write, and
+the last writer wins. Here a lease row in Postgres decides: the holder is primary, every other instance
+is standby and frozen, and a takeover is a database event with an audit trail instead of a deployment
+accident.
+
+**A turn that dies halfway.** The usual loop runs a tool, crashes, and the restart repeats the side
+effect. Here the message and its turn are enqueued in one transaction, the turn is a row with a step
+checkpoint, and delivery is recorded per chunk. A restart resumes from the checkpoint, resends only what
+was not sent, re-runs a tool only when it is idempotent, and marks a non-idempotent action that already
+executed as interrupted instead of repeating it. A failed archive write fails the turn loudly; nothing
+is reported as saved when it is not.
+
+**A guess that becomes a rule.** The usual memory feature lets the agent write notes into its own
+prompt, and next turn those notes read like the operator's instructions. Here a derived write must carry
+references to its source, derivation is limited to one level, and a rule can only be extracted from the
+soul document. New memory starts quarantined, needs corroboration before it is readable, and never
+changes a permission.
+
+**A reply that invents what it does not know.** The usual model answers from the prompt and fills gaps
+confidently. Here a knowledge layer selects vetted facts per turn — embedding similarity over curated
+packs, with a keyword fallback when vectors are absent — so the prompt carries sourced facts instead of
+guesses. The character pass may rewrite the tone; it may not change facts, numbers, names, or tool
+results, and when the rewrite looks suspicious the original draft is used.
+
+**A reply that sounds like a machine.** The usual fix is a system prompt that says "be friendly", which
+produces the same flat paragraph for everyone. Here emotion is its own engine: a PAD state with a
+personality baseline that decays between turns, drives such as energy, boredom, and loneliness that
+pulse over time, and a relationship per person that moves through stages with inertia and a rate limit.
+The context engine selects character moves gated by register and harshness, and a humanize pass paces
+the reply. All of it is a switch — on by default, asked once during init — so a deployment that wants a
+flat voice can turn it off.
+
+None of this is a prompt trick. Each one is a place where state lives, and a rule about who may change
+it.
 
 ## Architecture
 

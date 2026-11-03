@@ -84,30 +84,76 @@ berbasis role adalah sifat store itu, bukan sifat prompt.
 <a id="apa-yang-coba-diselesaikan"></a>
 ## Apa yang coba diselesaikan
 
-- **Asisten yang lupa.** Anda menjelaskan hal yang sama lagi di setiap sesi baru.
-- **Percakapan yang melampaui window.** Chat panjang dipadatkan, dan yang dipadatkan hilang — memorinya
-  tidak pernah hidup di mana pun selain window.
-- **Karakter yang bergeser.** Orang yang sama berperilaku berbeda di tiap aplikasi, karena tiap aplikasi
-  menyimpan prompt dan riwayatnya sendiri.
-- **Memori yang bocor.** Fakta privat satu chat muncul di chat lain, dan orang yang menjadi subjeknya
-  tidak punya suara.
-- **Agent yang bertindak tanpa otoritas.** Loop dengan tool bisa menyentuh hal yang tidak pernah
-  disetujui siapa pun.
-- **Dua instance, satu jiwa.** Proses kedua menjawab pesan yang sama, atau menimpa pekerjaan yang
-  pertama.
-- **Giliran yang mati di tengah.** Proses berhenti antara panggilan tool dan balasan, dan tidak ada yang
-  tahu apa yang sudah terjadi.
-- **Tebakan yang menjadi aturan.** Satu inferensi dari satu giliran ditulis, lalu dibaca kembali di
-  giliran berikutnya seolah operator yang mengatakannya.
-- **Balasan yang mengarang apa yang tidak diketahuinya.** Tanpa lapisan pengetahuan, celah diisi
-  tebakan yang percaya diri.
-- **Balasan yang terdengar seperti mesin.** Datar, formal, suara yang sama untuk semua orang — tanpa
-  mood, tanpa timing, tanpa karakter.
+Hampir semua produk agent menabrak sepuluh dinding yang sama. Tiap paragraf menyebut apa yang biasanya
+terjadi, lalu apa yang dilakukan engine ini.
 
-Masing-masing dijawab di desain, bukan di prompt: store kanonik, satu identitas, tingkat privasi dengan
-veto, role dan approval, satu primary, giliran yang aman dari crash, lapisan pengetahuan yang memilih
-fakta tiap giliran, dan gerbang kepercayaan untuk apa pun yang jiwa tulis tentang dirinya. Suara datar
-adalah sakelar, bukan syarat: emosi, pacing, dan karakter bisa dimatikan.
+**Asisten yang lupa.** Bangunan biasanya memulai setiap sesi dari prompt kosong: riwayat adalah transkrip
+yang Anda tempel kembali, dan "memori" adalah apa pun yang masih muat. Di sini setiap giliran menulis
+kandidat fakta ke Postgres, model memberi label berupa tingkat privasi numerik, pemilik, dan subjek, dan
+giliran berikutnya mengambilnya lewat pencarian vektor pgvector melalui Mem0, dibatasi pada orang,
+thread, atau seluruh jiwa. Pertanyaan tentang keputusan bulan lalu bergantung pada apa yang tersimpan,
+bukan pada apa yang masih muat di window.
+
+**Percakapan yang melampaui window.** Jawaban biasanya pemadatan: ringkas giliran tertua, buang, lanjut.
+Yang dibuang hilang, dan ringkasan menjadi satu-satunya jejak. Di sini arsip adalah rekamannya dan window
+adalah tampilan: tiap giliran menyusun working set dari arsip — ekor terbaru plus rantai kutipan pesan
+yang sedang dijawab — di bawah budget karakter, lalu membuang working set itu lagi. Satu thread bisa
+berjalan berbulan-bulan tanpa model memegang semuanya.
+
+**Karakter yang bergeser.** Bangunan biasanya mengirim system prompt per klien: bot WhatsApp punya satu
+kepribadian, widget web lain, CLI lain lagi, masing-masing dengan riwayatnya sendiri. Di sini satu dokumen
+soul berwenang di database dan dicerminkan ke disk; setiap tubuh membaca dokumen yang sama dan memori
+yang sama, jadi terminal, aplikasi chat, perangkat, dan robot berbicara sebagai satu orang. Tubuh
+menambah transport dan aksinya sendiri; ia tidak pernah menambah kepribadian.
+
+**Memori yang bocor.** Vector store biasanya satu index per bot: pengambilan mengembalikan apa pun yang
+paling mirip, termasuk fakta privat dari ruangan lain. Di sini tiap entri membawa tingkat privasi 0
+sampai 4, pemilik yang menyatakannya, dan subjek yang dibicarakannya; pengambilan hanya menyentuh
+global, orang ini, dan thread ini; grup membatasi levelnya; subjek bisa memveto entri; dan keputusan
+pengungkapan bersifat deterministik, dibuat sebelum model mana pun melihat teksnya. Model hanya diminta
+memberi label sementara dan merangkai pertanyaan konfirmasi.
+
+**Agent yang bertindak tanpa otoritas.** Loop biasanya menyetujui semuanya otomatis, atau menenggelamkan
+operator dengan pertanyaan. Di sini izin hanya datang dari role — entri yang tidak ada berarti menolak —
+dan aksi sensitif melewati guard deterministik lebih dulu; hanya yang tak bisa diklasifikasi lapisan itu
+yang sampai ke model kecil dan cepat. Target menentukan kelasnya: lingkup sendiri meminta persetujuan
+peminta, lingkup bersama atau luar meminta role approver, dan bukti lingkup dihitung ulang saat eksekusi
+sehingga role yang melebar membuka ulang approval.
+
+**Dua instance, satu jiwa.** Deployment biasanya naik ke dua replika, keduanya menjawab, keduanya
+menulis, dan penulis terakhir menang. Di sini satu baris lease di Postgres yang memutuskan: pemegangnya
+primary, instance lain standby dan beku, dan takeover adalah peristiwa database dengan jejak audit, bukan
+kecelakaan deployment.
+
+**Giliran yang mati di tengah.** Loop biasanya menjalankan tool, crash, dan restart mengulang efek
+sampingnya. Di sini pesan dan gilirannya masuk antrean dalam satu transaksi, giliran adalah baris dengan
+checkpoint langkah, dan pengiriman dicatat per potongan. Restart melanjutkan dari checkpoint, mengirim
+ulang hanya yang belum terkirim, menjalankan ulang tool hanya kalau ia idempoten, dan menandai aksi
+non-idempoten yang sudah dieksekusi sebagai interrupted alih-alih mengulanginya. Penulisan arsip yang
+gagal menggagalkan giliran secara terbuka; tidak ada yang dilaporkan tersimpan padahal tidak.
+
+**Tebakan yang menjadi aturan.** Fitur memori biasanya membiarkan agent menulis catatan ke promptnya
+sendiri, dan giliran berikutnya catatan itu terbaca seperti instruksi operator. Di sini tulisan turunan
+wajib membawa rujukan ke sumbernya, penurunan dibatasi satu tingkat, dan aturan hanya boleh diekstrak
+dari dokumen soul. Memori baru mulai dalam karantina, butuh korroborasi sebelum bisa dibaca, dan tidak
+pernah mengubah izin.
+
+**Balasan yang mengarang apa yang tidak diketahuinya.** Model biasanya menjawab dari prompt dan mengisi
+celah dengan percaya diri. Di sini lapisan pengetahuan memilih fakta terkurasi tiap giliran — kemiripan
+embedding atas pack terkurasi, dengan fallback kata kunci saat vektor tidak ada — jadi prompt membawa
+fakta bersumber, bukan kira-kira. Pass karakter boleh menulis ulang nadanya; ia tidak boleh mengubah
+fakta, angka, nama, atau hasil tool, dan kalau hasilnya mencurigakan, draf aslinya yang dipakai.
+
+**Balasan yang terdengar seperti mesin.** Perbaikan biasanya system prompt "jadilah ramah", yang
+menghasilkan paragraf datar yang sama untuk semua orang. Di sini emosi adalah engine sendiri: state PAD
+dengan baseline kepribadian yang meluruh antar-giliran, drive seperti energi, kebosanan, dan kesepian
+yang berdenyut seiring waktu, dan relasi per orang yang bergerak lewat tahap dengan inersia dan batas
+laju. Engine konteks memilih gerakan karakter dengan gerbang register dan tingkat kasar, dan pass
+humanize mengatur pacing balasan. Semuanya sakelar — aktif default, ditanyakan sekali saat init — jadi
+deployment yang menginginkan suara datar bisa mematikannya.
+
+Tidak satu pun dari ini trik prompt. Masing-masing adalah tempat state hidup, dan aturan siapa yang boleh
+mengubahnya.
 
 <a id="architecture"></a>
 ## Arsitektur
