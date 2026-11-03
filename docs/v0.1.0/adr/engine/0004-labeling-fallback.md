@@ -1,7 +1,7 @@
 # ADR-0004: Fallback Labeling — Provisional Canonical with `level NULL` as a Sentinel
 
 - **Status:** accepted
-- **Implementation:** partial — present: `_assess` + the drop path on failure; remaining: the `staged` state, the `via` enum
+- **Implementation:** partial — present: six-state machine + `memories_readable` view, `level NULL` sentinel, strict partial-output drop, `staged`, 7-day TTL + tombstone, CHECKs, tests; remaining: bounded retry with backoff (5 attempts) owned by the capture worker (W3.2)
 - **Date:** 2026-11-01
 - **Deciders:** Muqsith (owner), omp (reviewer)
 - **Context:** follow-up to ADR-0001 (canonical + Mem0 adapter), ADR-0002 (capture gate + assess batch), ADR-0003 (cognition worker)

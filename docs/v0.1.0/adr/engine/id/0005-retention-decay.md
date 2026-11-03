@@ -1,10 +1,10 @@
-> Terjemahan turunan — jangan sunting; sumber: engine/0005-retention-decay.md (sha256: ea674ab371db)
+> Terjemahan turunan — jangan sunting; sumber: engine/0005-retention-decay.md (sha256: 23610848dc42)
 > Teks ini ditulis manusia; baris yang tidak bisa diterjemahkan mesin disalin apa adanya ke sumber English, jadi sumber bercampur dua bahasa.
 
 # ADR-0005: Retention & Decay — Hybrid TTL, Renewal Saat Dipakai, dan Pin Otomatis
 
 - **Status:** accepted
-- **Implementasi:** draft — belum ada `expires_at`/`max_lifetime_at`/`pinned` di skema
+- **Implementasi:** partial — ada: `pinned`/`durability`/`category`/`use_*`/`expires_at`/`max_lifetime_at`, renewal per turn delivered, auto-pin, `memory purge` dengan `--dry-run` dan penghapusan salinan library, `tests/test_memory_store.py`; sisa: prototipe intent remember/forget MiniLM dan loop purge terjadwal (W3.2/W6)
 - **Tanggal:** 2026-11-01
 - **Deciders:** Muqsith (owner), omp (reviewer)
 - **Konteks:** lanjutan ADR-0001 (canonical), ADR-0003 (worker & konsolidasi), ADR-0004 (TTL state non-`ok`); memori default-on memerlukan kebijakan umur

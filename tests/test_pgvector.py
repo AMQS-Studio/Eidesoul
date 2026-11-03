@@ -10,6 +10,7 @@ from support import StubEncoder, build_config, database, stub_vector
 from eidesoul.engine import embed
 from eidesoul.engine.memory import build_memory
 from eidesoul.engine.memory.mem0 import Mem0Backend
+from eidesoul.engine.memory.store import MemoryStore
 
 
 @pytest.fixture(autouse=True)
@@ -24,16 +25,18 @@ def mem0_stub_embedder(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def test_build_memory_keeps_the_semantic_path(tmp_path) -> None:
-    """The store is the shipped one, so `build_memory` must not skip Mem0 any more."""
+    """The store is the shipped one, so `build_memory` must attach Mem0 as extractor/index."""
     config = build_config(tmp_path)
     db = database()
-    backend = asyncio.run(build_memory(config, db=db))
+    store = asyncio.run(build_memory(config, db=db))
     try:
-        assert isinstance(backend, Mem0Backend)
-        assert backend.available is True
-        assert backend.reason == ""
+        assert isinstance(store, MemoryStore)
+        assert store.available is True
+        assert store.reason == ""
+        assert isinstance(store.index, Mem0Backend)
+        assert store.index.available is True
     finally:
-        asyncio.run(backend.close())
+        asyncio.run(store.close())
         db.dispose()
 
 

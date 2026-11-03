@@ -1,9 +1,11 @@
-"""Database archive contract: rich upsert, windows, quotes, and seeding."""
+"""Database archive contract: rich upsert, windows, quotes, seeding, and the intake rows."""
 
 from __future__ import annotations
 
 from datetime import datetime
 
+import pytest
+from sqlalchemy import text as sql_text
 from support import database
 
 from eidesoul.engine.context import Media, Message, Quote
@@ -224,3 +226,53 @@ def test_real_message_merge_replaces_the_unreadable_placeholder(tmp_path) -> Non
     assert item.text == "isi asli"
     assert item.view_once is True
     assert item.unreadable is False
+
+
+def _count(store: HistoryStore, table: str) -> int:
+    return int(store.db.scalar(sql_text(f"SELECT count(*) FROM {table}")) or 0)
+
+
+class ExplodingSink:
+    """The W3.2 job insert is the last write in the intake transaction."""
+
+    def enqueue(self, conn, candidate) -> None:
+        raise RuntimeError("job insert failed")
+
+
+def test_intake_is_one_transaction_with_memory_and_job(tmp_path) -> None:
+    store = HistoryStore(database(), job_sink=ExplodingSink())
+
+    with pytest.raises(RuntimeError, match="job insert failed"):
+        store.intake("chat", message("m1", "aku suka kopi"), "628222")
+
+    assert _count(store, "messages") == 0
+    assert _count(store, "turns") == 0
+    assert _count(store, "memories") == 0
+    assert _count(store, "memory_events") == 0
+
+
+def test_intake_writes_the_pending_candidate_and_event(tmp_path) -> None:
+    store = HistoryStore(database())
+    assert store.intake("chat", message("m1", "aku suka kopi"), "628222") is True
+    assert store.intake("chat", message("m1", "aku suka kopi"), "628222") is False
+
+    candidate = store.db.fetch_one(sql_text("SELECT * FROM memories"))
+    event = store.db.fetch_one(sql_text("SELECT * FROM memory_events"))
+    assert candidate["state"] == "pending" and candidate["level"] is None
+    assert candidate["trust"] == 3 and candidate["person_id"] == "628222"
+    assert candidate["refs"] == ["message:m1"]
+    assert event["memory_id"] == candidate["id"]
+    assert event["content"] == "aku suka kopi"
+    assert _count(store, "memories") == 1
+    assert _count(store, "memory_events") == 1
+
+
+def test_intake_hard_exclusion_keeps_the_archive_only(tmp_path) -> None:
+    store = HistoryStore(database())
+
+    assert store.intake("chat", message("m1", "api_key=abc123"), "628222") is True
+
+    assert _count(store, "messages") == 1
+    assert _count(store, "turns") == 1
+    assert _count(store, "memories") == 0
+    assert _count(store, "memory_events") == 0

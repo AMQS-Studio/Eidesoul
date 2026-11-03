@@ -1,10 +1,10 @@
-> Terjemahan turunan — jangan sunting; sumber: engine/0004-labeling-fallback.md (sha256: 993d80a16d84)
+> Terjemahan turunan — jangan sunting; sumber: engine/0004-labeling-fallback.md (sha256: 6f681b689e74)
 > Teks ini ditulis manusia; baris yang tidak bisa diterjemahkan mesin disalin apa adanya ke sumber English, jadi sumber bercampur dua bahasa.
 
 # ADR-0004: Fallback Labeling — Provisional Canonical dengan `level NULL` sebagai Sentinel
 
 - **Status:** accepted
-- **Implementasi:** sebagian — ada: `_assess` + jalur drop saat gagal; sisa: state `staged`, enum `via`
+- **Implementasi:** partial — ada: state machine enam status + view `memories_readable`, sentinel `level NULL`, drop output parsial, `staged`, TTL 7 hari + tombstone, CHECK, tes; sisa: retry berbatas dengan backoff (5 percobaan) milik worker capture (W3.2)
 - **Tanggal:** 2026-11-01
 - **Deciders:** Muqsith (owner), omp (reviewer)
 - **Konteks:** lanjutan ADR-0001 (canonical + Mem0 adapter), ADR-0002 (gate capture + assess batch), ADR-0003 (cognition worker)

@@ -1,4 +1,9 @@
-"""Mem0 OSS adapter: fact extraction, embedding, retrieval; Eidesoul only stores metadata."""
+"""Mem0 adapter: the extractor and semantic index behind `MemoryStore` (ADR-0001).
+
+Mem0 is not the store of record. `MemoryStore` owns canonical rows; this module turns a
+conversation into structured facts (`MemoryExtractor`) and writes/searches the derived vector
+index (`MemoryIndex`). Its library cache (`mem0_history.db`) is derived and purgeable.
+"""
 
 from __future__ import annotations
 
@@ -118,6 +123,10 @@ def _hit(item: dict, fallback_scope: str = "person") -> MemoryHit | None:
     if not text or not memory_id:
         return None
     person = _person_from(item, metadata)
+    try:
+        trust = int(metadata.get("trust") or 1)
+    except (TypeError, ValueError):
+        trust = 1
     return MemoryHit(
         id=memory_id,
         text=text,
@@ -132,11 +141,15 @@ def _hit(item: dict, fallback_scope: str = "person") -> MemoryHit | None:
         subject_id=_text(metadata.get("subject_id")) or _text(metadata.get("owner_id")) or person,
         confirmed=_flag(metadata.get("confirmed"), True),
         vetoed=_flag(metadata.get("vetoed"), False),
+        kind=_text(metadata.get("kind")) or "fact",
+        trust=trust,
+        state=_text(metadata.get("state")) or "ok",
     )
 
 
 class Mem0Backend:
     available = True
+    backend = "mem0"
 
     def __init__(self, db, config: Config, llm=None) -> None:
         self.db = db
@@ -146,7 +159,14 @@ class Mem0Backend:
         self._memory = None
         self._capture_lock = asyncio.Lock()
         self._limits = config.memory
+        self.embedding_model = MODEL
+        self.dim = DIM
         self.label = f"mem0 ({config.memory.collection})"
+
+    @property
+    def history_path(self) -> Path:
+        """The library cache path; derived, never read as truth, purgeable at any time."""
+        return Path(self.config.workspace).parent / "mem0_history.db"
 
     # -------------------------------------------------------------- setup
 
@@ -154,7 +174,7 @@ class Mem0Backend:
         memory = self.config.memory
         parsed = make_url(self.config.database_url())
         dsn = parsed.set(drivername="postgresql").render_as_string(hide_password=False)
-        history_path = Path(self.config.workspace).parent / "mem0_history.db"
+        history_path = self.history_path
         history_path.parent.mkdir(parents=True, exist_ok=True)
         extraction_model = memory.extraction_model or self.config.llm.model
         return {
@@ -367,7 +387,7 @@ class Mem0Backend:
         owner_id: str = "",
         subject_id: str = "",
         confirmed: bool = True,
-    ) -> list[str]:
+    ) -> list[MemoryHit]:
         body = [item for item in messages if _text(item.get("content"))]
         if not body or person_id is None:
             return []
@@ -394,7 +414,7 @@ class Mem0Backend:
                 infer=True,
                 **identity,
             )
-        return [hit.id for hit in (_hit(item, "person") for item in _items(result)) if hit]
+        return [hit for hit in (_hit(item, "person") for item in _items(result)) if hit]
 
     # ---------------------------------------------------------------- read
 
@@ -555,6 +575,44 @@ class Mem0Backend:
         except Exception as exc:  # slow/broken retrieval must not hold the reply
             log.debug("memory context skipped: %s", exc)
             return MemoryContext()
+
+    async def delete(self, external_id: str) -> bool:
+        """Remove one index entry; the canonical row is already gone or about to be."""
+        resolved = self._resolve_id(external_id)
+        if not resolved or self._memory is None:
+            return False
+        result = await self._safe("delete", self._memory.delete, resolved)
+        return result is not None
+
+    def purge_library(self, external_id: str = "", text: str = "") -> int:
+        """Remove the library copy (`history`/`messages`) for a purged row (ADR-0005 §4.5)."""
+        path = self.history_path
+        if not path.exists():
+            return 0
+        import sqlite3
+
+        deleted = 0
+        try:
+            with sqlite3.connect(path) as conn:
+                if external_id:
+                    deleted += conn.execute(
+                        "DELETE FROM history WHERE memory_id = ?", (str(external_id),)
+                    ).rowcount
+                body = _text(text)
+                if body:
+                    deleted += conn.execute(
+                        "DELETE FROM history WHERE old_memory = ? OR new_memory = ?",
+                        (body, body),
+                    ).rowcount
+                    deleted += conn.execute(
+                        "DELETE FROM messages WHERE content = ? OR content LIKE ?",
+                        (body, f"%{body}%"),
+                    ).rowcount
+                conn.commit()
+        except sqlite3.Error as exc:
+            log.warning("mem0 history purge failed: %s", exc)
+            return 0
+        return max(0, deleted)
 
     async def close(self) -> None:
         self._memory = None

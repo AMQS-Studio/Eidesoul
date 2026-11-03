@@ -115,8 +115,19 @@ def test_stale_burst_is_not_answered_twice(tmp_path) -> None:
 
 
 def test_auto_capture_runs_for_memory_role(tmp_path) -> None:
+    import json
+
+    class AssessLLM(FakeLLM):
+        """The decision fake must also answer the privacy assess prompt."""
+
+        async def complete(self, system, user, **kwargs):
+            if "privacy of one chat turn" in system:
+                return json.dumps({"level": 2, "subject": "", "ask": False})
+            return await super().complete(system, user, **kwargs)
+
     memory = FakeMemory()
     env = make_agent(tmp_path, memory=memory)
+    env.agent.llm = AssessLLM()
 
     handle(env, inbound_message("aku suka kopi tanpa gula", thread=DM))
     if env.agent.tasks:

@@ -1,10 +1,10 @@
-> Terjemahan turunan — jangan sunting; sumber: engine/0008-memory-integrity.md (sha256: 9c7ed4cf0f80)
+> Terjemahan turunan — jangan sunting; sumber: engine/0008-memory-integrity.md (sha256: 410cf772992e)
 > Teks ini ditulis manusia; baris yang tidak bisa diterjemahkan mesin disalin apa adanya ke sumber English, jadi sumber bercampur dua bahasa.
 
 # ADR-0008: Integritas Memori — Provenance, Trust, Karantina Instruksi, Anti-Poisoning
 
 - **Status:** accepted
-- **Implementasi:** draft — belum ada trust/quarantine/`memory_tombstones`
+- **Implementasi:** partial — ada: `via`/`refs`/`asserted_at`/`trust` T0-T3, `integrity.py` deterministik, karantina, tombstone, bukti supersede, kuota bertingkat ke `staged`, promosi recall-miss, penanda trust di prompt; sisa: `kind=rule` hanya dari `soul_doc` + T0 + corroboration 2 hari (reflection W3.2)
 - **Tanggal:** 2026-11-02
 - **Deciders:** Muqsith (owner), omp (reviewer)
 - **Konteks:** lanjutan ADR-0001 (canonical), ADR-0002 (gate capture), ADR-0004 (labeling), ADR-0005 (retention), ADR-0006 (privasi grup), ADR-0007 (capability vs authorization)

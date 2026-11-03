@@ -1,0 +1,1840 @@
+"""`MemoryStore`: the one canonical write port and the readable port of ADR-0001/0004/0005/0008.
+
+Canonical rows live in Postgres (`memories`). Reads for prompts, recall, tools, and `/memori`
+go through the `memories_readable` view only; the worker/admin uses the base table. Mem0 is an
+extractor and an index behind this port: it may fail without losing a fact, and the index can
+be rebuilt from canonical.
+"""
+
+from __future__ import annotations
+
+import hashlib
+import inspect
+import logging
+import re
+import time
+import uuid
+from collections.abc import Mapping, Sequence
+from dataclasses import dataclass
+
+from sqlalchemy import String, and_, case, cast, delete, func, or_, select, text
+from sqlalchemy.dialects.postgresql import insert as pg_insert
+
+from .. import io
+from ..db import Database
+from ..guard import SENSITIVE, is_crisis, is_injection
+from ..schema import (
+    memories,
+    memories_readable,
+    memory_events,
+    memory_index,
+    memory_tombstones,
+    memory_uses,
+)
+from . import MemoryContext, MemoryHit
+from . import context as memory_context
+from .integrity import (
+    TRUST_INFERENCE,
+    TRUST_UNLABELED,
+    WriteQuota,
+    quarantine_kind,
+    supersede_verdict,
+    trust_for,
+    via_of,
+)
+from .retention import RetentionPlan, RetentionPolicy, retention_days_from
+
+log = logging.getLogger(__name__)
+
+DAY = 86400.0
+MAX_TEXT = 4000
+FULL_UUID = re.compile(
+    r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$", re.IGNORECASE
+)
+HEX_PREFIX = re.compile(r"^[0-9a-f]{1,32}$", re.IGNORECASE)
+STATES = ("pending", "ok", "staged", "failed", "not_worth", "superseded")
+SCOPES = ("global", "person", "thread")
+AUDIENCES = ("private", "group", "shared")
+TRANSITIONS = {
+    "pending": {"ok", "failed", "not_worth"},
+    "staged": {"ok", "failed", "not_worth"},
+    "ok": {"superseded"},
+    "failed": set(),
+    "not_worth": set(),
+    "superseded": set(),
+}
+
+
+@dataclass(frozen=True)
+class MemoryCandidate:
+    """One `memory_events` + `memories(pending)` pair from the intake transaction."""
+
+    memory_id: str
+    event_id: str
+    thread_id: str
+    person_id: str
+    message_id: str
+    text: str
+    kind: str = "message"
+
+
+@dataclass(frozen=True)
+class PurgeReport:
+    selected: int = 0
+    purged: int = 0
+    dry_run: bool = False
+
+
+@dataclass(frozen=True)
+class _WriteParams:
+    body: str
+    scope: str
+    kind: str
+    person_id: str
+    thread_id: str
+    audience: str
+    route: str
+    source: str
+    refs: list[str]
+    level: int
+    owner: str
+    subject: str
+    confirmed: bool | None
+    pinned: bool
+    durability: str
+    category: str
+    task_status: str | None
+    due_at: float | None
+    asserted_at: float
+    dedupe: bool
+    external_id: str
+    supersedes: str | None
+    change: str
+
+
+@dataclass(frozen=True)
+class _Capture:
+    person_id: str
+    thread_id: str
+    audience: str
+    source: str
+    level: int
+    owner: str
+    subject: str
+    confirmed: bool
+    refs: tuple[str, ...]
+    category: str
+    durability: str
+    route: str
+
+
+def _flat(value: object, limit: int = MAX_TEXT) -> str:
+    text = " ".join(str(value or "").split())
+    return text if len(text) <= limit else text[: limit - 1] + "…"
+
+
+def _digest(text: str) -> str:
+    return hashlib.sha256(str(text or "").encode("utf-8")).hexdigest()
+
+
+def _hit(row: Mapping) -> MemoryHit:
+    level = row.get("level")
+    confirmed = row.get("confirmed")
+    return MemoryHit(
+        id=str(row.get("id") or ""),
+        text=str(row.get("text") or ""),
+        score=float(row.get("score") or 0.0),
+        scope=str(row.get("scope") or "person"),
+        person_id=str(row.get("person_id") or ""),
+        thread_id=str(row.get("thread_id") or ""),
+        created_at=float(row["created_at"]) if row.get("created_at") is not None else None,
+        metadata={
+            "kind": str(row.get("kind") or "fact"),
+            "state": str(row.get("state") or ""),
+            "via": str(row.get("via") or ""),
+            "pinned": bool(row.get("pinned")),
+            "category": str(row.get("category") or "general"),
+            "durability": str(row.get("durability") or "normal"),
+            "refs": row.get("refs") or [],
+        },
+        level=int(level) if level is not None else 0,
+        owner_id=str(row.get("owner_id") or ""),
+        subject_id=str(row.get("subject_id") or ""),
+        confirmed=bool(confirmed) if confirmed is not None else False,
+        vetoed=bool(row.get("vetoed")),
+        kind=str(row.get("kind") or "fact"),
+        trust=int(row.get("trust") if row.get("trust") is not None else TRUST_INFERENCE),
+        state=str(row.get("state") or ""),
+    )
+
+
+class MemoryStore:
+    """The canonical memory port (ADR-0001); Mem0 is attached as extractor + index."""
+
+    def __init__(
+        self,
+        db: Database | None,
+        config=None,
+        *,
+        index=None,
+        extractor=None,
+        policy: RetentionPolicy | None = None,
+        quota: WriteQuota | None = None,
+    ) -> None:
+        self.db = db
+        self.config = config
+        self._index = index
+        self._extractor = extractor
+        self._policy = policy or RetentionPolicy()
+        self._quota = quota or WriteQuota()
+        self._limits = getattr(config, "memory", None)
+        self.available = db is not None
+        self.reason = "" if db is not None else "no database"
+        self.label = "postgres"
+
+    # ---------------------------------------------------------------- wiring
+
+    def configure_limits(self, memory) -> None:
+        self._limits = memory
+
+    def bind(self, index=None, extractor=None, *, label: str = "") -> None:
+        self._index = index
+        self._extractor = extractor
+        if label:
+            self.label = label
+
+    @property
+    def _has_index(self) -> bool:
+        return self._index is not None and bool(getattr(self._index, "available", False))
+
+    @property
+    def index(self):
+        return self._index
+
+    async def close(self) -> None:
+        if self._index is not None and hasattr(self._index, "close"):
+            await self._index.close()
+
+    # ------------------------------------------------------------ policies
+
+    @property
+    def policy(self) -> RetentionPolicy:
+        return self._policy
+
+    def _audience(self, scope: str, audience: str) -> str:
+        if audience in AUDIENCES:
+            return audience
+        return {"global": "shared", "person": "private", "thread": "group"}[scope]
+
+    def _quota_counts(self, *, person_id: str, thread_id: str, now: float) -> tuple[int, int, int]:
+        if self.db is None:
+            return (0, 0, 0)
+        hour = now - 3600.0
+        day = now - DAY
+        live = memories.c.state.in_(("ok", "staged"))
+
+        def count(*clauses) -> int:
+            statement = select(func.count()).select_from(memories).where(live, *clauses)
+            return int(self.db.scalar(statement) or 0)
+
+        person_hour = count(memories.c.person_id == person_id, memories.c.created_at >= hour)
+        person_day = count(memories.c.person_id == person_id, memories.c.created_at >= day)
+        thread_hour = count(
+            memories.c.thread_id == thread_id, memories.c.created_at >= hour
+        ) if thread_id else 0
+        return person_hour, person_day, thread_hour
+
+    def _state_after_quota(
+        self,
+        *,
+        state: str,
+        kind: str,
+        person_id: str,
+        thread_id: str,
+        category: str,
+        via: str,
+        pinned: bool,
+        now: float,
+    ) -> str:
+        if state != "ok" or self.db is None:
+            return state
+        if self._quota.exempt(category=category, kind=kind, via=via, pinned=pinned):
+            return state
+        person_hour, person_day, thread_hour = self._quota_counts(
+            person_id=person_id, thread_id=thread_id, now=now
+        )
+        if self._quota.overflow(
+            person_hour=person_hour, person_day=person_day, thread_hour=thread_hour
+        ):
+            return "staged"
+        return state
+
+    # ------------------------------------------------------------ canonical write
+
+    async def add(
+        self,
+        text: str,
+        *,
+        scope: str = "person",
+        kind: str = "fact",
+        person_id: str = "",
+        thread_id: str = "",
+        audience: str = "",
+        source: str = "",
+        metadata: dict | None = None,
+        supersedes: str | None = None,
+        infer: bool = False,
+        level: int = 2,
+        owner_id: str = "",
+        subject_id: str = "",
+        confirmed: bool = True,
+    ) -> list[str]:
+        """Conscious write (tool/command): canonical first, then the derived index."""
+        old = (
+            await io.run(self._superseded_row_sync, supersedes)
+            if supersedes
+            else None
+        )
+        memory_id = await io.run(
+            self.write,
+            text,
+            scope=scope,
+            kind=kind,
+            person_id=person_id,
+            thread_id=thread_id,
+            audience=audience,
+            via=via_of(source or "command"),
+            source=source,
+            level=level,
+            owner_id=owner_id,
+            subject_id=subject_id,
+            confirmed=confirmed,
+            supersedes=supersedes,
+            asserted_at=None,
+        )
+        if old is not None:
+            await self._drop_index(old)
+        await self._index_row(memory_id)
+        return [memory_id]
+
+    def _superseded_row_sync(self, memory_id: str) -> dict | None:
+        return self._base_row(self._resolve_id(memory_id))
+
+    def _validated(
+        self,
+        *,
+        text: str,
+        level: int | None,
+        scope: str,
+        kind: str,
+        source: str,
+        via: str,
+        person_id: str,
+        owner_id: str,
+        subject_id: str,
+        corroboration_days: int,
+    ) -> tuple[str, int, str, str, str, str]:
+        body = _flat(text)
+        if not body:
+            raise ValueError("memory text is empty")
+        if level is None:
+            raise ValueError("a canonical ok/staged row needs a privacy level")
+        number = int(level)
+        if number > 4:
+            raise ValueError("privacy level 5/credentials are never stored")
+        if number < 0:
+            raise ValueError("privacy level must be 0-4")
+        if SENSITIVE.search(body):
+            raise ValueError("text contains a secret/credential")
+        if is_crisis(body):
+            raise ValueError("crisis text is never stored in memory")
+        if scope not in SCOPES:
+            raise ValueError(f"unknown scope: {scope}")
+        route = via_of(source or via, fallback=via)
+        owner = str(owner_id or person_id or "").strip()
+        subject = str(subject_id or owner or "").strip()
+        wanted = quarantine_kind(
+            kind,
+            via=route,
+            trust=trust_for(route, owner, subject),
+            corroboration_days=corroboration_days,
+        )
+        return body, number, route, owner, subject, wanted
+
+    def _prepare(
+        self,
+        *,
+        body: str,
+        kind: str,
+        scope: str,
+        person_id: str,
+        thread_id: str,
+        audience: str,
+        route: str,
+        source: str,
+        refs: Sequence[str],
+        level: int,
+        owner: str,
+        subject: str,
+        confirmed: bool | None,
+        pinned: bool,
+        durability: str,
+        category: str,
+        task_status: str | None,
+        due_at: float | None,
+        asserted_at: float | None,
+        dedupe: bool,
+        external_id: str,
+        supersedes: str | None,
+        change: str,
+        state: str,
+    ) -> tuple[_WriteParams, str, RetentionPlan, float]:
+        if state not in {"ok", "staged"}:
+            raise ValueError(
+                "write creates only ok or staged rows; use intake/transition otherwise"
+            )
+        now = time.time()
+        is_pinned = bool(pinned) or str(category) in self._policy.pin_categories
+        if state == "ok":
+            state = self._state_after_quota(
+                state=state,
+                kind=kind,
+                person_id=person_id,
+                thread_id=thread_id,
+                category=category,
+                via=route,
+                pinned=is_pinned,
+                now=now,
+            )
+        plan = self._policy.plan(
+            kind=kind,
+            level=level,
+            state=state,
+            durability=durability,
+            category=category,
+            task_status=task_status,
+            pinned=is_pinned,
+            now=now,
+        )
+        if confirmed is None:
+            confirmed = True if state == "ok" else None
+        params = _WriteParams(
+            body=body,
+            scope=scope,
+            kind=kind,
+            person_id=str(person_id or ""),
+            thread_id=str(thread_id or ""),
+            audience=self._audience(scope, audience),
+            route=route,
+            source=str(source or route),
+            refs=[_flat(item, 200) for item in refs if str(item or "").strip()],
+            level=level,
+            owner=owner,
+            subject=subject,
+            confirmed=confirmed,
+            pinned=plan.pinned,
+            durability=str(durability or "normal"),
+            category=str(category or "general"),
+            task_status=task_status,
+            due_at=due_at,
+            asserted_at=float(asserted_at if asserted_at is not None else now),
+            dedupe=dedupe,
+            external_id=str(external_id or ""),
+            supersedes=supersedes,
+            change=change,
+        )
+        return params, state, plan, now
+
+    def _values(
+        self, params: _WriteParams, state: str, plan: RetentionPlan, now: float
+    ) -> dict:
+        memory_id = str(uuid.uuid4())
+        return {
+            "id": memory_id,
+            "scope": params.scope,
+            "person_id": params.person_id,
+            "thread_id": params.thread_id,
+            "kind": params.kind,
+            "text": params.body,
+            "state": state,
+            "level": params.level,
+            "confirmed": params.confirmed,
+            "owner_id": params.owner,
+            "subject_id": params.subject,
+            "via": params.route,
+            "refs": params.refs,
+            "trust": trust_for(params.route, params.owner, params.subject),
+            "audience": params.audience,
+            "source": params.source,
+            "vetoed": False,
+            "vetoed_by": "",
+            "vetoed_at": 0.0,
+            "pinned": plan.pinned,
+            "durability": params.durability,
+            "category": params.category,
+            "use_count": 0,
+            "distinct_use_days": 0,
+            "last_used_at": 0.0,
+            "max_lifetime_at": plan.max_lifetime_at,
+            "expires_at": plan.expires_at,
+            "supersedes": None,
+            "superseded_by": None,
+            "due_at": params.due_at,
+            "task_status": params.task_status,
+            "dispute_state": "none",
+            "disputed_with": None,
+            "dispute_reason": "",
+            "disputed_at": 0.0,
+            "asserted_at": params.asserted_at,
+            "created_at": now,
+            "updated_at": now,
+        }
+
+    def _existing(self, conn, params: _WriteParams) -> str:
+        found = conn.execute(
+            select(memories.c.id)
+            .where(
+                memories.c.text == params.body,
+                memories.c.scope == params.scope,
+                memories.c.person_id == params.person_id,
+                memories.c.thread_id == params.thread_id,
+                memories.c.state == "ok",
+                memories.c.vetoed.is_(False),
+            )
+            .limit(1)
+        ).scalar()
+        return str(found) if found is not None else ""
+
+    def _superseded(self, conn, params: _WriteParams) -> dict | None:
+        if not params.supersedes:
+            return None
+        resolved = self._resolve_id(params.supersedes)
+        if not resolved:
+            raise ValueError("memory to supersede was not found")
+        old = (
+            conn.execute(
+                select(memories)
+                .where(memories.c.id == resolved)
+                .with_for_update()
+            )
+            .mappings()
+            .first()
+        )
+        if old is None:
+            raise ValueError("memory to supersede was not found")
+        verdict = supersede_verdict(
+            old,
+            owner_id=params.owner,
+            subject_id=params.subject,
+            scope=params.scope,
+            kind=params.kind,
+            thread_id=params.thread_id,
+            change=params.change,
+            task_status=params.task_status,
+        )
+        if not verdict.allowed:
+            raise ValueError(verdict.reason or "supersede refused")
+        return dict(old)
+
+    def write(
+        self,
+        text: str,
+        *,
+        scope: str = "person",
+        kind: str = "fact",
+        person_id: str = "",
+        thread_id: str = "",
+        audience: str = "",
+        via: str = "turn",
+        source: str = "",
+        refs: Sequence[str] = (),
+        level: int | None = 2,
+        owner_id: str = "",
+        subject_id: str = "",
+        confirmed: bool | None = None,
+        pinned: bool = False,
+        durability: str = "normal",
+        category: str = "general",
+        task_status: str | None = None,
+        due_at: float | None = None,
+        supersedes: str | None = None,
+        change: str = "contradiction",
+        asserted_at: float | None = None,
+        state: str = "ok",
+        corroboration_days: int = 0,
+        external_id: str = "",
+        dedupe: bool = False,
+    ) -> str:
+        """Insert one labelled canonical row; raises before touching anything forbidden."""
+        if self.db is None:
+            raise ValueError("memory store has no database")
+        body, number, route, owner, subject, wanted = self._validated(
+            text=text,
+            level=level,
+            scope=scope,
+            kind=kind,
+            source=source,
+            via=via,
+            person_id=person_id,
+            owner_id=owner_id,
+            subject_id=subject_id,
+            corroboration_days=corroboration_days,
+        )
+        params, state, plan, now = self._prepare(
+            body=body,
+            kind=wanted,
+            scope=scope,
+            person_id=person_id,
+            thread_id=thread_id,
+            audience=audience,
+            route=route,
+            source=source,
+            refs=refs,
+            level=number,
+            owner=owner,
+            subject=subject,
+            confirmed=confirmed,
+            pinned=pinned,
+            durability=durability,
+            category=category,
+            task_status=task_status,
+            due_at=due_at,
+            asserted_at=asserted_at,
+            dedupe=dedupe,
+            external_id=external_id,
+            supersedes=supersedes,
+            change=change,
+            state=state,
+        )
+        values = self._values(params, state, plan, now)
+        memory_id = str(values["id"])
+        with self.db.connect() as conn:
+            if params.dedupe:
+                found = self._existing(conn, params)
+                if found:
+                    if params.external_id:
+                        self._link(conn, found, params.external_id)
+                    return found
+            old = self._superseded(conn, params)
+            if old is not None:
+                values["supersedes"] = str(old["id"])
+            conn.execute(pg_insert(memories).values(**values))
+            if old is not None:
+                conn.execute(
+                    memories.update()
+                    .where(memories.c.id == old["id"])
+                    .values(
+                        state="superseded",
+                        superseded_by=memory_id,
+                        pinned=False,
+                        expires_at=self._policy.superseded_expiry(now),
+                        updated_at=now,
+                    )
+                )
+            if params.external_id:
+                self._link(conn, memory_id, params.external_id)
+        return memory_id
+
+
+    # ------------------------------------------------------------ intake seam
+
+    def intake(
+        self,
+        conn,
+        *,
+        thread_id: str,
+        person_id: str,
+        message_id: str,
+        text: str,
+        kind: str = "message",
+        language: str = "id",
+        audience: str = "private",
+        asserted_at: float | None = None,
+    ) -> MemoryCandidate | None:
+        """Write `memory_events` + `memories(pending, level NULL)` on an open intake connection.
+
+        Hard exclusion (ADR-0004 §3) runs before either row: a credential/crisis/injection
+        candidate is never journalled. The caller owns the transaction; a failure here must
+        roll the message and turn back too.
+        """
+        body = _flat(text)
+        if not body or SENSITIVE.search(body) or is_crisis(body):
+            return None
+        if is_injection(body, language):
+            return None
+        now = time.time()
+        memory_id = str(uuid.uuid4())
+        event_id = str(uuid.uuid4())
+        refs = [f"message:{_flat(message_id, 160)}"] if message_id else []
+        conn.execute(
+            pg_insert(memories).values(
+                id=memory_id,
+                scope="person",
+                person_id=str(person_id or ""),
+                thread_id=str(thread_id or ""),
+                kind=str(kind or "fact"),
+                text=body,
+                state="pending",
+                level=None,
+                confirmed=None,
+                owner_id=str(person_id or ""),
+                subject_id=str(person_id or ""),
+                via="turn",
+                refs=refs,
+                trust=TRUST_UNLABELED,
+                audience=self._audience("person", audience),
+                source="turn",
+                vetoed=False,
+                vetoed_by="",
+                vetoed_at=0.0,
+                pinned=False,
+                durability="normal",
+                category="general",
+                use_count=0,
+                distinct_use_days=0,
+                last_used_at=0.0,
+                max_lifetime_at=None,
+                expires_at=self._policy.unlabeled_expiry(now),
+                supersedes=None,
+                superseded_by=None,
+                due_at=None,
+                task_status=None,
+                dispute_state="none",
+                disputed_with=None,
+                dispute_reason="",
+                disputed_at=0.0,
+                asserted_at=float(asserted_at if asserted_at is not None else now),
+                created_at=now,
+                updated_at=now,
+            )
+        )
+        conn.execute(
+            pg_insert(memory_events).values(
+                id=event_id,
+                memory_id=memory_id,
+                thread_id=str(thread_id or ""),
+                person_id=str(person_id or ""),
+                message_id=str(message_id or ""),
+                kind="message",
+                content=body,
+                content_hash=_digest(body),
+                created_at=now,
+            )
+        )
+        return MemoryCandidate(
+            memory_id=memory_id,
+            event_id=event_id,
+            thread_id=str(thread_id or ""),
+            person_id=str(person_id or ""),
+            message_id=str(message_id or ""),
+            text=body,
+            kind="message",
+        )
+
+    # ------------------------------------------------------------ state machine
+
+    def _base_row(self, memory_id: str) -> dict | None:
+        if self.db is None or not str(memory_id or "").strip():
+            return None
+        resolved = self._resolve_id(memory_id)
+        if not resolved:
+            return None
+        found = self.db.fetch_one(select(memories).where(memories.c.id == resolved))
+        return found
+
+    def _resolve_id(self, memory_id: str) -> str:
+        raw = str(memory_id or "").strip().lstrip("#").strip().lower()
+        if not raw or self.db is None:
+            return ""
+        if FULL_UUID.match(raw):
+            return raw
+        if not HEX_PREFIX.match(raw):
+            return ""
+        if len(raw) == 32:
+            return f"{raw[:8]}-{raw[8:12]}-{raw[12:16]}-{raw[16:20]}-{raw[20:]}"
+        rows = self.db.fetch_all(
+            select(cast(memories.c.id, String).label("id"))
+            .where(cast(memories.c.id, String).like(f"{raw}%"))
+            .limit(2)
+        )
+        return str(rows[0]["id"]) if len(rows) == 1 else ""
+
+    def _pending_ids(self, conn, thread_id: str, refs: Sequence[str]) -> list[str]:
+        statement = select(memories.c.id).where(
+            memories.c.state == "pending",
+            memories.c.thread_id == str(thread_id or ""),
+        )
+        wanted = [f"message:{item}" for item in refs if str(item or "").strip()]
+        if wanted:
+            statement = statement.where(memories.c.refs.contains(wanted))
+        statement = statement.with_for_update()
+        return [str(row["id"]) for row in conn.execute(statement).mappings().all()]
+
+    def _transition_values(
+        self,
+        row: Mapping,
+        to_state: str,
+        *,
+        level: int | None,
+        confirmed: bool | None,
+        reason: str = "",
+        now: float | None = None,
+    ) -> dict:
+        moment = time.time() if now is None else now
+        allowed = TRANSITIONS.get(str(row.get("state") or ""), set())
+        if to_state not in allowed:
+            raise ValueError(f"illegal memory transition {row.get('state')} -> {to_state}")
+        values: dict = {"state": to_state, "updated_at": moment}
+        if to_state == "ok":
+            if level is None and row.get("level") is None:
+                raise ValueError("state ok needs a privacy level")
+            if level is not None:
+                if int(level) > 4:
+                    raise ValueError("privacy level 5/credentials are never stored")
+                values["level"] = int(level)
+            final_level = int(level if level is not None else row["level"])
+            final_confirmed = confirmed if confirmed is not None else row.get("confirmed")
+            if final_confirmed is None:
+                final_confirmed = True
+            values["confirmed"] = bool(final_confirmed)
+            plan = self._policy.plan(
+                kind=str(row.get("kind") or "fact"),
+                level=final_level,
+                state="ok",
+                durability=str(row.get("durability") or "normal"),
+                category=str(row.get("category") or "general"),
+                task_status=row.get("task_status"),
+                pinned=bool(row.get("pinned")),
+                now=moment,
+            )
+            values.update(
+                pinned=plan.pinned,
+                max_lifetime_at=plan.max_lifetime_at,
+                expires_at=plan.expires_at,
+            )
+            values["trust"] = trust_for(
+                str(row.get("via") or "turn"),
+                str(row.get("owner_id") or ""),
+                str(row.get("subject_id") or ""),
+            )
+            values["last_error"] = ""
+        elif to_state in {"failed", "not_worth"}:
+            values["level"] = None
+            values["confirmed"] = None
+            values["trust"] = TRUST_UNLABELED
+            values["last_error"] = _flat(reason, 200)
+            values["expires_at"] = self._policy.unlabeled_expiry(moment)
+            values["pinned"] = False
+        elif to_state == "superseded":
+            values["pinned"] = False
+            values["expires_at"] = self._policy.superseded_expiry(moment)
+        return values
+
+    def transition(
+        self,
+        memory_id: str,
+        to_state: str,
+        *,
+        level: int | None = None,
+        confirmed: bool | None = None,
+        reason: str = "",
+    ) -> bool:
+        """The ADR-0004 six-state machine: only the listed edges exist, never a guessed level."""
+        if self.db is None:
+            return False
+        resolved = self._resolve_id(memory_id)
+        if not resolved:
+            return False
+        with self.db.connect() as conn:
+            row = (
+                conn.execute(select(memories).where(memories.c.id == resolved).with_for_update())
+                .mappings()
+                .first()
+            )
+            if row is None:
+                return False
+            values = self._transition_values(
+                row, to_state, level=level, confirmed=confirmed, reason=reason
+            )
+            conn.execute(memories.update().where(memories.c.id == resolved).values(**values))
+        return True
+
+    def label(
+        self,
+        memory_id: str,
+        *,
+        level: int,
+        confirmed: bool = True,
+        subject_id: str | None = None,
+        category: str | None = None,
+        durability: str | None = None,
+        task_status: str | None = None,
+    ) -> bool:
+        """`pending`/`staged` -> `ok` with the assess verdict; the level is never defaulted."""
+        if self.db is None:
+            return False
+        resolved = self._resolve_id(memory_id)
+        if not resolved:
+            return False
+        with self.db.connect() as conn:
+            row = (
+                conn.execute(select(memories).where(memories.c.id == resolved).with_for_update())
+                .mappings()
+                .first()
+            )
+            if row is None:
+                return False
+            extra: dict = {}
+            if subject_id is not None:
+                extra["subject_id"] = str(subject_id or "")
+            if category:
+                extra["category"] = str(category)
+            if durability:
+                extra["durability"] = str(durability)
+            if task_status is not None:
+                extra["task_status"] = str(task_status or "")
+            merged = {**dict(row), **extra}
+            values = self._transition_values(
+                merged, "ok", level=level, confirmed=confirmed, reason=""
+            )
+            if extra:
+                conn.execute(
+                    memories.update().where(memories.c.id == resolved).values(**extra)
+                )
+            conn.execute(memories.update().where(memories.c.id == resolved).values(**values))
+        return True
+
+    async def promote(self, memory_id: str) -> bool:
+        changed = await io.run(self.transition, memory_id, "ok")
+        if changed:
+            await self._index_row(memory_id)
+        return changed
+
+    def mark_not_worth(self, memory_id: str, reason: str = "not worth") -> bool:
+        return self.transition(memory_id, "not_worth", reason=reason)
+
+    async def discard_candidate(
+        self,
+        thread_id: str,
+        refs: Sequence[str] = (),
+        *,
+        state: str = "not_worth",
+        reason: str = "not worth",
+    ) -> int:
+        """Move pending intake candidates to a terminal unreadable state (failed/not_worth)."""
+        return await io.run(
+            self._discard, thread_id, refs, state=state, reason=reason
+        )
+
+    def _discard(
+        self,
+        thread_id: str,
+        refs: Sequence[str],
+        *,
+        state: str,
+        reason: str,
+    ) -> int:
+        if self.db is None:
+            return 0
+        if state not in {"failed", "not_worth"}:
+            raise ValueError("a pending candidate can only be dropped as failed or not_worth")
+        now = time.time()
+        with self.db.connect() as conn:
+            ids = self._pending_ids(conn, thread_id, refs)
+            for memory_id in ids:
+                row = (
+                    conn.execute(
+                        select(memories).where(memories.c.id == memory_id).with_for_update()
+                    )
+                    .mappings()
+                    .first()
+                )
+                if row is None:
+                    continue
+                values = self._transition_values(
+                    row, state, level=None, confirmed=None, reason=reason, now=now
+                )
+                conn.execute(
+                    memories.update()
+                    .where(memories.c.id == memory_id)
+                    .values(**values, label_attempts=memories.c.label_attempts + 1)
+                )
+        return len(ids)
+
+    async def drop_candidate(
+        self,
+        thread_id: str,
+        refs: Sequence[str] = (),
+        *,
+        reason: str = "labeling failed",
+    ) -> int:
+        """Classifier failure drops the candidate: `failed`, level NULL, never a guessed level."""
+        return await self.discard_candidate(thread_id, refs, state="failed", reason=reason)
+
+    def _label_pending(
+        self,
+        thread_id: str,
+        refs: Sequence[str],
+        *,
+        level: int,
+        confirmed: bool,
+        subject_id: str,
+        category: str,
+        durability: str,
+    ) -> list[str]:
+        now = time.time()
+        with self.db.connect() as conn:
+            ids = self._pending_ids(conn, thread_id, refs)
+            for memory_id in ids:
+                row = (
+                    conn.execute(
+                        select(memories).where(memories.c.id == memory_id).with_for_update()
+                    )
+                    .mappings()
+                    .first()
+                )
+                if row is None:
+                    continue
+                merged = {
+                    **dict(row),
+                    "subject_id": str(subject_id or row.get("subject_id") or ""),
+                    "category": str(category or row.get("category") or "general"),
+                    "durability": str(durability or row.get("durability") or "normal"),
+                }
+                values = self._transition_values(
+                    merged, "ok", level=int(level), confirmed=bool(confirmed), reason="", now=now
+                )
+                conn.execute(
+                    memories.update()
+                    .where(memories.c.id == memory_id)
+                    .values(
+                        **values,
+                        subject_id=merged["subject_id"],
+                        category=merged["category"],
+                        durability=merged["durability"],
+                    )
+                )
+        return ids
+
+    # ------------------------------------------------------------ capture
+
+    @staticmethod
+    def _excluded(text: str, language: str) -> bool:
+        body = _flat(text)
+        return (
+            not body
+            or bool(SENSITIVE.search(body))
+            or is_crisis(body)
+            or is_injection(body, language)
+        )
+
+    @staticmethod
+    def _user_text(messages: Sequence[Mapping]) -> str:
+        for item in messages:
+            if str(item.get("role") or "") == "user":
+                return _flat(item.get("content"))
+        return _flat(messages[0].get("content")) if messages else ""
+
+    async def _store_facts(self, facts: Sequence[MemoryHit], ctx: _Capture) -> list[str]:
+        ids: list[str] = []
+        for fact in facts:
+            try:
+                ids.append(
+                    await io.run(
+                        self.write,
+                        fact.text,
+                        scope="person",
+                        kind=str(fact.metadata.get("kind") or "fact"),
+                        person_id=ctx.person_id,
+                        thread_id=ctx.thread_id,
+                        audience=ctx.audience,
+                        via=ctx.route,
+                        source=ctx.source,
+                        refs=[f"message:{item}" for item in ctx.refs],
+                        level=ctx.level,
+                        owner_id=ctx.owner,
+                        subject_id=ctx.subject,
+                        confirmed=ctx.confirmed,
+                        category=str(ctx.category or fact.metadata.get("category") or "general"),
+                        durability=str(
+                            ctx.durability or fact.metadata.get("durability") or "normal"
+                        ),
+                        dedupe=True,
+                        external_id=str(fact.id or ""),
+                    )
+                )
+            except ValueError as exc:
+                log.debug("extracted fact rejected: %s", exc)
+        await io.run(
+            self._drop_pending,
+            ctx.thread_id,
+            ctx.refs,
+            state="not_worth",
+            reason="extracted",
+        )
+        for memory_id in ids:
+            await self._index_row(memory_id)
+        return ids
+
+    async def _fallback_capture(self, user: str, ctx: _Capture) -> list[str]:
+        labeled = await io.run(
+            self._label_pending,
+            ctx.thread_id,
+            ctx.refs,
+            level=ctx.level,
+            confirmed=ctx.confirmed,
+            subject_id=ctx.subject,
+            category=ctx.category,
+            durability=ctx.durability,
+        )
+        if labeled:
+            for memory_id in labeled:
+                await self._index_row(memory_id)
+            return labeled
+        try:
+            memory_id = await io.run(
+                self.write,
+                user,
+                scope="person",
+                kind="fact",
+                person_id=ctx.person_id,
+                thread_id=ctx.thread_id,
+                audience=ctx.audience,
+                via=ctx.route,
+                source=ctx.source,
+                refs=[f"message:{item}" for item in ctx.refs],
+                level=ctx.level,
+                owner_id=ctx.owner,
+                subject_id=ctx.subject,
+                confirmed=ctx.confirmed,
+                category=ctx.category or "general",
+                durability=ctx.durability or "normal",
+            )
+        except ValueError:
+            return []
+        await self._index_row(memory_id)
+        return [memory_id]
+
+    async def capture(
+        self,
+        messages: list[dict],
+        *,
+        person_id: str,
+        thread_id: str,
+        audience: str,
+        source: str = "turn",
+        level: int | None = 2,
+        owner_id: str = "",
+        subject_id: str = "",
+        confirmed: bool = True,
+        refs: Sequence[str] = (),
+        category: str = "",
+        durability: str = "",
+        worth: bool = True,
+        language: str = "id",
+    ) -> list[str]:
+        """Label a turn candidate; Mem0 extraction is used when present, canonical never waits."""
+        user = self._user_text(messages)
+        if level is None or int(level) > 4 or int(level) < 0:
+            return []
+        if self._excluded(user, language):
+            return []
+        owner = str(owner_id or person_id or "")
+        ctx = _Capture(
+            person_id=str(person_id or ""),
+            thread_id=str(thread_id or ""),
+            audience=audience,
+            source=source,
+            level=int(level),
+            owner=owner,
+            subject=str(subject_id or owner),
+            confirmed=bool(confirmed),
+            refs=tuple(str(item) for item in refs if str(item or "").strip()),
+            category=category,
+            durability=durability,
+            route=via_of(source),
+        )
+        if not worth:
+            await io.run(
+                self._drop_pending,
+                ctx.thread_id,
+                ctx.refs,
+                state="not_worth",
+                reason="not worth",
+            )
+            return []
+        if self._extractor is not None and bool(getattr(self._extractor, "available", False)):
+            try:
+                facts = await self._extractor.capture(
+                    messages,
+                    person_id=ctx.person_id,
+                    thread_id=ctx.thread_id,
+                    audience=ctx.audience,
+                    source=ctx.source,
+                    level=ctx.level,
+                    owner_id=ctx.owner,
+                    subject_id=ctx.subject,
+                    confirmed=ctx.confirmed,
+                )
+            except Exception as exc:  # Mem0/LLM trouble must not lose the canonical candidate
+                log.warning("memory extraction skipped: %s: %s", type(exc).__name__, exc)
+            else:
+                if facts:
+                    return await self._store_facts(facts, ctx)
+        return await self._fallback_capture(user, ctx)
+
+    def _drop_pending(
+        self,
+        thread_id: str,
+        refs: Sequence[str],
+        *,
+        state: str,
+        reason: str,
+    ) -> int:
+        if self.db is None:
+            return 0
+        now = time.time()
+        with self.db.connect() as conn:
+            ids = self._pending_ids(conn, thread_id, refs)
+            for memory_id in ids:
+                row = (
+                    conn.execute(
+                        select(memories).where(memories.c.id == memory_id).with_for_update()
+                    )
+                    .mappings()
+                    .first()
+                )
+                if row is None:
+                    continue
+                values = self._transition_values(
+                    row, state, level=None, confirmed=None, reason=reason, now=now
+                )
+                conn.execute(memories.update().where(memories.c.id == memory_id).values(**values))
+        return len(ids)
+
+    # ------------------------------------------------------------ use / renewal
+
+    def record_uses(
+        self,
+        turn_id: str,
+        memory_ids: Sequence[str],
+        *,
+        delivered: bool = True,
+    ) -> int:
+        """ADR-0005 §4.3: one touch per memory per delivered turn, then renew deterministically."""
+        if (
+            self.db is None
+            or not delivered
+            or not turn_id
+            or not self._policy.renew_on_use
+            or not self._policy.enabled
+        ):
+            return 0
+        wanted = list(dict.fromkeys(str(item) for item in memory_ids if str(item or "").strip()))
+        if not wanted:
+            return 0
+        now = time.time()
+        touched = 0
+        with self.db.connect() as conn:
+            for memory_id in wanted:
+                inserted = conn.execute(
+                    pg_insert(memory_uses)
+                    .values(memory_id=memory_id, day=func.current_date(), turn_id=str(turn_id))
+                    .on_conflict_do_nothing(
+                        index_elements=["memory_id", "day", "turn_id"]
+                    )
+                    .returning(memory_uses.c.memory_id)
+                ).scalar()
+                if inserted is None:
+                    continue
+                row = (
+                    conn.execute(
+                        select(memories).where(memories.c.id == memory_id).with_for_update()
+                    )
+                    .mappings()
+                    .first()
+                )
+                if row is None or str(row.get("state") or "") != "ok":
+                    continue
+                distinct = conn.execute(
+                    select(func.count(func.distinct(memory_uses.c.day))).where(
+                        memory_uses.c.memory_id == memory_id
+                    )
+                ).scalar()
+                values: dict = {
+                    "use_count": memories.c.use_count + 1,
+                    "distinct_use_days": int(distinct or 1),
+                    "last_used_at": now,
+                    "updated_at": now,
+                }
+                renewed = self._policy.renewed_expiry(
+                    kind=str(row.get("kind") or "fact"),
+                    level=int(row.get("level") or 0),
+                    pinned=bool(row.get("pinned")),
+                    confirmed=row.get("confirmed"),
+                    max_lifetime_at=row.get("max_lifetime_at"),
+                    last_used_at=float(row.get("last_used_at") or 0.0),
+                    now=now,
+                )
+                if renewed is not None:
+                    values["expires_at"] = renewed
+                conn.execute(memories.update().where(memories.c.id == memory_id).values(**values))
+                touched += 1
+        return touched
+
+    # ------------------------------------------------------------ purge / forget
+
+    def _mapping_external_sync(self, memory_id: str) -> str:
+        if self.db is None:
+            return ""
+        found = self.db.fetch_one(
+            select(memory_index.c.external_id).where(memory_index.c.memory_id == memory_id)
+        )
+        return str(found["external_id"]) if found else ""
+
+    def _unlink_sync(self, memory_id: str) -> None:
+        if self.db is None:
+            return
+        with self.db.connect() as conn:
+            conn.execute(memory_index.delete().where(memory_index.c.memory_id == memory_id))
+
+    def _link_sync(self, memory_id: str, external_id: str) -> None:
+        if self.db is None:
+            return
+        with self.db.connect() as conn:
+            self._link(conn, memory_id, external_id)
+
+    async def _drop_index(self, row: Mapping) -> None:
+        memory_id = str(row.get("id") or "")
+        text = str(row.get("text") or "")
+        external = await io.run(self._mapping_external_sync, memory_id)
+        if self._has_index:
+            if external and hasattr(self._index, "delete"):
+                try:
+                    await self._index.delete(external)
+                except Exception as exc:
+                    log.warning("index delete failed %s: %s", memory_id, exc)
+            if hasattr(self._index, "purge_library"):
+                try:
+                    purged = self._index.purge_library(external, text)
+                    if inspect.isawaitable(purged):
+                        await purged
+                except Exception as exc:
+                    log.warning("library purge failed %s: %s", memory_id, exc)
+        await io.run(self._unlink_sync, memory_id)
+
+    async def _index_row(self, memory_id: str, *, external_id: str = "") -> str:
+        if not self._has_index or self.db is None:
+            return ""
+        if not external_id:
+            found = await io.run(self._mapping_external_sync, memory_id)
+            if found:
+                return found
+        row = await io.run(self._base_row, memory_id)
+        if row is None or str(row.get("state") or "") != "ok":
+            return ""
+        if not external_id:
+            try:
+                ids = await self._index.add(
+                    row["text"],
+                    scope=str(row["scope"]),
+                    kind=str(row["kind"]),
+                    person_id=str(row["person_id"]),
+                    thread_id=str(row["thread_id"]),
+                    audience=str(row["audience"]),
+                    source=str(row["source"]),
+                    metadata={"canonical_id": memory_id, "trust": int(row["trust"])},
+                    infer=False,
+                    level=int(row["level"]),
+                    owner_id=str(row["owner_id"]),
+                    subject_id=str(row["subject_id"]),
+                    confirmed=bool(row["confirmed"]),
+                )
+            except Exception as exc:
+                log.warning("memory index add failed %s: %s", memory_id, exc)
+                return ""
+            external_id = str(ids[0]) if ids else ""
+        if external_id:
+            await io.run(self._link_sync, memory_id, external_id)
+        return external_id
+
+    def _link(self, conn, memory_id: str, external_id: str) -> None:
+        backend = str(getattr(self._index, "backend", "mem0"))
+        model = str(getattr(self._index, "embedding_model", "") or "")
+        dim = int(getattr(self._index, "dim", 384) or 384)
+        values = {
+            "memory_id": memory_id,
+            "backend": backend,
+            "external_id": str(external_id),
+            "model": model,
+            "dim": dim,
+            "updated_at": time.time(),
+        }
+        conn.execute(
+            pg_insert(memory_index)
+            .values(**values)
+            .on_conflict_do_update(
+                index_elements=["memory_id"],
+                set_={key: value for key, value in values.items() if key != "memory_id"},
+            )
+        )
+
+    async def forget(
+        self,
+        memory_id: str,
+        *,
+        requester_id: str = "",
+        thread_id: str = "",
+        allow_global: bool = False,
+    ) -> bool:
+        """Index -> canonical -> library copy -> content-free tombstone (ADR-0005 §4.5)."""
+        row = await io.run(self._base_row, memory_id)
+        if row is None:
+            return False
+        scope = str(row.get("scope") or "")
+        if scope == "person" and str(row.get("person_id") or "") != str(requester_id or ""):
+            return False
+        if scope == "thread" and str(row.get("thread_id") or "") != str(thread_id or ""):
+            return False
+        if scope == "global" and not allow_global:
+            return False
+        await self._drop_index(row)
+        return await io.run(self._forget_sync, row)
+
+    def _forget_sync(self, row: Mapping) -> bool:
+        with self.db.connect() as conn:
+            removed = conn.execute(
+                delete(memories)
+                .where(memories.c.id == str(row["id"]))
+                .returning(memories.c.id)
+            ).scalar()
+            if removed is None:
+                return False
+            conn.execute(
+                pg_insert(memory_tombstones).values(
+                    id=str(row["id"]),
+                    kind=str(row.get("kind") or "fact"),
+                    level=row.get("level"),
+                    scope=str(row.get("scope") or "person"),
+                    content_hash=_digest(str(row.get("text") or "")),
+                    reason="forgot",
+                    deleted_at=time.time(),
+                )
+            )
+        return True
+
+    async def purge(
+        self,
+        *,
+        dry_run: bool = False,
+        batch: int | None = None,
+        grace_days: float | None = None,
+        now: float | None = None,
+    ) -> PurgeReport:
+        """ADR-0005 §4.5: expired, unpinned rows; index, library copy, canonical, tombstone."""
+        if self.db is None:
+            return PurgeReport(dry_run=dry_run)
+        moment = time.time() if now is None else now
+        limit = int(batch if batch is not None else self._policy.purge_batch)
+        cutoff = self._policy.purge_cutoff(moment, grace_days)
+        rows = await io.run(self._purge_candidates_sync, cutoff, limit)
+        report = PurgeReport(selected=len(rows), dry_run=dry_run)
+        if dry_run:
+            return report
+        if not rows:
+            await io.run(self._purge_metrics_only_sync, moment)
+            return report
+        for row in rows:
+            await self._drop_index(row)
+        purged = await io.run(self._purge_rows_sync, rows, cutoff, moment)
+        return PurgeReport(selected=len(rows), purged=purged, dry_run=False)
+
+    def _purge_candidates_sync(self, cutoff: float, limit: int) -> list[dict]:
+        return self.db.fetch_all(
+            select(memories)
+            .where(
+                memories.c.expires_at.is_not(None),
+                memories.c.expires_at <= cutoff,
+                memories.c.pinned.is_(False),
+            )
+            .order_by(memories.c.expires_at)
+            .limit(max(1, int(limit)))
+        )
+
+    def _purge_metrics_only_sync(self, now: float) -> int:
+        with self.db.connect() as conn:
+            return self._purge_metrics(conn, now)
+
+    def _purge_rows_sync(self, rows: Sequence[Mapping], cutoff: float, moment: float) -> int:
+        purged = 0
+        with self.db.connect() as conn:
+            for row in rows:
+                removed = conn.execute(
+                    delete(memories)
+                    .where(
+                        memories.c.id == str(row["id"]),
+                        memories.c.pinned.is_(False),
+                        memories.c.expires_at <= cutoff,
+                    )
+                    .returning(memories.c.id)
+                ).scalar()
+                if removed is None:
+                    continue
+                reason = (
+                    "vetoed"
+                    if bool(row.get("vetoed"))
+                    else "superseded"
+                    if str(row.get("state") or "") == "superseded"
+                    else "expired"
+                )
+                conn.execute(
+                    pg_insert(memory_tombstones).values(
+                        id=str(row["id"]),
+                        kind=str(row.get("kind") or "fact"),
+                        level=row.get("level"),
+                        scope=str(row.get("scope") or "person"),
+                        content_hash=_digest(str(row.get("text") or "")),
+                        reason=reason,
+                        deleted_at=moment,
+                    )
+                )
+                purged += 1
+            self._purge_metrics(conn, moment)
+        return purged
+
+    def _purge_metrics(self, conn, now: float) -> int:
+        """ADR-0005 §4.7 / ADR-0019: cost rows expire by `engine.metrics.retention_days`."""
+        try:
+            if conn.execute(text("SELECT to_regclass('llm_calls')")).scalar() is None:
+                return 0
+            days = retention_days_from(self.config)
+            return int(
+                conn.execute(
+                    text("DELETE FROM llm_calls WHERE ts < to_timestamp(:cutoff)"),
+                    {"cutoff": now - days * DAY},
+                ).rowcount
+                or 0
+            )
+        except Exception as exc:  # a metrics table problem never blocks memory retention
+            log.warning("metrics purge skipped: %s", exc)
+            return 0
+
+    # ------------------------------------------------------------ veto / privacy
+
+    async def veto(self, memory_id: str, *, subject_id: str, active: bool = True) -> bool:
+        return await io.run(self._veto_sync, memory_id, subject_id, active)
+
+    def _veto_sync(self, memory_id: str, subject_id: str, active: bool) -> bool:
+        row = self._base_row(memory_id)
+        if row is None or not subject_id or str(row.get("subject_id") or "") != str(subject_id):
+            return False
+        now = time.time()
+        with self.db.connect() as conn:
+            conn.execute(
+                memories.update()
+                .where(memories.c.id == str(row["id"]))
+                .values(
+                    vetoed=bool(active),
+                    vetoed_by=str(subject_id) if active else "",
+                    vetoed_at=now if active else 0.0,
+                    updated_at=now,
+                )
+            )
+        return True
+
+    async def set_privacy(
+        self,
+        memory_id: str,
+        *,
+        level: int | None = None,
+        confirmed: bool | None = None,
+        subject_id: str | None = None,
+        vetoed: bool | None = None,
+        actor: str = "",
+    ) -> bool:
+        return await io.run(
+            self._set_privacy_sync,
+            memory_id,
+            level=level,
+            confirmed=confirmed,
+            subject_id=subject_id,
+            vetoed=vetoed,
+            actor=actor,
+        )
+
+    def _set_privacy_sync(
+        self,
+        memory_id: str,
+        *,
+        level: int | None = None,
+        confirmed: bool | None = None,
+        subject_id: str | None = None,
+        vetoed: bool | None = None,
+        actor: str = "",
+    ) -> bool:
+        row = self._base_row(memory_id)
+        if row is None:
+            return False
+        values: dict = {"updated_at": time.time()}
+        if level is not None:
+            if int(level) > 4:
+                raise ValueError("privacy level 5/credentials are never stored")
+            if str(row.get("state") or "") not in {"ok", "staged"}:
+                raise ValueError("only a labelled memory can change level")
+            values["level"] = int(level)
+            plan = self._policy.plan(
+                kind=str(row.get("kind") or "fact"),
+                level=int(level),
+                state=str(row["state"]),
+                durability=str(row.get("durability") or "normal"),
+                category=str(row.get("category") or "general"),
+                task_status=row.get("task_status"),
+                pinned=bool(row.get("pinned")),
+            )
+            values.update(
+                pinned=plan.pinned,
+                expires_at=plan.expires_at,
+                max_lifetime_at=plan.max_lifetime_at,
+            )
+        if confirmed is not None:
+            values["confirmed"] = bool(confirmed)
+        if subject_id is not None:
+            values["subject_id"] = str(subject_id or "")
+        if vetoed is not None:
+            values["vetoed"] = bool(vetoed)
+            values["vetoed_by"] = str(actor or "") if vetoed else ""
+            values["vetoed_at"] = time.time() if vetoed else 0.0
+        with self.db.connect() as conn:
+            conn.execute(memories.update().where(memories.c.id == str(row["id"])).values(**values))
+        return True
+
+    # ------------------------------------------------------------ rekey
+
+    async def rekey(self, old_id: str, new_id: str) -> int:
+        """ADR-0001: identity rekey is an UPDATE; veto/audience/level/confirmed ride along."""
+        if self.db is None or not old_id or not new_id or old_id == new_id:
+            return 0
+        rows = await io.run(self._rekey_rows_sync, old_id)
+        for row in rows:
+            await self._drop_index(row)
+        return await io.run(self._rekey_update_sync, old_id, new_id)
+
+    def _rekey_rows_sync(self, old_id: str) -> list[dict]:
+        return self.db.fetch_all(
+            select(memories).where(
+                or_(
+                    memories.c.person_id == old_id,
+                    memories.c.owner_id == old_id,
+                    memories.c.subject_id == old_id,
+                )
+            )
+        )
+
+    def _rekey_update_sync(self, old_id: str, new_id: str) -> int:
+        with self.db.connect() as conn:
+            result = conn.execute(
+                memories.update()
+                .where(
+                    or_(
+                        memories.c.person_id == old_id,
+                        memories.c.owner_id == old_id,
+                        memories.c.subject_id == old_id,
+                    )
+                )
+                .values(
+                    person_id=case(
+                        (memories.c.person_id == old_id, new_id),
+                        else_=memories.c.person_id,
+                    ),
+                    owner_id=case(
+                        (memories.c.owner_id == old_id, new_id),
+                        else_=memories.c.owner_id,
+                    ),
+                    subject_id=case(
+                        (memories.c.subject_id == old_id, new_id),
+                        else_=memories.c.subject_id,
+                    ),
+                    updated_at=time.time(),
+                )
+            )
+        return int(result.rowcount or 0)
+
+    # ------------------------------------------------------------ reads (view only)
+
+    def readable(self, limit: int = 200) -> list[MemoryHit]:
+        if self.db is None:
+            return []
+        rows = self.db.fetch_all(
+            select(memories_readable).order_by(memories_readable.c.created_at.desc()).limit(
+                max(1, int(limit))
+            )
+        )
+        return [_hit(row) for row in rows]
+
+    def admin(self, *, state: str | None = None, limit: int = 200) -> list[MemoryHit]:
+        """Worker/admin read of the base table (ADR-0004 §5.3); never for prompts."""
+        if self.db is None:
+            return []
+        statement = select(memories).order_by(memories.c.created_at.desc()).limit(
+            max(1, int(limit))
+        )
+        if state:
+            statement = statement.where(memories.c.state == str(state))
+        return [_hit(row) for row in self.db.fetch_all(statement)]
+
+    def backlog(self) -> dict[str, int]:
+        if self.db is None:
+            return {}
+        rows = self.db.fetch_all(
+            select(memories.c.state, func.count().label("count")).group_by(memories.c.state)
+        )
+        return {str(row["state"]): int(row["count"]) for row in rows}
+
+    def _scope_filter(self, scope: str, person_id: str, thread_id: str):
+        if scope == "global":
+            return memories_readable.c.scope == "global"
+        if scope == "person":
+            if not person_id:
+                return None
+            return and_(
+                memories_readable.c.scope == "person",
+                memories_readable.c.person_id == person_id,
+                or_(
+                    memories_readable.c.audience != "group",
+                    memories_readable.c.thread_id == thread_id,
+                ),
+            )
+        if scope == "thread":
+            if not thread_id:
+                return None
+            return and_(
+                memories_readable.c.scope == "thread",
+                memories_readable.c.thread_id == thread_id,
+            )
+        return None
+
+    def _rows(
+        self, scope: str, query: str, person_id: str, thread_id: str, limit: int
+    ) -> list[MemoryHit]:
+        if self.db is None:
+            return []
+        clause = self._scope_filter(scope, person_id, thread_id)
+        if clause is None:
+            return []
+        statement = select(memories_readable).where(clause)
+        for term in re.findall(r"\w+", str(query or ""), re.UNICODE):
+            pattern = f"%{term}%"
+            statement = statement.where(
+                or_(
+                    memories_readable.c.text.ilike(pattern),
+                    memories_readable.c.kind.ilike(pattern),
+                )
+            )
+        statement = statement.order_by(
+            memories_readable.c.last_used_at.desc(),
+            memories_readable.c.created_at.desc(),
+        ).limit(max(1, int(limit)))
+        return [_hit(row) for row in self.db.fetch_all(statement)]
+
+    async def _search_scope(
+        self, scope: str, query: str, person_id: str, thread_id: str, limit: int
+    ) -> list[MemoryHit]:
+        return await io.run(self._rows, scope, query, person_id, thread_id, limit)
+
+    async def search(
+        self,
+        query: str,
+        *,
+        person_id: str = "",
+        thread_id: str = "",
+        limit: int = 12,
+        scopes: tuple[str, ...] = SCOPES,
+    ) -> list[MemoryHit]:
+        return await memory_context.gather(
+            self,
+            query=query,
+            person_id=person_id,
+            thread_id=thread_id,
+            limit=limit,
+            scopes=scopes,
+        )
+
+    async def list(
+        self,
+        *,
+        scope: str,
+        person_id: str = "",
+        thread_id: str = "",
+        limit: int = 20,
+    ) -> list[MemoryHit]:
+        return await io.run(self._rows, scope, "", person_id, thread_id, limit)
+
+    def get(self, memory_id: str) -> MemoryHit | None:
+        if self.db is None:
+            return None
+        resolved = self._resolve_readable(memory_id)
+        if not resolved:
+            return None
+        found = self.db.fetch_one(
+            select(memories_readable).where(memories_readable.c.id == resolved)
+        )
+        return _hit(found) if found else None
+
+    def _resolve_readable(self, memory_id: str) -> str:
+        raw = str(memory_id or "").strip().lstrip("#").strip().lower()
+        if not raw or self.db is None:
+            return ""
+        if FULL_UUID.match(raw):
+            return raw
+        if not HEX_PREFIX.match(raw):
+            return ""
+        if len(raw) == 32:
+            return f"{raw[:8]}-{raw[8:12]}-{raw[12:16]}-{raw[16:20]}-{raw[20:]}"
+        rows = self.db.fetch_all(
+            select(cast(memories_readable.c.id, String).label("id"))
+            .where(cast(memories_readable.c.id, String).like(f"{raw}%"))
+            .limit(2)
+        )
+        return str(rows[0]["id"]) if len(rows) == 1 else ""
+
+    async def context(
+        self,
+        *,
+        person_id: str,
+        thread_id: str,
+        query: str,
+        mood=None,
+        max_items: int | None = None,
+        max_chars: int | None = None,
+    ) -> MemoryContext:
+        limits = self._limits
+        items = max_items or int(getattr(limits, "max_items", 12) or 12)
+        chars = max_chars or int(getattr(limits, "max_chars", 3000) or 3000)
+        try:
+            return await memory_context.build(
+                self,
+                person_id=person_id,
+                thread_id=thread_id,
+                query=query,
+                max_items=items,
+                max_chars=chars,
+            )
+        except Exception as exc:
+            log.debug("memory context skipped: %s", exc)
+            return MemoryContext()
+
+    # ------------------------------------------------------------ helpers for worker
+
+    def pending(self, thread_id: str = "", limit: int = 200) -> list[dict]:
+        """The labeling queue for ADR-0002/0003 (worker); the base table, never the view."""
+        if self.db is None:
+            return []
+        statement = (
+            select(memories)
+            .where(memories.c.state.in_(("pending", "staged")))
+            .order_by(memories.c.created_at)
+            .limit(max(1, int(limit)))
+        )
+        if thread_id:
+            statement = statement.where(memories.c.thread_id == thread_id)
+        return self.db.fetch_all(statement)

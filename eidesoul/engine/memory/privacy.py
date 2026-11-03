@@ -32,6 +32,10 @@ class PrivacyVerdict:
     ask: bool = False
     question: str = ""
     reason: str = ""
+    worth: bool = True
+    valid: bool = True
+    category: str = ""
+    durability: str = ""
 
 
 @dataclass(frozen=True)

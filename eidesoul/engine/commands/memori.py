@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import re
+
 from ..i18n import t
 from ..memory import MemoryHit
 from ..memory.privacy import PrivacyPolicy, clamp_level
@@ -9,6 +11,7 @@ from ..registry import Handler
 from . import CommandContext
 
 SCOPES = ("person", "thread", "global")
+ID = re.compile(r"^#?[0-9a-f]{4,32}(?:-[0-9a-f]{4,12}){0,4}$", re.IGNORECASE)
 
 
 SCOPE_KEYS = {"person": "scope_person", "thread": "scope_chat", "global": "scope_global"}
@@ -84,7 +87,7 @@ async def _memori(ctx: CommandContext) -> str:
         if scope == "global" and not memory_admin:
             return t("command.memori.global_denied", lang)
         target = rest.strip()
-        if target.isdigit():
+        if target.isdigit() or ID.match(target):
             removed = await memory.forget(
                 target,
                 requester_id=requester,

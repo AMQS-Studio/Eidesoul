@@ -22,6 +22,8 @@ from ..context import (
     clamp_visibility,
 )
 from ..db import Database
+from ..memory import CaptureJobSink
+from ..memory.store import MemoryStore
 from ..schema import messages, threads, turns
 
 log = logging.getLogger(__name__)
@@ -98,9 +100,18 @@ def _like_terms(query: str) -> list[str]:
 class HistoryStore:
     """One row per (chat, message id); an upsert keeps the richer content."""
 
-    def __init__(self, db: Database, workspace=None):
+    def __init__(
+        self,
+        db: Database,
+        workspace=None,
+        *,
+        memories: MemoryStore | None = None,
+        job_sink: CaptureJobSink | None = None,
+    ):
         self.db = db
         self.workspace = workspace
+        self.memories = memories or MemoryStore(db)
+        self.job_sink = job_sink
 
     # ------------------------------------------------------------ write
 
@@ -201,13 +212,22 @@ class HistoryStore:
             self._upsert_messages(conn, rows)
         return len(rows)
 
-    def intake(self, thread_id: str, message: Message, person_id: str = "") -> bool:
-        """The one intake transaction (ADR-0011 §4.1): `messages` + `turns(received)`.
+    def intake(
+        self,
+        thread_id: str,
+        message: Message,
+        person_id: str = "",
+        *,
+        language: str = "id",
+        audience: str = "private",
+    ) -> bool:
+        """The one intake transaction (ADR-0011 §4.1): message + turn + memory journal + candidate.
 
-        W3 extends this function with memories/memory_events and cognition_jobs; no other
-        writer repeats the transaction. A duplicate message id is idempotent: the existing
-        turn is kept and `False` is returned. A failure here propagates, so the turn is not
-        processed (fail fast, never a fail-open archive).
+        `MemoryStore.intake` writes `memory_events` + `memories(pending, level NULL)` after hard
+        exclusion on the same connection; `job_sink` is the W3.2/ADR-0003 seam that inserts the
+        `capture` job in this transaction. Any failure rolls all five writes back together, so a
+        turn is never processed from a partial intake. A duplicate message id is idempotent: the
+        existing turn is kept, no second candidate is written, and `False` is returned.
         """
         now = time.time()
         row = self._row(thread_id, message)
@@ -236,7 +256,21 @@ class HistoryStore:
                 .on_conflict_do_nothing(index_elements=["id"])
                 .returning(turns.c.id)
             ).scalar()
-        return created is not None
+            if created is None:
+                return False
+            candidate = self.memories.intake(
+                conn,
+                thread_id=str(thread_id),
+                person_id=str(person_id or ""),
+                message_id=str(message.id or row["msg_id"]),
+                text=str(message.text or ""),
+                language=language,
+                audience=audience,
+                asserted_at=message.when.timestamp() if message.when else now,
+            )
+            if candidate is not None and self.job_sink is not None:
+                self.job_sink.enqueue(conn, candidate)
+        return True
 
     def add_notice(
         self, thread_id: str, text: str, *, kind: str, message_id: str = ""

@@ -24,6 +24,9 @@ class MemoryHit:
     subject_id: str = ""
     confirmed: bool = True
     vetoed: bool = False
+    kind: str = "fact"
+    trust: int = 1
+    state: str = "ok"
 
 
 @dataclass(frozen=True)
@@ -128,59 +131,87 @@ class MemoryBackend(Protocol):
     async def close(self) -> None: ...
 
 
-class NullMemory:
-    """Fail-open: the bot still replies when Mem0 is unavailable."""
+class MemoryExtractor(Protocol):
+    """Mem0 (or a replacement) turns a conversation into structured facts (ADR-0001)."""
 
-    available = False
+    available: bool
 
-    def __init__(self, reason: str = "disabled") -> None:
-        self.reason = reason
+    async def capture(
+        self,
+        messages: list[dict],
+        *,
+        person_id: str,
+        thread_id: str,
+        audience: str,
+        source: str = "turn",
+        level: int = 2,
+        owner_id: str = "",
+        subject_id: str = "",
+        confirmed: bool = True,
+    ) -> list[MemoryHit]: ...
 
-    async def add(self, text: str, **kwargs) -> list[str]:
-        return []
 
-    async def capture(self, messages: list[dict], **kwargs) -> list[str]:
-        return []
+class MemoryIndex(Protocol):
+    """The derived semantic index; rebuildable from canonical and never read as truth."""
 
-    async def search(self, query: str, **kwargs) -> list[MemoryHit]:
-        return []
+    available: bool
 
-    async def list(self, **kwargs) -> list[MemoryHit]:
-        return []
+    async def add(
+        self,
+        text: str,
+        *,
+        scope: str,
+        kind: str,
+        person_id: str,
+        thread_id: str,
+        audience: str,
+        source: str,
+        metadata: dict | None = None,
+        infer: bool = False,
+        level: int = 2,
+        owner_id: str = "",
+        subject_id: str = "",
+        confirmed: bool = True,
+    ) -> list[str]: ...
 
-    async def get(self, memory_id: str) -> MemoryHit | None:
-        return None
+    async def delete(self, external_id: str) -> bool: ...
 
-    async def forget(self, memory_id: str, **kwargs) -> bool:
-        return False
+    def purge_library(self, external_id: str, text: str) -> int: ...
 
-    async def set_privacy(self, memory_id: str, **kwargs) -> bool:
-        return False
+    async def close(self) -> None: ...
 
-    async def veto(self, memory_id: str, **kwargs) -> bool:
-        return False
 
-    async def context(self, **kwargs) -> MemoryContext:
-        return MemoryContext()
+class CaptureJobSink(Protocol):
+    """W3.2/ADR-0003 writes `cognition_jobs` on the open intake transaction."""
 
-    async def close(self) -> None:
-        return None
+    def enqueue(self, conn, candidate: object) -> None: ...
 
 
 def memory_status(backend) -> str:
     if getattr(backend, "available", False):
-        return str(getattr(backend, "label", "mem0"))
+        return str(getattr(backend, "label", "postgres"))
     return f"unavailable: {getattr(backend, 'reason', 'unknown')}"
 
 
 async def build_memory(config, *, db=None) -> MemoryBackend:
-    """Build the Mem0 backend; any failure falls back to NullMemory with a visible reason."""
+    """Build the canonical store; Mem0 is its extractor/index and may fail without losing facts."""
+    from .store import MemoryStore
+
+    store = MemoryStore(db, config)
+    if db is None:
+        return store
     try:
         from .mem0 import Mem0Backend
 
         backend = Mem0Backend(db, config)
         await backend.ready()
-        return backend
-    except Exception as exc:  # missing deps/model/pgvector must not kill the bot
-        log.warning("Mem0 memory is unavailable: %s: %s", type(exc).__name__, exc)
-        return NullMemory(f"{type(exc).__name__}: {exc}")
+        store.bind(
+            backend,
+            backend,
+            label=f"postgres+mem0 ({config.memory.collection})",
+        )
+    except Exception as exc:  # missing deps/model/pgvector must not silence canonical memory
+        log.warning("Mem0 index is unavailable: %s: %s", type(exc).__name__, exc)
+        store.reason = f"index unavailable: {type(exc).__name__}: {exc}"
+        store.label = f"postgres (index unavailable: {type(exc).__name__})"
+    return store

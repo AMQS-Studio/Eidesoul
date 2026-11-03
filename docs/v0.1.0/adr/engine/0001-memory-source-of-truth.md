@@ -1,7 +1,7 @@
 # ADR-0001: Memory Source of Truth — Postgres Canonical, Mem0 as Memory Intelligence
 
 - **Status:** accepted
-- **Implementation:** partial — present: `memory/mem0.py`, `memory/privacy.py`, `memory/rekey.py`; remaining: the `memories` + `memory_events` tables, the `MemoryStore` port
+- **Implementation:** partial — present: canonical `memories`/`memory_events`/`memory_uses`/`memory_index`/`memory_tombstones`, `MemoryStore` single write port + view-only reads, Mem0 demoted to extractor/index, rekey, veto, forget/purge, intake seam, `tests/test_memory_store.py`; remaining: retry/status for capture when Mem0/Postgres fails (`cognition_jobs`, W3.2) and the recall-precision eval
 - **Date:** 2026-11-01
 - **Deciders:** Muqsith (owner), omp (reviewer)
 - **Context:** Eidesoul architecture review session at commit `5dc004c`; follow-up discussion on default-on memory and Mem0's roles

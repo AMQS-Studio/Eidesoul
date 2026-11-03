@@ -14,7 +14,7 @@ from sqlalchemy import Connection, Engine, Table, create_engine, text
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.engine import make_url
 
-from .schema import engine_control, metadata, schema_meta
+from .schema import READABLE_VIEW_SQL, engine_control, metadata, schema_meta
 
 log = logging.getLogger(__name__)
 
@@ -87,6 +87,8 @@ class Database:
     def create_all(self) -> None:
         metadata.create_all(self.engine)
         with self.connect() as conn:
+            # ADR-0004 §5.3: the one readable path. Migrations create the same view.
+            conn.execute(text(READABLE_VIEW_SQL))
             # A create_all database must stay upgradable: stamp the chain head, exactly as
             # `alembic stamp head` would, so a later `upgrade` is a no-op instead of a conflict.
             conn.execute(
@@ -222,9 +224,9 @@ class Database:
         with self.connect() as conn:
             return [dict(row) for row in conn.execute(statement).mappings().all()]
 
-    def fetch_one(self, statement) -> dict | None:
+    def fetch_one(self, statement, params: Mapping[str, Any] | None = None) -> dict | None:
         with self.connect() as conn:
-            row = conn.execute(statement).mappings().first()
+            row = conn.execute(statement, params or {}).mappings().first()
             return dict(row) if row is not None else None
 
     def scalar(self, statement):

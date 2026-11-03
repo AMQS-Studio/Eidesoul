@@ -227,10 +227,23 @@ class PrivacyService:
         text = str(message.text or "").strip()
         if not text or guard.SENSITIVE.search(text):
             return
+        refs = (str(message.id or ""),)
+        memory = self.agent.memory
         if self.config.enabled and self.agent.llm is not None:
             verdict = await self._assess(f"{text}\n{reply}")
-            if verdict is None:
-                log.warning("privacy assess failed; capture skipped chat=%s", inbound.thread)
+            if verdict is None or not verdict.valid:
+                # ADR-0004: drop the candidate; never guess a level from a partial answer.
+                log.warning("privacy assess failed; candidate dropped chat=%s", inbound.thread)
+                drop = getattr(memory, "drop_candidate", None)
+                if drop is not None:
+                    await drop(inbound.thread, refs, reason="labeling failed")
+                return
+            if not verdict.worth:
+                discard = getattr(memory, "discard_candidate", None)
+                if discard is not None:
+                    await discard(
+                        inbound.thread, refs, state="not_worth", reason="not worth"
+                    )
                 return
         else:
             verdict = PrivacyVerdict(level=self.config.default_level, ask=False)
@@ -250,7 +263,7 @@ class PrivacyService:
             self.agent.history.set_visibility(inbound.thread, targets, level)
         except Exception:
             log.debug("failed to set chat visibility chat=%s", inbound.thread, exc_info=True)
-        ids = await self.agent.memory.capture(
+        ids = await memory.capture(
             [
                 {"role": "user", "content": text},
                 {"role": "assistant", "content": reply or ""},
@@ -263,6 +276,10 @@ class PrivacyService:
             owner_id=owner,
             subject_id=subject,
             confirmed=not verdict.ask,
+            refs=refs,
+            category=verdict.category,
+            durability=verdict.durability,
+            language=str(self._lang),
         )
         if not (verdict.ask and ids):
             return
@@ -281,7 +298,11 @@ class PrivacyService:
         await self.agent.send_text(inbound.thread, question, gateway=gateway)
 
     async def _assess(self, text: str) -> PrivacyVerdict | None:
-        """Label the privacy of one turn; None when the model gives no JSON twice."""
+        """Label the privacy of one turn; None when the model gives no JSON twice.
+
+        A JSON body without a usable level is returned as `valid=False` (partial output):
+        ADR-0004 never lets it become an `ok` row or fall back to `default_level`.
+        """
         user = f"Turn:\n{text}\n\nSoul language: {self._lang}"
         budget = assess_budget(user)
         body = None
@@ -293,18 +314,33 @@ class PrivacyService:
             log.warning("privacy assess returned no JSON (max_tokens=%s)", tokens)
         if body is None:
             return None
+        worth = _flag(body.get("worth")) if "worth" in body else True
+        common = {
+            "subject": " ".join(str(body.get("subject") or "").split())[:60],
+            "question": " ".join(str(body.get("question") or "").split()),
+            "reason": " ".join(str(body.get("reason") or "").split())[:120],
+            "worth": worth,
+        }
+        if not worth:
+            return PrivacyVerdict(level=self.config.default_level, ask=False, **common)
+        raw_level = body.get("level")
         try:
-            level = int(body.get("level"))
+            level = int(raw_level)
         except (TypeError, ValueError):
-            level = self.config.default_level
-        level = clamp_level(level, self.config.default_level)
+            return PrivacyVerdict(valid=False, **common)
+        if not 0 <= level <= 4:
+            return PrivacyVerdict(valid=False, **common)
+        category = " ".join(str(body.get("category") or "").split())[:20]
+        durability = str(body.get("durability") or "").strip().lower()
+        if durability not in {"core", "durable", "episodic", "normal"}:
+            durability = ""
         ask = _flag(body.get("ask")) and level >= self.config.ask_level
         return PrivacyVerdict(
             level=level,
-            subject=" ".join(str(body.get("subject") or "").split())[:60],
             ask=ask,
-            question=" ".join(str(body.get("question") or "").split()),
-            reason=" ".join(str(body.get("reason") or "").split())[:120],
+            category=category,
+            durability=durability,
+            **common,
         )
 
     # ------------------------------------------------------------- pending

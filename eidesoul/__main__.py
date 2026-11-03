@@ -696,6 +696,34 @@ def _people_dispatch(args: argparse.Namespace) -> int:
     return 2
 
 
+def _memory_dispatch(args: argparse.Namespace) -> int:
+    if args.memory_command == "purge":
+        return _memory_purge(args)
+    build_parser().print_help()
+    return 2
+
+
+def _memory_purge(args: argparse.Namespace) -> int:
+    from .engine.db import Database
+    from .engine.memory.store import MemoryStore
+
+    host, _ = load_host(args.config)
+    url = resolve_database_url(host.database)
+    if not url:
+        raise ConfigError("database URL is empty; memory purge needs the configured database")
+    db = Database(url)
+    try:
+        report = asyncio.run(
+            MemoryStore(db).purge(dry_run=args.dry_run, batch=args.batch)
+        )
+    finally:
+        db.dispose()
+    verb = "would purge" if report.dry_run else "purged"
+    count = report.selected if report.dry_run else report.purged
+    print(f"memory purge: {verb} {count} of {report.selected} expired rows", flush=True)
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="eidesoul", description="Eidesoul soul engine")
     parser.add_argument("--config", default=None, help="path to config.yaml (default: ./config.yaml)")
@@ -753,6 +781,13 @@ def build_parser() -> argparse.ArgumentParser:
     people_unlink.add_argument("person_id", help="per_… identity id")
     people_unlink.add_argument("gateway", help="gateway name")
     people_sub.add_parser("adopt", help="move legacy raw addresses onto per_… identities")
+    memory = sub.add_parser("memory", help="canonical memory maintenance")
+    memory_sub = memory.add_subparsers(dest="memory_command")
+    memory_purge = memory_sub.add_parser("purge", help="delete expired, unpinned memories")
+    memory_purge.add_argument(
+        "--dry-run", action="store_true", help="report what would be purged, change nothing"
+    )
+    memory_purge.add_argument("--batch", type=int, default=500, help="rows per batch")
     return parser
 
 
@@ -771,7 +806,11 @@ def main(argv: list[str] | None = None) -> int:
             return _config_export(args)
         if args.command == "config" and args.config_command == "import":
             return _config_import(args)
-        dispatch = {"library": _library_dispatch, "people": _people_dispatch}
+        dispatch = {
+            "library": _library_dispatch,
+            "people": _people_dispatch,
+            "memory": _memory_dispatch,
+        }
         if args.command in dispatch:
             return dispatch[args.command](args)
         if args.command == "db":

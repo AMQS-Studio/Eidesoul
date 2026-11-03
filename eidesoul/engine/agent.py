@@ -974,7 +974,13 @@ class Agent:
             log.warning("message without an id cannot become a turn chat=%s", thread_id)
             return []
         try:
-            self.history.intake(thread_id, message, inbound.actor)
+            self.history.intake(
+                thread_id,
+                message,
+                inbound.actor,
+                language=str(self.soul.language or "id"),
+                audience="private" if bool(inbound.hints.get("dm")) else "group",
+            )
         except Exception:
             log.exception(
                 "intake failed chat=%s id=%s: the turn is not processed", thread_id, turn_id
@@ -1712,6 +1718,16 @@ class Agent:
                                 + random.uniform(0, 0.4)
                             )
                     if delivered:
+                        touch = getattr(self.memory, "record_uses", None)
+                        if touch is not None and memory_ctx.hits:
+                            try:
+                                await io.run(
+                                    touch, turn_id, [hit.id for hit in memory_ctx.hits]
+                                )
+                            except Exception:
+                                log.exception(
+                                    "failed to record memory use chat=%s", thread_id
+                                )
                         self._finish(turn_id, planned=len(chunks))
                     else:
                         self.turns.defer(

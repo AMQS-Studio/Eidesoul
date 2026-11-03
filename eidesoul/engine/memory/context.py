@@ -96,10 +96,15 @@ def render(hits: list, *, max_items: int, max_chars: int) -> str:
         label = f"{scope}/{stamp}" if stamp else scope
         level = int(getattr(hit, "level", 2) or 0)
         mark = "" if getattr(hit, "confirmed", True) else "?"
+        trust = int(getattr(hit, "trust", 1) if getattr(hit, "trust", 1) is not None else 1)
+        kind = str(getattr(hit, "kind", "fact") or "fact")
+        short = str(getattr(hit, "id", "") or "").replace("-", "")[:8]
+        markers = f"L{level}{mark} T{trust}" + (" rule" if kind == "rule" else "")
+        ident = f"#{short} " if short else ""
         text = " ".join(str(getattr(hit, "text", "") or "").split())
         if not text:
             continue
-        line = f"- [{label} L{level}{mark}] {text}"
+        line = f"- {ident}[{label} {markers}] {text}"
         if used + len(line) + 1 > max_chars:
             break
         lines.append(line)

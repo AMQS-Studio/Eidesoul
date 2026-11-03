@@ -6,13 +6,13 @@ import asyncio
 import json
 
 import yaml
-from support import FakeMem0, build_config, database
+from support import build_config, database
 
 from eidesoul.admin import people as admin_people
 from eidesoul.engine.config import DatabaseConfig
 from eidesoul.engine.identity import IdentityStore, is_person_id
-from eidesoul.engine.memory.mem0 import Mem0Backend
 from eidesoul.engine.memory.rekey import rekey_memory
+from eidesoul.engine.memory.store import MemoryStore
 from eidesoul.engine.schema import people, state, thread_people
 from eidesoul.engine.stores.documents import DocumentStore
 
@@ -123,21 +123,12 @@ def test_people_link_creates_a_missing_person_row(tmp_path) -> None:
 
 def test_rekey_moves_person_and_chat_entries(tmp_path, monkeypatch) -> None:
     monkeypatch.setenv("K", "key")
-    db = database()
     new = "per_abcdefghjk"
-    with db.connect() as conn:
-        db.upsert(
-            conn,
-            thread_people,
-            [{"thread_id": "chat", "person_id": new, "interactions": 1, "last_seen": 0.0}],
-            ["thread_id", "person_id"],
-        )
     config = build_config(
         tmp_path,
         database_config=DatabaseConfig(url="postgresql+psycopg://u:p@db:5432/eidesoul", url_env=""),
     )
-    memory = Mem0Backend(config=config, db=None)
-    memory._memory = FakeMem0()
+    memory = MemoryStore(database(), config)
     asyncio.run(
         memory.add(
             "suka kopi",
@@ -153,7 +144,7 @@ def test_rekey_moves_person_and_chat_entries(tmp_path, monkeypatch) -> None:
         memory.add("punya orang lain", scope="person", person_id="per_other000", thread_id="chat")
     )
 
-    moved = asyncio.run(rekey_memory(memory, LEGACY, new, db=db))
+    moved = asyncio.run(rekey_memory(memory, LEGACY, new))
 
     assert moved == 2
     assert asyncio.run(memory.list(scope="person", person_id=LEGACY)) == []
