@@ -95,7 +95,15 @@ def _turn_counts(agent, lang: str) -> str:
             counts[status] = int(row["count"])
         elif status == "sending":
             counts["running"] += int(row["count"])
-    return t("command.status.turns", lang, **counts)
+    return t(
+        "command.status.turns",
+        lang,
+        received=counts["received"],
+        running=counts["running"],
+        delivered=counts["delivered"],
+        interrupted=counts["interrupted"],
+        expired=counts["expired"],
+    )
 
 
 def _turn_latency(agent, now: float) -> list[float]:

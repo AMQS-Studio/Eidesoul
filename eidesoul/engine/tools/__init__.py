@@ -218,13 +218,14 @@ def _value_errors(label: str, value: object, schema: dict) -> list[str]:
     enum = schema.get("enum")
     if isinstance(enum, list) and value not in enum:
         errors.append(f"{label} must be one of: {', '.join(str(item) for item in enum)}")
-    if kind in {"integer", "number"} and not isinstance(value, bool):
+    if kind in {"integer", "number"} and isinstance(value, (int, float)):
+        numeric = not isinstance(value, bool)
         low, high = schema.get("minimum"), schema.get("maximum")
-        if isinstance(low, (int, float)) and value < low:
+        if numeric and isinstance(low, (int, float)) and value < low:
             errors.append(f"{label} must be >= {low}")
-        if isinstance(high, (int, float)) and value > high:
+        if numeric and isinstance(high, (int, float)) and value > high:
             errors.append(f"{label} must be <= {high}")
-    if kind == "string":
+    if kind == "string" and isinstance(value, str):
         low, high = schema.get("minLength"), schema.get("maxLength")
         if isinstance(low, int) and len(value) < low:
             errors.append(f"{label} must be at least {low} characters")
@@ -233,17 +234,19 @@ def _value_errors(label: str, value: object, schema: dict) -> list[str]:
         pattern = schema.get("pattern")
         if isinstance(pattern, str) and not re.search(pattern, value):
             errors.append(f"{label} must match {pattern}")
-    if kind == "array" and isinstance(schema.get("items"), dict):
+    if kind == "array" and isinstance(value, list) and isinstance(schema.get("items"), dict):
         for index, item in enumerate(value):
             errors.extend(_value_errors(f"{label}[{index}]", item, schema["items"]))
-    if kind == "object":
+    if kind == "object" and isinstance(value, dict):
         errors.extend(_object_errors(value, schema, prefix=label))
     return errors
 
 
 def _object_errors(args: dict, schema: dict, *, prefix: str = "") -> list[str]:
-    properties = schema.get("properties") if isinstance(schema.get("properties"), dict) else {}
-    required = schema.get("required") if isinstance(schema.get("required"), list) else []
+    declared = schema.get("properties")
+    properties = declared if isinstance(declared, dict) else {}
+    listed = schema.get("required")
+    required = listed if isinstance(listed, list) else []
     errors: list[str] = []
     for field in required:
         if field not in args:

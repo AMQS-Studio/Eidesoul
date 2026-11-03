@@ -134,7 +134,7 @@ def novelty(
     if not body:
         return Novelty("new")
     for row in candidates:
-        if _normal(row.get("text")) == body:
+        if _normal(str(row.get("text") or "")) == body:
             return Novelty("duplicate", str(row.get("id") or ""), 1.0)
     vectors = embed.encode([str(text or "")] + [str(row.get("text") or "") for row in candidates])
     if len(vectors) != len(candidates) + 1:

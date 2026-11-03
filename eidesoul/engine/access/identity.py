@@ -11,6 +11,8 @@ import logging
 import re
 import secrets
 import time
+from collections.abc import Awaitable, Callable
+from typing import cast
 
 from sqlalchemy import delete, insert, select, update
 from sqlalchemy.exc import IntegrityError
@@ -475,8 +477,10 @@ async def display_target(
     if style[0] == "unknown" and agent.config.character.gender_avatar:
         grab = getattr(gateway, "avatar", None)
         if callable(grab):
+            # The gateway type is not importable here; its `avatar` is an async method.
+            fetch = cast(Callable[[str], Awaitable[tuple[bytes, str] | None]], grab)
             try:
-                shot = await grab(message.sender_address)
+                shot = await fetch(message.sender_address)
             except Exception:
                 log.debug("gender: avatar fetch failed", exc_info=True)
                 shot = None

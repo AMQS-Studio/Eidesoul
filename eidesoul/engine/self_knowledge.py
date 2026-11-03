@@ -398,9 +398,9 @@ class SelfKnowledge:
         if two_level:
             families = sorted(
                 {
-                    tools.get(name).family
-                    for name in allowed_tools
-                    if tools.get(name) is not None and tools.get(name).family
+                    spec.family
+                    for spec in (tools.get(name) for name in allowed_tools)
+                    if spec is not None and spec.family
                 }
             )
             lines.append(

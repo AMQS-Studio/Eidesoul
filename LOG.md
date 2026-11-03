@@ -1,5 +1,36 @@
 # LOG
 
+## 2026-11-04 — Pyright is clean: zero errors, and the ratchet has nothing left to permit
+
+`pyright` over `eidesoul`, `admin`, `gateways`, and `scripts` reports **0 errors**, so
+`scripts/types-baseline.json` is now an empty object: the gate no longer allows a single diagnostic
+to appear. The 191 diagnostics were fixed as type narrowing only (guards, hoisted locals, precise
+annotations) across 40 files; no test was rewritten, and `ruff check` and the 851-test suite are
+unchanged.
+
+**Two real defects the checker had been holding** — `MemoryStore.label(memory_id, *, level, ...)`
+was unreachable: `__init__` sets `self.label = "postgres"` and `bind(label=...)` resets it, so the
+instance attribute shadowed the method for every instance, and no caller ever invoked it; the method
+is deleted and the string attribute (`memory_status`, `bind`) is the surviving contract.
+`CursorResult.inserted_primary_key` is `Optional[Any]` in SQLAlchemy 2.1, and both insert sites
+(`access/approvals.py`, `memory/ledger.py`) indexed it blind; each now raises its own
+`RuntimeError` when the insert reports no key.
+
+**One contract gap** — `MemoryBackend.context` omitted the `direct` keyword that
+`MemoryStore.context` requires and enforces (ADR-0006 §4.1); the protocol now declares it, and the
+store keeps raising when a caller does not state its audience.
+
+**The recurring shapes** — a ternary such as `x = raw.get(k) if isinstance(raw.get(k), dict) else {}`
+leaves `x` as `dict | None` because pyright narrows the checked expression, not the value
+expression; `int()`/`float()` on a JSON scalar relied on `except (TypeError, ValueError)` for the
+`None` case, which is now an explicit branch in front of the same `try`; `getattr`-reached gateway
+methods needed `Callable`/`Awaitable` annotations; and the neonize/genai stubs accept no cast-free
+form, so those boundaries carry a `cast` with a one-line reason.
+
+**Verification** — `pyright` 0 errors; `ruff check eidesoul scripts tests plugins migrations` clean;
+`pytest -q` 851 passed; `scripts/selfcheck.py --check` ok (`engine_modules=111`); `scripts/adr.py
+--check` 33/33 and `--translate-check` 33 files, 0 problems.
+
 ## 2026-11-03 — ADR-0031 and ADR-0032 implemented
 
 Both drafts are now code, on the same day they were accepted. Measured after the landing: the engine

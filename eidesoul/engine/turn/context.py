@@ -429,14 +429,17 @@ def _text_lines(config: Config, thread_id: str, message: Message) -> list[str]:
 
 
 def _inline_lines(media: Media, relative: str) -> list[str]:
+    path = media.path
+    if path is None:  # pragma: no cover - callers only inline media that has a local path
+        return ["  [unreadable: the file is not available]"]
     try:
-        size = media.path.stat().st_size
+        size = path.stat().st_size
     except OSError as exc:
         return [f"  [unreadable: {type(exc).__name__}]"]
     if size > INLINE_TEXT_BYTES:
         return [f"  [large file; read it with the read tool, path=\"{relative}\"]"]
     try:
-        content = media.path.read_text(encoding="utf-8", errors="replace")
+        content = path.read_text(encoding="utf-8", errors="replace")
     except OSError as exc:
         return [f"  [unreadable: {type(exc).__name__}]"]
     preview, remaining = _clip(content, INLINE_TEXT_LINES, INLINE_TEXT_CHARS)
@@ -659,8 +662,11 @@ async def build_user_content(
     parts: list[dict] = []
     for media in planned:
         number = numbers[_media_key(config, media)]
+        path = media.path
+        if path is None:  # pragma: no cover - _plan_images only plans media with a local path
+            continue
         try:
-            raw = media.path.read_bytes()
+            raw = path.read_bytes()
         except OSError as exc:
             lines.append(f"Image #{number} could not be attached ({type(exc).__name__})")
             continue

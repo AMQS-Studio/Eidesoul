@@ -146,18 +146,24 @@ class TextFormatter(logging.Formatter):
 
     def format(self, record: logging.LogRecord) -> str:
         parts = [_stamp(record), record.levelname, record.name]
-        if getattr(record, "turn_id", ""):
-            parts.append(f"turn={record.turn_id}")
-        if getattr(record, "thread_id", ""):
-            parts.append(f"thread={record.thread_id}")
-        if getattr(record, "job_id", None):
-            parts.append(f"job={record.job_id}")
-        if getattr(record, "run_id", ""):
-            parts.append(f"run={record.run_id}")
-        if getattr(record, "gateway", ""):
-            parts.append(f"gateway={record.gateway}")
-        if getattr(record, "duration_ms", None) is not None:
-            parts.append(f"duration_ms={record.duration_ms}")
+        turn_id = getattr(record, "turn_id", "")
+        if turn_id:
+            parts.append(f"turn={turn_id}")
+        thread_id = getattr(record, "thread_id", "")
+        if thread_id:
+            parts.append(f"thread={thread_id}")
+        job_id = getattr(record, "job_id", None)
+        if job_id:
+            parts.append(f"job={job_id}")
+        run_id = getattr(record, "run_id", "")
+        if run_id:
+            parts.append(f"run={run_id}")
+        gateway = getattr(record, "gateway", "")
+        if gateway:
+            parts.append(f"gateway={gateway}")
+        duration_ms = getattr(record, "duration_ms", None)
+        if duration_ms is not None:
+            parts.append(f"duration_ms={duration_ms}")
         event = str(getattr(record, "event", "log.message"))
         body = f"{' '.join(parts)} {event}: {redact(record.getMessage())}"
         if record.exc_info is not None and record.exc_info[0] is not None:

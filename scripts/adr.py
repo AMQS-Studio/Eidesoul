@@ -397,6 +397,8 @@ def check_refs(
         if err:
             problems.append(f"{rel}: {err}")
             continue
+        if target is None:  # pragma: no cover - err is always set when nothing resolves
+            continue
         if wanted is not None:
             label = f"{ref_folder}/{number:04d}" if ref_folder else f"{number:04d}"
             if int(wanted) not in [n for n, _ in sections(read(target))]:

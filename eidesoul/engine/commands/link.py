@@ -52,7 +52,7 @@ async def link(ctx: CommandContext) -> str:
     address = ""
     if inbound is not None:
         address = inbound.payload.sender_id or inbound.payload.sender_address
-    if ctx.gateway is None or not address:
+    if inbound is None or ctx.gateway is None or not address:
         return t("command.link.no_gateway", lang)
     identity = ctx.agent.identity
     person = inbound.actor

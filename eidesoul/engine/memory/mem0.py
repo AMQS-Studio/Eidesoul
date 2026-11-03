@@ -14,6 +14,7 @@ import re
 import time
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from openai import OpenAI
 from sqlalchemy import String, cast, column, select, table
@@ -25,6 +26,9 @@ from ..guard import SENSITIVE
 from . import MemoryContext, MemoryHit
 from . import context as memory_context
 from .privacy import MAX_LEVEL, PrivacyPolicy, clamp_level
+
+if TYPE_CHECKING:
+    from mem0 import AsyncMemory
 
 log = logging.getLogger(__name__)
 
@@ -116,7 +120,8 @@ def _flag(value, default: bool) -> bool:
 
 
 def _hit(item: dict, fallback_scope: str = "person") -> MemoryHit | None:
-    metadata = item.get("metadata") if isinstance(item.get("metadata"), dict) else {}
+    raw_metadata = item.get("metadata")
+    metadata = raw_metadata if isinstance(raw_metadata, dict) else {}
     text = _text(item.get("memory") or item.get("text") or item.get("data"))
     memory_id = _text(item.get("id") or item.get("memory_id"))
     if not text or not memory_id:
@@ -155,7 +160,7 @@ class Mem0Backend:
         self.config = config
         self.llm = llm
         self.reason = ""
-        self._memory = None
+        self._memory: AsyncMemory | None = None
         self._capture_lock = asyncio.Lock()
         self._limits = config.memory
         self.embedding_model = MODEL
@@ -340,6 +345,7 @@ class Mem0Backend:
         if SENSITIVE.search(body):
             raise ValueError("text contains a secret/credential")
         identity = self._identity(scope, person_id, thread_id)
+        memory = self._memory
         if supersedes:
             old = await self.get(str(supersedes))
             if old is None:
@@ -350,11 +356,14 @@ class Mem0Backend:
                 raise ValueError("another person's memory cannot be superseded")
             if scope == "thread" and old.thread_id != thread_id:
                 raise ValueError("another chat's memory cannot be superseded")
-            await self._safe("delete", self._memory.delete, old.id)
+            if memory is not None:
+                await self._safe("delete", memory.delete, old.id)
+        if memory is None:
+            return []
         payload = [{"role": "user", "content": body}]
         result = await self._safe(
             "add",
-            self._memory.add,
+            memory.add,
             payload,
             metadata=self._metadata(
                 scope=scope,
@@ -393,10 +402,13 @@ class Mem0Backend:
         if any(SENSITIVE.search(_text(item.get("content"))) for item in body):
             return []
         identity = self._identity("person", person_id, thread_id)
+        memory = self._memory
+        if memory is None:
+            return []
         async with self._capture_lock:
             result = await self._safe(
                 "capture",
-                self._memory.add,
+                memory.add,
                 body,
                 metadata=self._metadata(
                     scope="person",
@@ -424,11 +436,14 @@ class Mem0Backend:
             identity = self._identity(scope, person_id, thread_id)
         except ValueError:
             return []
+        memory = self._memory
+        if memory is None:
+            return []
         text = _text(query)
         if text:
             result = await self._safe(
                 f"search:{scope}",
-                self._memory.search,
+                memory.search,
                 text,
                 top_k=max(1, int(limit)),
                 filters=identity,
@@ -436,7 +451,7 @@ class Mem0Backend:
         else:
             result = await self._safe(
                 f"list:{scope}",
-                self._memory.get_all,
+                memory.get_all,
                 filters=identity,
                 top_k=max(1, int(limit)),
             )
@@ -509,7 +524,10 @@ class Mem0Backend:
             return False
         if hit.scope == "global" and not allow_global:
             return False
-        result = await self._safe("forget", self._memory.delete, hit.id)
+        memory = self._memory
+        if memory is None:
+            return False
+        result = await self._safe("forget", memory.delete, hit.id)
         return result is not None
 
     async def set_privacy(
@@ -538,8 +556,11 @@ class Mem0Backend:
             metadata["vetoed"] = bool(vetoed)
             metadata["vetoed_by"] = str(actor or "") if vetoed else ""
             metadata["vetoed_at"] = time.time() if vetoed else 0.0
+        memory = self._memory
+        if memory is None:
+            return False
         result = await self._safe(
-            "privacy", self._memory.update, hit.id, metadata=metadata
+            "privacy", memory.update, hit.id, metadata=metadata
         )
         return result is not None
 

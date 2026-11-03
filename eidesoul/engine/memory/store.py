@@ -13,7 +13,7 @@ import logging
 import re
 import time
 import uuid
-from collections.abc import Mapping, Sequence
+from collections.abc import Awaitable, Callable, Mapping, Sequence
 from dataclasses import dataclass
 
 from sqlalchemy import delete, select, text
@@ -158,6 +158,7 @@ def _marked_supersede(row: Mapping) -> bool:
 def _hit(row: Mapping) -> MemoryHit:
     level = row.get("level")
     confirmed = row.get("confirmed")
+    trust = row.get("trust")
     return MemoryHit(
         id=str(row.get("id") or ""),
         text=str(row.get("text") or ""),
@@ -182,7 +183,7 @@ def _hit(row: Mapping) -> MemoryHit:
         confirmed=bool(confirmed) if confirmed is not None else False,
         vetoed=bool(row.get("vetoed")),
         kind=str(row.get("kind") or "fact"),
-        trust=int(row.get("trust") if row.get("trust") is not None else TRUST_INFERENCE),
+        trust=int(trust) if trust is not None else TRUST_INFERENCE,
         state=str(row.get("state") or ""),
     )
 
@@ -195,7 +196,7 @@ class MemoryStore:
         db: Database | None,
         config=None,
         *,
-        index=None,
+        index: object | None = None,
         extractor=None,
         policy: RetentionPolicy | None = None,
         quota: WriteQuota | None = None,
@@ -237,7 +238,7 @@ class MemoryStore:
                 f"lease generation moved on: held {self._guard.generation}, live {live}"
             )
 
-    def bind(self, index=None, extractor=None, *, label: str = "") -> None:
+    def bind(self, index: object | None = None, extractor=None, *, label: str = "") -> None:
         self._index = index
         self._extractor = extractor
         if label:
@@ -251,9 +252,16 @@ class MemoryStore:
     def index(self):
         return self._index
 
+    def _database(self) -> Database:
+        """The base table handle; every sync helper is reached only when `available` is true."""
+        if self.db is None:  # pragma: no cover - callers refuse the work without a database
+            raise ValueError("memory store has no database")
+        return self.db
+
     async def close(self) -> None:
-        if self._index is not None and hasattr(self._index, "close"):
-            await self._index.close()
+        close: Callable[[], Awaitable[object]] | None = getattr(self._index, "close", None)
+        if close is not None:
+            await close()
 
     # ------------------------------------------------------------ policies
 
@@ -866,46 +874,6 @@ class MemoryStore:
             queries.update_memory(conn, resolved, values)
         return True
 
-    def label(
-        self,
-        memory_id: str,
-        *,
-        level: int,
-        confirmed: bool = True,
-        subject_id: str | None = None,
-        category: str | None = None,
-        durability: str | None = None,
-        task_status: str | None = None,
-    ) -> bool:
-        """`pending`/`staged` -> `ok` with the assess verdict; the level is never defaulted."""
-        if self.db is None:
-            return False
-        resolved = self._resolve_id(memory_id)
-        if not resolved:
-            return False
-        with self.db.connect() as conn:
-            self._fence(conn, "label")
-            row = queries.locked(conn, resolved)
-            if row is None:
-                return False
-            extra: dict = {}
-            if subject_id is not None:
-                extra["subject_id"] = str(subject_id or "")
-            if category:
-                extra["category"] = str(category)
-            if durability:
-                extra["durability"] = str(durability)
-            if task_status is not None:
-                extra["task_status"] = str(task_status or "")
-            merged = {**dict(row), **extra}
-            values = self._transition_values(
-                merged, "ok", level=level, confirmed=confirmed, reason=""
-            )
-            if extra:
-                queries.update_memory(conn, resolved, extra)
-            queries.update_memory(conn, resolved, values)
-        return True
-
     async def promote(self, memory_id: str) -> bool:
         changed = await io.run(self.transition, memory_id, "ok")
         if changed:
@@ -976,7 +944,7 @@ class MemoryStore:
         durability: str,
     ) -> list[str]:
         now = time.time()
-        with self.db.connect() as conn:
+        with self._database().connect() as conn:
             self._fence(conn, "_label_pending")
             ids = self._pending_ids(conn, thread_id, refs)
             for memory_id in ids:
@@ -1281,15 +1249,21 @@ class MemoryStore:
         memory_id = str(row.get("id") or "")
         text = str(row.get("text") or "")
         external = await io.run(self._mapping_external_sync, memory_id)
+        delete_index: Callable[[str], Awaitable[object]] | None = getattr(
+            self._index, "delete", None
+        )
+        purge_library: Callable[[str, str], object] | None = getattr(
+            self._index, "purge_library", None
+        )
         if self._has_index:
-            if external and hasattr(self._index, "delete"):
+            if external and delete_index is not None:
                 try:
-                    await self._index.delete(external)
+                    await delete_index(external)
                 except Exception as exc:
                     log.warning("index delete failed %s: %s", memory_id, exc)
-            if hasattr(self._index, "purge_library"):
+            if purge_library is not None:
                 try:
-                    purged = self._index.purge_library(external, text)
+                    purged = purge_library(external, text)
                     if inspect.isawaitable(purged):
                         await purged
                 except Exception as exc:
@@ -1307,8 +1281,11 @@ class MemoryStore:
         if row is None or str(row.get("state") or "") != "ok":
             return ""
         if not external_id:
+            add: Callable[..., Awaitable[list[str]]] | None = getattr(self._index, "add", None)
+            if add is None:  # pragma: no cover - the attached index always implements `add`
+                return ""
             try:
-                ids = await self._index.add(
+                ids = await add(
                     row["text"],
                     scope=str(row["scope"]),
                     kind=str(row["kind"]),
@@ -1375,7 +1352,7 @@ class MemoryStore:
         return await io.run(self._forget_sync, row)
 
     def _forget_candidates_sync(self, owner_id: str, thread_id: str) -> list[dict]:
-        with self.db.connect() as conn:
+        with self._database().connect() as conn:
             return queries.forget_candidates(conn, owner_id, thread_id)
 
     async def forget_by_intent(
@@ -1406,7 +1383,7 @@ class MemoryStore:
         return [memory_id]
 
     def _forget_sync(self, row: Mapping) -> bool:
-        with self.db.connect() as conn:
+        with self._database().connect() as conn:
             self._fence(conn, "_forget_sync")
             removed = conn.execute(
                 delete(memories)
@@ -1455,16 +1432,16 @@ class MemoryStore:
         return PurgeReport(selected=len(rows), purged=purged, dry_run=False)
 
     def _purge_candidates_sync(self, cutoff: float, limit: int) -> list[dict]:
-        with self.db.connect() as conn:
+        with self._database().connect() as conn:
             return queries.purge_candidates(conn, cutoff, limit)
 
     def _purge_metrics_only_sync(self, now: float) -> int:
-        with self.db.connect() as conn:
+        with self._database().connect() as conn:
             return self._purge_metrics(conn, now)
 
     def _purge_rows_sync(self, rows: Sequence[Mapping], cutoff: float, moment: float) -> int:
         purged = 0
-        with self.db.connect() as conn:
+        with self._database().connect() as conn:
             self._fence(conn, "_purge_rows_sync")
             for row in rows:
                 if not queries.delete_row(conn, str(row["id"]), cutoff):
@@ -1512,7 +1489,7 @@ class MemoryStore:
         if row is None or not subject_id or str(row.get("subject_id") or "") != str(subject_id):
             return False
         now = time.time()
-        with self.db.connect() as conn:
+        with self._database().connect() as conn:
             self._fence(conn, "_veto_sync")
             conn.execute(
                 memories.update()
@@ -1588,7 +1565,7 @@ class MemoryStore:
             values["vetoed"] = bool(vetoed)
             values["vetoed_by"] = str(actor or "") if vetoed else ""
             values["vetoed_at"] = time.time() if vetoed else 0.0
-        with self.db.connect() as conn:
+        with self._database().connect() as conn:
             self._fence(conn, "_set_privacy_sync")
             queries.update_memory(conn, str(row["id"]), values)
         return True
@@ -1605,11 +1582,11 @@ class MemoryStore:
         return await io.run(self._rekey_update_sync, old_id, new_id)
 
     def _rekey_rows_sync(self, old_id: str) -> list[dict]:
-        with self.db.connect() as conn:
+        with self._database().connect() as conn:
             return queries.rekey_rows(conn, old_id)
 
     def _rekey_update_sync(self, old_id: str, new_id: str) -> int:
-        with self.db.connect() as conn:
+        with self._database().connect() as conn:
             self._fence(conn, "_rekey_update_sync")
             return queries.rekey_update(conn, old_id, new_id)
 
@@ -2274,7 +2251,7 @@ class MemoryStore:
             return []
         with self.db.connect() as conn:
             rows = queries.open_disputes(conn, limit)
-        found: dict[tuple[str, str], dict] = {}
+        found: dict[tuple[str, ...], dict] = {}
         for row in rows:
             partner = self._base_row(str(row.get("disputed_with") or ""))
             if partner is None:

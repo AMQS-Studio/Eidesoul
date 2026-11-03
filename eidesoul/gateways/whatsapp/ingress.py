@@ -148,7 +148,9 @@ def event_to_inbound(ev, gateway) -> Percept | None:
     mapped = ""
     if sender.endswith("@lid"):
         alt = getattr(source, "SenderAlt", None)
-        mapped = f"{alt.User}@{alt.Server}" if getattr(alt, "User", "") else ""
+        alt_user = getattr(alt, "User", "")
+        alt_server = getattr(alt, "Server", "")
+        mapped = f"{alt_user}@{alt_server}" if alt_user else ""
         mapped = mapped or directory.pn_jid(gateway.db, sender)
     sender_address = mapped or sender
     sender_digits = normalize_jid(mapped or source.Sender.User or source.Sender.RawAgent)

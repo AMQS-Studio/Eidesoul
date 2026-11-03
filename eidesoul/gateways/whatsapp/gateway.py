@@ -7,12 +7,16 @@ import logging
 import re
 import secrets
 import time
+from collections.abc import Awaitable, Callable
 from pathlib import Path
+from typing import cast
 
 from neonize.aioze.client import NewAClient
 from neonize.aioze.events import ConnectedEv, GroupInfoEv, HistorySyncEv, MessageEv
 from neonize.exc import SendMessageError
+from neonize.proto.Neonize_pb2 import JID
 from neonize.proto.Neonize_pb2 import UndecryptableMessage as UndecryptableMessageEv
+from neonize.proto.waE2E import WAWebProtobufsE2E_pb2 as e2e
 from neonize.proto.waE2E.WAWebProtobufsE2E_pb2 import ContextInfo, ExtendedTextMessage
 from neonize.utils.enum import ChatPresence, ChatPresenceMedia
 from neonize.utils.jid import build_jid
@@ -67,9 +71,10 @@ class WhatsAppGateway:
         self.backfill = None
         self._stopping = False
         base = Path(__file__).parent
-        self._tools = discover(__package__ + ".tools", base / "tools", "TOOL", "tool", FAMILIES)
+        package = __package__ or ""
+        self._tools = discover(package + ".tools", base / "tools", "TOOL", "tool", FAMILIES)
         self._commands = discover(
-            __package__ + ".commands", base / "commands", "COMMAND", "command"
+            package + ".commands", base / "commands", "COMMAND", "command"
         )
 
     @property
@@ -300,9 +305,14 @@ class WhatsAppGateway:
         )
         try:
             if reply is not None and reply.raw is not None:
-                sent = await self.client.reply_message(payload, reply.raw)
+                # The percept keeps the neonize event; reply_message wants that proto Message.
+                quoted = cast(MessageEv, reply.raw)
+                sent = await self.client.reply_message(payload, quoted)
             else:
-                sent = await self.client.send_message(self._jid(thread), payload)
+                # neonize accepts an ExtendedTextMessage where its stubs declare Message.
+                sent = await self.client.send_message(
+                    self._jid(thread), cast(e2e.Message | str, payload)
+                )
         except SendMessageError as exc:
             log.exception("failed to send text to %s", thread)
             raise GatewayError(str(exc)) from exc
@@ -444,7 +454,9 @@ class WhatsAppGateway:
         if moment - self.name_retry.get(thread, 0.0) < GROUP_NAME_RETRY:
             return
         self.name_retry[thread] = moment
-        getter = getattr(self.client, "get_group_info", None)
+        getter: Callable[[JID], Awaitable[object]] | None = getattr(
+            self.client, "get_group_info", None
+        )
         if not callable(getter):
             return
         try:

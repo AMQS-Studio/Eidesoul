@@ -907,6 +907,8 @@ class CognitionWorker:
             await self._ladder_apply(str(decided.get("action")), decided, names, found)
 
     async def _ladder_decision(self, found, names: list[str]) -> dict | None:
+        if self.llm is None:
+            return None
         payload = {
             "signature": found.signature,
             "episodes": found.as_dict(),
@@ -934,6 +936,8 @@ class CognitionWorker:
         return body
 
     async def _ladder_apply(self, action: str, decided: dict, names: list[str], found) -> None:
+        if self.skills is None:
+            return
         skill = str(decided.get("skill") or "")
         reason = str(decided.get("reason") or "")[:200]
         if action == "promote":
@@ -985,6 +989,8 @@ class CognitionWorker:
     async def _ladder_propose(self, skill: str, decided: dict, found, reason: str) -> None:
         """Ladder step 8: one approval, nothing stored until the owner approves it."""
         settings = self.config.skills
+        if self.skills is None:
+            return
         if not getattr(settings, "ladder_enabled", False) or self.propose is None:
             return
         if await io.run(self._proposal_recent, skill):
@@ -1014,6 +1020,8 @@ class CognitionWorker:
 
     def _proposal_recent(self, skill: str) -> bool:
         """Cooldown: the same skill was proposed inside `proposal_cooldown_days`."""
+        if self.db is None:
+            return False
         days = float(getattr(self.config.skills, "ladder_proposal_cooldown_days", 14.0))
         if days <= 0:
             return False
@@ -1095,6 +1103,8 @@ class CognitionWorker:
         return name, description[:200], body
 
     async def _draft(self, episode, steps: list[dict]) -> tuple[str, str, str] | None:
+        if self.llm is None:
+            return None
         payload = {
             "episode": episode.id,
             "turns": episode.turns,

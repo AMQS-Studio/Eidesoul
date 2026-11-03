@@ -149,8 +149,12 @@ def decision_from_row(row: dict) -> Decision | None:
     if not isinstance(raw, dict):
         return None
     try:
-        appraisal = raw.get("appraisal") if isinstance(raw.get("appraisal"), dict) else {}
-        relationship = raw.get("relationship") if isinstance(raw.get("relationship"), dict) else {}
+        appraisal = raw.get("appraisal")
+        if not isinstance(appraisal, dict):
+            appraisal = {}
+        relationship = raw.get("relationship")
+        if not isinstance(relationship, dict):
+            relationship = {}
         return Decision(
             addressed=str(raw.get("addressed") or "me"),
             act=str(raw.get("act") or "reply"),
@@ -187,7 +191,9 @@ def parse_decision(raw: str) -> Decision | None:
     tone = str(data.get("tone") or "").strip().lower()
     if addressed not in ADDRESSED or act not in ACTS or mode not in MODES or tone not in TONES:
         return None
-    appraisal_raw = data.get("appraisal") if isinstance(data.get("appraisal"), dict) else {}
+    appraisal_raw = data.get("appraisal")
+    if not isinstance(appraisal_raw, dict):
+        appraisal_raw = {}
     label = str(appraisal_raw.get("label") or "").strip().lower()
     if label not in LABELS:
         label = "neutral"
@@ -198,7 +204,9 @@ def parse_decision(raw: str) -> Decision | None:
         dD=_float(appraisal_raw.get("dD"), DELTA_LIMIT),
         note=_flat(appraisal_raw.get("note"), NOTE_CHARS),
     )
-    relation_raw = data.get("relationship") if isinstance(data.get("relationship"), dict) else {}
+    relation_raw = data.get("relationship")
+    if not isinstance(relation_raw, dict):
+        relation_raw = {}
     relationship = RelationshipDelta(
         trust=_float(relation_raw.get("trust"), RELATION_LIMIT),
         affection=_float(relation_raw.get("affection"), RELATION_LIMIT),

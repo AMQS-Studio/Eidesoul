@@ -45,6 +45,8 @@ async def _automation_decision(ctx: CommandContext, approval) -> str:
         manifest = approval.args.get("manifest") if isinstance(approval.args, dict) else None
     store = AutomationStore(agent.db, agent.config.automations)
     try:
+        if manifest is None:
+            raise ManifestError("the automation must be a mapping")
         automation_id = store.create(
             manifest, approval=approval, agent=agent, approved_now=True
         )

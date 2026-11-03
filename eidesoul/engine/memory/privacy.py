@@ -17,6 +17,8 @@ MAX_LEVEL = 4
 
 def clamp_level(value: object, default: int = 2) -> int:
     """Clamp to 0..4; level 5 (credentials) is rejected by storage, never clamped in."""
+    if not isinstance(value, (int, float, str, bytes, bytearray)):
+        return default
     try:
         number = int(value)
     except (TypeError, ValueError):

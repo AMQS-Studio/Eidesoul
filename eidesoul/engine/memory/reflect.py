@@ -148,7 +148,7 @@ def duplicate_groups(rows: Sequence[Mapping]) -> list[list[Mapping]]:
             continue
         if str(row.get("via") or "") == "reflection":
             continue
-        body = _normal(row.get("text"))
+        body = _normal(str(row.get("text") or ""))
         if not body:
             continue
         key = (

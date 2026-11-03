@@ -57,7 +57,8 @@ def _pattern_packs() -> list[_Pack]:
         body = patterns.load_pack(target.stem)
         if not body:
             continue
-        lexicon = body.get("lexicon") if isinstance(body.get("lexicon"), dict) else {}
+        raw_lexicon = body.get("lexicon")
+        lexicon = raw_lexicon if isinstance(raw_lexicon, dict) else {}
         words = [str(item) for values in lexicon.values() for item in values or ()]
         for row in body.get("patterns") or ():
             if isinstance(row, dict):

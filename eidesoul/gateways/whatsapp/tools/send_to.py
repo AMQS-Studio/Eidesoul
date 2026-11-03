@@ -99,6 +99,8 @@ def _record(
 
 def _relay(ctx: ToolContext, thread_id: str, args: dict, text: str):
     """`(grant, "")` when a relay is permitted, `(None, "")` for a plain send, `(None, error)`."""
+    if ctx.agent is None:
+        return None, "error: gateway is not available"
     task = str(args.get("relay_task") or "").strip()
     source = str(args.get("relay_from") or "").strip()
     if not task and not source:
@@ -126,6 +128,8 @@ def _relay(ctx: ToolContext, thread_id: str, args: dict, text: str):
 async def _deliver_text(
     ctx: ToolContext, thread_id: str, name: str, text: str, grant
 ) -> tuple[str, dict | None]:
+    if ctx.agent is None:
+        return "error: gateway is not available", None
     result = await ctx.agent.send_text(
         thread_id, text, gateway=ctx.gateway, subject=ctx.person_id or ctx.sender
     )
@@ -148,6 +152,8 @@ async def _deliver_text(
 async def _deliver_file(
     ctx: ToolContext, thread_id: str, name: str, path, caption: str, grant
 ) -> tuple[str, dict | None]:
+    if ctx.agent is None:
+        return "error: gateway is not available", None
     result = await ctx.agent.send_file(
         thread_id, path, caption, gateway=ctx.gateway, subject=ctx.person_id or ctx.sender
     )
@@ -168,6 +174,8 @@ async def _deliver_file(
 
 
 def _target(ctx: ToolContext, raw_chat: str) -> tuple[tuple[str, str] | None, str]:
+    if ctx.gateway is None:
+        return None, "error: gateway is not available"
     target, candidates = ctx.gateway.resolve_target(raw_chat)
     if target is not None:
         return target, ""

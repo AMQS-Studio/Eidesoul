@@ -358,7 +358,7 @@ async def selftest(config: Config) -> int:
         )
 
         config.workspace.mkdir(parents=True, exist_ok=True)
-        ctx = ToolContext(config, role, tool_patterns((role,)), memory=memory, skills=skills)
+        ctx = ToolContext(config, (role,), tool_patterns((role,)), memory=memory, skills=skills)
         specs = {
             handler.name: handler
             for handler in REGISTRY.by_name.values()

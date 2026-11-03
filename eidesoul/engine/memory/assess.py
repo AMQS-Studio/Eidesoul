@@ -102,6 +102,8 @@ def _verdict(item: Mapping, ask_level: int = 4) -> FactVerdict:
     text = _flat(item.get("text"))
     if not text:
         return FactVerdict(item_id=item_id, valid=False, reason="empty text")
+    if raw_level is None:
+        return FactVerdict(item_id=item_id, valid=False, reason="missing level")
     try:
         level = int(raw_level)
     except (TypeError, ValueError):

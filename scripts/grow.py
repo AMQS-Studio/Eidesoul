@@ -191,7 +191,8 @@ def _domains(sources: list[str]) -> list[str]:
 
 
 def _sources(item: dict) -> list[str]:
-    evidence = item.get("evidence") if isinstance(item.get("evidence"), dict) else {}
+    raw = item.get("evidence")
+    evidence = raw if isinstance(raw, dict) else {}
     found = evidence.get("sources") or []
     return [url for url in found if isinstance(url, str) and url.startswith("http")]
 
@@ -319,9 +320,9 @@ class Muse:
     the style mode."""
 
     def __init__(self) -> None:
-        self.llm = None
-        self.primary = None
-        self.fallback = None
+        self.llm: research.LLM | None = None
+        self.primary: research.LLM | None = None
+        self.fallback: research.LLM | None = None
         self.dead = False
         self.misses = 0
 
@@ -335,7 +336,10 @@ class Muse:
         return self.llm
 
     async def _once(self, system: str, user: str, session: str, max_tokens: int) -> str:
-        return await self.llm.complete(
+        llm = self._client()
+        if llm is None:  # pragma: no cover - _client always installs the primary client
+            raise RuntimeError("muse primary client is unavailable")
+        return await llm.complete(
             system,
             user,
             max_tokens=max_tokens,
@@ -354,7 +358,10 @@ class Muse:
                     self.misses = 0
                     return text
                 if self.llm is self.primary:
-                    fallback_model = self.fallback.config.llm.model
+                    fallback = self.fallback
+                    if fallback is None:  # pragma: no cover - _client installs both clients
+                        raise RuntimeError("muse fallback client is unavailable")
+                    fallback_model = fallback.config.llm.model
                     print(f"muse reply empty, switching to the default model {fallback_model}")
                     self.llm = self.fallback
         except Exception as exc:  # missing key, 429/5xx, timeout: stop the style mode

@@ -323,7 +323,8 @@ def _sources(item: dict) -> list[str]:
 
 
 def _gate(item: dict) -> tuple[str, int, int]:
-    gate = item.get("gate") if isinstance(item.get("gate"), dict) else {}
+    raw = item.get("gate")
+    gate = raw if isinstance(raw, dict) else {}
     target = str(gate.get("target") or "any").strip().lower()
     return (
         target if target in TARGETS else "any",

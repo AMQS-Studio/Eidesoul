@@ -196,7 +196,8 @@ def _load_vectors(pack: str) -> dict:
         return {}
     if not isinstance(body, dict) or body.get("model") != MODEL or body.get("dim") != DIM:
         return {}
-    return body.get("vectors") if isinstance(body.get("vectors"), dict) else {}
+    vectors = body.get("vectors")
+    return vectors if isinstance(vectors, dict) else {}
 
 
 def _vectors(ids: list[str], packs: tuple[str, ...] = ()) -> dict[str, list[float]]:

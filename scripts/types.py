@@ -1,7 +1,8 @@
 """Per-directory pyright ratchet (ADR-0031 §4.7).
 
 The baseline records how many type errors each directory carries today; the gate fails only when a
-directory grows. Lowering a baseline is a commit of its own.
+directory grows. Lowering a baseline is a commit of its own. The baseline is empty, so nothing is
+allowed: any diagnostic fails the gate.
 
 Run it as `python -P scripts/types.py --check`: `-P` keeps this file's directory off `sys.path`,
 so a module named `types` cannot shadow the standard library one that `argparse` imports.
@@ -89,6 +90,8 @@ def main(argv: list[str] | None = None) -> int:
             failed = True
             continue
         print(f"{key} {count} (baseline {allowed})", flush=True)
+    total = sum(counts.values())
+    print(f"pyright: {total} {'error' if total == 1 else 'errors'}", flush=True)
     return 1 if failed else 0
 
 

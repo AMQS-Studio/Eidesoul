@@ -7,7 +7,7 @@ import logging
 import random
 import time
 from collections import OrderedDict, deque
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Callable, Iterable
 from contextlib import asynccontextmanager
 from dataclasses import asdict, replace
 from pathlib import Path
@@ -197,11 +197,7 @@ class Agent:
         self.tools = Registry([*CORE_TOOLS.by_name.values(), *self.plugins.tools], "tool")
         self.body_tools = {str(item.name): list(item.tools()) for item in self.gateways}
         self.tool_index = ToolIndex(self.tools, self.body_tools)
-        handlers = [
-            *CORE_COMMANDS.by_name.values(),
-            *gateway_commands,
-            *self.plugins.commands,
-        ]
+        handlers = [*CORE_COMMANDS.by_name.values(), *gateway_commands, *self.plugins.commands]
         self.commands = Registry(handlers, "command")
         self._sync_soul_rules()
         self.runtime = runtime or RuntimeFacts(
@@ -224,7 +220,7 @@ class Agent:
         """
         rules = tuple(getattr(self.soul, "rules", ()) or ())
         sync = getattr(self.memory, "sync_soul_rules", None)
-        promote = getattr(self.memory, "promote_soul_rules", None)
+        promote: Callable[..., int] | None = getattr(self.memory, "promote_soul_rules", None)
         try:
             if callable(sync) and rules:
                 sync(rules)
@@ -639,7 +635,8 @@ class Agent:
 
     def _role_set(self, inbound: Percept) -> tuple[Role, ...]:
         declared = inbound.hints.get("roles") or ()
-        names = (declared,) if isinstance(declared, str) else tuple(str(item) for item in declared)
+        found = declared if isinstance(declared, Iterable) else ()
+        names = (declared,) if isinstance(declared, str) else tuple(str(item) for item in found)
         if names:
             return self.config.roles.override(names)
         return self.config.roles.for_person(inbound.actor)
@@ -812,7 +809,7 @@ class Agent:
         if kind != "forget":
             return
         forget = getattr(self.memory, "forget_by_intent", None)
-        if not callable(forget):
+        if not isinstance(forget, Callable):
             return
         try:
             removed = await forget(
@@ -951,7 +948,7 @@ class Agent:
                 claimed=claimed,
             )
         )
-        task._eidesoul_turn_id = turn_id
+        setattr(task, "_eidesoul_turn_id", turn_id)  # noqa: B010 — a dynamic task attribute
         if not is_command:
             self._pending_tasks[thread_id] = task
         try:
@@ -1005,8 +1002,8 @@ class Agent:
         lease_seconds = max(60.0, float(self.config.turns.timeout_seconds) + 30.0)
         queue = contextlib.nullcontext() if is_command else self._thread_lock(thread_id)
         async with queue:
-            if not is_command:
-                self._turn_tasks[thread_id] = asyncio.current_task()
+            if not is_command and (running := asyncio.current_task()) is not None:
+                self._turn_tasks[thread_id] = running
                 self._turn_gateways[thread_id] = gateway
             claimed = claimed or self.turns.claim(
                 turn_id,
@@ -1253,6 +1250,8 @@ class Agent:
                             inbound,
                         )
                     else:
+                        if decision is None or self.llm is None:  # pragma: no cover
+                            raise RuntimeError("a reply turn needs a decision and a model")
                         specs = self._specs(roles, gateway)
                         cross_send = any(spec.name == "send_to" for spec in specs)
                         mood = None
@@ -1699,6 +1698,8 @@ class Agent:
                 session=f"eidesoul-recipe-{thread_id}-{name}",
             )
         ctx = self.command_context(thread_id, sender, roles, gateway, args, inbound)
+        if handler is None or handler.fn is None:  # pragma: no cover - a command is callable
+            return t("agent.unknown_command", self.soul.language, name=name)
         return await handler.fn(ctx)
 
     # ------------------------------------------------------------ hidup
@@ -1732,9 +1733,7 @@ class Agent:
         from .config import ConfigError, load_config
 
         reload_catalogs()
-        loaded = load_config(
-            self.config.paths.config, documents=self.documents, require_key=False
-        )
+        loaded = load_config(self.config.paths.config, documents=self.documents, require_key=False)
         before = self._restart_tokens(self.config)
         after = self._restart_tokens(loaded)
         changed = [key for key in before if before[key] != after[key]]

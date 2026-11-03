@@ -42,9 +42,10 @@ class HarnessGateway(CoreDefaults):
         self.actions: list[Action] = []
         self.sent: list[str] = []
         base = Path(__file__).parent
-        self._tools = discover(__package__ + ".tools", base / "tools", "TOOL", "tool", FAMILIES)
+        package = __package__ or ""
+        self._tools = discover(package + ".tools", base / "tools", "TOOL", "tool", FAMILIES)
         self._commands = discover(
-            __package__ + ".commands", base / "commands", "COMMAND", "command"
+            package + ".commands", base / "commands", "COMMAND", "command"
         )
 
     def tools(self) -> list[Handler]:

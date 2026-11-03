@@ -91,6 +91,11 @@ class StepSkipped(Exception):
 # --------------------------------------------------------------------- manifest
 
 
+def _mapping(value: object) -> dict:
+    """A stored JSON field read as a mapping; any other value reads as an empty one."""
+    return value if isinstance(value, dict) else {}
+
+
 def _schedule_event(raw: dict, event: dict, config: AutomationConfig) -> None:
     at = raw.get("at")
     every = raw.get("every")
@@ -110,6 +115,8 @@ def _schedule_event(raw: dict, event: dict, config: AutomationConfig) -> None:
                 f"at most {config.max_occurrences_per_day} occurrences per day"
             )
         return
+    if not isinstance(every, (int, float, str)):
+        raise ManifestError("schedule 'every' must be a number")
     interval = int(float(every))
     if interval < int(config.min_interval_seconds):
         raise ManifestError(
@@ -156,9 +163,10 @@ def _validate_event(raw: object, config: AutomationConfig) -> dict:
         found = _date(raw.get(field), field)
         if found is not None:
             event[field] = found.isoformat()
-    if raw.get("count") is not None:
+    raw_count = raw.get("count")
+    if raw_count is not None:
         try:
-            count = int(raw.get("count"))
+            count = int(raw_count)
         except (TypeError, ValueError) as exc:
             raise ManifestError("event.count must be a number") from exc
         if count < 1:
@@ -707,7 +715,10 @@ class AutomationStore:
         }
         with self.db.connect() as conn:
             found = conn.execute(automations.insert().values(row).returning(automations.c.id))
-            automation_id = int(found.scalar())
+            new_id = found.scalar()
+            if new_id is None:  # pragma: no cover - the insert always returns its own row
+                raise RuntimeError("the new automation could not be read back")
+            automation_id = int(new_id)
             conn.execute(
                 automation_state_log.insert().values(
                     automation_id=automation_id,
@@ -1117,7 +1128,7 @@ class AutomationStore:
         Only an executed outcome spends the budget (ADR-0014 §4.13: `budget_per_day` counts
         runs, not attempts); the currently claimed run is excluded until it finishes.
         """
-        event = automation.get("event") if isinstance(automation.get("event"), dict) else {}
+        event = _mapping(automation.get("event"))
         moment = datetime.fromtimestamp(
             float(scheduled_at), zone(event.get("tz") or DEFAULT_TZ)
         )
@@ -1264,7 +1275,7 @@ class AutomationWorker:
         self.worker_id = f"automation:{os.getpid()}"
         self._task: asyncio.Task | None = None
         self._running = False
-        self._nl: dict[str, object] = {"day": "", "tokens": 0}
+        self._nl: dict[str, int | str] = {"day": "", "tokens": 0}
 
     # ------------------------------------------------------------- lifecycle
 
@@ -1370,8 +1381,8 @@ class AutomationWorker:
 
     def _quiet(self, automation: dict, run: dict, now: float) -> bool:
         """True when the run may proceed; records `skipped` or defers to the window end."""
-        policy = automation.get("policy") if isinstance(automation.get("policy"), dict) else {}
-        event = automation.get("event") if isinstance(automation.get("event"), dict) else {}
+        policy = _mapping(automation.get("policy"))
+        event = _mapping(automation.get("event"))
         window = parse_quiet_hours(policy.get("quiet_hours") or self.config.default_quiet_hours)
         if window is None or not in_quiet(float(run["scheduled_at"]), event.get("tz"), window):
             return True
@@ -1470,7 +1481,7 @@ class AutomationWorker:
 
     async def _message_facts(self, run: dict, facts: dict) -> bool:
         """A message run carries its message: the condition and the steps read real fields."""
-        payload = run.get("payload") if isinstance(run.get("payload"), dict) else {}
+        payload = _mapping(run.get("payload"))
         message_id = str(payload.get("message_id") or "")
         if not message_id:
             return True
@@ -1914,7 +1925,7 @@ class AutomationWorker:
         return sent
 
     async def _notify(self, automation: dict, key: str, **kw) -> None:
-        policy = automation.get("policy") if isinstance(automation.get("policy"), dict) else {}
+        policy = _mapping(automation.get("policy"))
         if str(policy.get("on_error") or "notify_owner") != "notify_owner":
             return
         text = t(key, self._language(), **kw)

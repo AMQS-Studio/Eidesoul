@@ -817,6 +817,8 @@ def _bool(value: object, default: bool) -> bool:
 
 
 def _num(value: object, default: float) -> float:
+    if not isinstance(value, (str, bytes, int, float)):
+        return default
     try:
         return float(value)
     except (TypeError, ValueError):
@@ -825,7 +827,7 @@ def _num(value: object, default: float) -> float:
 
 def _clamped(value: object, default: int, low: int, high: int) -> int:
     """Numeric level: a broken value falls back to the default, an out-of-range value is clamped."""
-    if isinstance(value, bool):
+    if isinstance(value, bool) or not isinstance(value, (str, bytes, int, float)):
         return default
     try:
         number = int(float(value))
@@ -877,7 +879,8 @@ def _mcp_servers(raw: object) -> dict[str, MCPServerConfig]:
         elif not isinstance(command, str) or not command:
             raise ConfigError(f"mcp server '{name}' needs 'command'")
         stdio = url is None
-        env = body.get("env") if stdio and isinstance(body.get("env"), dict) else {}
+        raw_env = body.get("env") if stdio else None
+        env = raw_env if isinstance(raw_env, dict) else {}
         result[str(name)] = MCPServerConfig(
             name=str(name),
             command=command if stdio else None,
@@ -1164,7 +1167,7 @@ def _roles(
     """Role documents win; otherwise read every role from `roles.yaml`."""
     source: Mapping[str, str | dict] = {}
     names = documents.names("role:") if documents is not None else []
-    if names:
+    if names and documents is not None:
         source = {
             name.split(":", 1)[1]: documents.get(name) or ""
             for name in names

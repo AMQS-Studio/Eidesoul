@@ -5,6 +5,7 @@ import asyncio
 import logging
 import sqlite3
 import time
+from collections.abc import Awaitable, Callable
 from pathlib import Path
 
 from sqlalchemy import and_, func, select, update
@@ -294,7 +295,7 @@ def group_name(info) -> str:
 async def sync_group_names(
     client, db: Database, timeout_seconds: float = GROUP_LIST_TIMEOUT
 ) -> int:
-    getter = getattr(client, "get_joined_groups", None)
+    getter: Callable[[], Awaitable[list]] | None = getattr(client, "get_joined_groups", None)
     if not callable(getter):
         return 0
     try:

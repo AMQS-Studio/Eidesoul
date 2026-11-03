@@ -115,7 +115,14 @@ def _pack(code: str, body: object) -> Lexicon:
         isinstance(key, str) and isinstance(value, str) for key, value in examples.items()
     ):
         raise ValueError("prompt_examples must be a string map")
-    return Lexicon(language=code, prompt_examples=dict(examples), **lists)
+    return Lexicon(
+        language=code,
+        negations=lists["negations"],
+        stopwords=lists["stopwords"],
+        assistant_tells=lists["assistant_tells"],
+        injection=lists["injection"],
+        prompt_examples=dict(examples),
+    )
 
 
 def _words(value: object, key: str) -> frozenset[str]:

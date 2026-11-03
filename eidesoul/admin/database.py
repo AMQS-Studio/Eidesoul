@@ -14,7 +14,7 @@ from sqlalchemy import func, select, text
 from sqlalchemy.engine import make_url
 from sqlalchemy.exc import SQLAlchemyError
 
-from ..engine.config import ConfigError, HostConfig, load_host, resolve_database_url
+from ..engine.config import ConfigError, HostConfig, Paths, load_host, resolve_database_url
 from ..engine.db import Database
 from ..engine.schema import (
     actions,
@@ -61,7 +61,7 @@ COUNT_TABLES = (
 # ------------------------------------------------------------------ helpers
 
 
-def _host(config_path) -> tuple[HostConfig, object]:
+def _host(config_path) -> tuple[HostConfig, Paths]:
     return load_host(config_path)
 
 

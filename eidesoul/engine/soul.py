@@ -134,6 +134,8 @@ def _identifiers(value: object, key: str) -> tuple[str, ...]:
 def _clamp(value: object, key: str) -> int:
     if value is None:
         return 0
+    if not isinstance(value, (str, bytes, int, float)):
+        raise ValueError(f"soul style.{key} must be an integer")
     try:
         number = int(value)
     except (TypeError, ValueError) as exc:

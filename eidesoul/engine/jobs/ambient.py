@@ -144,6 +144,8 @@ class Ambient:
                 break
 
     async def _research_candidate(self, thread_id: str, moment: float) -> bool:
+        if self.affect is None:
+            return False
         settings = self.settings
         try:
             topic = self.affect.topic(thread_id)
@@ -267,6 +269,8 @@ class Ambient:
 
     def _close_era(self, thread_id: str, topic: dict, summary: str) -> None:
         """Archive the old topic as a dated era once the digest moved to another subject."""
+        if self.affect is None:  # `_digest` guards it already; nothing archived without the store
+            return
         previous = str(topic["summary"]).strip()
         fresh = " ".join(str(summary or "").split())
         if not previous or not fresh or not drift(previous, fresh, self.config.soul.language):

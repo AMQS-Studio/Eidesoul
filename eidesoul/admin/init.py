@@ -13,13 +13,13 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 from types import SimpleNamespace
-from typing import TextIO
+from typing import TextIO, cast
 
 import yaml
 from sqlalchemy.engine import make_url
 from sqlalchemy.exc import ArgumentError
 
-from ..engine.config import ConfigError
+from ..engine.config import Config, ConfigError
 from ..providers import PROVIDERS
 from . import templates
 
@@ -94,7 +94,7 @@ def validate_database_url(url: str) -> str | None:
     return None
 
 
-def _probe(provider: str) -> SimpleNamespace:
+def _probe(provider: str) -> Config:
     """A read-only stand-in for `Config` so `admin/models.py` stays the only list fetcher."""
     defaults = PROVIDERS[provider]
     llm = SimpleNamespace(
@@ -112,7 +112,8 @@ def _probe(provider: str) -> SimpleNamespace:
             return "local"
         raise KeyError(llm.api_key_env)
 
-    return SimpleNamespace(llm=llm, api_key=api_key)
+    # The stand-in carries only `.llm` and `.api_key()`, which is all `list_models` reads.
+    return cast(Config, SimpleNamespace(llm=llm, api_key=api_key))
 
 
 def model_ids(provider: str) -> list[str]:
@@ -317,7 +318,7 @@ def init(
         label=label,
         voice=voice_layer,
     )
-    decisions = dict.fromkeys(HOST_FILES, "replace" if force else "new")
+    decisions: dict[str, str] = dict.fromkeys(HOST_FILES, "replace" if force else "new")
     return write_files(folder, contents, decisions)
 
 
@@ -643,8 +644,8 @@ def wizard(
     A flag pre-answers its step; a step the operator changes is asked again before the next
     review. `Ctrl-C` cancels the run and leaves nothing behind.
     """
-    stdin = stdin or sys.stdin
-    stdout = stdout or sys.stdout
+    stream_in = stdin or sys.stdin
+    stream_out = stdout or sys.stdout
     answers = Answers(
         provider=provider or "",
         model=model or "",
@@ -666,21 +667,21 @@ def wizard(
     try:
         written, skipped = _interactive(
             folder,
-            stdin=stdin,
-            stdout=stdout,
+            stdin=stream_in,
+            stdout=stream_out,
             color=color,
             answers=answers,
             locked=locked,
             force=force,
         )
     except KeyboardInterrupt:
-        _say(stdout, "")
-        _say(stdout, "cancelled; nothing was written")
+        _say(stream_out, "")
+        _say(stream_out, "cancelled; nothing was written")
         raise InitCancelled("cancelled by the operator; nothing was written") from None
-    _say(stdout, "")
-    _say(stdout, "Receipt")
+    _say(stream_out, "")
+    _say(stream_out, "Receipt")
     _say(
-        stdout,
+        stream_out,
         report(base=folder, written=written, skipped=skipped, provider=answers.provider,
                model=answers.model),
     )

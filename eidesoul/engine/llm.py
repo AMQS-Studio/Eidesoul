@@ -5,11 +5,13 @@ import hashlib
 import json
 import logging
 import time
+from collections.abc import Callable
 
 from openai import APIError, APITimeoutError, AsyncOpenAI
 
 from . import guard, io
 from .config import Config
+from .db import Database
 from .i18n import t
 from .registry import Handler, allows
 from .schema import llm_calls
@@ -117,7 +119,7 @@ def _has_images(content: str | list[dict]) -> bool:
     )
 
 
-def _client_error(exc: APIError) -> bool:
+def _client_error(exc: Exception) -> bool:
     status = getattr(exc, "status_code", None)
     return isinstance(status, int) and 400 <= status < 500
 
@@ -144,7 +146,7 @@ def prompt_prefix_hash(system: str, specs: list[Handler]) -> str:
 
 def _message_dict(message) -> dict:
     """One assistant message as a plain dict; the SDK may return a pydantic model or a stub."""
-    dump = getattr(message, "model_dump", None)
+    dump: Callable[..., dict] | None = getattr(message, "model_dump", None)
     if callable(dump):
         return dump(exclude_none=True)
     body: dict = {
@@ -168,7 +170,7 @@ def _message_dict(message) -> dict:
 
 
 class LLM:
-    def __init__(self, config: Config, db=None):
+    def __init__(self, config: Config, db: Database | None = None):
         self.config = config
         self.db = db
         self.prefix_hash = ""
@@ -357,6 +359,8 @@ class LLM:
             log.debug("llm_calls write failed", exc_info=True)
 
     def _insert_call(self, row: dict) -> None:
+        if self.db is None:
+            return
         with self.db.connect() as conn:
             conn.execute(llm_calls.insert().values(row))
 

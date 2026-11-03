@@ -8,7 +8,7 @@ import re
 from functools import partial
 
 from mcp import Client, StdioServerParameters
-from mcp.types import TextContent
+from mcp.types import TextContent, Tool
 
 from ..access.permissions import tool_allowed
 from ..config import MCPServerConfig
@@ -40,7 +40,7 @@ class Hub:
         self.servers = servers
         self._stack = contextlib.AsyncExitStack()
         self._handlers: dict[str, Handler] = {}  # exposed name -> handler
-        self._clients: dict[str, tuple[object, object]] = {}  # exposed name -> (client, tool)
+        self._clients: dict[str, tuple[Client, Tool]] = {}  # exposed name -> (client, tool)
 
     async def start(self) -> None:
         for name, server in self.servers.items():

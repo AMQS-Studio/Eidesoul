@@ -4,12 +4,13 @@
 import contextlib
 import logging
 import time
-from collections.abc import Iterator, Mapping, Sequence
+from collections.abc import Callable, Iterator, Mapping, Sequence
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
 from sqlalchemy import Connection, Engine, Table, create_engine, text
+from sqlalchemy.dialects.postgresql import Insert as PGInsert
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.engine import make_url
 
@@ -241,7 +242,7 @@ class Database:
         table: Table,
         rows: Sequence[Mapping[str, Any]],
         index_elements: Sequence[str],
-        update=None,
+        update: Mapping[str, Any] | Callable[[PGInsert], Mapping[str, Any]] | None = None,
     ) -> int:
         if not rows:
             return 0

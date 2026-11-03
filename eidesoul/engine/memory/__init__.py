@@ -92,7 +92,7 @@ class MemoryBackend(Protocol):
         limit: int = 20,
     ) -> list[MemoryHit]: ...
 
-    async def get(self, memory_id: str) -> MemoryHit | None: ...
+    def get(self, memory_id: str) -> MemoryHit | None: ...
 
     async def forget(
         self,
@@ -122,6 +122,7 @@ class MemoryBackend(Protocol):
         person_id: str,
         thread_id: str,
         query: str,
+        direct: bool | None = None,
         mood=None,
         max_items: int | None = None,
         max_chars: int | None = None,
