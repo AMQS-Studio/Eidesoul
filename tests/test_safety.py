@@ -14,6 +14,21 @@ from eidesoul.engine.guard import (
     scan_command,
     scope_proof,
 )
+from eidesoul.engine.tools import REGISTRY as TOOLS
+
+
+def declared(tool: str) -> dict:
+    """The same metadata `execute` passes from the handler declaration."""
+    spec = TOOLS.by_name.get(tool)
+    if spec is None:
+        return {}
+    return {
+        "target": spec.target,
+        "declared_class": spec.approval_class,
+        "destructive": spec.destructive,
+        "path_arg": spec.path_arg,
+        "scan": spec.scan,
+    }
 
 
 def scoped(tool: str, *, roots=("/w/public", "/w/scratch/c"), roles=("member",), **args):
@@ -26,6 +41,7 @@ def scoped(tool: str, *, roots=("/w/public", "/w/scratch/c"), roles=("member",),
         roles=roles,
         workspace="/w",
         roots=roots,
+        **declared(tool),
     )
 
 
@@ -70,6 +86,7 @@ def request(tool: str, **args) -> ActionRequest:
         sender="s",
         gateway="g",
         roles=("owner",),
+        **declared(tool),
     )
 
 
@@ -131,9 +148,8 @@ def test_destructive_internal_actions_wait_for_approval() -> None:
     config = ApprovalConfig()
     assert verdict(config, "memory", action="forget") == "pending"
     assert verdict(config, "memory", action="add", text="a") == "allow"
-    assert verdict(config, "skill", action="archive", name="x") == "pending"
-    assert verdict(config, "skill", action="save", name="x") == "allow"
-    assert verdict(config, "recipe", action="remove", name="x") == "allow"
+    assert verdict(config, "recipe", action="remove", name="x") == "pending"
+    assert verdict(config, "recipe", action="list") == "allow"
 
 
 def test_empty_sensitive_commands_disables_command_gate() -> None:

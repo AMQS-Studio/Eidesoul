@@ -68,7 +68,7 @@ def test_send_text_prints_with_prefix(tmp_path, capsys) -> None:
 def test_render_is_identity_and_hints_are_plain(tmp_path) -> None:
     gateway = make_cli(tmp_path)
     assert gateway.render("**tebal**") == "**tebal**"
-    assert "plain text" in gateway.prompt_hints()
+    assert "plain text" in gateway.prompt_section()
     assert gateway.self_handles() == set()
 
 

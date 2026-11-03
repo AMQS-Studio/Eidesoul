@@ -40,7 +40,7 @@ def open_stores(config, db, memory) -> dict:
             stores["affect"] = AffectStore(db, config.affect, soul=config.soul.persona)
     if config.style.enabled:
         with suppress(Exception):
-            stores["style"] = StyleStore(db, config.style)
+            stores["style"] = StyleStore(db, config.style, language=config.soul.language)
     return stores
 
 

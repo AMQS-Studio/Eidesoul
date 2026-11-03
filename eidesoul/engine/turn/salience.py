@@ -12,7 +12,6 @@ PINNED = ("base", "self", "roles", "away", "capabilities")
 MANDATORY = PINNED  # the historical name; pinned is the contract
 COMPETING = (
     "topic",
-    "currents",
     "emotion",
     "vibe",
     "style",
@@ -36,7 +35,6 @@ ORDER = (
     "emotion",
     "vibe",
     "topic",
-    "currents",
     "style",
     "person_style",
     "memory",

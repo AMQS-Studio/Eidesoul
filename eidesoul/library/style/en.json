@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "language": "en",
+  "seed_median": 40,
+  "seed_p90": 140,
+  "seed_lower": 0.8,
+  "seed_emoji": 0.1,
+  "particles": [
+    "lol",
+    "tbh",
+    "imo",
+    "ngl",
+    "yeah"
+  ],
+  "emojis": [
+    "😂",
+    "🙂",
+    "🔥"
+  ],
+  "laughter": [
+    "haha",
+    "hehe",
+    "hihi",
+    "lol"
+  ]
+}

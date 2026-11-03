@@ -16,6 +16,6 @@ async def reload(ctx: CommandContext) -> str:
 
 COMMAND = Handler(
     name="reload",
-    description="♻️ Reload config/soul/role from DB documents without a restart.",
+    description="Reload config/soul/role from DB documents without a restart.",
     fn=reload,
 )

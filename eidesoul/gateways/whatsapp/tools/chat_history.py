@@ -159,6 +159,8 @@ async def _search(args: dict, ctx: ToolContext) -> str:
 TOOL = Handler(
     name="chat_history",
     family="read",
+    target="room",
+    approval_class="none",
     description=(
         "Search an archived chat, newest first. Default: this chat's archive (outside the "
         "20-message payload). chat=<chat name or id> reads another archived chat; read "

@@ -1,0 +1,18 @@
+{
+  "version": 1,
+  "language": "en",
+  "words": {
+    "idiot": [
+      "curse",
+      2
+    ],
+    "moron": [
+      "curse",
+      2
+    ],
+    "stupid": [
+      "tease",
+      1
+    ]
+  }
+}

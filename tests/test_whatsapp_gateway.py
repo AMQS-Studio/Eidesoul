@@ -166,9 +166,9 @@ def test_render_converts_markdown_but_keeps_fence(tmp_path) -> None:
     assert "reasoning" not in rendered
 
 
-def test_prompt_hints_include_handles(tmp_path) -> None:
+def test_prompt_section_include_handles(tmp_path) -> None:
     gateway = make_gateway(tmp_path)
-    hints = gateway.prompt_hints()
+    hints = gateway.prompt_section()
     assert "WhatsApp formatting" in hints
     assert BOT in hints
     assert "Your handles" in hints

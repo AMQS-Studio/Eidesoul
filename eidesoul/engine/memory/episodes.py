@@ -144,26 +144,23 @@ def _evidence(
     return rows, steps
 
 
-# ADR-0020 §4.6: the target type a tool acts on. Two runs match only with the same targets.
-TARGET_TYPES: dict[str, str] = {
-    "read": "file",
-    "write": "file",
-    "grep": "file",
-    "fetch": "file",
-    "send": "room",
-    "send_to": "room",
-    "chat_history": "room",
-    "google": "document",
-    "shell": "process",
-    "sandbox": "process",
-}
+def _target_of(tool: str) -> str:
+    """ADR-0020 §4.6: the target comes from the handler's declaration, not a table."""
+    try:
+        from ..tools import REGISTRY
+
+        spec = REGISTRY.by_name.get(tool)
+    except Exception:  # a missing registry must not break a signature
+        return tool
+    return (spec.target if spec is not None else "") or tool
 
 
 def _signature(steps: list[dict], thread_id: str = "") -> str:
     """`scope=…;tools=…;targets=…`: the comparable identity of one episode's work.
 
     Tool names are collapsed to one entry per run (a retry is not a different procedure), and
-    the target types come from a constant map, so the signature never carries a path or a text.
+    the target types come from each handler's declaration, so the signature never carries a
+    path or a text.
     """
     names: list[str] = []
     targets: list[str] = []
@@ -173,7 +170,7 @@ def _signature(steps: list[dict], thread_id: str = "") -> str:
             continue
         if tool not in names:
             names.append(tool)
-        target = TARGET_TYPES.get(tool, tool)
+        target = str(step.get("target") or "") or _target_of(tool)
         if target not in targets:
             targets.append(target)
     scope = "thread" if str(thread_id or "") else "global"

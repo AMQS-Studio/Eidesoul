@@ -45,6 +45,8 @@ async def _send(args: dict, ctx: ToolContext) -> str:
 TOOL = Handler(
     name="send",
     family="write",
+    target="room",
+    approval_class="consent",
     description=(
         "Send a file from public/ or scratch/; trusted roles may send other workspace paths "
         "(sticker/photo/document chosen automatically)."

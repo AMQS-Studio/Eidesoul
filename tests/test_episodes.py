@@ -201,9 +201,9 @@ def test_procedure_scope_does_not_leak_to_another_thread(tmp_path) -> None:
 def test_the_signature_names_scope_tools_and_target_types() -> None:
     """ADR-0020 §4.6: two runs compare only when the scope, tools, and target types match."""
     steps = [
-        {"tool": "read", "args_hash": "a"},
-        {"tool": "read", "args_hash": "b"},
-        {"tool": "send", "args_hash": "c"},
+        {"tool": "read", "args_hash": "a", "target": "file"},
+        {"tool": "read", "args_hash": "b", "target": "file"},
+        {"tool": "send", "args_hash": "c", "target": "room"},
     ]
 
     signature = episodes._signature(steps, "t")

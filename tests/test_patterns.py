@@ -64,7 +64,6 @@ BOOK = {
             "roast_return",
             register=["banter"],
             keys=["goblok"],
-            target="male",
             min_toxicity=3,
             priority=10,
             content="Balas sekali dalam register ruangan.",
@@ -81,7 +80,6 @@ BOOK = {
             "care_female",
             register=["comfort"],
             keys=["sedih"],
-            target="female",
             priority=7,
             content="Temani dulu tanpa memaksa.",
         ),
@@ -191,13 +189,12 @@ def test_register_allow_list_filters_rows(tmp_path, monkeypatch) -> None:
     got = select_patterns(
         6,
         register="banter",
-        target="male",
         limits=(3, 1),
         messages=["goblok wkwk"],
         packs=(pack,),
         registers=("meme",),
         encoder=None,
-    )
+     language="id")
     assert all("Balas sekali" not in line for line in got)
     assert any("Mirror hanya" in line for line in got)
 
@@ -208,12 +205,11 @@ def test_keyword_path_ranks_by_hits_and_respects_gates(tmp_path, monkeypatch) ->
     got = select_patterns(
         3,
         register="comfort",
-        target="female",
         limits=(1, 0),
         messages=["aku capek banget, gak kuat"],
         packs=(pack,),
         encoder=None,
-    )
+     language="id")
     assert got[0].startswith("Validasi dulu"), got
     assert '(examples: "boleehhh")' in got[0]
     assert all("Balas sekali" not in line for line in got)
@@ -221,60 +217,39 @@ def test_keyword_path_ranks_by_hits_and_respects_gates(tmp_path, monkeypatch) ->
         select_patterns(
             0,
             register="banter",
-            target="male",
             limits=(4, 3),
             messages=["ayoo"],
             packs=(pack,),
             encoder=None,
-        )
+         language="id")
         == []
     )
 
 
-def test_target_and_level_gates(tmp_path, monkeypatch) -> None:
+def test_level_gates_keep_the_room_register(tmp_path, monkeypatch) -> None:
     pack = use(tmp_path, monkeypatch)
 
-    male = select_patterns(
+    loud = select_patterns(
         6,
         register="banter",
-        target="male",
         limits=(3, 1),
         messages=["ayo"],
         packs=(pack,),
         encoder=None,
+        language="id",
     )
-    assert any(line.startswith("Balas sekali") for line in male)
-    for target in ("female", "unknown", ""):
-        quiet = select_patterns(
-            6,
-            register="banter",
-            target=target,
-            limits=(3, 1),
-            messages=["ayo"],
-            packs=(pack,),
-            encoder=None,
-        )
-        assert all("Balas sekali" not in line for line in quiet), (target, quiet)
-    low = select_patterns(
+    assert any(line.startswith("Balas sekali") for line in loud)
+
+    quiet = select_patterns(
         6,
         register="banter",
-        target="male",
-        limits=(2, 1),
+        limits=(0, 0),
         messages=["ayo"],
         packs=(pack,),
         encoder=None,
+        language="id",
     )
-    assert all("Balas sekali" not in line for line in low)
-    adult_off = select_patterns(
-        6,
-        register="meme",
-        target="male",
-        limits=(3, 0),
-        messages=["ayo"],
-        packs=(pack,),
-        encoder=None,
-    )
-    assert all("Mirror hanya" not in line for line in adult_off)
+    assert not any(line.startswith("Balas sekali") for line in quiet)
 
 
 def test_always_pattern_is_eligible_without_keyword_hits(tmp_path, monkeypatch) -> None:
@@ -283,12 +258,11 @@ def test_always_pattern_is_eligible_without_keyword_hits(tmp_path, monkeypatch) 
     got = select_patterns(
         2,
         register="neutral",
-        target="unknown",
         limits=(0, 0),
         messages=["apa kabar"],
         packs=(pack,),
         encoder=None,
-    )
+     language="id")
     assert got == ["Satu bahasa per balasan dan tetap pendek."]
 
 
@@ -299,12 +273,11 @@ def test_cosine_path_ranks_by_similarity_and_drops_far_patterns(tmp_path, monkey
     got = select_patterns(
         3,
         register="comfort",
-        target="female",
         limits=(0, 0),
         messages=["aku capek banget"],
         packs=(pack,),
         encoder=stub,
-    )
+     language="id")
 
     assert stub.calls == 1
     assert got[0].startswith("Validasi dulu"), got
@@ -319,12 +292,11 @@ def test_vector_model_mismatch_falls_back_to_keywords(tmp_path, monkeypatch) -> 
     got = select_patterns(
         2,
         register="comfort",
-        target="female",
         limits=(0, 0),
         messages=["aku sedih"],
         packs=(pack,),
         encoder=stub,
-    )
+     language="id")
 
     assert stub.calls == 0
     assert got[0].startswith("Temani dulu"), got

@@ -163,8 +163,15 @@ async def _approve(ctx: CommandContext) -> str:
         approved=True,
         approval_id=str(approval.id),
     )
+    spec = None
+    if getattr(agent, "tools", None) is not None:
+        spec = agent.tools.by_name.get(str(approval.tool or approval.kind))
     resolved: tuple[str, ...] = ()
-    raw_path = approval.args.get("path") if isinstance(approval.args, dict) else None
+    raw_path = (
+        approval.args.get(spec.path_arg)
+        if spec is not None and spec.path_arg and isinstance(approval.args, dict)
+        else None
+    )
     if isinstance(raw_path, str) and raw_path.strip():
         try:
             resolved = (
@@ -182,6 +189,11 @@ async def _approve(ctx: CommandContext) -> str:
         workspace=str(agent.config.workspace),
         roots=tuple(str(root) for root in tool_ctx.roots),
         paths=resolved,
+        target=spec.target if spec is not None else "",
+        declared_class=spec.approval_class if spec is not None else "authorization",
+        destructive=spec.destructive if spec is not None else (),
+        path_arg=spec.path_arg if spec is not None else "",
+        scan=spec.scan if spec is not None else (),
     )
     proof = scope_proof(request, extra=agent.config.guard.credential_patterns)
     if approval.scope_proof:
@@ -227,7 +239,7 @@ async def _approve(ctx: CommandContext) -> str:
 
 COMMAND = Handler(
     name="approve",
-    description="✅ Run a sensitive action that is waiting for approval.",
+    description="Run a sensitive action that is waiting for approval.",
     fn=_approve,
     usage="[id|last]",
 )

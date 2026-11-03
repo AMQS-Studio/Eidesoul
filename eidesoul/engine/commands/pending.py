@@ -33,6 +33,6 @@ async def _pending(ctx: CommandContext) -> str:
 
 COMMAND = Handler(
     name="pending",
-    description="🕓 List the approvals waiting in this chat.",
+    description="List the approvals waiting in this chat.",
     fn=_pending,
 )

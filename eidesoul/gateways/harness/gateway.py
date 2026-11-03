@@ -9,7 +9,6 @@ from pathlib import Path
 from ...engine.config import Config, GatewaySettings
 from ...engine.inbound import TASK, Action, CoreDefaults, GatewayError, Percept
 from ...engine.registry import Handler, discover
-from ...engine.tools import FAMILIES
 from ...engine.turn.context import Message
 
 log = logging.getLogger(__name__)
@@ -43,7 +42,7 @@ class HarnessGateway(CoreDefaults):
         self.sent: list[str] = []
         base = Path(__file__).parent
         package = __package__ or ""
-        self._tools = discover(package + ".tools", base / "tools", "TOOL", "tool", FAMILIES)
+        self._tools = discover(package + ".tools", base / "tools", "TOOL", "tool")
         self._commands = discover(
             package + ".commands", base / "commands", "COMMAND", "command"
         )
@@ -96,7 +95,7 @@ class HarnessGateway(CoreDefaults):
     def render(self, text: str) -> str:
         return str(text or "")
 
-    def prompt_hints(self) -> str:
+    def prompt_section(self) -> str:
         return (
             "## Harness interface\n"
             "- You are completing one task on the host; answer with a short plain-text report.\n"

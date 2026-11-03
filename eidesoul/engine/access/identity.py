@@ -11,22 +11,17 @@ import logging
 import re
 import secrets
 import time
-from collections.abc import Awaitable, Callable
-from typing import cast
 
 from sqlalchemy import delete, insert, select, update
 from sqlalchemy.exc import IntegrityError
 
 from ..db import Database
 from ..schema import (
-    google_device,
-    google_identity,
     people,
     person_link_codes,
     person_links,
     thread_people,
 )
-from .target import classify, combine, score_style
 
 log = logging.getLogger(__name__)
 
@@ -342,23 +337,6 @@ class IdentityStore:
                 .where(person_links.c.person_id == source)
                 .values(person_id=target)
             )
-            for table in (google_identity, google_device):
-                held = conn.execute(
-                    select(table).where(table.c.person_id == source)
-                ).mappings().first()
-                if held is None:
-                    continue
-                if (
-                    conn.execute(
-                        select(table).where(table.c.person_id == target)
-                    ).mappings().first()
-                    is not None
-                ):
-                    conn.execute(delete(table).where(table.c.person_id == source))
-                    continue
-                conn.execute(
-                    update(table).where(table.c.person_id == source).values(person_id=target)
-                )
             conn.execute(
                 delete(person_link_codes).where(
                     (person_link_codes.c.person_id == source)
@@ -453,47 +431,3 @@ class IdentityStore:
                 .where(person_link_codes.c.code == code)
                 .values(used_at=now)
             )
-
-
-async def display_target(
-    agent, person_id: str, *, gateway, messages, message
-) -> tuple[str, float, str]:
-    """Target gender: manual override, then typing style, avatar only when requested."""
-    recent = [
-        entry.text
-        for entry in messages[-8:]
-        if entry.sender_id == message.sender_id and entry.text.strip()
-    ]
-    style = score_style(recent)
-    stored = ("", 0.0, "")
-    if agent.affect is not None:
-        try:
-            stored = agent.affect.gender(person_id)
-        except Exception:
-            log.debug("gender: failed to read the stored value", exc_info=True)
-    if stored[0] and stored[2] == "manual":
-        return stored
-    avatar = None
-    if style[0] == "unknown" and agent.config.character.gender_avatar:
-        grab = getattr(gateway, "avatar", None)
-        if callable(grab):
-            # The gateway type is not importable here; its `avatar` is an async method.
-            fetch = cast(Callable[[str], Awaitable[tuple[bytes, str] | None]], grab)
-            try:
-                shot = await fetch(message.sender_address)
-            except Exception:
-                log.debug("gender: avatar fetch failed", exc_info=True)
-                shot = None
-            if shot:
-                avatar = await classify(
-                    agent.llm, shot[0], shot[1], locale=agent.config.soul.locale
-                )
-    target, confidence, source = combine(
-        style, avatar, gate=agent.config.character.gender_gate
-    )
-    if agent.affect is not None and (target, confidence, source) != tuple(stored):
-        try:
-            agent.affect.set_gender(person_id, target, confidence, source)
-        except Exception:
-            log.debug("gender: failed to save the label", exc_info=True)
-    return (target, confidence, source)

@@ -17,8 +17,6 @@ from ..registry import allows
 NAME = re.compile(r"^[a-z][a-z0-9_-]{0,31}$")
 
 PROTECTED = "administrator"
-LEGACY = "owner"
-MIGRATE = "`eidesoul config import`"
 LABEL_MAX = 40
 
 
@@ -87,13 +85,10 @@ class RoleRegistry:
         """Boot gate (ADR-0022 §4.2): the protected role must exist and stay able to approve."""
         role = self.by_name.get(PROTECTED)
         if role is None:
-            raise RoleError(
-                f"no protected role '{PROTECTED}'; add it to roles.yaml and run {MIGRATE}"
-            )
+            raise RoleError(f"no protected role '{PROTECTED}'; add it to roles.yaml")
         if not role.users:
             raise RoleError(
-                f"role '{PROTECTED}' has no users; name at least one person in roles.yaml and "
-                f"run {MIGRATE}"
+                f"role '{PROTECTED}' has no users; name at least one person in roles.yaml"
             )
         if "*" not in role.tools:
             raise RoleError(f"role '{PROTECTED}' must list tools: ['*']")
@@ -111,7 +106,7 @@ def assert_protected_roles(before: Iterable[str], after: Iterable[str]) -> None:
     if PROTECTED in set(before) and PROTECTED not in set(after):
         raise RoleError(
             f"the protected role '{PROTECTED}' cannot be deleted or renamed; change it only "
-            f"through roles.yaml and {MIGRATE}"
+            "through roles.yaml"
         )
 
 
@@ -158,10 +153,6 @@ def parse_role(name: str, body: object, source: str) -> Role:
         raise RoleError(f"{source}: field 'name' is required")
     if declared != name:
         raise RoleError(f"{source}: name '{declared}' does not match key '{name}'")
-    if declared == LEGACY:
-        raise RoleError(
-            f"{source}: the role name '{LEGACY}' is gone; rename it to '{PROTECTED}' with {MIGRATE}"
-        )
     if not NAME.fullmatch(declared):
         raise RoleError(f"{source}: invalid role name: '{declared}'")
     try:
@@ -213,10 +204,6 @@ def load_roles(
         role = parse_role(str(name), body, label)
         by_name[role.name] = role
     default = str(default_role or "").strip()
-    if default == LEGACY:
-        raise RoleError(
-            f"default_role '{LEGACY}' is gone; set it to '{PROTECTED}' and run {MIGRATE}"
-        )
     if default not in by_name:
         raise RoleError(f"default_role '{default}' is not among the loaded roles")
     return RoleRegistry(by_name=by_name, default=default)

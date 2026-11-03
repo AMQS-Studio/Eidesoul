@@ -4,6 +4,7 @@
 import importlib
 import logging
 from importlib.metadata import entry_points
+from typing import Any
 
 from ..engine.config import ConfigError
 from ..engine.inbound import capability_report, ensure_core
@@ -28,6 +29,19 @@ def ensure_schemas(db) -> list[str]:
         module.ensure_schema(db)
         done.append(module_name)
     return done
+
+
+def cli_entry(name: str, *args) -> Any:
+    """A transport CLI entry point, looked up by capability so core names no transport."""
+    for module_name in ("eidesoul.gateways.whatsapp.cli",):
+        try:
+            module = importlib.import_module(module_name)
+        except ImportError:  # the transport extra is not installed
+            continue
+        function = getattr(module, name, None)
+        if callable(function):
+            return function(*args)
+    raise ConfigError(f"no gateway provides the '{name}' command; install its extra")
 
 
 def load_gateway(name: str):

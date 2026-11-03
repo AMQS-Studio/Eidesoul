@@ -68,12 +68,12 @@ BEHAVIORS: dict[str, str] = {
 }
 
 TOPIC_BEHAVIORS: dict[str, tuple[str, ...]] = {
-    "ruangan": ("rooms",),
-    "ingatan": ("memory",),
-    "izin": ("permissions",),
-    "inisiatif": ("initiative",),
-    "gagal": ("failure",),
-    "batas": ("limits",),
+    "rooms": ("rooms",),
+    "memory": ("memory",),
+    "permissions": ("permissions",),
+    "initiative": ("initiative",),
+    "failure": ("failure",),
+    "limits": ("limits",),
 }
 
 
@@ -315,11 +315,11 @@ class SelfKnowledge:
         for behavior_id in TOPIC_BEHAVIORS[key]:
             lines.append(BEHAVIORS[behavior_id])
             lines.append(f"(behavior:{behavior_id})")
-        if key == "izin":
+        if key == "permissions":
             lines.append(f"Approval mode in this instance: {self.config.approval.mode}.")
-        if key == "inisiatif":
+        if key == "initiative":
             lines.append(f"Automation: {AUTOMATION_OFF}.")
-        if key == "ingatan":
+        if key == "memory":
             lines.append(
                 "Cost and call records are kept for "
                 f"{bucket_days(self.config.metrics.retention_days)}; procedures are renewed "

@@ -90,5 +90,42 @@
     "curse_openers": "`fuck`, `shit`, `damn`",
     "self_reference": "\"mine\" or \"I\"",
     "character_polish_examples": "DRAFT: Sure! Here are a few suggestions for your event: 1. Draft the rundown 2. Check catering\nFINAL: rundown first, food later. want me to draft it?\n\nDRAFT: Aww, you must be so tired. I understand how you feel. Hope your day gets better!\nFINAL: where does it hurt most?\n\nDRAFT: I am always here for you, do not forget that I love you\nFINAL: if you need someone to talk to, i'm here"
-  }
+  },
+  "affirmations": [
+    "yes",
+    "ok",
+    "okay",
+    "sure",
+    "y",
+    "fine",
+    "proceed",
+    "go ahead"
+  ],
+  "laughter": [
+    "haha",
+    "hehe",
+    "hihi",
+    "lol"
+  ],
+  "particles": [
+    "lol",
+    "tbh",
+    "imo",
+    "ngl",
+    "yeah",
+    "well",
+    "like"
+  ],
+  "level_words": {
+    "secret": 4,
+    "sensitive": 3,
+    "personal": 2,
+    "team": 1,
+    "public": 0
+  },
+  "serious_registers": [
+    "serious",
+    "comforting",
+    "direct"
+  ]
 }

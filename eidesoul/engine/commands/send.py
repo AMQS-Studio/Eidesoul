@@ -7,11 +7,11 @@ from ..tools import resolve_for
 from . import CommandContext
 
 
-async def _kirim(ctx: CommandContext) -> str:
+async def _send(ctx: CommandContext) -> str:
     lang = ctx.lang
     raw = ctx.args.strip()
     if not raw:
-        return t("command.kirim.usage", lang)
+        return t("command.send.usage", lang)
     target, _, caption = raw.partition(" ")
     try:
         path = resolve_for(ctx.agent.config, target, ctx.roles, ctx.thread_id)
@@ -19,14 +19,14 @@ async def _kirim(ctx: CommandContext) -> str:
         return f"error: {exc}"
     result = await ctx.agent.send_file(ctx.thread_id, path, caption.strip(), gateway=ctx.gateway)
     if result.startswith("ok:"):
-        return t("command.kirim.sent", lang, name=path.name)
-    return t("command.kirim.failed", lang, detail=result.removeprefix("error: ").strip())
+        return t("command.send.sent", lang, name=path.name)
+    return t("command.send.failed", lang, detail=result.removeprefix("error: ").strip())
 
 
 COMMAND = Handler(
-    name="kirim",
-    description="📤 Send a file/photo/sticker from the workspace to this chat.",
-    fn=_kirim,
+    name="send",
+    description="Send a file/photo/sticker from the workspace to this chat.",
+    fn=_send,
     aliases=("sendfile", "file"),
     usage="<path> [caption]",
 )

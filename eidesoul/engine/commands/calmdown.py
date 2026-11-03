@@ -25,8 +25,8 @@ async def calmdown(ctx: CommandContext) -> str:
 
 COMMAND = Handler(
     name="calmdown",
-    description="🧊 Calm Eidesoul down after it was upset or hurt (owner).",
+    description="Calm Eidesoul down after it was upset or hurt (administrator).",
     fn=calmdown,
-    aliases=("tenang",),
+    aliases=(),
     usage="/calmdown [name or number]",
 )

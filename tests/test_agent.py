@@ -355,53 +355,6 @@ def test_partial_send_leaves_the_turn_resumable(tmp_path) -> None:
     assert turn["delivered_chunks"] == 1
 
 
-def test_gender_command_sets_a_manual_target(tmp_path) -> None:
-    env = make_agent(tmp_path, affect=True)
-    env.affect.turn_end(DM, "628222", "Raka", "gue anjir goblok", "member", "", None, "m0")
-
-    handle(env, inbound_message("/gender Raka male", thread=DM))
-
-    assert "male" in env.gateway.sent[-1][1]
-    assert env.affect.gender("628222") == ("male", 1.0, "manual")
-    assert env.llm.calls == 0
-
-
-def test_gender_command_reports_unknown_names_and_usage(tmp_path) -> None:
-    env = make_agent(tmp_path, affect=True)
-
-    handle(env, inbound_message("/gender Siapa male", thread=DM))
-    assert "tidak ada di chat ini" in env.gateway.sent[-1][1]
-
-    handle(env, inbound_message("/gender Raka", thread=DM))
-    assert "/gender <nama>" in env.gateway.sent[-1][1]
-
-    handle(env, inbound_message("/gender Raka banana", thread=DM))
-    assert "/gender <nama>" in env.gateway.sent[-1][1]
-
-
-def test_konteks_command_prints_the_stored_block(tmp_path) -> None:
-    import time
-
-    from eidesoul.engine.stores.currents import CurrentsStore
-
-    env = make_agent(tmp_path)
-    env.agent.currents = CurrentsStore(env.db)
-    now = time.time()
-    env.agent.currents.save(
-        {
-            "updated_at": now,
-            "topics": {
-                "rupiah": {"text": "rupiah melemah", "fetched_at": now, "source": "web_search"}
-            },
-        }
-    )
-
-    handle(env, inbound_message("/konteks", thread=DM))
-
-    assert "rupiah: rupiah melemah" in env.gateway.sent[-1][1]
-    assert env.llm.calls == 0
-
-
 def _dm(env, thread_id: str, person_id: str, *, kind: str = "dm", extra: str = "") -> None:
     with env.db.connect() as conn:
         conn.execute(

@@ -40,7 +40,7 @@ def build(tmp_path, digest: dict):
                 text=f"kabar {index}",
             ),
         )
-    ambient = Ambient(config, DigestLLM(digest), affect, None, None, history, None, None)
+    ambient = Ambient(config, DigestLLM(digest), affect, None, None, history, None)
     return db, affect, ambient
 
 

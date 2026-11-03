@@ -36,6 +36,9 @@ async def _shell(args: dict, ctx: ToolContext) -> str:
 
 TOOL = Handler(
     name="shell",
+    target="process",
+    approval_class="authorization",
+    scan=("command",),
     family="shell",
     description=(
         "Run a shell command on the host in the workspace directory. The child sees only "

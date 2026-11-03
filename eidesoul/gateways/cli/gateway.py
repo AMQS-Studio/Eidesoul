@@ -106,7 +106,7 @@ class CliGateway(CoreDefaults):
     def render(self, text: str) -> str:
         return str(text or "")
 
-    def prompt_hints(self) -> str:
+    def prompt_section(self) -> str:
         return (
             "## CLI interface\n"
             "- You are answering in a local terminal: plain text, no WhatsApp formatting, no "

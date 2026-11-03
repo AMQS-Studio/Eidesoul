@@ -22,22 +22,6 @@ from ..memory.privacy import AuditResult, PrivacyPolicy, clamp_level
 log = logging.getLogger(__name__)
 
 KINDS = ("privacy", "disclosure")
-# Agreement tokens are shared accept-words, not a negation list; the pack schema carries only the
-# negative side (`negations`).
-YES = ("ya", "yes", "y", "ok", "oke", "boleh", "sip", "gas", "lanjut", "silakan")
-LEVEL_WORDS = (
-    ("rahasia", 4),
-    ("secret", 4),
-    ("sensitif", 3),
-    ("sensitive", 3),
-    ("aib", 3),
-    ("personal", 2),
-    ("pribadi", 2),
-    ("biasa", 2),
-    ("umum", 0),
-    ("publik", 0),
-    ("public", 0),
-)
 
 ANSWER_PROMPT = """Classify the sender's answer to a pending confirmation.
 Reply ONLY with JSON: {"kind":"yes|no|level|unclear","level":0,"reason":""}
@@ -340,12 +324,13 @@ class PrivacyService:
 
     def _regex_answer(self, text: str) -> dict:
         words = set(re.findall(r"[a-z]+", text.lower()))
-        for word, level in LEVEL_WORDS:
+        pack = lexicon.load(self._lang)
+        for word, level in pack.level_words.items():
             if word in words:
                 return {"kind": "level", "level": level}
-        if words & set(YES):
+        if words & pack.affirmations:
             return {"kind": "yes", "level": None}
-        if words & lexicon.load(self._lang).negations:
+        if words & pack.negations:
             return {"kind": "no", "level": None}
         digits = [int(ch) for ch in text if ch.isdigit() and int(ch) <= 4]
         if digits:

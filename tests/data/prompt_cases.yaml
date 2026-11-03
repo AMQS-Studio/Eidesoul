@@ -1,0 +1,38 @@
+# Prompt contract cases (ADR-0033 §6.11): properties, never word-for-word text.
+# Each case builds the real system prompt for one soul and one body section.
+cases:
+  - id: dispatch-only
+    language: en
+    locale: en-US
+    timezone: UTC
+    section: ""
+    expect_contains:
+      - "Toxicity level"
+      - "Hard floor no level unlocks"
+    expect_absent:
+      - "DM"
+      - "group chat"
+      - "sticker"
+      - "mention="
+      - "WhatsApp"
+      - "chat_history"
+  - id: cli-body
+    language: en
+    locale: en-US
+    timezone: UTC
+    section_from: cli
+    expect_contains:
+      - "## CLI interface"
+    expect_absent:
+      - "sticker"
+      - "mention="
+  - id: room-body
+    language: en
+    locale: en-US
+    timezone: UTC
+    section: "## Room\nThis thread is shared with other people; another person may be addressed."
+    expect_contains:
+      - "This thread is shared"
+    expect_absent:
+      - "DM"
+      - "WhatsApp"

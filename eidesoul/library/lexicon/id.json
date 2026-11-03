@@ -83,5 +83,66 @@
     "curse_openers": "`cok`, `cokk`, `jancok`",
     "self_reference": "\"mine\" or \"aku\"",
     "character_polish_examples": "DRAFT: Sure! Here are a few suggestions for your event: 1. Draft the rundown 2. Check catering\nFINAL: rundown dulu, konsumsi belakangan. mau aku bantu susun?\n\nDRAFT: Aww, you must be so tired. I understand how you feel. Hope your day gets better!\nFINAL: capeknya di bagian mana?\n\nDRAFT: I am always here for you, do not forget that I love you\nFINAL: kalau butuh temen ngobrol, aku ada"
-  }
+  },
+  "affirmations": [
+    "ya",
+    "yes",
+    "y",
+    "ok",
+    "oke",
+    "boleh",
+    "sip",
+    "gas",
+    "lanjut",
+    "silakan"
+  ],
+  "laughter": [
+    "wkwk",
+    "awok",
+    "hehe",
+    "haha"
+  ],
+  "particles": [
+    "aja",
+    "kok",
+    "sih",
+    "deh",
+    "loh",
+    "banget",
+    "gitu",
+    "gini",
+    "kan",
+    "nih",
+    "tuh",
+    "wkwk",
+    "anjir",
+    "jir",
+    "wes",
+    "iki",
+    "iku",
+    "yo",
+    "ya",
+    "eh",
+    "mah",
+    "lah",
+    "dong"
+  ],
+  "level_words": {
+    "rahasia": 4,
+    "secret": 4,
+    "sensitif": 3,
+    "sensitive": 3,
+    "aib": 3,
+    "personal": 2,
+    "pribadi": 2,
+    "biasa": 2,
+    "umum": 0,
+    "publik": 0,
+    "public": 0
+  },
+  "serious_registers": [
+    "serious",
+    "comfort",
+    "soal"
+  ]
 }

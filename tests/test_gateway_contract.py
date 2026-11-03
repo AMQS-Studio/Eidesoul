@@ -181,7 +181,7 @@ def test_a_body_without_core_fails_at_boot_naming_the_method() -> None:
         async def dispatch(self, action):
             return "x"
 
-        def prompt_hints(self):
+        def prompt_section(self):
             return ""
 
     with pytest.raises(ConfigError, match="self_handles"):
@@ -218,7 +218,7 @@ def test_build_gateways_logs_capabilities_and_refuses_a_broken_body(
         async def dispatch(self, action):
             return "x"
 
-        def prompt_hints(self):
+        def prompt_section(self):
             return ""
 
     config = replace(

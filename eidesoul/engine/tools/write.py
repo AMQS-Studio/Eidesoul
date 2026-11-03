@@ -15,6 +15,10 @@ async def _write(args: dict, ctx: ToolContext) -> str:
 
 TOOL = Handler(
     name="write",
+    target="file",
+    path_arg="path",
+    approval_class="consent",
+    scan=("path",),
     family="write",
     description=(
         "Write text under scratch/; public/ is read-only; trusted roles may write other "

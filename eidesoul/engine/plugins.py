@@ -53,7 +53,6 @@ MANIFEST_KEYS = frozenset(
     {"name", "version", "engine", "entry", "digest", "provides", "requires", "secrets", "credits"}
 )
 CREDIT_KEYS = frozenset({"license", "author", "source", "use"})
-PROVIDES_KEYS = frozenset({"tools", "commands", "gateways"})
 ARTIFACT_LIMIT = 64 * 1024 * 1024
 FETCH_TIMEOUT = 30
 DEPS_TIMEOUT = 900
@@ -262,9 +261,11 @@ def read_manifest(path: Path) -> Manifest:
     provides_raw = body.get("provides") or {}
     if not isinstance(provides_raw, dict):
         raise PluginError("provides must be a mapping")
-    unknown = sorted(set(provides_raw) - PROVIDES_KEYS)
-    if unknown:
-        raise PluginError(f"provides has unsupported key(s): {', '.join(unknown)}")
+    for key, value in provides_raw.items():
+        if not isinstance(key, str) or not isinstance(value, list):
+            raise PluginError("provides must map names to lists")
+        if not all(isinstance(item, str) and item for item in value):
+            raise PluginError(f"provides.{key} must be a list of names")
     secrets = _strings(body.get("secrets"), "secrets")
     for secret in secrets:
         if not SECRET.fullmatch(secret):
@@ -505,10 +506,9 @@ def _register(
         _declared(manifest, "tools", tools)
         _declared(manifest, "commands", commands)
         errors: list[str] = []
-        from .tools import FAMILIES
 
         for handler in tools:
-            errors.extend(validate(handler, handler.name, "tool", FAMILIES))
+            errors.extend(validate(handler, handler.name, "tool"))
         for handler in commands:
             errors.extend(validate(handler, handler.name, "command"))
         if errors:

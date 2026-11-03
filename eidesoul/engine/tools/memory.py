@@ -185,6 +185,9 @@ async def _memory(args: dict, ctx: ToolContext) -> str:
 
 TOOL = Handler(
     name="memory",
+    target="document",
+    approval_class="consent",
+    destructive=("forget", "veto"),
     family="write",
     description=(
         "Long-term memory across threads: add/search/list/forget/veto. scope=person stores facts "
@@ -198,7 +201,7 @@ TOOL = Handler(
         "third person. Pass supersedes=<id> when a new fact replaces an old entry."
     ),
     fn=_memory,
-    aliases=("memori",),
+    aliases=(),
     max_output_chars=8_000,
     parameters={
         "type": "object",

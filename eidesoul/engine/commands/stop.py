@@ -23,7 +23,7 @@ async def stop(ctx: CommandContext) -> str:
 
 COMMAND = Handler(
     name="stop",
-    description="🛑 Cancel the turn running in this chat.",
+    description="Cancel the turn running in this chat.",
     fn=stop,
     usage="/stop",
 )

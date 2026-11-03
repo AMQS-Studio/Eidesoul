@@ -381,12 +381,26 @@ def parse_quiet_hours(value: object) -> tuple[int, int] | None:
 
 
 @dataclass(frozen=True)
+class SafetyConfig:
+    """ADR-0033 §5: a language without a pack is refused unless the operator opts in."""
+
+    allow_degraded: bool = False
+
+
+@dataclass(frozen=True)
 class SelfKnowledgeConfig:
     """ADR-0015 §4.8: generated-first self knowledge, on by default, disableable."""
 
     enabled: bool = True
     capability_index: bool = True
-    topics: tuple[str, ...] = ("ruangan", "ingatan", "izin", "inisiatif", "gagal", "batas")
+    topics: tuple[str, ...] = (
+        "rooms",
+        "memory",
+        "permissions",
+        "initiative",
+        "failure",
+        "limits",
+    )
     coarse_buckets: bool = True
     topology: bool = True
     max_chars_per_topic: int = 1200
@@ -598,10 +612,7 @@ class CharacterConfig:
     temperature: float = 0.7
     toxicity: int = 2
     adult_memes: int = 1
-    gender_gate: bool = True
-    gender_confidence: float = 0.6
     roast_jabs: int = 1
-    gender_avatar: bool = False  # avatar is only a fallback signal
     max_questions: int = 1  # questions per reply, 1..2
 
 
@@ -634,10 +645,6 @@ class AmbientConfig:
     research_cooldown: int = 21600
     research_per_day: int = 6
     research_results: int = 5
-    context_enabled: bool = True
-    context_hours: int = 6
-    context_topics: int = 2
-    context_results: int = 4
 
 
 @dataclass(frozen=True)
@@ -729,6 +736,7 @@ class Config:
     shell: ShellConfig = field(default_factory=ShellConfig)
     read: ReadConfig = field(default_factory=ReadConfig)
     search: SearchConfig = field(default_factory=SearchConfig)
+    safety: SafetyConfig = field(default_factory=SafetyConfig)
     logging: LoggingConfig = field(default_factory=LoggingConfig)
     metrics: MetricsConfig = field(default_factory=MetricsConfig)
     automations: AutomationConfig = field(default_factory=AutomationConfig)
@@ -1617,6 +1625,17 @@ def load_config(
     shell_config = _shell_config(engine)
     search_config = _search_config(_section(engine, "search"))
     self_knowledge = _self_knowledge_config(_section(engine, "self_knowledge"))
+    safety = SafetyConfig(
+        allow_degraded=_bool(_section(engine, "safety").get("allow_degraded"), False)
+    )
+    soul = _soul(raw, paths, documents)
+    from .guard.patterns import has_pack
+
+    if not has_pack(soul.language) and not safety.allow_degraded:
+        raise ConfigError(
+            f"no safety pack for '{soul.language}'; add library/safety/{soul.language}.json "
+            "or set engine.safety.allow_degraded: true"
+        )
     two_level_at = int(_num(prompt_raw.get("capability_index_two_level_at"), 150))
     if two_level_at < 0:
         raise ConfigError("engine.prompt.capability_index_two_level_at cannot be negative")
@@ -1648,8 +1667,9 @@ def load_config(
         roles=roles,
         default_role=default_role,
         gateways=gateways,
-        soul=_soul(raw, paths, documents),
+        soul=soul,
         sandbox=host.sandbox,
+        safety=safety,
         mcp=host.mcp,
         web_search=host.web_search,
         memory=MemoryConfig(
@@ -1710,10 +1730,7 @@ def load_config(
             temperature=_num(character_raw.get("temperature"), 0.7),
             toxicity=_clamped(character_raw.get("toxicity"), 2, 0, 4),
             adult_memes=_clamped(character_raw.get("adult_memes"), 1, 0, 3),
-            gender_gate=_bool(character_raw.get("gender_gate"), True),
-            gender_confidence=_num_clamped(character_raw.get("gender_confidence"), 0.6, 0.0, 1.0),
             roast_jabs=_clamped(character_raw.get("roast_jabs"), 1, 1, 3),
-            gender_avatar=_bool(character_raw.get("gender_avatar"), False),
             max_questions=_clamped(character_raw.get("max_questions"), 1, 1, 2),
         ),
         affect=AffectConfig(
@@ -1738,10 +1755,6 @@ def load_config(
             research_cooldown=int(_num(ambient_raw.get("research_cooldown"), 21600)),
             research_per_day=int(_num(ambient_raw.get("research_per_day"), 6)),
             research_results=int(_num(ambient_raw.get("research_results"), 5)),
-            context_enabled=_bool(ambient_raw.get("context_enabled"), True),
-            context_hours=_clamped(ambient_raw.get("context_hours"), 6, 1, 168),
-            context_topics=_clamped(ambient_raw.get("context_topics"), 2, 1, 9),
-            context_results=_clamped(ambient_raw.get("context_results"), 4, 1, 8),
         ),
         guard=GuardConfig(
             enabled=_bool(guard_raw.get("enabled"), True),

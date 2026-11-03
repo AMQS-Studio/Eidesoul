@@ -101,8 +101,8 @@ async def link(ctx: CommandContext) -> str:
 
 COMMAND = Handler(
     name="link",
-    description="🔗 Attach another gateway account to this identity.",
+    description="Attach another gateway account to this identity.",
     fn=link,
-    aliases=("tautkan",),
+    aliases=(),
     usage="[<gateway> | <code>]",
 )

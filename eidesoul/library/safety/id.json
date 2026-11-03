@@ -1,0 +1,18 @@
+{
+  "version": 1,
+  "language": "id",
+  "crisis": [
+    "bunuh diri",
+    "mau mati",
+    "pengen mati",
+    "ingin mati",
+    "nyakitin diri",
+    "gantung diri",
+    "overdosis",
+    "tidak ingin hidup"
+  ],
+  "sensitive": [
+    "kredensial",
+    "kata sandi"
+  ]
+}

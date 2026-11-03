@@ -67,6 +67,6 @@ async def mood(ctx: CommandContext) -> str:
 
 COMMAND = Handler(
     name="mood",
-    description="💭 Eidesoul's current mood, energy, and feelings.",
+    description="Eidesoul's current mood, energy, and feelings.",
     fn=mood,
 )

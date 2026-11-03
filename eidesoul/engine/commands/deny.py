@@ -27,7 +27,7 @@ async def _deny(ctx: CommandContext) -> str:
 
 COMMAND = Handler(
     name="deny",
-    description="🚫 Cancel an action that is waiting for approval.",
+    description="Cancel an action that is waiting for approval.",
     fn=_deny,
     usage="[id|last] [reason]",
 )

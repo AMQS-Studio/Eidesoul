@@ -16,6 +16,6 @@ async def freeze(ctx: CommandContext) -> str:
 
 COMMAND = Handler(
     name="freeze",
-    description="🧊 Freeze this instance (owner/admin); another instance can take over.",
+    description="Freeze this instance (administrator); another instance can take over.",
     fn=freeze,
 )

@@ -47,6 +47,6 @@ COMMAND = Handler(
     name="language",
     description="Switch Eidesoul's reply language (installed catalog code).",
     fn=language_command,
-    aliases=("bahasa",),
+    aliases=(),
     usage="[code]",
 )

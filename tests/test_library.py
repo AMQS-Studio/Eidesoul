@@ -64,7 +64,14 @@ def test_no_packs_means_no_data() -> None:
     assert load_lexicon(()) == {"serious": (), "laughter": (), "roast": (), "meme": ()}
     assert load_facts(()) == []
     assert (
-        select_patterns(3, register="neutral", target="any", limits=(0, 0), messages=["halo"]) == []
+        select_patterns(
+            3,
+            register="neutral",
+            limits=(0, 0),
+            messages=["halo"],
+            language="id",
+        )
+        == []
     )
     assert select_facts(3, messages=["uin malang maba"]) == []
 
@@ -124,15 +131,14 @@ def test_register_allow_list_filters_rows(tmp_path, monkeypatch) -> None:
     allowed = select_patterns(
         4,
         register="banter",
-        target="any",
         limits=(0, 0),
         messages=["halo"],
         packs=("trial",),
         registers=("soal",),
-    )
+     language="id")
     assert allowed == ["Banter dan soal."]
     unfiltered = select_patterns(
-        4, register="banter", target="any", limits=(0, 0), messages=["halo"], packs=("trial",)
+        4, register="banter", limits=(0, 0), messages=["halo"], packs=("trial",), language="id"
     )
     assert unfiltered == ["Banter dan soal.", "Banter saja."]
 

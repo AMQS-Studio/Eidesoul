@@ -20,8 +20,6 @@ TRUNCATED = "\n...[truncated: output exceeds {limit} chars; {hint}]"
 DEFAULT_HINT = "next: narrow the query/read range or ask for the rest"
 INVALID_ARGS = "error: invalid arguments for {tool}: {detail}"
 
-FAMILIES = frozenset({"shell", "read", "write", "web_search", "sandbox", "mcp"})
-
 PUBLIC = "public"
 SCRATCH = "scratch"
 PRIVATE = "private"
@@ -346,7 +344,7 @@ async def execute(specs: dict[str, Handler], name: str, args: dict, ctx: ToolCon
         return invalid_arguments(spec.name, errors)
     if ctx.agent is not None and not ctx.approved:
         resolved: tuple[str, ...] = ()
-        raw_path = args.get("path") if isinstance(args, dict) else None
+        raw_path = args.get(spec.path_arg) if spec.path_arg and isinstance(args, dict) else None
         if isinstance(raw_path, str) and raw_path.strip():
             try:
                 resolved = (str(_resolve(ctx, raw_path)),)
@@ -362,9 +360,14 @@ async def execute(specs: dict[str, Handler], name: str, args: dict, ctx: ToolCon
             workspace=str(ctx.config.workspace),
             roots=tuple(str(root) for root in ctx.roots),
             paths=resolved,
+            target=spec.target,
+            declared_class=spec.approval_class,
+            destructive=spec.destructive,
+            path_arg=spec.path_arg,
+            scan=spec.scan,
         )
         decision = ctx.agent.safety.check(request)
-        if spec.name == "sandbox" and decision.verdict == "allow":
+        if "command" in spec.scan and decision.verdict == "allow":
             guard = getattr(ctx.agent, "sandbox_guard", None)
             if guard is not None:
                 decision = await guard.check(
@@ -417,7 +420,7 @@ async def execute(specs: dict[str, Handler], name: str, args: dict, ctx: ToolCon
 
 
 REGISTRY = Registry(
-    discover(__name__, Path(__file__).parent, "TOOL", "tool", FAMILIES),
+    discover(__name__, Path(__file__).parent, "TOOL", "tool"),
     "tool",
 )
 

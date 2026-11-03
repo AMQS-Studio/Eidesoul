@@ -92,8 +92,8 @@ async def help_command(ctx: CommandContext) -> str:
 
 COMMAND = Handler(
     name="help",
-    description="🧭 List the commands available to your role.",
+    description="List the commands available to your role.",
     fn=help_command,
-    aliases=("h", "bantuan"),
+    aliases=("h",),
     usage="[command]",
 )

@@ -236,7 +236,7 @@ class FakeGateway(CoreDefaults):
     def render(self, text: str) -> str:
         return str(text or "")
 
-    def prompt_hints(self) -> str:
+    def prompt_section(self) -> str:
         return "## Fake interface"
 
     def self_handles(self) -> set[str]:
@@ -467,7 +467,6 @@ def make_agent(
     humanize=None,
     approvals=None,
     soul=None,
-    currents=None,
 ):
     """Build a full Agent on the test store with the rich directory fake."""
     from types import SimpleNamespace
@@ -510,7 +509,11 @@ def make_agent(
     skills = SkillStore(db, config.skills)
     recipes = RecipeStore(db)
     affect_store = AffectStore(db, config.affect, soul=config.soul.persona) if affect else None
-    style = StyleStore(db, config.style) if config.style.enabled else None
+    style = (
+        StyleStore(db, config.style, language=config.soul.language)
+        if config.style.enabled
+        else None
+    )
     memory = memory if memory is not None else FakeMemory()
     llm = FakeLLM(answer=answer, decision=decision)
     agent = Agent(
@@ -526,7 +529,6 @@ def make_agent(
         recipes=recipes,
         affect=affect_store,
         style=style,
-        currents=currents,
         gateways=tuple(gateways) if gateways is not None else (gateway,),
         approvals=ApprovalStore(db, config.approval),
     )

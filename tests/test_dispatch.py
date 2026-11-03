@@ -220,7 +220,7 @@ def test_a_robot_body_with_only_dispatch_meets_the_core(tmp_path) -> None:
         async def dispatch(self, action):
             return "moved"
 
-        def prompt_hints(self):
+        def prompt_section(self):
             return ""
 
         def self_handles(self):

@@ -377,6 +377,6 @@ def _memory_backlog(agent) -> dict[str, int]:
 
 COMMAND = Handler(
     name="status",
-    description="⚙️ Summary of mode, lease, model, archive, memory, approvals, and config.",
+    description="Summary of mode, lease, model, archive, memory, approvals, and config.",
     fn=status,
 )

@@ -29,7 +29,7 @@ def build(tmp_path):
             "telegram": GatewaySettings(name="telegram", enabled=False),
         },
     )
-    env.agent.style = StyleStore(env.db, StyleConfig(enabled=True))
+    env.agent.style = StyleStore(env.db, StyleConfig(enabled=True), language="id")
     return env, whatsapp, cli
 
 

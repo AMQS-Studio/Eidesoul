@@ -32,6 +32,11 @@ class Handler:
     pattern: str = ""
     hidden: bool = False
     family: str = ""
+    target: str = ""  # file | room | document | process | ""
+    approval_class: str = "authorization"  # none | consent | authorization; fail closed
+    destructive: tuple[str, ...] = ()  # actions that destroy state
+    path_arg: str = ""  # the argument that names a filesystem target
+    scan: tuple[str, ...] = ()  # arguments a credential/injection scan must read
     max_output_chars: int = 20_000  # ADR-0021 §4.1: per tool, cut by `execute`
 
     @property
@@ -131,12 +136,11 @@ def _schema_errors(parameters: object) -> list[str]:
     return errors
 
 
-def validate(
-    handler: Handler,
-    source: str,
-    kind: str,
-    families: frozenset[str] = frozenset(),
-) -> list[str]:
+TARGETS = frozenset({"file", "room", "document", "process", ""})
+CLASSES = frozenset({"none", "consent", "authorization"})
+
+
+def validate(handler: Handler, source: str, kind: str) -> list[str]:
     """Check the handler contract; return the error list prefixed with `<source>.py: `."""
     errors: list[str] = []
 
@@ -167,9 +171,20 @@ def validate(
         elif kind == "tool" and not handler.pattern:
             add("tool requires fn")
     if kind == "tool":
-        if handler.family not in families:
-            choices = ", ".join(sorted(families))
-            add(f"invalid family: '{handler.family}'; pick one of: {choices}")
+        if handler.target not in TARGETS:
+            add(f"invalid target: '{handler.target}'")
+        if handler.approval_class not in CLASSES:
+            add(f"invalid approval_class: '{handler.approval_class}'")
+        if not isinstance(handler.destructive, tuple) or not all(
+            isinstance(item, str) and item for item in handler.destructive
+        ):
+            add("destructive must be a tuple of action names")
+        if not isinstance(handler.scan, tuple) or not all(
+            isinstance(item, str) and item for item in handler.scan
+        ):
+            add("scan must be a tuple of argument names")
+        if handler.path_arg and handler.target != "file":
+            add("path_arg is only meaningful with target='file'")
         if handler.fn is not None:
             schema_errors = _schema_errors(handler.parameters)
             errors.extend(f"{source}.py: {message}" for message in schema_errors)
@@ -223,7 +238,6 @@ def discover(
     folder: Path,
     attribute: str,
     kind: str,
-    families: frozenset[str] = frozenset(),
 ) -> list[Handler]:
     """Import every module in the folder (sorted by name), validate, and merge the errors."""
     found: list[Handler] = []
@@ -243,7 +257,7 @@ def discover(
         if not isinstance(handler, Handler):
             errors.append(f"{info.name}.py: {attribute} is not a Handler")
             continue
-        handler_errors = validate(handler, info.name, kind, families)
+        handler_errors = validate(handler, info.name, kind)
         errors.extend(handler_errors)
         if not handler_errors:
             found.append(handler)
@@ -256,14 +270,13 @@ def discover_many(
     sources: Sequence[tuple[str, Path]],
     attribute: str,
     kind: str,
-    families: frozenset[str] = frozenset(),
 ) -> list[Handler]:
     """Merge discovery across several packages (core + gateway) with aggregated errors."""
     found: list[Handler] = []
     errors: list[str] = []
     for package, folder in sources:
         try:
-            found.extend(discover(package, Path(folder), attribute, kind, families))
+            found.extend(discover(package, Path(folder), attribute, kind))
         except RegistryError as exc:
             errors.append(str(exc).split(":\n- ", 1)[-1])
     if errors:

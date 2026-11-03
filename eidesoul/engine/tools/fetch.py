@@ -243,6 +243,9 @@ async def _fetch(args: dict, ctx: ToolContext) -> str:
 
 TOOL = Handler(
     name="fetch",
+    target="",
+    approval_class="none",
+    scan=("url",),
     family="web_search",
     description=(
         "Fetch one public http(s) page and return its text. Only http/https, only ports "

@@ -71,6 +71,9 @@ async def _recipe(args: dict, ctx: ToolContext) -> str:
 
 TOOL = Handler(
     name="recipe",
+    target="document",
+    approval_class="consent",
+    destructive=("remove",),
     family="read",
     description=(
         "User recipes: list/view to inspect dynamic commands, save to register one "

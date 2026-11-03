@@ -19,7 +19,16 @@ log = logging.getLogger(__name__)
 
 SCHEMA_VERSION = 1
 DEFAULT_DIR = Path(__file__).resolve().parents[2] / "library" / "lexicon"
-LIST_KEYS = ("negations", "stopwords", "assistant_tells", "injection")
+LIST_KEYS = (
+    "negations",
+    "stopwords",
+    "assistant_tells",
+    "injection",
+    "affirmations",
+    "laughter",
+    "particles",
+    "serious_registers",
+)
 
 
 @dataclass(frozen=True)
@@ -31,6 +40,11 @@ class Lexicon:
     stopwords: frozenset[str] = frozenset()
     assistant_tells: frozenset[str] = frozenset()
     injection: frozenset[str] = frozenset()
+    affirmations: frozenset[str] = frozenset()
+    laughter: frozenset[str] = frozenset()
+    particles: frozenset[str] = frozenset()
+    serious_registers: frozenset[str] = frozenset()
+    level_words: Mapping[str, int] = field(default_factory=dict)
     prompt_examples: Mapping[str, str] = field(default_factory=dict)
     ok: bool = True
 
@@ -110,6 +124,7 @@ def _pack(code: str, body: object) -> Lexicon:
     if str(body.get("language") or "") != code:
         raise ValueError(f"language must be '{code}'")
     lists = {key: _words(body.get(key), key) for key in LIST_KEYS}
+    levels = _levels(body.get("level_words"))
     examples = body.get("prompt_examples")
     if not isinstance(examples, dict) or not all(
         isinstance(key, str) and isinstance(value, str) for key, value in examples.items()
@@ -121,6 +136,11 @@ def _pack(code: str, body: object) -> Lexicon:
         stopwords=lists["stopwords"],
         assistant_tells=lists["assistant_tells"],
         injection=lists["injection"],
+        affirmations=lists["affirmations"],
+        laughter=lists["laughter"],
+        particles=lists["particles"],
+        serious_registers=lists["serious_registers"],
+        level_words=levels,
         prompt_examples=dict(examples),
     )
 
@@ -131,6 +151,19 @@ def _words(value: object, key: str) -> frozenset[str]:
     ):
         raise ValueError(f"'{key}' must be a list of non-empty strings")
     return frozenset(item.strip().casefold() for item in value)
+
+
+def _levels(value: object) -> dict[str, int]:
+    if not isinstance(value, dict):
+        raise ValueError("'level_words' must be a word -> level map")
+    found: dict[str, int] = {}
+    for word, level in value.items():
+        if not isinstance(word, str) or not word.strip():
+            raise ValueError("'level_words' keys must be non-empty strings")
+        if not isinstance(level, int) or not 0 <= level <= 4:
+            raise ValueError("'level_words' values must be integers 0-4")
+        found[word.strip().casefold()] = level
+    return found
 
 
 def _degraded(code: str, message: str) -> Lexicon:

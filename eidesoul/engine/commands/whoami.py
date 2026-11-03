@@ -54,7 +54,7 @@ async def whoami(ctx: CommandContext) -> str:
 
 COMMAND = Handler(
     name="whoami",
-    description="👤 Your identity, role, chat, and surface.",
+    description="Your identity, role, chat, and surface.",
     fn=whoami,
     aliases=("id",),
 )

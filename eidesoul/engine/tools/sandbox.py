@@ -168,6 +168,9 @@ async def _sandbox(args: dict, ctx: ToolContext) -> str:
 
 TOOL = Handler(
     name="sandbox",
+    target="process",
+    approval_class="authorization",
+    scan=("command",),
     family="sandbox",
     description=(
         "Run a command with /work/public (read-only) and /work/scratch (writable); trusted "

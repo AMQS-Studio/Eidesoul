@@ -10,6 +10,8 @@ import logging
 import re
 import threading
 import time
+from functools import lru_cache
+from pathlib import Path
 
 from sqlalchemy import select
 
@@ -24,41 +26,37 @@ MAX_LENGTHS = 200
 TOP = 20
 MAX_TEXT = 500
 EMOJI = re.compile("[\U0001f300-\U0001faff\u2600-\u27bf\u2b00-\u2bff]")
-LAUGH = re.compile(r"(wkwk|awok|hehe|haha)", re.IGNORECASE)
 REPEAT = re.compile(r"([a-zA-Z])\1{2,}")
-PARTICLES = (
-    "aja", "kok", "sih", "deh", "loh", "banget", "gitu", "gini", "kan", "nih", "tuh",
-    "wkwk", "anjir", "jir", "wes", "iki", "iku", "yo", "ya", "eh", "mah", "lah", "dong",
-)
-EMOJIS = ("😭", "🗿", "🙏", "😹", "😂", "😊", "🥲", "😌", "🙃", "🔥")
-SEED = {
-    "median": 34,
-    "p90": 130,
-    "lower": 0.86,
-    "emoji": 0.20,
-    "particles": (
-        "aja",
-        "kok",
-        "sih",
-        "deh",
-        "loh",
-        "banget",
-        "gitu",
-        "gini",
-        "kan",
-        "nih",
-        "tuh",
-        "wkwk",
-        "anjir",
-        "jir",
-        "wes",
-        "iki",
-        "iku",
-        "yo",
-    ),
-    "emojis": ("😭", "🗿", "🙏", "😹", "😂", "😊"),
-}
+STYLE_DIR = Path(__file__).resolve().parents[2] / "library" / "style"
 SEED_MIN = 20
+
+
+@lru_cache(maxsize=8)
+def _style_pack(code: str, folder: str) -> dict:
+    """One language's rhythm baseline; an absent pack means no style block, never another's."""
+    path = Path(folder) / f"{code}.json"
+    if not path.is_file():
+        return {}
+    try:
+        body = json.loads(path.read_text(encoding="utf-8"))
+        if body.get("version") != 1 or str(body.get("language")) != code:
+            return {}
+        return {
+            "median": int(body["seed_median"]),
+            "p90": int(body["seed_p90"]),
+            "lower": float(body["seed_lower"]),
+            "emoji": float(body["seed_emoji"]),
+            "particles": tuple(str(item) for item in body["particles"]),
+            "emojis": tuple(str(item) for item in body["emojis"]),
+            "laughter": tuple(str(item) for item in body["laughter"]),
+        }
+    except (OSError, ValueError, KeyError, TypeError):
+        return {}
+
+
+def style_pack(language: str) -> dict:
+    code = str(language or "").strip().lower()
+    return _style_pack(code, str(STYLE_DIR)) if code else {}
 PERSON_MIN = 8
 
 STATE_KEY = "style"
@@ -119,8 +117,15 @@ def _percentile(values: list[int], ratio: float) -> int:
 class StyleStore:
     """Persistent chat style statistics in `state`; aggregates only, no message content."""
 
-    def __init__(self, db: Database, config: StyleConfig | None = None):
+    def __init__(self, db: Database, config: StyleConfig | None = None, *, language: str):
         self.config = config or StyleConfig()
+        self.language = str(language or "").strip().lower()
+        self._seed = style_pack(self.language)
+        self._laugh = (
+            re.compile("|".join(re.escape(item) for item in self._seed["laughter"]), re.IGNORECASE)
+            if self._seed
+            else None
+        )
         self._db = db
         self._lock = threading.RLock()
         self._data = self._load()
@@ -175,8 +180,7 @@ class StyleStore:
 
     # ------------------------------------------------------------------ learning
 
-    @staticmethod
-    def _count(bucket: dict, text: str) -> None:
+    def _count(self, bucket: dict, text: str) -> None:
         letters = [char for char in text if char.isalpha()]
         bucket["n"] += 1
         bucket["lengths"] = [*bucket["lengths"], len(text)][-MAX_LENGTHS:]
@@ -192,12 +196,12 @@ class StyleStore:
             bucket["question"] += 1
         if text.rstrip().endswith("!"):
             bucket["exclaim"] += 1
-        if LAUGH.search(text):
+        if self._laugh is not None and self._laugh.search(text):
             bucket["laugh"] += 1
         if REPEAT.search(text):
             bucket["repeat"] += 1
         folded = text.casefold()
-        for particle in PARTICLES:
+        for particle in self._seed.get("particles", ()):
             hits = len(re.findall(rf"\b{particle}\b", folded))
             if hits:
                 bucket["particles"][particle] = bucket["particles"].get(particle, 0) + hits
@@ -288,7 +292,7 @@ class StyleStore:
     # ------------------------------------------------------------------ profile
 
     def seed_profile(self) -> dict:
-        return dict(SEED)
+        return dict(self._seed)
 
     def _bucket(self, thread_id: str = "") -> dict:
         with self._lock:
@@ -337,13 +341,15 @@ class StyleStore:
         return text if len(text) <= limit else text[: limit - 1] + "…"
 
     def profile(self, thread_id: str = "") -> str:
-        """Chat style prompt block; empty never happens (the seed is the minimal baseline)."""
+        """Chat style prompt block; a language without a pack gets none (ADR-0033 §4.2)."""
+        if not self._seed:
+            return ""
         bucket = self._bucket(thread_id)
         if not bucket:
-            median, p90 = SEED["median"], SEED["p90"]
-            lower = SEED["lower"]
-            particles = list(SEED["particles"][:6])
-            emojis = list(SEED["emojis"][:3])
+            median, p90 = self._seed["median"], self._seed["p90"]
+            lower = self._seed["lower"]
+            particles = list(self._seed["particles"][:6])
+            emojis = list(self._seed["emojis"][:3])
         else:
             lengths = [int(value) for value in bucket["lengths"]]
             median = _percentile(lengths, 0.5)
@@ -351,10 +357,10 @@ class StyleStore:
             total = max(1, int(bucket["n"]))
             lower = bucket["lower"] / total
             ranked = sorted(bucket["particles"].items(), key=lambda item: -item[1])
-            particles = [name for name, _ in ranked[:6]] or list(SEED["particles"][:6])
+            particles = [name for name, _ in ranked[:6]] or list(self._seed["particles"][:6])
             emojis = [
                 name for name, _ in sorted(bucket["emojis"].items(), key=lambda item: -item[1])[:3]
-            ] or list(SEED["emojis"][:3])
+            ] or list(self._seed["emojis"][:3])
         lines = [
             "How people chat here (mimic rhythm and diction, not content or opinions):",
             f"- median {median} characters; 90% below {p90}. Reply in 1-2 short sentences.",

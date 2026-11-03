@@ -121,21 +121,21 @@ def test_fenced_draft_is_never_rewritten(tmp_path) -> None:
     assert llm.calls == 0
 
 
-def limits_config(tmp_path, **values):
+def limits_config(tmp_path, toxicity: int = 3, adult_memes: int = 3, **values):
     return replace(
         build_config(tmp_path),
-        character=CharacterConfig(enabled=True, toxicity=3, adult_memes=3, **values),
+        character=CharacterConfig(
+            enabled=True, toxicity=toxicity, adult_memes=adult_memes, **values
+        ),
     )
 
 
-def run_regulate(config, llm, reply: str, *, target="male", confidence=0.9, **kwargs) -> str:
+def run_regulate(config, llm, reply: str, **kwargs) -> str:
     return asyncio.run(
         regulate(
             llm,
             config,
             reply,
-            target=target,
-            confidence=confidence,
             latest="dasar goblok",
             session="s",
             **kwargs,
@@ -143,25 +143,27 @@ def run_regulate(config, llm, reply: str, *, target="male", confidence=0.9, **kw
     )
 
 
-def test_limits_are_gentle_unless_the_target_is_confidently_male(tmp_path) -> None:
+def test_limits_come_from_the_room_configuration() -> None:
     settings = CharacterConfig(toxicity=3, adult_memes=3)
-
-    assert effective_limits(settings, "male", 0.9) == (3, 3)
-    assert effective_limits(settings, "male", 0.2) == (1, 0)
-    assert effective_limits(settings, "female", 0.99) == (1, 0)
-    assert effective_limits(settings, "unknown", 0.0) == (1, 0)
-    assert effective_limits(settings, "", 0.0) == (1, 0)
-    ungated = CharacterConfig(toxicity=3, adult_memes=3, gender_gate=False)
-    assert effective_limits(ungated, "female", 0.0) == (3, 3)
+    assert effective_limits(settings) == (3, 3)
+    quiet = CharacterConfig(toxicity=0, adult_memes=0)
+    assert effective_limits(quiet) == (0, 0)
 
 
 def test_over_level_lists_markers_by_appearance() -> None:
-    assert over_level("dasar goblok", toxicity=1, adult_memes=0) == ["goblok"]
-    assert over_level("dasar goblok", toxicity=2, adult_memes=0) == []
-    assert over_level("ngokang linggis", toxicity=4, adult_memes=2) == ["ngokang linggis"]
-    assert over_level("jomok", toxicity=4, adult_memes=1) == []  # ordinary meme, not adult
-    assert over_level("jomok dulu, baru goblok", toxicity=0, adult_memes=3) == ["goblok"]
-    assert over_level("", toxicity=0, adult_memes=0) == []
+    assert over_level("dasar goblok", toxicity=1, adult_memes=0, language="id") == [
+        "goblok"
+    ]
+    assert over_level("dasar goblok", toxicity=2, adult_memes=0, language="id") == []
+    assert over_level("ngokang linggis", toxicity=4, adult_memes=2, language="id") == [
+        "ngokang linggis"
+    ]
+    # ordinary meme, not adult
+    assert over_level("jomok", toxicity=4, adult_memes=1, language="id") == []
+    assert over_level("jomok dulu, baru goblok", toxicity=0, adult_memes=3, language="id") == [
+        "goblok"
+    ]
+    assert over_level("", toxicity=0, adult_memes=0, language="id") == []
 
 
 def test_regulate_within_level_never_calls_the_model(tmp_path) -> None:
@@ -177,7 +179,7 @@ def test_regulate_rewrites_an_over_level_reply_once(tmp_path) -> None:
     llm = StubLLM("yaelah, gitu doang")
 
     reply = run_regulate(
-        limits_config(tmp_path), llm, "dasar goblok, jomok juga", target="unknown", confidence=0.0
+        limits_config(tmp_path, toxicity=1, adult_memes=0), llm, "dasar goblok, jomok juga"
     )
 
     assert reply == "yaelah, gitu doang"
@@ -190,14 +192,14 @@ def test_regulate_keeps_the_reply_when_the_rewrite_still_trips(tmp_path) -> None
     llm = StubLLM("dasar goblok lagi")
 
     assert (
-        run_regulate(limits_config(tmp_path), llm, "dasar goblok", target="unknown", confidence=0.0)
+        run_regulate(limits_config(tmp_path), llm, "dasar goblok")
         == "dasar goblok"
     )
 
 
 def test_regulate_keeps_the_reply_when_the_model_fails(tmp_path) -> None:
     assert (
-        run_regulate(limits_config(tmp_path), StubLLM(""), "dasar goblok", confidence=0.0)
+        run_regulate(limits_config(tmp_path), StubLLM(""), "dasar goblok")
         == "dasar goblok"
     )
 
@@ -215,32 +217,7 @@ def test_regulate_collapses_extra_questions_except_in_professional_mode(tmp_path
     assert llm.calls == 0
 
 
-def test_unsure_target_gets_no_curse_even_a_mild_one(tmp_path) -> None:
-    settings = CharacterConfig(enabled=True, toxicity=3, adult_memes=0)
-
-    # exclamations like anjir/anjay are not swearing: still allowed even when the target is unsure
-    assert over_level("anjir, capek banget", toxicity=3, adult_memes=0, curses=False) == []
-    assert over_level("anjay, gila", toxicity=3, adult_memes=0, curses=False) == []
-    assert over_level("ngeselin banget", toxicity=3, adult_memes=0, curses=False) == []
-    assert over_level("dasar goblok", toxicity=3, adult_memes=0, curses=False) == ["goblok"]
-
-    llm = StubLLM("yaelah, capek banget ya. yang mana paling berat?")
-    reply = asyncio.run(
-        regulate(
-            llm,
-            replace(build_config(tmp_path), character=settings),
-            "dasar goblok, capek banget",
-            target="unknown",
-            confidence=0.0,
-            latest="capek banget",
-            session="s",
-        )
-    )
-    assert reply == "yaelah, capek banget ya. yang mana paling berat?"
-    assert llm.calls == 1
-
-
-def test_confident_male_keeps_a_mild_curse_inside_the_level(tmp_path) -> None:
+def test_a_mild_curse_stays_inside_the_level(tmp_path) -> None:
     llm = StubLLM("harusnya nggak dipakai")
     settings = CharacterConfig(enabled=True, toxicity=3, adult_memes=0)
     reply = asyncio.run(
@@ -248,8 +225,6 @@ def test_confident_male_keeps_a_mild_curse_inside_the_level(tmp_path) -> None:
             llm,
             replace(build_config(tmp_path), character=settings),
             "anjir, capek banget",
-            target="male",
-            confidence=0.95,
             latest="capek banget",
             session="s",
         )

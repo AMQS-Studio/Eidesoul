@@ -17,8 +17,7 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from ..db import Database
 from ..schema import TURN_TERMINAL, outbound_messages, turn_steps, turns
 
-# ADR-0013 §8.2: these tools are not replayed after they already ran.
-SIDE_EFFECTING = frozenset({"send", "send_to", "shell", "sandbox", "settings"})
+# ADR-0013 §8.2: a step whose handler declared state is never replayed.
 MAX_RESULT_CHARS = 4000
 
 
@@ -73,7 +72,7 @@ class TurnStore:
             select(turn_steps.c.turn_id)
             .where(
                 turn_steps.c.turn_id == str(turn_id),
-                turn_steps.c.tool.in_(tuple(SIDE_EFFECTING)),
+                turn_steps.c.approval_class != "none",
                 turn_steps.c.status == "executed",
             )
             .limit(1)
@@ -352,6 +351,8 @@ class TurnStore:
         tool: str,
         args: object,
         result: object,
+        target: str = "",
+        approval_class: str = "none",
         status: str = "executed",
         started_at: float | None = None,
         finished_at: float | None = None,
@@ -374,6 +375,8 @@ class TurnStore:
                     step_index=index,
                     step=str(step),
                     tool=str(tool),
+                    target=str(target),
+                    approval_class=str(approval_class),
                     args_hash=args_hash(str(tool), args),
                     result=_clip(result),
                     status=str(status),

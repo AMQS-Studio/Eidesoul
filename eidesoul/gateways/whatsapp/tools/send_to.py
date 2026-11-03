@@ -281,6 +281,8 @@ async def _send_to(args: dict, ctx: ToolContext) -> str:
 TOOL = Handler(
     name="send_to",
     family="write",
+    target="room",
+    approval_class="consent",
     description=(
         "Send text and/or a file to an existing group or direct-message (DM) chat in the archive. "
         "chat = group/contact name (a fragment is fine) or JID; an empty chat lists groups and "

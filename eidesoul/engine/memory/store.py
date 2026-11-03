@@ -209,6 +209,7 @@ class MemoryStore:
         self._quota = quota or WriteQuota()
         self._limits = getattr(config, "memory", None)
         self._tz = str(getattr(getattr(config, "soul", None), "timezone", "") or "")
+        self._language = str(getattr(getattr(config, "soul", None), "language", "") or "")
         self._guard = None
         self.available = db is not None
         self.reason = "" if db is not None else "no database"
@@ -385,7 +386,7 @@ class MemoryStore:
             raise ValueError("privacy level must be 0-4")
         if SENSITIVE.search(body):
             raise ValueError("text contains a secret/credential")
-        if is_crisis(body):
+        if is_crisis(body, self._language):
             raise ValueError("crisis text is never stored in memory")
         if scope not in SCOPES:
             raise ValueError(f"unknown scope: {scope}")
@@ -977,7 +978,7 @@ class MemoryStore:
         return (
             not body
             or bool(SENSITIVE.search(body))
-            or is_crisis(body)
+            or is_crisis(body, language)
             or is_injection(body, language)
         )
 

@@ -77,7 +77,7 @@ def structural(
         return GateDecision(False, "empty")
     if SENSITIVE.search(body):
         return GateDecision(False, "credential")
-    if is_crisis(body):
+    if is_crisis(body, language):
         return GateDecision(False, "crisis")
     if is_injection(body, language):
         return GateDecision(False, "injection")

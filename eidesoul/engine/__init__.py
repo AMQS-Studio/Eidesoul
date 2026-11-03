@@ -17,7 +17,7 @@ reason to change::
     access/     who may do what: roles, permissions, identity, privacy, approvals,
                 relay, target
     jobs/       background work and lifecycle: cognition, automation, supervisor,
-                lease, ambient, currents, mcp
+                lease, ambient, mcp
     memory/  stores/  tools/  commands/  guard/     fixed contracts, unchanged
 
 A module has one reason to change and stays at or below 800 lines (ADR-0031 §4.1); the growth

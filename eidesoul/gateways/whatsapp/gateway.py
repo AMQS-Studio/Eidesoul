@@ -24,13 +24,11 @@ from neonize.utils.jid import build_jid
 from ...engine.config import Config, GatewaySettings, secure_db
 from ...engine.inbound import Action, GatewayError, Percept
 from ...engine.registry import Handler, discover
-from ...engine.tools import FAMILIES
 from ...engine.turn.context import Message, human_size
 from ...engine.turn.reply import FENCE, clean_prose, strip_blocks
 from . import directory, history_sync, ingress
 from .config import WhatsAppSettings
 from .media import download_media, send_kind
-from .profile import avatar_bytes
 
 log = logging.getLogger(__name__)
 
@@ -72,7 +70,7 @@ class WhatsAppGateway:
         self._stopping = False
         base = Path(__file__).parent
         package = __package__ or ""
-        self._tools = discover(package + ".tools", base / "tools", "TOOL", "tool", FAMILIES)
+        self._tools = discover(package + ".tools", base / "tools", "TOOL", "tool")
         self._commands = discover(
             package + ".commands", base / "commands", "COMMAND", "command"
         )
@@ -206,12 +204,6 @@ class WhatsAppGateway:
     def _jid(self, thread: str):
         user, _, server = thread.partition("@")
         return build_jid(user, server)
-
-    async def avatar(self, jid: str) -> tuple[bytes, str] | None:
-        """Profile picture used as a fallback gender signal; None without a client or a photo."""
-        if self.client is None:
-            return None
-        return await avatar_bytes(self.client, self.config, jid)
 
     def remember_sent(self, message_id: str) -> None:
         """Record an ID the bot sent; a `fromMe` echo with this ID is the bot, not the owner."""
@@ -426,7 +418,7 @@ class WhatsAppGateway:
         )
         return re.sub(r"\n{3,}", "\n\n", cleaned).strip()
 
-    def prompt_hints(self) -> str:
+    def prompt_section(self) -> str:
         handles = ", ".join(sorted(self.self_handles())) or "-"
         return (
             "## WhatsApp interface\n"

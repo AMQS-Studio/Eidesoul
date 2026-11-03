@@ -28,7 +28,6 @@ sys.path.insert(0, str(ROOT / "scripts"))
 from _paths import safe_path
 
 from eidesoul.engine.access.roles import Role
-from eidesoul.engine.access.target import combine, score_style
 from eidesoul.engine.character.character import (
     MARKDOWN,
     assistant_tell,
@@ -121,14 +120,6 @@ def hard_fails(
     return fails
 
 
-def resolve_target(scenario: dict, speaker: str, recent: list[str]) -> tuple[str, float]:
-    declared = str((scenario.get("targets") or {}).get(speaker, "")).lower()
-    if declared in ("male", "female"):
-        return declared, 1.0
-    target, confidence, _ = combine(score_style(recent), None, gate=True)
-    return target, confidence
-
-
 def judge_payload(sheet: dict, scenario: dict, transcript: list[str], reply: str) -> str:
     dimensions = "\n".join(
         f"- {item['id']}: {item['question']}" for item in sheet["rubric"]["dimensions"]
@@ -190,8 +181,7 @@ async def reply_once(
     config, llm: LLM, scenario: dict, window: list, current, transcript: list
 ) -> dict:
     recent = [entry.text for entry in window[-8:] if entry.text.strip()]
-    target, confidence = resolve_target(scenario, current.sender_name, recent)
-    limits = effective_limits(config.character, target, confidence)
+    limits = effective_limits(config.character)
     style = config.soul.style
     lexicon = load_lexicon(style.patterns)
     register = room_register(
@@ -200,8 +190,8 @@ async def reply_once(
     patterns = select_patterns(
         style.max_patterns,
         register=register,
-        target=target,
         limits=limits,
+        language=config.soul.language,
         messages=recent,
         packs=style.patterns,
         registers=style.registers,
@@ -209,9 +199,6 @@ async def reply_once(
     )
     block = character_block(
         limits,
-        target,
-        confidence,
-        gate=config.character.gender_gate,
         jabs=config.character.roast_jabs,
         patterns=patterns,
         language=config.soul.language,
@@ -243,8 +230,6 @@ async def reply_once(
         str(await llm.run(system, content, [], ctx, session=f"replay-{scenario['id']}"))
     ).strip()
     return {
-        "target": target,
-        "confidence": confidence,
         "limits": limits,
         "register": register,
         "patterns": patterns,
@@ -280,8 +265,6 @@ async def run_scenario(
                 llm,
                 config,
                 answer,
-                target=result["target"],
-                confidence=result["confidence"],
                 latest=current.text,
                 session=f"replay-regulate-{scenario['id']}",
             )
@@ -316,7 +299,6 @@ async def run_scenario(
                 "speaker": turn["speaker"],
                 "text": turn["text"],
                 "expect": turn.get("expect") or [],
-                "target": result["target"],
                 "limits": list(result["limits"]),
                 "register": result["register"],
                 "patterns": result["patterns"],

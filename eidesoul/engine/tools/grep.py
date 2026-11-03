@@ -147,6 +147,10 @@ async def _grep(args: dict, ctx: ToolContext) -> str:
 
 TOOL = Handler(
     name="grep",
+    target="file",
+    path_arg="path",
+    approval_class="none",
+    scan=("path",),
     family="read",
     description=(
         "Search file contents with a regex under public/ (shared) and scratch/ (this chat); "

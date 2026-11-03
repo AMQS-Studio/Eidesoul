@@ -181,46 +181,42 @@ def test_system_prompt_states_the_cross_room_policy(tmp_path) -> None:
         env.config, (Role("member"),), actions='- [2026-01-01 10:00] teks -> chat: "halo"'
     )
 
-    assert "one soul across rooms" in prompt
-    assert "role=manual_owner" in prompt
+    assert "one soul across conversations" in prompt
+    assert "role=trusted" in prompt
     assert "never reveal or hint at the requester" in prompt
     assert "## Recent actions" in prompt
     assert "The archive covers only this chat" not in prompt
 
 
 def test_character_block_reports_levels_target_and_patterns() -> None:
-    block = character_block(
-        (3, 2), "male", 0.9, jabs=2, patterns=["Balas sekali", " "], language="id"
+    block = character_block((3, 2), jabs=2, patterns=["Balas sekali", " "], language="id"
     )
 
-    assert "Toxicity level 3/4 for this turn (target male, confidence 0.90)." in block
+    assert "Toxicity level 3/4 for this turn." in block
     assert "Adult memes 2/3:" in block
     assert "At most 2 jab per turn" in block
-    assert "stay gentle: no jab, no curse" in block
+    assert "stay gentle: no curse at all" in block
     assert "Hard floor no level unlocks" in block
     assert block.count("\n- ") == 1
     assert "## Room patterns (apply the move, never copy the wording):" in block
     assert "Balas sekali" in block
 
 
-def test_character_block_gentle_floor_and_disabled_gate() -> None:
-    gentle = character_block((1, 0), "", 0.0, language="id")
-    assert "target unknown" in gentle
+def test_character_block_gentle_floor() -> None:
+    gentle = character_block((1, 0), language="id")
     assert "Toxicity level 1/4" in gentle
     assert "## Room patterns" not in gentle
-    ungated = character_block((3, 3), "female", 0.9, gate=False, language="id")
-    assert "Target restriction disabled for this host." in ungated
-    assert "Never target a woman" not in ungated
+    assert "No sexual or degrading material" in gentle
 
 
-def test_research_block_forbids_interrogation_and_uses_the_soul_locale() -> None:
-    block = research_block("id-ID")
+def test_research_block_forbids_interrogation_without_a_country() -> None:
+    block = research_block()
 
     assert "Ask at most one question per turn" in block
-    assert "Never ask about stickers" in block
-    assert "Assume id-ID context" in block
+    assert "Never ask about media" in block
+    assert "id-ID" not in block
     assert "never invent fresh numbers or quotes" in block
-    assert "closest match" not in research_block("en-US")
+    assert "closest match" not in research_block()
 
 
 def test_system_prompt_carries_the_character_and_research_blocks(tmp_path) -> None:
@@ -229,14 +225,12 @@ def test_system_prompt_carries_the_character_and_research_blocks(tmp_path) -> No
         replace(env.agent.config, prompt=PromptConfig(max_chars=20000)),
         (Role(name="member"),),
         runtime=RuntimeFacts(),
-        character=character_block((1, 0), "unknown", 0.0, language="id"),
-        research=research_block("id-ID"),
-        currents="## Current context (fetched 2026-11-01)\n- rupiah: melemah",
+        character=character_block((1, 0), language="id"),
+        research=research_block(),
         query="ada berita apa",
     )
 
     assert "Toxicity level 1/4" in prompt
     assert "Research before asking" in prompt
-    assert "## Current context (fetched 2026-11-01)" in prompt
     assert "In a clearly joking room you may return one short jab" not in prompt
     assert "but never start them yourself" not in prompt

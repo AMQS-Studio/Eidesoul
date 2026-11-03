@@ -4,11 +4,17 @@
 from .patterns import (
     CRISIS,
     SENSITIVE,
+    Safety,
     cross_chat_leak,
+    has_pack,
     injection,
     is_crisis,
     is_injection,
     safe_text,
+    safety,
+)
+from .patterns import (
+    configure as configure_safety,
 )
 from .policy import (
     AUTHORIZATION,
@@ -40,6 +46,7 @@ __all__ = [
     "ActionRequest",
     "AllowAllSafety",
     "ApprovalPolicy",
+    "Safety",
     "SafetyDecision",
     "SafetyPolicy",
     "SandboxGuard",
@@ -47,13 +54,16 @@ __all__ = [
     "approval_class",
     "approval_summary",
     "build_safety",
+    "configure_safety",
     "credential_read",
     "cross_chat_leak",
+    "has_pack",
     "injection",
     "is_crisis",
     "is_injection",
     "recheck_scope",
     "safe_text",
+    "safety",
     "scan_command",
     "scope_proof",
     "screen",

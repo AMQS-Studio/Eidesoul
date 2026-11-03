@@ -367,9 +367,6 @@ people = Table(
     Column("window_respect", Float, nullable=False, default=0.0),
     Column("window_annoyance", Float, nullable=False, default=0.0),
     Column("notes", JSONB, nullable=False, default=list),
-    Column("gender", String(12), nullable=False, default=""),
-    Column("gender_confidence", Float, nullable=False, default=0.0),
-    Column("gender_source", String(16), nullable=False, default=""),
 )
 # ADR-0026 §4.3: the trigram net for a person's display name (the column is `name`).
 Index(
@@ -899,6 +896,10 @@ turn_steps = Table(
     Column("step_index", Integer, nullable=False),
     Column("step", String(20), nullable=False, default="drafted", server_default="drafted"),
     Column("tool", Text, nullable=False),
+    Column("target", String(16), nullable=False, default="", server_default=""),
+    Column(
+        "approval_class", String(16), nullable=False, default="none", server_default="none"
+    ),
     Column("args_hash", String(64), nullable=False),
     Column("result", Text, nullable=True),
     Column("status", String(20), nullable=False, default="executed"),
@@ -924,30 +925,3 @@ outbound_messages = Table(
     ),
 )
 
-google_identity = Table(
-    "google_identity",
-    metadata,
-    Column(
-        "person_id",
-        String(160),
-        ForeignKey("people.person_id", ondelete="CASCADE", name="fk_google_identity_person"),
-        primary_key=True,
-    ),
-    Column("email", String(320), nullable=False),
-    Column("subject", String(128), nullable=False, default=""),
-    Column("linked_at", Float, nullable=False),
-)
-
-google_device = Table(
-    "google_device",
-    metadata,
-    Column("person_id", String(160), primary_key=True),
-    Column("device_code", Text, nullable=False),
-    Column("user_code", String(32), nullable=False),
-    Column("verification_url", String(300), nullable=False),
-    Column("expires_at", Float, nullable=False),
-    Column("interval", Integer, nullable=False, default=5),
-    Column("status", String(20), nullable=False, default="pending"),
-    Column("last_error", Text, nullable=False, default=""),
-    Column("created_at", Float, nullable=False),
-)

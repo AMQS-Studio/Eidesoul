@@ -11,7 +11,6 @@ from ..engine.config import (
     DEFAULT_SENSITIVE_COMMANDS,
     DatabaseConfig,
     HostConfig,
-    PluginSettings,
     SandboxConfig,
     WebSearchConfig,
 )
@@ -67,7 +66,7 @@ def host_defaults() -> dict:
     # The operator document wraps the server map, and an empty root means `<workspace>/plugins`.
     raw["mcp"] = {"servers": raw.get("mcp") or {}}
     raw["plugin"] = {**raw["plugin"], "root": ""}
-    raw["plugins"] = {"google": asdict(PluginSettings())}
+    raw["plugins"] = {}
     host: dict = {}
     for key, fields in HOST_KEYS.items():
         value = raw[key]
@@ -251,10 +250,7 @@ ENGINE: dict = {
         "temperature": 0.7,
         "toxicity": 2,
         "adult_memes": 1,
-        "gender_gate": True,
-        "gender_confidence": 0.6,
         "roast_jabs": 1,
-        "gender_avatar": False,
         "max_questions": 1,
     },
     "guard": {
@@ -285,10 +281,6 @@ ENGINE: dict = {
         "research_cooldown": 21600,
         "research_per_day": 6,
         "research_results": 5,
-        "context_enabled": True,
-        "context_hours": 6,
-        "context_topics": 2,
-        "context_results": 4,
     },
 }
 
@@ -340,7 +332,6 @@ ROLES: dict[str, dict] = {
             "chat_history",
             "memory",
             "recipe",
-            "google",
             "info",
         ],
         "commands": [
@@ -351,9 +342,9 @@ ROLES: dict[str, dict] = {
             "whoami",
             "status",
             "tools",
-            "cari",
-            "memori",
-            "kirim",
+            "search",
+            "memory",
+            "send",
             "mood",
         ],
         "memory_admin": False,
@@ -377,7 +368,7 @@ ROLES: dict[str, dict] = {
             "whoami",
             "status",
             "tools",
-            "cari",
+            "search",
         ],
         "memory_admin": False,
         "context": (
@@ -390,10 +381,6 @@ ENV_TAIL = """# Values, never placeholders: `eidesoul init` writes the names, yo
 # Postgres for this soul. The password is the same one `compose.yaml` reads.
 EIDESOL_DATABASE_URL=
 POSTGRES_PASSWORD=
-# Optional Google plugin credentials; leave empty while the plugin is off.
-GOOGLE_SERVICE_ACCOUNT_PATH=
-GOOGLE_OAUTH_CLIENT_ID=
-GOOGLE_OAUTH_CLIENT_SECRET=
 """
 
 

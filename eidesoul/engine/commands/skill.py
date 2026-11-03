@@ -131,7 +131,7 @@ async def _skill(ctx: CommandContext) -> str:
 
 COMMAND = Handler(
     name="skill",
-    description="📚 Owner: list, view, pin, forget, restore, or import derived procedures.",
+    description="Administrator: list, view, pin, forget, restore, or import derived procedures.",
     fn=_skill,
     aliases=("skills", "sop"),
     usage="[list|view|read|pin|forget|restore|import|save] [name] [file|revision]",

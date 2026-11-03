@@ -1,0 +1,42 @@
+{
+  "version": 1,
+  "language": "id",
+  "seed_median": 34,
+  "seed_p90": 130,
+  "seed_lower": 0.86,
+  "seed_emoji": 0.2,
+  "particles": [
+    "aja",
+    "kok",
+    "sih",
+    "deh",
+    "loh",
+    "banget",
+    "gitu",
+    "gini",
+    "kan",
+    "nih",
+    "tuh",
+    "wkwk",
+    "anjir",
+    "jir",
+    "wes",
+    "iki",
+    "iku",
+    "yo"
+  ],
+  "emojis": [
+    "😭",
+    "🗿",
+    "🙏",
+    "😹",
+    "😂",
+    "😊"
+  ],
+  "laughter": [
+    "wkwk",
+    "awok",
+    "hehe",
+    "haha"
+  ]
+}

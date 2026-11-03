@@ -27,7 +27,7 @@ async def tools_command(ctx: CommandContext) -> str:
 
 COMMAND = Handler(
     name="tools",
-    description="🧰 List the tools allowed for this role.",
+    description="List the tools allowed for this role.",
     fn=tools_command,
     aliases=("tool",),
 )

@@ -131,6 +131,19 @@ def test_revision_0013_adds_the_fence_event_and_efficiency_columns(fresh_databas
                 )
             ).scalars().all()
         assert "dispute_asked_at" in set(view_columns)
-        assert SCHEMA_VERSION == 13
+        assert SCHEMA_VERSION == 16
+    finally:
+        db.dispose()
+
+
+def test_revision_0014_drops_the_person_gender_columns(fresh_database) -> None:
+    """ADR-0033 §4.8: a person's gender is never inferred or stored."""
+    db = Database(fresh_database)
+    try:
+        db.upgrade()
+        found = {column["name"] for column in inspect(db.engine).get_columns("people")}
+        assert "gender" not in found
+        assert "gender_confidence" not in found
+        assert "gender_source" not in found
     finally:
         db.dispose()

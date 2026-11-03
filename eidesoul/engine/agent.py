@@ -14,7 +14,7 @@ from pathlib import Path
 
 from . import guard, io, plugins
 from .access.approvals import ApprovalStore
-from .access.identity import IdentityStore, display_target
+from .access.identity import IdentityStore
 from .access.permissions import command_allowed, commands_for, tool_patterns, tools_for
 from .access.privacy import PrivacyService
 from .access.roles import Role
@@ -38,6 +38,7 @@ from .inbound import (
     Receipt,
     StandbyError,
     action_json,
+    prompt_section,
     refusal,
 )
 from .jobs import supervisor
@@ -48,7 +49,7 @@ from .registry import Handler, Registry
 from .runtime import ACTIVE_GENERATION as runtime_generation
 from .runtime import RuntimeFacts
 from .stores.history import RouteConflict
-from .stores.turns import SIDE_EFFECTING, TurnStore, args_hash
+from .stores.turns import TurnStore, args_hash
 from .tools import REGISTRY as CORE_TOOLS
 from .tools import ToolContext, ToolIndex
 from .turn import assembly, observability
@@ -127,7 +128,6 @@ class Agent:
         affect=None,
         style=None,
         ambient=None,
-        currents=None,
         vibe=None,
         gateways: tuple[GatewayCore, ...] = (),
         documents=None,
@@ -150,7 +150,6 @@ class Agent:
         self.affect = affect
         self.style = style
         self.ambient = ambient
-        self.currents = currents
         self.vibe = vibe
         self.gateways = tuple(gateways)
         self.documents = documents
@@ -326,7 +325,16 @@ class Agent:
             log.exception("failed to mark turn %s delivered", turn_id)
 
     def _step_recorder(self, turn_id: str, step: str):
-        def record(tool, args, result, started, finished, status: str = "executed"):
+        def record(
+            tool,
+            args,
+            result,
+            started,
+            finished,
+            status: str = "executed",
+            target="",
+            approval_class="none",
+        ):
             try:
                 self.turns.record_step(
                     turn_id,
@@ -334,6 +342,8 @@ class Agent:
                     tool=str(tool),
                     args=args,
                     result=result,
+                    target=str(target),
+                    approval_class=str(approval_class),
                     status=str(status or "executed"),
                     started_at=started,
                     finished_at=finished,
@@ -350,7 +360,12 @@ class Agent:
                 return None
             if found["status"] != "executed":
                 return None
-            if str(tool) in SIDE_EFFECTING:
+            spec = None
+            if getattr(self, "tools", None) is not None:
+                spec = self.tools.by_name.get(str(tool))
+            if found.get("approval_class", "none") != "none" or (
+                spec is not None and spec.approval_class != "none"
+            ):
                 raise SideEffectAlreadyRan(
                     f"{tool} already executed in this turn; refusing to repeat it"
                 )
@@ -1044,7 +1059,7 @@ class Agent:
                 resume_reply = str(claimed.get("reviewed_text") or claimed.get("draft_text") or "")
 
                 text = message.text
-                crisis = guard.is_crisis(text)
+                crisis = guard.is_crisis(text, self.soul.language)
                 roles = self._role_set(inbound)
                 if not is_command and await self.privacy.handle_pending(
                     inbound, gateway, self._sender(inbound)
@@ -1323,10 +1338,7 @@ class Agent:
                         for entry in messages:
                             with contextlib.suppress(Exception):
                                 await self._prepare_media(gateway, thread_id, entry)
-                        target, confidence, _source = await display_target(
-                            self, inbound.actor, gateway=gateway, messages=messages, message=message
-                        )
-                        limits = effective_limits(self.config.character, target, confidence)
+                        limits = effective_limits(self.config.character)
                         style = self.soul.style
                         lexicon = load_lexicon(style.patterns)
                         register = room_register(
@@ -1336,8 +1348,8 @@ class Agent:
                         patterns = select_patterns(
                             style.max_patterns,
                             register=register,
-                            target=target,
                             limits=limits,
+                            language=self.soul.language,
                             messages=[entry.text for entry in messages[-8:]],
                             packs=style.patterns,
                             registers=style.registers,
@@ -1350,22 +1362,11 @@ class Agent:
                         )
                         character = character_block(
                             limits,
-                            target,
-                            confidence,
-                            gate=self.config.character.gender_gate,
                             jabs=self.config.character.roast_jabs,
                             patterns=patterns,
                             facts=facts,
                             language=self.soul.language,
                         )
-                        currents_block = ""
-                        if self.currents is not None:
-                            try:
-                                currents_block = self.currents.block(time.time(), 6)
-                            except Exception:
-                                log.debug(
-                                    "currents: failed to read the context", exc_info=True
-                                )
                         try:
                             content = await build_user_content(
                                 self.config,
@@ -1434,7 +1435,7 @@ class Agent:
                                 self.config,
                                 roles,
                                 runtime=self.runtime,
-                                gateway_hints=gateway.prompt_hints(),
+                                gateway_hints=prompt_section(gateway),
                                 memory=memory_block,
                                 actions=actions_block,
                                 skills=skill_block,
@@ -1447,8 +1448,7 @@ class Agent:
                                 person_style=person_style,
                                 safety=safety,
                                 character=character,
-                                research=research_block(self.config.soul.locale),
-                                currents=currents_block,
+                                research=research_block(),
                                 sender=message.sender_name,
                                 direct=bool(inbound.hints.get("dm")),
                                 mode=decision.mode,
@@ -1514,8 +1514,6 @@ class Agent:
                                 self.llm,
                                 self.config,
                                 reply,
-                                target=target,
-                                confidence=confidence,
                                 latest=message.text,
                                 session=f"eidesoul-character-{thread_id}",
                                 is_professional=bool(
@@ -1525,10 +1523,8 @@ class Agent:
                                 min_call_seconds=min_call,
                             )
                             log.info(
-                                "level chat=%s target=%s/%s status=%s",
+                                "level chat=%s status=%s",
                                 thread_id,
-                                target,
-                                f"{confidence:.2f}",
                                 "regulated" if reply != before else "pass",
                             )
                         review = await self.privacy.review(
@@ -1686,7 +1682,7 @@ class Agent:
                     self.config,
                     roles,
                     runtime=self.runtime,
-                    gateway_hints=gateway.prompt_hints(),
+                    gateway_hints=prompt_section(gateway),
                     mode="professional",
                     tools=self.tool_index.registry(gateway.name),
                     commands=self.commands,

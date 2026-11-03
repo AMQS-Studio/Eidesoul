@@ -496,6 +496,8 @@ async def apply_payload(agent, payload: dict) -> str:
 
 TOOL = Handler(
     name="settings",
+    target="",
+    approval_class="authorization",
     family="write",
     description=(
         "Read or change Eidesoul's own config/soul/roles. Actions: schema, get, set, unset, "

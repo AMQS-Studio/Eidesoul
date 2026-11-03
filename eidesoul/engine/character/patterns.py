@@ -16,6 +16,7 @@ from functools import cache
 from pathlib import Path
 
 from .. import embed
+from . import lexicon as lexicon_packs
 
 log = logging.getLogger(__name__)
 
@@ -24,8 +25,6 @@ LIBRARY = Path(__file__).resolve().parents[2] / "library" / "patterns"
 PACK = re.compile(r"^[a-z0-9][a-z0-9-]{0,63}$")
 DIM = embed.DIM
 LEXICON_KEYS = ("serious", "laughter", "roast", "meme")
-SERIOUS_REGISTERS = frozenset({"serious", "comfort", "soal"})
-TARGETS = frozenset({"male", "female", "unknown"})
 WINDOW = 8
 CAP = 6
 LINE_MAX = 180
@@ -155,26 +154,20 @@ def room_register(
     return "neutral"
 
 
-def _target(value: str) -> str:
-    body = str(value or "").strip().lower()
-    return body if body in TARGETS else "unknown"
-
-
-def _register_ok(found: list[str], register: str) -> bool:
+def _register_ok(found: list[str], register: str, language: str) -> bool:
     if register in found:
         return True
-    return register == "serious" and any(item in SERIOUS_REGISTERS for item in found)
+    serious = lexicon_packs.load(language).serious_registers
+    return register == "serious" and any(item in serious for item in found)
 
 
-def _eligible(row: dict, register: str, target: str, limits: tuple[int, int]) -> bool:
+def _eligible(row: dict, register: str, limits: tuple[int, int], language: str) -> bool:
     toxic, adult = int(limits[0]), int(limits[1])
-    if row["target"] not in ("any", target):
-        return False
     if row["min_toxicity"] > toxic or toxic > row["max_toxicity"]:
         return False
     if row["min_adult"] > adult:
         return False
-    return _register_ok(row["register"], register)
+    return _register_ok(row["register"], register, language)
 
 
 def _found(key: str, body: str, tokens: set[str]) -> bool:
@@ -264,8 +257,8 @@ def select_patterns(
     count: int,
     *,
     register: str,
-    target: str,
     limits: tuple[int, int],
+    language: str,
     messages: list[str],
     packs: tuple[str, ...] = (),
     path: str | None = None,
@@ -277,12 +270,11 @@ def select_patterns(
     limit = max(0, min(CAP, int(count)))
     if not limit:
         return []
-    room = _target(target)
     allowed = tuple(str(item).strip() for item in registers if str(item).strip())
     rows = load_patterns(packs, path)
     if allowed:
         rows = [row for row in rows if set(row["register"]) & set(allowed)]
-    eligible = [row for row in rows if _eligible(row, register, room, limits)]
+    eligible = [row for row in rows if _eligible(row, register, limits, language)]
     if not eligible:
         return []
     body = " ".join(str(item or "") for item in messages[-WINDOW:]).lower()

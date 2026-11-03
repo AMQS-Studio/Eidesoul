@@ -15,7 +15,6 @@ import yaml
 from support import build_config, database, inbound_message, make_agent
 
 from eidesoul.admin import templates
-from eidesoul.admin.roles import migrate
 from eidesoul.engine.access.permissions import (
     command_allowed,
     command_patterns,
@@ -31,7 +30,6 @@ from eidesoul.engine.access.roles import (
     load_roles,
 )
 from eidesoul.engine.commands import REGISTRY as COMMANDS
-from eidesoul.engine.schema import approvals, config_changes
 from eidesoul.engine.stores.documents import DocumentStore
 from eidesoul.engine.tools import REGISTRY as TOOLS
 
@@ -112,13 +110,11 @@ def test_role_without_defaults_denies_tools() -> None:
 # ------------------------------------------------------------ ADR-0022
 
 
-def test_owner_role_name_is_gone() -> None:
+def test_a_missing_default_role_is_refused() -> None:
     with pytest.raises(RoleError) as caught:
-        load_roles({"owner": "name: owner\ntools: ['*']\ncommands: ['*']\n"}, "owner")
+        load_roles({"guest": "name: guest\n"}, "owner")
 
-    message = str(caught.value)
-    assert "administrator" in message
-    assert "config import" in message
+    assert "default_role 'owner' is not among the loaded roles" in str(caught.value)
 
 
 def test_administrator_is_protected_and_needs_the_full_contract() -> None:
@@ -275,102 +271,3 @@ def _roles_file(tmp_path, roles: dict) -> DocumentStore:
         yaml.safe_dump({"roles": roles}, sort_keys=False), encoding="utf-8"
     )
     return docs
-
-
-def test_config_import_migrates_owner_once(tmp_path) -> None:
-    docs = _roles_file(
-        tmp_path,
-        {
-            "owner": {
-                "name": "owner",
-                "users": ["628111"],
-                "tools": ["*"],
-                "commands": ["*"],
-            },
-            "guest": {"name": "guest"},
-        },
-    )
-    docs.put("role:owner", "name: owner\nusers: ['628111']\ntools: ['*']\ncommands: ['*']\n")
-    docs.put("role:guest", "name: guest\n")
-    with docs.db.connect() as conn:
-        conn.execute(
-            approvals.insert().values(
-                created_at=1.0,
-                expires_at=9e9,
-                thread_id="t",
-                sender="628111",
-                kind="tool",
-                tool="memory",
-                payload={"roles": ["owner"], "note": "keep"},
-            )
-        )
-
-    summary = migrate(docs, docs.paths)
-
-    assert summary["renamed"] is True
-    assert Path(summary["backup"]).is_file()
-    written = yaml.safe_load(docs.paths.roles.read_text(encoding="utf-8"))["roles"]
-    assert set(written) == {"administrator", "guest"}
-    assert written["administrator"]["name"] == "administrator"
-    assert docs.get("role:administrator") is not None
-    assert "name: administrator" in docs.get("role:administrator")
-    assert docs.get("role:owner") is None
-    pending = docs.db.fetch_one(approvals.select())
-    assert pending["payload"] == {"roles": ["administrator"], "note": "keep"}
-    audit = docs.db.fetch_all(config_changes.select())
-    assert [(row["path"], row["old"], row["new"]) for row in audit] == [
-        ("role_rename", "owner", "administrator")
-    ]
-
-    again = migrate(docs, docs.paths)
-
-    assert again["renamed"] is False
-    assert len(docs.db.fetch_all(config_changes.select())) == 1
-
-
-def test_config_import_refuses_deleting_the_protected_role(tmp_path) -> None:
-    docs = _roles_file(tmp_path, {"member": {"name": "member"}})
-
-    with pytest.raises(RoleError, match="cannot be deleted or renamed"):
-        migrate(docs, docs.paths)
-
-
-def test_config_import_refuses_a_rename_of_the_protected_role(tmp_path) -> None:
-    docs = _roles_file(tmp_path, {"admin": {"name": "admin", "tools": ["*"]}})
-
-    with pytest.raises(RoleError, match="cannot be deleted or renamed"):
-        migrate(docs, docs.paths)
-
-
-def test_config_import_refuses_both_names(tmp_path) -> None:
-    docs = _roles_file(
-        tmp_path,
-        {
-            "owner": {"name": "owner", "tools": ["*"], "commands": ["*"]},
-            "administrator": {
-                "name": "administrator",
-                "tools": ["*"],
-                "commands": ["*"],
-            },
-        },
-    )
-
-    with pytest.raises(RoleError, match="both"):
-        migrate(docs, docs.paths)
-
-
-def test_config_import_refuses_protected_false(tmp_path) -> None:
-    docs = _roles_file(
-        tmp_path,
-        {
-            "administrator": {
-                "name": "administrator",
-                "tools": ["*"],
-                "commands": ["*"],
-                "protected": False,
-            }
-        },
-    )
-
-    with pytest.raises(RoleError, match="protected"):
-        migrate(docs, docs.paths)

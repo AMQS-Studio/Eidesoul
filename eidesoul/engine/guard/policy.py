@@ -12,10 +12,7 @@ from typing import Protocol
 from ..config import ApprovalConfig
 from ..registry import allows
 
-READ_ONLY = frozenset({"read", "memory", "skill", "chat_history", "web_search"})
-
 # ADR-0007 §4.7: the target, not the tool, decides who approves.
-AUTHORIZATION_TOOLS = frozenset({"shell", "sandbox", "settings", "send", "send_to"})
 CONSENT = "consent"
 AUTHORIZATION = "authorization"
 CLASSES = frozenset({CONSENT, AUTHORIZATION})
@@ -41,7 +38,6 @@ SECRET_FILE = re.compile(
     r"credentials|\.netrc)$"
 )
 
-SHELL_TOOL = "shell"
 SHELL_WRAPPERS = frozenset(
     {
         "sudo",
@@ -105,10 +101,6 @@ WRAPPER_VALUES = {
 }
 SHELL_INTERPRETERS = frozenset({"bash", "sh", "zsh", "dash", "ksh"})
 SHELL_OPERATORS = frozenset({";", "&&", "||", "|", "&", "(", ")"})
-DESTRUCTIVE_ACTIONS = {
-    "memory": frozenset({"forget"}),
-    "skill": frozenset({"archive"}),
-}
 MAX_DEPTH = 3
 _ASSIGNMENT = re.compile(r"[A-Za-z_][A-Za-z0-9_]*=.*")
 _SUBSTITUTION = re.compile(r"\$\(([^()]*)\)|`([^`]*)`")
@@ -122,6 +114,11 @@ class ActionRequest:
     sender: str
     gateway: str
     roles: tuple[str, ...]
+    target: str = ""
+    declared_class: str = "authorization"
+    destructive: tuple[str, ...] = ()
+    path_arg: str = ""
+    scan: tuple[str, ...] = ()
     origin_gateway: str = ""
     workspace: str = ""
     roots: tuple[str, ...] = ()
@@ -283,35 +280,30 @@ def _absolute(request: ActionRequest, raw: str) -> str:
 
 
 def action_targets(request: ActionRequest) -> list[dict]:
-    """The deterministic target list stored in `scope_proof` (path, room, column, host)."""
+    """The deterministic target list stored in `scope_proof` (path, room, document, host)."""
     args = request.args if isinstance(request.args, dict) else {}
     targets: list[dict] = []
-    if request.tool != "settings":
+    if request.target == "file":
         if request.paths:
             targets.extend({"kind": "path", "value": str(item)} for item in request.paths)
         else:
-            path = _absolute(request, str(args.get("path") or ""))
+            path = _absolute(request, str(args.get(request.path_arg or "path") or ""))
             if path:
                 targets.append({"kind": "path", "value": path})
-    if request.tool in {"send", "send_to"}:
-        room = str(args.get("chat") or "").strip()
+    if request.target == "room":
+        room = str(args.get("chat") or args.get("to") or args.get("room") or "").strip()
         targets.append({"kind": "room", "value": room or request.thread_id})
+    if request.target == "document":
+        action = str(args.get("action") or "").strip()
+        scope = str(args.get("scope") or "").strip()
+        targets.append({"kind": "column", "value": f"{action}:{scope}"})
+    if request.target == "process":
+        command = str(args.get("command") or "").strip()
+        targets.append({"kind": "host", "value": command.split(" ")[0] if command else ""})
     if request.gateway:
         targets.append({"kind": "body", "value": request.gateway})
     if request.origin_gateway:
         targets.append({"kind": "origin", "value": request.origin_gateway})
-    if request.tool == "settings":
-        value = f"{args.get('file') or ''}:{args.get('path') or ''}"
-        targets.append({"kind": "config", "value": value})
-    if request.tool == "memory":
-        targets.append(
-            {
-                "kind": "column",
-                "value": f"memory:{args.get('action') or ''}:{args.get('scope') or ''}",
-            }
-        )
-    if request.tool in {"shell", "sandbox"}:
-        targets.append({"kind": "host", "value": request.tool})
     url = str(args.get("url") or "").strip()
     if url:
         targets.append({"kind": "url", "value": url})
@@ -332,20 +324,16 @@ def _inside(value: str, roots: tuple[str, ...]) -> bool:
 
 
 def approval_class(request: ActionRequest, *, extra: tuple[str, ...] = ()) -> str:
-    """`consent` when every target is inside the requester's scope, else `authorization`."""
+    """`authorization` when the declaration or a target leaves the requester's own scope."""
+    if request.declared_class == AUTHORIZATION:
+        return AUTHORIZATION
     args = request.args if isinstance(request.args, dict) else {}
-    if request.tool in AUTHORIZATION_TOOLS:
-        return AUTHORIZATION
-    command = " ".join(
-        str(args.get(key) or "") for key in ("command", "text", "query")
-    )
-    if credential_read(command, extra):
-        return AUTHORIZATION
-    if request.tool == "memory":
-        action = str(args.get("action") or "").strip().lower()
-        scope = str(args.get("scope") or "").strip().lower()
-        if scope == "global" and action in {"add", "forget", "veto"}:
+    for name in request.scan:
+        if credential_read(str(args.get(name) or ""), extra):
             return AUTHORIZATION
+    action = str(args.get("action") or "").strip().lower()
+    if action and action in request.destructive:
+        return AUTHORIZATION
     for target in action_targets(request):
         kind = target["kind"]
         value = str(target["value"])
@@ -353,11 +341,17 @@ def approval_class(request: ActionRequest, *, extra: tuple[str, ...] = ()) -> st
             return AUTHORIZATION
         if kind == "path" and not _inside(value, request.roots):
             return AUTHORIZATION
-        if kind == "path" and request.tool == "write" and _inside(
+        if kind == "path" and request.target == "file" and _inside(
             value, (str(Path(request.workspace) / "public"),)
         ):
             return AUTHORIZATION
         if kind == "room" and value not in {"", request.thread_id}:
+            return AUTHORIZATION
+        if (
+            kind == "column"
+            and str(args.get("scope") or "").strip().lower() == "global"
+            and action in {"add", "forget", "veto"}
+        ):
             return AUTHORIZATION
     return CONSENT
 
@@ -416,21 +410,26 @@ class ApprovalPolicy:
     def check(self, request: ActionRequest) -> SafetyDecision:
         if self.config.mode == "off":
             return SafetyDecision("allow")
-        if self.config.mode == "strict" and request.tool not in READ_ONLY:
+        if self.config.mode == "strict" and request.declared_class != "none":
             return SafetyDecision("pending", "strict mode: every action waits for /approve")
         if allows(tuple(self.config.sensitive_tools), request.tool):
             return SafetyDecision(
                 "pending", f"{request.tool} is a sensitive tool; it needs /approve"
             )
-        if request.tool == SHELL_TOOL and scan_command(
-            str(request.args.get("command") or ""), self.config.sensitive_commands
-        ):
-            return SafetyDecision("pending", "shell command is sensitive; needs /approve")
-        actions = DESTRUCTIVE_ACTIONS.get(request.tool)
-        if actions and str(request.args.get("action") or "").strip().lower() in actions:
+        command = next(
+            (
+                str(request.args.get(name) or "")
+                for name in request.scan
+                if name in {"command", "script", "cmd"}
+            ),
+            "",
+        )
+        if command and scan_command(command, self.config.sensitive_commands):
+            return SafetyDecision("pending", "the command is sensitive; needs /approve")
+        action = str(request.args.get("action") or "").strip().lower()
+        if action and action in request.destructive:
             return SafetyDecision(
-                "pending",
-                f"{request.tool} {request.args.get('action')} is destructive; it needs /approve",
+                "pending", f"{request.tool} {action} is destructive; it needs /approve"
             )
         return SafetyDecision("allow")
 

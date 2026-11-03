@@ -24,8 +24,8 @@ async def unlink(ctx: CommandContext) -> str:
 
 COMMAND = Handler(
     name="unlink",
-    description="🔓 Detach one gateway account from this identity.",
+    description="Detach one gateway account from this identity.",
     fn=unlink,
-    aliases=("lepas",),
+    aliases=(),
     usage="<gateway> [confirm]",
 )

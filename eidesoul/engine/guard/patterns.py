@@ -1,22 +1,80 @@
 """Shared safety boundary: crisis, injection, and secrets.
 
-The crisis and secret patterns are safety nets that must run even when a language pack is
-missing, so they stay here. Injection phrases are language data and come from
-`library/lexicon/<language>.json`; a missing pack simply has none, so only these
-language-independent patterns run.
+Crisis and sensitive phrases are per-language data in `library/safety/<lang>.json`. The English
+net below is the only compiled list, kept as the last line when a pack is missing (ADR-0033
+§4.2/§8); every other language reads its own pack and never borrows. Injection phrases come
+from `library/lexicon/<language>.json`, so a missing pack simply has none.
 """
 
 
+import json
 import re
+from dataclasses import dataclass
 from functools import lru_cache
+from pathlib import Path
 
 from ..character import lexicon
 
-CRISIS = re.compile(
-    r"(bunuh diri|mau mati|pengen mati|ingin mati|self[ -]?harm|nyakitin diri|overdosis|gantung diri)",
-    re.IGNORECASE,
+SCHEMA_VERSION = 1
+SAFETY_DIR = Path(__file__).resolve().parents[2] / "library" / "safety"
+_OVERRIDE: Path | None = None
+_NET = ("self-harm", "self harm", "suicide", "kill myself", "end my life", "want to die",
+        "hurt myself", "overdose", "hang myself")
+_NET_SENSITIVE = ("api key", "api_key", "api-key", "password", "passwd", "token", "secret",
+                  "otp", "credential")
+CRISIS = re.compile("|".join(re.escape(item) for item in _NET), re.IGNORECASE)
+SENSITIVE = re.compile(
+    "|".join(re.escape(item) for item in _NET_SENSITIVE), re.IGNORECASE
 )
-SENSITIVE = re.compile(r"(api[\s_-]?key|password|passwd|token|secret|otp|kredensial)", re.IGNORECASE)
+
+
+@dataclass(frozen=True)
+class Safety:
+    """One language's crisis and sensitive phrases; `ok` is false when the pack is missing."""
+
+    language: str
+    crisis: tuple[str, ...] = ()
+    sensitive: tuple[str, ...] = ()
+    ok: bool = True
+
+
+def directory() -> Path:
+    return _OVERRIDE or SAFETY_DIR
+
+
+def configure(folder: str | Path | None = None) -> None:
+    """Point the guard at another pack directory; a test seam, never a runtime setting."""
+    global _OVERRIDE
+    _OVERRIDE = Path(folder).expanduser() if folder else None
+    _pack.cache_clear()
+
+
+@lru_cache(maxsize=8)
+def _pack(code: str, folder: str) -> Safety:
+    path = Path(folder) / f"{code}.json"
+    if not path.is_file():
+        return Safety(language=code, ok=False)
+    try:
+        body = json.loads(path.read_text(encoding="utf-8"))
+        if body.get("version") != SCHEMA_VERSION or str(body.get("language")) != code:
+            return Safety(language=code, ok=False)
+        crisis = tuple(str(item).strip().casefold() for item in body.get("crisis") or ())
+        sensitive = tuple(str(item).strip().casefold() for item in body.get("sensitive") or ())
+        return Safety(language=code, crisis=crisis, sensitive=sensitive)
+    except (OSError, ValueError):
+        return Safety(language=code, ok=False)
+
+
+def safety(language: str) -> Safety:
+    """The pack for one catalog code, loaded lazily and cached; `ok` false when absent."""
+    code = str(language or "").strip().lower()
+    if not code:
+        return Safety(language="", ok=False)
+    return _pack(code, str(directory()))
+
+
+def has_pack(language: str) -> bool:
+    return safety(language).ok
 
 
 @lru_cache(maxsize=8)
@@ -38,8 +96,14 @@ def injection(language: str) -> re.Pattern[str] | None:
     return _injection(code, str(lexicon.directory()), lexicon.generation())
 
 
-def is_crisis(text: str) -> bool:
-    return bool(CRISIS.search(str(text or "")))
+def is_crisis(text: str, language: str) -> bool:
+    """Crisis detection reads the language pack; the English net is the last line."""
+    body = str(text or "")
+    pack = safety(language)
+    phrases = pack.crisis or tuple(item.casefold() for item in _NET)
+    if any(phrase in body.casefold() for phrase in phrases):
+        return True
+    return bool(CRISIS.search(body))
 
 
 def is_injection(text: str, language: str) -> bool:
@@ -50,7 +114,9 @@ def is_injection(text: str, language: str) -> bool:
 def safe_text(text: str, limit: int = 400, *, language: str) -> str:
     """Flatten text before storing it; secrets and injection attempts never reach memory."""
     flat = " ".join(str(text or "").split())
-    if not flat or SENSITIVE.search(flat) or is_injection(flat, language):
+    phrases = safety(language).sensitive
+    secret = any(phrase in flat.casefold() for phrase in phrases) or SENSITIVE.search(flat)
+    if not flat or secret or is_injection(flat, language):
         return ""
     return flat if len(flat) <= limit else flat[: limit - 1] + "…"
 

@@ -13,7 +13,6 @@ from . import ToolContext, _int
 
 log = logging.getLogger(__name__)
 
-WEB_BACKENDS = ("wikipedia", "yahoo", "startpage", "brave")
 USER_AGENT = "eidesoul"
 
 
@@ -65,21 +64,18 @@ def _search_sync(query: str, limit: int, region: str = "") -> list[dict]:
     from ddgs import DDGS
 
     engine = DDGS(timeout=10)
+    try:
+        hits = engine.text(query, max_results=limit, region=region or None)
+    except Exception:  # a blocked or rate-limited engine must not break the search
+        return []
     found: list[dict] = []
     seen: set[str] = set()
-    for backend in WEB_BACKENDS:
-        try:
-            hits = engine.text(
-                query, max_results=limit, backend=backend, region=region or None
-            )
-        except Exception:  # one blocked/rate-limited backend must not break the search
+    for hit in hits:
+        href = str(hit.get("href") or hit.get("url") or "")
+        if href and href in seen:
             continue
-        for hit in hits:
-            href = str(hit.get("href") or hit.get("url") or "")
-            if href and href in seen:
-                continue
-            seen.add(href)
-            found.append(hit)
+        seen.add(href)
+        found.append(hit)
         if len(found) >= limit:
             break
     return found[:limit]
@@ -103,10 +99,12 @@ async def _web_search(args: dict, ctx: ToolContext) -> str:
 
 TOOL = Handler(
     name="web_search",
+    target="",
+    approval_class="none",
     family="web_search",
     description="Search the web and return titles, URLs, and snippets.",
     fn=_web_search,
-    aliases=("search", "cari"),
+    aliases=("search",),
     max_output_chars=4_000,
     parameters={
         "type": "object",

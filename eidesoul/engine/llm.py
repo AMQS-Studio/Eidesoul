@@ -466,6 +466,7 @@ class LLM:
                         started = time.monotonic()
                         result = await execute(by_name, name, arguments, ctx)
                         if on_step is not None:
+                            spec = by_name.get(name)
                             on_step(
                                 name,
                                 arguments,
@@ -475,6 +476,8 @@ class LLM:
                                 # ADR-0020 §4.4: a tool error is a failed step, so the episode
                                 # can tell a repair from a clean run.
                                 "failed" if str(result).startswith("error:") else "executed",
+                                spec.target if spec is not None else "",
+                                spec.approval_class if spec is not None else "none",
                             )
             messages.append({"role": "tool", "tool_call_id": call.id, "content": result})
         return last_sig, repeat

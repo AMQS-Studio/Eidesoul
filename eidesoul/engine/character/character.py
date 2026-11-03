@@ -7,8 +7,10 @@ original draft is used.
 """
 
 
+import json
 import re
 from functools import lru_cache
+from pathlib import Path
 
 from ..config import CharacterConfig, Config
 from ..llm import LLM, DeadlineExceeded
@@ -185,30 +187,35 @@ def _collapse_runs(text: str) -> str:
     return REPEAT_RUN.sub(r"\1", text)
 
 
-SEVERITY: dict[str, tuple[str, int]] = {
-    # kind "curse": minimum harshness level (toxicity) needed for this word to be allowed.
-    # "anjir"/"anjay"/"ngeselin" are exclamations/complaints, not curses: they stay allowed
-    # while the target is unconfirmed.
-    "anjir": ("tease", 1),
-    "anjay": ("tease", 1),
-    "ngeselin": ("tease", 1),
-    "goblok": ("curse", 2),
-    "bego": ("curse", 2),
-    "tolol": ("curse", 2),
-    "idiot": ("curse", 2),
-    "bangsat": ("curse", 3),
-    "asu": ("curse", 2),
-    "anjing": ("curse", 2),
-    "jancok": ("curse", 3),
-    "jancuk": ("curse", 3),
-    "kontol": ("curse", 3),
-    "memek": ("curse", 3),
-    # kind "adult": only genuinely explicit phrases. Meme names that are not explicit
-    # (jomok, ambatukam, mas amba, bunda rahma, mas rusdi) are ordinary register: usable
-    # according to the room level, without the adult meme gate.
-    "ngokang linggis": ("adult", 3),
-    "linggis jawa": ("adult", 3),
-}
+SEVERITY_DIR = Path(__file__).resolve().parents[2] / "library" / "severity"
+
+
+@lru_cache(maxsize=8)
+def _severity_pack(code: str, folder: str) -> dict[str, tuple[str, int]]:
+    path = Path(folder) / f"{code}.json"
+    if not path.is_file():
+        return {}
+    try:
+        body = json.loads(path.read_text(encoding="utf-8"))
+        if body.get("version") != 1 or str(body.get("language")) != code:
+            return {}
+        words = body.get("words")
+        if not isinstance(words, dict):
+            return {}
+        found: dict[str, tuple[str, int]] = {}
+        for word, row in words.items():
+            kinds = {"tease", "curse", "adult"}
+            if isinstance(row, list) and len(row) == 2 and str(row[0]) in kinds:
+                found[str(word).casefold()] = (str(row[0]), int(row[1]))
+        return found
+    except (OSError, ValueError):
+        return {}
+
+
+def severity(language: str) -> dict[str, tuple[str, int]]:
+    """Profanity severity for one language; a missing pack carries no words, never another's."""
+    code = str(language or "").strip().lower()
+    return _severity_pack(code, str(SEVERITY_DIR)) if code else {}
 
 DOWNGRADE_SYSTEM = """You rewrite one chat reply from {name}, a soul in chat, so it
 stays inside the register this room is allowed. Rules:
@@ -222,15 +229,8 @@ Hard floor no level unlocks: sexual content involving minors, personal data or d
 threats of violence, hate against a race, religion, or gender identity."""
 
 
-def effective_limits(
-    character: CharacterConfig, target: str, confidence: float
-) -> tuple[int, int]:
-    """(toxicity, adult_memes) for this turn; an unconfirmed target is always gentle."""
-    if character.gender_gate and not (
-        str(target or "").strip().lower() == "male"
-        and float(confidence) >= float(character.gender_confidence)
-    ):
-        return (min(int(character.toxicity), 1), 0)
+def effective_limits(character: CharacterConfig) -> tuple[int, int]:
+    """(toxicity, adult_memes) from the room's configuration; no person is classified."""
     return (int(character.toxicity), int(character.adult_memes))
 
 
@@ -243,7 +243,7 @@ def _marker_position(text: str, marker: str) -> int:
 
 
 def over_level(
-    text: str, *, toxicity: int, adult_memes: int, curses: bool = True
+    text: str, *, toxicity: int, adult_memes: int, curses: bool = True, language: str
 ) -> list[str]:
     """Markers that exceed the level, in order of appearance. Empty = still within the level.
 
@@ -262,14 +262,14 @@ def over_level(
     }
     hits = [
         (position, marker)
-        for marker, (kind, level) in SEVERITY.items()
+        for marker, (kind, level) in severity(language).items()
         if (position := _marker_position(body, marker)) >= 0 and allowed.get(kind, 0) < level
     ]
     return [marker for _, marker in sorted(hits)]
 
 
 def too_many_questions(text: str, *, limit: int = 1) -> bool:
-    """Hitung '?' di luar blok kode; pertanyaan berlebih memicu satu penulisan ulang."""
+    """Count '?' outside fenced code; extra questions trigger one rewrite."""
     body = str(text or "")
     if not body:
         return False
@@ -288,8 +288,6 @@ def _regulate_payload(
     draft: str,
     limits: tuple[int, int],
     *,
-    target: str,
-    confidence: float,
     latest: str,
     markers: list[str],
     questions: bool,
@@ -300,10 +298,6 @@ def _regulate_payload(
         remove.append(f"extra questions (keep at most {int(limit)})")
     return "\n\n".join(
         (
-            (
-                f"TARGET: {str(target or 'unknown').strip() or 'unknown'} "
-                f"(confidence {float(confidence):.2f})"
-            ),
             f"LIMITS: toxicity={int(limits[0])} adult_memes={int(limits[1])}",
             f"REMOVE: {', '.join(remove)}",
             f"LATEST USER MESSAGE:\n{str(latest or '').strip() or '-'}",
@@ -317,8 +311,6 @@ async def regulate(
     config: Config,
     reply: str,
     *,
-    target: str,
-    confidence: float,
     latest: str,
     session: str = "",
     is_professional: bool = False,
@@ -330,13 +322,8 @@ async def regulate(
     language = config.soul.language
     if not body or not config.character.enabled:
         return body
-    limits = effective_limits(config.character, target, confidence)
-    male = str(target or "").strip().lower() == "male" and float(confidence) >= float(
-        config.character.gender_confidence
-    )
-    markers = over_level(
-        body, toxicity=limits[0], adult_memes=limits[1], curses=male
-    )
+    limits = effective_limits(config.character)
+    markers = over_level(body, toxicity=limits[0], adult_memes=limits[1], language=language)
     limit = int(config.character.max_questions)
     questions = not is_professional and too_many_questions(body, limit=limit)
     if not markers and not questions:
@@ -347,8 +334,6 @@ async def regulate(
             _regulate_payload(
                 body,
                 limits,
-                target=target,
-                confidence=confidence,
                 latest=latest,
                 markers=markers,
                 questions=questions,
@@ -370,7 +355,7 @@ async def regulate(
     text = _clean(raw)
     if not text or _rejected(body, text, language=language):
         return body
-    if over_level(text, toxicity=limits[0], adult_memes=limits[1], curses=male):
+    if over_level(text, toxicity=limits[0], adult_memes=limits[1], language=language):
         return body
     if not is_professional and too_many_questions(text, limit=limit):
         return body

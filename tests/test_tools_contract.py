@@ -9,7 +9,6 @@ from support import build_config, role
 from eidesoul.engine.config import ConfigError, ShellConfig, _shell_config
 from eidesoul.engine.registry import Handler, validate
 from eidesoul.engine.tools import (
-    FAMILIES,
     ToolContext,
     argument_errors,
     execute,
@@ -83,7 +82,7 @@ def test_unsupported_keyword_fails_validation() -> None:
         }
     )
 
-    errors = validate(spec, "probe", "tool", FAMILIES)
+    errors = validate(spec, "probe", "tool")
 
     assert any("unsupported keyword" in item and "format" in item for item in errors)
 
@@ -94,7 +93,7 @@ def test_synchronous_handler_fails_validation() -> None:
 
     spec = Handler(name="probe", description="p", fn=sync, family="read", parameters=SCHEMA)
 
-    errors = validate(spec, "probe", "tool", FAMILIES)
+    errors = validate(spec, "probe", "tool")
 
     assert any("fn must be async" in item for item in errors)
 

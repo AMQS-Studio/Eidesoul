@@ -18,8 +18,8 @@ import contextlib
 import json
 import logging
 import re
-import time
 from contextvars import ContextVar
+from datetime import UTC, datetime
 from typing import Any
 
 TURN_ID: ContextVar[str] = ContextVar("eidesoul_turn_id", default="")
@@ -116,9 +116,8 @@ class ContextFilter(logging.Filter):
 
 
 def _stamp(record: logging.LogRecord) -> str:
-    created = time.localtime(record.created)
-    millis = int(record.msecs)
-    return time.strftime("%Y-%m-%dT%H:%M:%S", created) + f".{millis:03d}"
+    created = datetime.fromtimestamp(record.created, UTC)
+    return created.strftime("%Y-%m-%dT%H:%M:%S") + f".{int(record.msecs):03d}"
 
 
 class JsonFormatter(logging.Formatter):

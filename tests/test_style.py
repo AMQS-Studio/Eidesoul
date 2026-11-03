@@ -21,7 +21,7 @@ def humanize_reply(text: str, *, max_parts: int) -> list[str]:
 
 
 def make_store(tmp_path: Path) -> StyleStore:
-    return StyleStore(database(), StyleConfig(enabled=True))
+    return StyleStore(database(), StyleConfig(enabled=True), language="id")
 
 
 def test_seed_profile_mentions_short_style(tmp_path) -> None:
@@ -51,14 +51,14 @@ def test_learn_ignores_commands_and_media(tmp_path) -> None:
 
 def test_learn_persists_aggregates_only(tmp_path) -> None:
     db = database()
-    store = StyleStore(db, StyleConfig(enabled=True))
+    store = StyleStore(db, StyleConfig(enabled=True), language="id")
     store.learn("wkwk aja sih", thread_id="c@g.us")
     store.close()
 
     stored = db.scalar(select(state.c.value).where(state.c.key == "style"))
     assert stored is not None
     assert "wkwk aja sih" not in stored
-    reloaded = StyleStore(database(), StyleConfig(enabled=True))
+    reloaded = StyleStore(database(), StyleConfig(enabled=True), language="id")
     assert reloaded.stats()["global"] == 1
     assert reloaded.stats()["threads"] == {"c@g.us": 1}
     reloaded.close()

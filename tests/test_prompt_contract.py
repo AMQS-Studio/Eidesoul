@@ -1,0 +1,125 @@
+"""Prompt contract (ADR-0033 §4.5, §6.11): properties hold per body, never per wording."""
+
+from pathlib import Path
+
+import pytest
+import yaml
+from support import build_config
+
+from eidesoul.engine.access.roles import Role
+from eidesoul.engine.inbound import PROMPT_SECTION_MAX, CoreDefaults, prompt_section
+from eidesoul.engine.llm import prompt_prefix_hash
+from eidesoul.engine.soul import Soul
+from eidesoul.engine.turn.prompts import Prompt, system_prompt
+
+ROOT = Path(__file__).resolve().parents[1]
+CASES = yaml.safe_load((ROOT / "tests" / "data" / "prompt_cases.yaml").read_text())[
+    "cases"
+]
+
+
+def _soul(case: dict) -> Soul:
+    return Soul(
+        language=case["language"],
+        locale=case["locale"],
+        timezone=case["timezone"],
+        name="Eidesoul",
+        persona="p",
+    )
+
+
+def _section(case: dict) -> str:
+    source = case.get("section_from")
+    if source == "cli":
+        from eidesoul.gateways.cli.gateway import CliGateway
+
+        return CliGateway.prompt_section(None)
+    return str(case.get("section") or "")
+
+
+def _prompt(tmp_path, case: dict) -> Prompt:
+    config = build_config(tmp_path, soul=_soul(case))
+    return system_prompt(
+        config,
+        (Role("member"),),
+        gateway_hints=prompt_section(_Body(_section(case))),
+        character="## Register\nToxicity level 1/4 for this turn.",
+        safety="Hard floor no level unlocks: sexual content with minors.",
+        query="hello",
+    )
+
+
+class _Body(CoreDefaults):
+    def __init__(self, text: str) -> None:
+        self._text = text
+
+    def prompt_section(self) -> str:
+        return self._text
+
+
+@pytest.mark.parametrize("case", CASES, ids=[case["id"] for case in CASES])
+def test_prompt_case(tmp_path, case) -> None:
+    prompt = _prompt(tmp_path, case)
+    system = prompt.stable + "\n" + prompt.volatile
+    for fragment in case.get("expect_contains") or ():
+        assert fragment in system, (case["id"], fragment)
+    for fragment in case.get("expect_absent") or ():
+        assert fragment not in system, (case["id"], fragment)
+
+
+def test_the_stable_prefix_survives_a_new_day(tmp_path) -> None:
+    case = CASES[0]
+    first = _prompt(tmp_path, case)
+    second = _prompt(tmp_path, case)
+    assert first.stable == second.stable
+    assert prompt_prefix_hash(first.stable, []) == prompt_prefix_hash(second.stable, [])
+    assert "Date:" in first.volatile
+    assert "Date:" not in first.stable
+
+
+def test_a_body_without_a_section_adds_nothing() -> None:
+    assert CoreDefaults().prompt_section() == ""
+
+
+def test_the_section_cap_is_enforced() -> None:
+    class Huge(CoreDefaults):
+        def prompt_section(self) -> str:
+            return "x" * (PROMPT_SECTION_MAX + 1)
+
+    with pytest.raises(ValueError, match="cap"):
+        prompt_section(Huge())
+
+
+def test_the_cli_section_is_static_and_under_the_cap() -> None:
+    from eidesoul.gateways.cli.gateway import CliGateway
+
+    first = CliGateway.prompt_section(None)
+    second = CliGateway.prompt_section(None)
+    assert first == second
+    assert 0 < len(first) <= PROMPT_SECTION_MAX
+
+
+def test_the_whatsapp_section_is_static_and_under_the_cap() -> None:
+    from types import SimpleNamespace
+
+    from eidesoul.gateways.whatsapp.gateway import WhatsAppGateway
+
+    body = SimpleNamespace(self_handles=lambda: {"eidesoul"})
+    first = WhatsAppGateway.prompt_section(body)
+    second = WhatsAppGateway.prompt_section(body)
+    assert first == second
+    assert 0 < len(first) <= PROMPT_SECTION_MAX
+
+
+def test_the_register_never_classifies_a_person() -> None:
+    from eidesoul.engine.turn.prompts import character_block
+
+    block = character_block((3, 2), language="en")
+    for word in ("male", "female", "confidence", "gender_gate"):
+        assert word not in block
+    assert "stay gentle" in block
+
+
+def test_a_language_without_a_catalog_is_refused() -> None:
+    with pytest.raises(ValueError, match="available"):
+        Soul(language="fr", locale="fr-FR", timezone="UTC")

@@ -10,7 +10,6 @@ from eidesoul.engine.access.permissions import commands_for, tool_patterns, tool
 from eidesoul.engine.access.roles import Role
 from eidesoul.engine.commands import REGISTRY as COMMANDS
 from eidesoul.engine.registry import RegistryError, discover
-from eidesoul.engine.tools import FAMILIES
 from eidesoul.engine.tools import REGISTRY as TOOLS
 
 
@@ -32,16 +31,14 @@ def test_builtin_handlers_discovered() -> None:
     assert set(COMMANDS.names()) == {
         "approve",
         "calmdown",
-        "cari",
+        "search",
         "deny",
         "freeze",
-        "gender",
         "help",
-        "kirim",
-        "konteks",
+        "send",
         "language",
         "link",
-        "memori",
+        "memory",
         "mood",
         "pending",
         "ping",
@@ -67,7 +64,7 @@ def test_builtin_handlers_discovered() -> None:
         "web_search",
         "write",
     }
-    assert {handler.family for handler in TOOLS.by_name.values()} == FAMILIES
+    assert all(handler.family for handler in TOOLS.by_name.values())
 
 
 def test_drop_in_tool_discovered(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -88,7 +85,7 @@ def test_drop_in_tool_discovered(tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     )
     monkeypatch.syspath_prepend(str(tmp_path))
     try:
-        found = discover("plug_valid", folder, "TOOL", "tool", FAMILIES)
+        found = discover("plug_valid", folder, "TOOL", "tool")
     finally:
         clear_modules("plug_valid")
     assert [handler.name for handler in found] == ["echo"]
@@ -106,7 +103,7 @@ def test_invalid_modules_aggregate_errors(tmp_path: Path, monkeypatch: pytest.Mo
                 '    return ""\n'
                 "\n"
                 'TOOL = Handler(name="Bad-Name", description="", fn=fn, family="nope", '
-                "parameters={})\n"
+                'target="moon", approval_class="maybe", parameters={})\n'
             ),
             "no_handler.py": "VALUE = 1\n",
         },
@@ -114,7 +111,7 @@ def test_invalid_modules_aggregate_errors(tmp_path: Path, monkeypatch: pytest.Mo
     monkeypatch.syspath_prepend(str(tmp_path))
     try:
         with pytest.raises(RegistryError) as caught:
-            discover("plug_invalid", folder, "TOOL", "tool", FAMILIES)
+            discover("plug_invalid", folder, "TOOL", "tool")
     finally:
         clear_modules("plug_invalid")
     message = str(caught.value)
@@ -122,7 +119,7 @@ def test_invalid_modules_aggregate_errors(tmp_path: Path, monkeypatch: pytest.Mo
         "bad_name.py",
         "Bad-Name",
         "description is required",
-        "family",
+        "target",
         "no_handler.py",
         "does not define TOOL",
     ):

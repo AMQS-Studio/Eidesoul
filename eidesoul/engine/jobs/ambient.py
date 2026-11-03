@@ -16,7 +16,6 @@ from ..config import Config
 from ..tools import ToolContext, execute
 from ..tools.web_search import TOOL as WEB_SEARCH
 from ..turn.context import keyword_set
-from .currents import refresh
 
 log = logging.getLogger(__name__)
 
@@ -45,7 +44,6 @@ class Ambient:
         memory=None,
         history=None,
         windows=None,
-        currents=None,
     ):
         self.config = config
         self.settings = config.ambient
@@ -55,7 +53,6 @@ class Ambient:
         self.memory = memory
         self.history = history
         self.windows = windows
-        self.currents = currents
         self.known_threads: set[str] = set()
         self.busy: set[str] = set()
         self.tasks: set[asyncio.Task] = set()
@@ -113,7 +110,6 @@ class Ambient:
 
     async def _tick(self, now: float | None = None) -> None:
         moment = time.time() if now is None else float(now)
-        await self._context(moment)
         if self.affect is None or self.history is None or self.llm is None:
             return
         settings = self.settings
@@ -158,38 +154,6 @@ class Ambient:
         if moment - float(topic["last_research"]) < int(settings.research_cooldown):
             return False
         return int(topic["research_count"]) < int(settings.research_per_day)
-
-    # ------------------------------------------------------------------ context
-
-    async def _context(self, moment: float) -> None:
-        """Refresh the stalest context; only the primary process reaches this code."""
-        settings = self.settings
-        if self.currents is None or self.llm is None or not settings.context_enabled:
-            return
-        if "__context" in self.busy:
-            return
-        try:
-            last = float(self.currents.load().get("updated_at") or 0.0)
-        except Exception:
-            log.debug("ambient: failed to read currents", exc_info=True)
-            return
-        if moment - last < int(settings.context_hours) * 3600:
-            return
-        self.busy.add("__context")
-        try:
-            updated = await refresh(
-                self.currents,
-                self._search,
-                self.llm.research_summary,
-                topics=int(settings.context_topics),
-                results=int(settings.context_results),
-                now=moment,
-            )
-            log.info("ambient context: %d topics updated", updated)
-        except Exception:  # background context must not stop the loop
-            log.exception("ambient context failed")
-        finally:
-            self.busy.discard("__context")
 
     async def _search(self, query: str, results: int) -> str:
         return await execute(

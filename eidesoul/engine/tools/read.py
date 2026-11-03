@@ -49,6 +49,10 @@ async def _read(args: dict, ctx: ToolContext) -> str:
 
 TOOL = Handler(
     name="read",
+    target="file",
+    path_arg="path",
+    approval_class="none",
+    scan=("path",),
     family="read",
     description=(
         "Read a text file under public/ (shared) or scratch/ (this chat); any other "

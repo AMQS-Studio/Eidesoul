@@ -12,7 +12,7 @@ async def ping(ctx: CommandContext) -> str:
 
 COMMAND = Handler(
     name="ping",
-    description="🏓 Check that Eidesoul is alive.",
+    description="Check that Eidesoul is alive.",
     fn=ping,
     aliases=("p",),
 )

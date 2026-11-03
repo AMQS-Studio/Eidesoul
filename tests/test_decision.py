@@ -119,7 +119,7 @@ def test_context_includes_emotion_relationship_and_transcript() -> None:
     assert "Fahri: halo" in text
     assert "kamu (eidesoul): hai" in text
     assert "Fahri: kamu culun" in text
-    assert "real mention of you" in text
+    assert "addressed to you" in text
 
 
 def test_context_marks_who_and_other_chat_in_emotion_log() -> None:

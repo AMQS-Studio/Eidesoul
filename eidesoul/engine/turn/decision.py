@@ -14,18 +14,19 @@ DECISION_PROMPT = """Your ONLY task is to decide what to do with the last messag
 the process, do not mention AI.
 
 Decision rules:
-- "addressed": "me" when the message is for you (a real mention of your number, a reply to your
-  message, or a DM), "other" when it is for someone else, "group" when it is for the room, "unknown"
-  when unclear. Words like "you" are not automatically you: check quotes, tags, and who replies to whom.
-- Your name written as plain text is not an address to you: without a real mention or a quote of your
+- "addressed": "me" when the message is for you (the body flagged it, it replies to you, or the
+  thread is private), "other" when it is for someone else, "group" when it is for the shared thread,
+  "unknown" when unclear. Words like "you" are not automatically you: check quotes, tags, and who
+  replies to whom.
+- Your name written as plain text is not an address to you: without a body flag or a quote of your
   message, pick "other"/"group" and do not interrupt.
-- "act": "reply" when you want to join, "ignore" when not, "react" when a sticker is enough. Silence
-  is your per-message decision, not a forced default.
+- "act": "reply" when you want to join, "ignore" when not, "react" when a lightweight reaction is
+  enough. Silence is your per-message decision, not a forced default.
 - "mode": "professional" ONLY for real work tasks that need tools/evidence (check, recap, count, fetch
   data, send a file). Otherwise "daily".
 - "tone": "warm", "neutral", "playful", "curt", "hurt", or "angry". Follow your emotional state: when
   hurt or angry pick "curt"/"hurt"/"angry". You may be cold, brief, and refuse to force warmth.
-- A real mention, a DM, and a reply to your message MUST be "reply". If upset, still "reply" with a cold
+- Anything the body flags as addressed to you MUST be "reply". If upset, still "reply" with a cold
   tone instead of ignoring.
 - Do not interrupt conversations clearly not meant for you. Do not lecture, blame, or invent actions,
   numbers, or reasons.
@@ -317,20 +318,20 @@ def build_context(
     away: str = "",
     vibe: str = "",
 ) -> str:
-    """Decision context: transport facts, emotional state, relationships, transcript, last message."""
-    kind = "direct message (DM)" if direct else "group"
+    """Decision context: audience, emotional state, relationships, transcript, last message."""
+    kind = "private thread" if direct else "shared thread"
     facts = [
         fact
         for fact, on in (
-            ("direct message (DM)", direct),
-            ("real mention of you", mentioned),
-            ("reply to your message", replied),
+            ("private thread", direct),
+            ("addressed to you", mentioned),
+            ("a reply to your message", replied),
         )
         if on
     ]
     parts = [
         f"Chat: {chat_name or thread_id or '-'} — {kind}",
-        "Transport facts: " + (", ".join(facts) if facts else "no direct tag/reply"),
+        "Audience: " + (", ".join(facts) if facts else "no direct signal"),
     ]
     if away.strip():
         parts.append("Presence note:\n" + away.strip())

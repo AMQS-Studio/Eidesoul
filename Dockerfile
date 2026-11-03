@@ -24,7 +24,7 @@ WORKDIR /app
 
 # The capability spine (Mem0 + embedder) ships in the core dependencies; only transports are
 # extras. Gateways and plugins are installed and enabled later, never baked in (ADR-0027/0028):
-#   docker build --build-arg EXTRAS="--extra whatsapp" .
+#   docker build --build-arg EXTRAS="--extra <transport>" .
 ARG EXTRAS=""
 
 COPY pyproject.toml uv.lock ./

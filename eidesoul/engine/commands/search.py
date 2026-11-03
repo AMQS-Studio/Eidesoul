@@ -16,35 +16,35 @@ def _clip(text: str) -> str:
 
 def _line(row, lang: str) -> str:
     missing = "attachment" if row.media is not None else "empty"
-    text = _clip(row.text) or t(f"command.cari.{missing}", lang)
+    text = _clip(row.text) or t(f"command.search.{missing}", lang)
     who = row.sender_name or row.sender_id or "?"
     stamp = row.when.strftime("%Y-%m-%d %H:%M") if row.when else "?"
-    return t("command.cari.line", lang, stamp=stamp, who=who, text=text)
+    return t("command.search.line", lang, stamp=stamp, who=who, text=text)
 
 
-async def cari(ctx: CommandContext) -> str:
+async def search(ctx: CommandContext) -> str:
     lang = ctx.lang
     query = ctx.args.strip()
     if not query:
-        return t("command.cari.usage", lang)
+        return t("command.search.usage", lang)
     store = ctx.agent.history
     if store is None:
-        return t("command.cari.unavailable", lang)
+        return t("command.search.unavailable", lang)
     try:
         rows = store.search(ctx.thread_id, query, limit=MAX_RESULTS)
     except Exception:
-        return t("command.cari.failed", lang)
+        return t("command.search.failed", lang)
     if not rows:
-        return t("command.cari.none", lang, query=query)
-    lines = [t("command.cari.head", lang, query=query)]
+        return t("command.search.none", lang, query=query)
+    lines = [t("command.search.head", lang, query=query)]
     lines.extend(_line(row, lang) for row in rows)
     return "\n".join(lines)
 
 
 COMMAND = Handler(
-    name="cari",
-    description="🔎 Search old messages in this chat archive (no LLM).",
-    fn=cari,
-    aliases=("search",),
+    name="search",
+    description="Search old messages in this chat archive (no LLM).",
+    fn=search,
+    aliases=(),
     usage="<word>",
 )

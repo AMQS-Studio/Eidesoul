@@ -32,7 +32,7 @@ Minimal body::
         async def run(self, agent): ...
         async def stop(self): ...
         async def dispatch(self, action: Action) -> str: ...
-        def prompt_hints(self): return ""
+        def prompt_section(self): return ""
         def self_handles(self): return set()
         # `chat_name` defaults to the thread id through `CoreDefaults`.
 """
@@ -175,6 +175,10 @@ class CoreDefaults:
         """Default label: the opaque thread id itself."""
         return thread
 
+    def prompt_section(self) -> str:
+        """Body-specific prompt facts; empty by default (ADR-0033 §4.5)."""
+        return ""
+
 
 @runtime_checkable
 class GatewayCore(Protocol):
@@ -192,13 +196,25 @@ class GatewayCore(Protocol):
 
     async def dispatch(self, action: Action) -> str: ...
 
-    def prompt_hints(self) -> str: ...
-
     def self_handles(self) -> set[str]: ...
 
     def chat_name(self, thread: str) -> str:
         """Default: the thread id, when a body has no label for it."""
         return thread
+
+
+PROMPT_SECTION_MAX = 1200
+
+
+def prompt_section(gateway) -> str:
+    """The body's own prompt text, capped; a body without one contributes nothing."""
+    grab = getattr(gateway, "prompt_section", None)
+    text = str(grab() if callable(grab) else "").strip()
+    if len(text) > PROMPT_SECTION_MAX:
+        raise ValueError(
+            f"prompt_section is {len(text)} chars; the cap is {PROMPT_SECTION_MAX}"
+        )
+    return text
 
 
 @runtime_checkable
@@ -245,7 +261,7 @@ CORE_MEMBERS = (
     "run",
     "stop",
     "dispatch",
-    "prompt_hints",
+    "prompt_section",
     "self_handles",
     "chat_name",
 )

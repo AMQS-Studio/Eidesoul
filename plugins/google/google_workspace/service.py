@@ -16,7 +16,7 @@ from pathlib import Path
 import httpx
 from sqlalchemy import delete, select
 
-from eidesoul.engine.schema import google_device, google_identity
+from .tables import ensure, google_device, google_identity
 
 log = logging.getLogger(__name__)
 
@@ -48,6 +48,7 @@ class GoogleWorkspace:
         self._docs = None
         self._sheets = None
         self._tasks: set[asyncio.Task] = set()
+        ensure(self.db)
 
     # ---------------------------------------------------------- credentials
 

@@ -13,7 +13,7 @@ from eidesoul.admin.templates import ROLES
 from eidesoul.engine import plugins
 from eidesoul.engine.access.roles import Role
 from eidesoul.engine.config import PluginConfig, PluginSettings
-from eidesoul.engine.schema import google_identity, people
+from eidesoul.engine.schema import people
 from eidesoul.engine.tools import REGISTRY as CORE_TOOLS
 from eidesoul.engine.tools import ToolContext
 from plugins.google.google_workspace.service import (
@@ -22,6 +22,7 @@ from plugins.google.google_workspace.service import (
     GoogleError,
     GoogleWorkspace,
 )
+from plugins.google.google_workspace.tables import ensure, google_identity
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -286,7 +287,7 @@ def test_tool_discovery_and_role_grants(tmp_path, monkeypatch) -> None:
     assert handler.aliases == ("gworkspace",)
     assert "google" not in CORE_TOOLS.names()
 
-    assert "google" in ROLES["member"]["tools"]
+    assert "google" not in ROLES["member"]["tools"]
     assert "mcp__*" not in ROLES["member"]["tools"]
     assert "google" not in ROLES["guest"]["tools"]
 
@@ -394,6 +395,7 @@ def test_tool_routes_actions_with_a_linked_identity(tmp_path, monkeypatch, googl
 
 def test_identity_row_is_read_by_person(tmp_path) -> None:
     db = database()
+    ensure(db)
     with db.connect() as conn:
         db.upsert(conn, people, [{"person_id": "p1", "name": ""}], ["person_id"])
         db.upsert(

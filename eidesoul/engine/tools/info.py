@@ -54,6 +54,8 @@ async def _info(args: dict, ctx: ToolContext) -> str:
 
 TOOL = Handler(
     name="info",
+    target="",
+    approval_class="none",
     family="read",
     description=(
         "Explain the engine's own capabilities without guessing: kind=catalog (every tool and "

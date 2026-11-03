@@ -66,7 +66,6 @@ async def build_runtime(config_path: str | None, *, console: bool = False):
     from .engine.memory import build_memory
     from .engine.memory.ledger import ActionLedger
     from .engine.stores.affect import AffectStore
-    from .engine.stores.currents import CurrentsStore
     from .engine.stores.documents import DocumentStore
     from .engine.stores.history import HistoryStore
     from .engine.stores.recipes import RecipeStore
@@ -102,8 +101,11 @@ async def build_runtime(config_path: str | None, *, console: bool = False):
     affect = (
         AffectStore(db, config.affect, soul=config.soul.persona) if config.affect.enabled else None
     )
-    style = StyleStore(db, config.style) if config.style.enabled else None
-    currents = CurrentsStore(db)
+    style = (
+        StyleStore(db, config.style, language=config.soul.language)
+        if config.style.enabled
+        else None
+    )
     vibe = None
     if affect is not None and config.affect.vibe.enabled:
         vibe = VibeRunner(db, config.affect.vibe)
@@ -117,7 +119,7 @@ async def build_runtime(config_path: str | None, *, console: bool = False):
     )
     ambient = None
     if config.ambient.enabled:
-        ambient = Ambient(config, llm, affect, style, memory, history, windows, currents)
+        ambient = Ambient(config, llm, affect, style, memory, history, windows)
     agent = Agent(
         config,
         db,
@@ -132,7 +134,6 @@ async def build_runtime(config_path: str | None, *, console: bool = False):
         affect=affect,
         style=style,
         ambient=ambient,
-        currents=currents,
         vibe=vibe,
         gateways=tuple(gateways),
         documents=documents,
@@ -197,87 +198,10 @@ async def serve(config_path: str | None, *, console: bool = False, takeover: boo
 
 
 async def backfill(config_path: str | None) -> int:
-    """Pair a throwaway device for history sync, then log it out; the primary is untouched."""
-    from neonize.aioze.client import NewAClient
-    from neonize.aioze.events import ConnectedEv, HistorySyncEv
+    """Transport-owned history backfill; the core names no transport."""
+    from .gateways import cli_entry
 
-    from .engine.config import drop_session, secure_db
-    from .engine.db import Database
-    from .engine.stores.documents import DocumentStore
-    from .engine.stores.history import HistoryStore
-    from .gateways import ensure_schemas
-    from .gateways.whatsapp import directory, history_sync, ingress
-    from .gateways.whatsapp.config import WhatsAppSettings
-
-    host, paths = load_host(config_path)
-    url = resolve_database_url(host.database)
-    if not url:
-        raise ConfigError("database URL is empty")
-    db = Database(url, pool_size=host.database.pool_size, pool_timeout=host.database.pool_timeout)
-    db.ensure()
-    ensure_schemas(db)
-    documents = DocumentStore(db, paths, sync=host.sync_documents)
-    documents.seed()
-    config = load_config(paths.config, documents=documents, require_gateway=True)
-    raw = config.gateways.get("whatsapp")
-    if raw is None:
-        raise ConfigError("gateway 'whatsapp' is not configured in config.yaml")
-    settings = WhatsAppSettings.from_mapping(raw.enabled, raw.options, paths.config.parent)
-    history = HistoryStore(db, config.workspace)
-    session = settings.session_db.parent / "backfill.db"
-    drop_session(session)
-    client = NewAClient(str(session), props=history_sync.history_props(True))
-    done = asyncio.Event()
-    paired = False
-
-    @client.event(ConnectedEv)
-    async def on_connected(accepted: NewAClient, ev) -> None:
-        nonlocal paired
-        paired = True
-        secure_db(session)
-        named = await directory.sync_group_names(accepted, db)
-        log.info("backfill: synced group names: %d", named)
-        log.info("backfill connected; waiting for history sync from the phone")
-
-    @client.event(HistorySyncEv)
-    async def on_history(accepted: NewAClient, ev) -> None:
-        if ev.Data is None:
-            return
-        count, thread_ids, finished = history_sync.ingest_sync(
-            db, history, ev.Data, ingress.self_jid(accepted.me)
-        )
-        log.info(
-            "backfill: %d messages, %d threads, sync=%s progress=%d%s",
-            count,
-            len(thread_ids),
-            ev.Data.syncType,
-            ev.Data.progress,
-            " (done)" if finished else "",
-        )
-        if finished:
-            done.set()
-
-    try:
-        await client.connect()
-        secure_db(session)
-        try:
-            await asyncio.wait_for(done.wait(), 900)
-        except TimeoutError:
-            log.warning("backfill timed out after 900 seconds")
-    finally:
-        logged_out = False
-        if paired:
-            try:
-                await client.logout()
-                logged_out = True
-            except Exception:
-                log.exception("failed to log out the backfill device")
-        with contextlib.suppress(Exception):
-            await client.stop()
-        if logged_out:
-            drop_session(session)
-        db.dispose()
-    return 0 if paired and done.is_set() else 1
+    return int(await cli_entry("backfill", config_path))
 
 
 async def selftest(config: Config) -> int:
@@ -318,7 +242,7 @@ async def selftest(config: Config) -> int:
     history = HistoryStore(db, config.workspace)
     ledger = ActionLedger(db)
     affect = AffectStore(db, config.affect, soul=config.soul.persona)
-    style = StyleStore(db, config.style)
+    style = StyleStore(db, config.style, language=config.soul.language)
     skills = SkillStore(db, config.skills)
     recipes = RecipeStore(db)
     memory = await build_memory(config, db=db)
@@ -499,16 +423,16 @@ async def selftest(config: Config) -> int:
             "selftest",
             "p1",
             "Tester",
-            "goblok banget sih kamu",
+            "you are an idiot",
             "member",
-            "p1@s.whatsapp.net",
+            "p1",
             Decision(
                 addressed="me",
                 act="reply",
                 mode="daily",
                 tone="hurt",
                 bubbles=1,
-                appraisal=Appraisal("hostility", -0.4, 0.3, 0.1, "dihina"),
+                appraisal=Appraisal("hostility", -0.4, 0.3, 0.1, "insulted"),
                 relationship=RelationshipDelta(trust=-0.1, annoyance=0.15),
                 reason="hinaan",
             ),
@@ -527,7 +451,7 @@ async def selftest(config: Config) -> int:
         detail = "" if passed else "PAD did not move"
         results.append(_report("affect", _verdict(passed), detail))
 
-        style.learn("iyaa aku udah cek, aman kok")
+        style.learn("yeah i already checked, it is fine")
         text = style.profile()
         passed = "How people chat here" in text and "particles:" in text
         results.append(_report("style", "PASS" if passed else "FAIL", "" if passed else text[:120]))
@@ -611,20 +535,15 @@ def _config_export(args: argparse.Namespace) -> int:
 
 
 def _config_import(args: argparse.Namespace) -> int:
-    from .admin.roles import migrate
     from .engine.access.roles import RoleError
 
     docs, db = _doc_store(args)
     try:
-        summary = migrate(docs, docs.paths)
         count = docs.import_from_files()
     except RoleError as exc:
         raise ConfigError(str(exc)) from exc
     finally:
         db.dispose()
-    if summary["renamed"]:
-        backup = f" (backup: {summary['backup']})" if summary["backup"] else ""
-        print(f"config import: role_rename owner -> administrator{backup}", flush=True)
     print(f"config import: {count} documents from files", flush=True)
     return 0
 
@@ -750,23 +669,6 @@ def _people_db(args: argparse.Namespace):
     return db
 
 
-def _people_adopt(args: argparse.Namespace) -> int:
-    from .admin import people as admin_people
-
-    documents, db = _doc_store(args)
-    try:
-        db.ensure()
-        documents.seed()
-        config = load_config(documents.paths.config, documents=documents, require_key=False)
-        rows = asyncio.run(admin_people.adopt(db, config, documents))
-    finally:
-        db.dispose()
-    for old, new, gateway, address in rows:
-        print(f"{old} -> {new} ({gateway}:{address})", flush=True)
-    print(f"adopt: {len(rows)} addresses migrated", flush=True)
-    return 0
-
-
 def _people_list(args: argparse.Namespace) -> int:
     from .admin import people as admin_people
 
@@ -814,7 +716,6 @@ def _people_dispatch(args: argparse.Namespace) -> int:
         "list": _people_list,
         "link": _people_link,
         "unlink": _people_unlink,
-        "adopt": _people_adopt,
     }
     if args.people_command in handlers:
         return handlers[args.people_command](args)
@@ -993,7 +894,7 @@ def build_parser() -> argparse.ArgumentParser:
     people_sub.add_parser("list", help="list identities, roles, and linked addresses")
     people_link = people_sub.add_parser("link", help="link a gateway address to an identity")
     people_link.add_argument("person_id", help="per_… identity id")
-    people_link.add_argument("gateway", help="gateway name, e.g. whatsapp")
+    people_link.add_argument("gateway", help="gateway name from config.yaml")
     people_link.add_argument("address", help="the gateway's own address for that person")
     people_unlink = people_sub.add_parser("unlink", help="remove one gateway link")
     people_unlink.add_argument("person_id", help="per_… identity id")
@@ -1018,7 +919,7 @@ def build_parser() -> argparse.ArgumentParser:
         ("remove", "delete a disabled plugin's code and config entry"),
     ):
         item = plugin_sub.add_parser(verb, help=text)
-        item.add_argument("name", help="plugin name, e.g. google")
+        item.add_argument("name", help="plugin name from its manifest")
     return parser
 
 
