@@ -18,11 +18,11 @@ from neonize.utils.enum import ChatPresence, ChatPresenceMedia
 from neonize.utils.jid import build_jid
 
 from ...engine.config import Config, GatewaySettings, secure_db
-from ...engine.context import Message, human_size
 from ...engine.inbound import GatewayError, Percept
 from ...engine.registry import Handler, discover
-from ...engine.reply import FENCE, clean_prose, strip_blocks
 from ...engine.tools import FAMILIES
+from ...engine.turn.context import Message, human_size
+from ...engine.turn.reply import FENCE, clean_prose, strip_blocks
 from . import directory, history_sync, ingress
 from .config import WhatsAppSettings
 from .media import download_media, send_kind

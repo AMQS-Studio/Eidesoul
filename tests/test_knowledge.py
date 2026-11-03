@@ -9,7 +9,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
 import fakta
 
 from eidesoul.engine import knowledge
-from eidesoul.engine.prompts import character_block
+from eidesoul.engine.turn.prompts import character_block
 
 
 def test_shipped_facts_pass_schema_and_vectors() -> None:

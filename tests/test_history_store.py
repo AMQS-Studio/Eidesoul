@@ -8,9 +8,9 @@ from sqlalchemy import text as sql_text
 from sqlalchemy.exc import IntegrityError
 from support import database
 
-from eidesoul.engine.context import Media, Message, Quote
 from eidesoul.engine.schema import messages
 from eidesoul.engine.stores.history import HistoryStore
+from eidesoul.engine.turn.context import Media, Message, Quote
 
 
 def message(

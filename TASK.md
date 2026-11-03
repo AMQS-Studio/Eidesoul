@@ -130,6 +130,6 @@ Eidesoul checklist. Every item is done when the listed surface exists and works 
 - [x] Identity is runtime state: `people` + `person_links` hold one opaque `per_…` id per human,
       `roles.*.users` lists only those ids, a gateway hands in `Inbound.person_address`, `/link`
       attaches a second gateway to the same person, and `eidesoul people adopt` migrates the old raw
-      addresses once. Context is assembled state: `eidesoul/engine/assembly.py` picks the newest tail
+      addresses once. Context is assembled state: `eidesoul/engine/turn/assembly.py` picks the newest tail
       plus the quoted messages under `engine.prompt.thread_chars`, and `/reset` is gone — the chat
       capsule is compacted into dated `chat_eras` rows by the ambient digest.

@@ -34,20 +34,20 @@ from eidesoul.engine.character import (
     regulate,
 )
 from eidesoul.engine.config import load_config, load_env
-from eidesoul.engine.context import (
+from eidesoul.engine.llm import LLM
+from eidesoul.engine.patterns import load_lexicon, room_register, select_patterns
+from eidesoul.engine.roles import Role
+from eidesoul.engine.runtime import RuntimeFacts
+from eidesoul.engine.target import combine, score_style
+from eidesoul.engine.tools import ToolContext
+from eidesoul.engine.turn.context import (
     AUTHOR_BOT,
     AUTHOR_UNKNOWN,
     Message,
     build_user_content,
 )
-from eidesoul.engine.llm import LLM
-from eidesoul.engine.patterns import load_lexicon, room_register, select_patterns
-from eidesoul.engine.prompts import character_block, system_prompt
-from eidesoul.engine.reply import clean_prose, human_chunks, strip_blocks
-from eidesoul.engine.roles import Role
-from eidesoul.engine.runtime import RuntimeFacts
-from eidesoul.engine.target import combine, score_style
-from eidesoul.engine.tools import ToolContext
+from eidesoul.engine.turn.prompts import character_block, system_prompt
+from eidesoul.engine.turn.reply import clean_prose, human_chunks, strip_blocks
 
 SCENARIOS = ROOT / "tests" / "data" / "scenarios.json"
 OUT = ROOT / "workspace"

@@ -21,7 +21,6 @@ from support import (
 )
 
 from eidesoul.engine.config import ConfigError, GatewaySettings
-from eidesoul.engine.context import WorkingMemory
 from eidesoul.engine.inbound import (
     Directory,
     GatewayCore,
@@ -32,6 +31,7 @@ from eidesoul.engine.inbound import (
 )
 from eidesoul.engine.registry import Handler, RegistryError
 from eidesoul.engine.stores.history import HistoryStore
+from eidesoul.engine.turn.context import WorkingMemory
 
 
 def handler(name: str) -> Handler:

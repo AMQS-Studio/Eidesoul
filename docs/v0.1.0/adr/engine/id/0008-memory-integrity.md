@@ -1,4 +1,4 @@
-> Terjemahan turunan — jangan sunting; sumber: engine/0008-memory-integrity.md (sha256: 86f8a58df915)
+> Terjemahan turunan — jangan sunting; sumber: engine/0008-memory-integrity.md (sha256: b15e6c889f86)
 > Teks ini ditulis manusia; baris yang tidak bisa diterjemahkan mesin disalin apa adanya ke sumber English, jadi sumber bercampur dua bahasa.
 
 # ADR-0008: Integritas Memori — Provenance, Trust, Karantina Instruksi, Anti-Poisoning
@@ -317,7 +317,7 @@ memory:
 - `eidesoul/engine/tools/memory.py:69-105,175-183,230-234` — `add`, `kind`, `supersedes`, `veto`.
 - `eidesoul/engine/commands/memori.py:83-134` — pintu command (source `command`).
 - `eidesoul/engine/ambient.py:251-256,310-315` — sintesis soul (source `ambient:<chat>`).
-- `eidesoul/engine/prompts.py:53-56,266,300-316` — aturan prompt memori dan krisis.
+- `eidesoul/engine/turn/prompts.py:53-56,266,300-316` — aturan prompt memori dan krisis.
 - `eidesoul/engine/schema.py:129-142` — tabel `people` (trust relasi, bukan trust memori).
 
 ---

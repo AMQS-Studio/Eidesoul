@@ -8,15 +8,15 @@ import pytest
 from support import inbound_message, make_agent, make_runtime
 
 from eidesoul.engine.config import PromptConfig
-from eidesoul.engine.prompts import (
+from eidesoul.engine.roles import Role
+from eidesoul.engine.runtime import RuntimeFacts
+from eidesoul.engine.soul import Soul, language_line, normalize_language
+from eidesoul.engine.turn.prompts import (
     character_block,
     research_block,
     self_block,
     system_prompt,
 )
-from eidesoul.engine.roles import Role
-from eidesoul.engine.runtime import RuntimeFacts
-from eidesoul.engine.soul import Soul, language_line, normalize_language
 
 
 def test_language_line_variants() -> None:

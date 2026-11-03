@@ -41,8 +41,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Protocol, runtime_checkable
 
-from .context import Message
 from .registry import Handler
+from .turn.context import Message
 
 HINT_KEYS = frozenset({"dm", "mention", "reply", "group", "presence", "self", "roles"})
 

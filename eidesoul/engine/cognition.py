@@ -20,7 +20,7 @@ from dataclasses import dataclass
 from sqlalchemy import func, select, text
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
-from . import io, observability
+from . import io
 from .config import Config
 from .db import Database
 from .lease import Superseded
@@ -29,6 +29,7 @@ from .memory import efficiency, gate, intent
 from .memory import episodes as memory_episodes
 from .memory import reflect as memory_reflect
 from .schema import actions, cognition_jobs
+from .turn import observability
 
 log = logging.getLogger(__name__)
 

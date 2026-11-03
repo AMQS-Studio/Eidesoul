@@ -14,9 +14,8 @@ import time
 from datetime import datetime
 from pathlib import Path
 
-from .context import AUTHOR_BOT, TEXT_EXT, Message, clean
-from .i18n import t
-from .inbound import (
+from ..i18n import t
+from ..inbound import (
     AUTHORIZATION,
     CONSENT,
     Action,
@@ -25,7 +24,8 @@ from .inbound import (
     Rich,
     StandbyError,
 )
-from .runtime import ACTIVE_GENERATION
+from ..runtime import ACTIVE_GENERATION
+from .context import AUTHOR_BOT, TEXT_EXT, Message, clean
 
 log = logging.getLogger(__name__)
 

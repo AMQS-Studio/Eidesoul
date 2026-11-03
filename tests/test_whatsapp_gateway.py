@@ -11,9 +11,9 @@ from neonize.proto.Neonize_pb2 import Message as ProtoMessage
 from support import build_config, database
 
 from eidesoul.engine.config import GatewaySettings
-from eidesoul.engine.context import Message, WorkingMemory
 from eidesoul.engine.inbound import GatewayError, Percept
 from eidesoul.engine.stores.history import HistoryStore
+from eidesoul.engine.turn.context import Message, WorkingMemory
 from eidesoul.gateways.whatsapp import directory, ingress
 from eidesoul.gateways.whatsapp.gateway import SENT_TTL, WhatsAppGateway
 

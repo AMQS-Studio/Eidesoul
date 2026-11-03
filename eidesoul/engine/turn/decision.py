@@ -358,7 +358,7 @@ async def decide(
     min_call_seconds: float = 0.0,
 ) -> Decision | None:
     """One LLM decision; empty after one retry = None (no regex fallback)."""
-    from .soul import Soul, language_line
+    from ..soul import Soul, language_line
 
     identity = soul if isinstance(soul, Soul) else Soul()
     system = (

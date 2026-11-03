@@ -4,7 +4,7 @@
 from datetime import datetime
 
 from eidesoul.engine.ablate import classify, replay_metrics
-from eidesoul.engine.context import Message, Quote
+from eidesoul.engine.turn.context import Message, Quote
 
 BOT = "eidesoul"
 

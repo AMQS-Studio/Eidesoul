@@ -376,14 +376,14 @@ engine:
 - `scripts/affect.py`, `scripts/patterns.py` — precedent for the "data + guard script" pattern (`--check`).
 - `README.md`, `README.id.md` — the source of the product documents (the subheading index is computed from this file).
 - `eidesoul/engine/tools/read.py:28-30` + `tools/__init__.py:120-165` — the `workspace_roots` limit (why `read` cannot reach the project directory).
-- `eidesoul/engine/prompts.py:150-186` `self_block` (the place of the infrastructure facts).
-- `eidesoul/engine/prompts.py:190-386` `system_prompt`, the block list, `salience.select`, `language_line`, `Date`.
-- `eidesoul/engine/salience.py:38-60` `JOIN`, `block_score`, `select` (where pinned blocks are passed through).
+- `eidesoul/engine/turn/prompts.py:150-186` `self_block` (the place of the infrastructure facts).
+- `eidesoul/engine/turn/prompts.py:190-386` `system_prompt`, the block list, `salience.select`, `language_line`, `Date`.
+- `eidesoul/engine/turn/salience.py:38-60` `JOIN`, `block_score`, `select` (where pinned blocks are passed through).
 - `eidesoul/engine/llm.py:150-260` the tool loop `execute`: `tools`/`by_name`, `kwargs["tools"]`, budget, repeated-call guard.
 - `eidesoul/engine/tools/__init__.py:180-235` `execute` (the one permission gate) and the error message that already names the tool.
 - `eidesoul/engine/permissions.py:56` + `eidesoul/engine/commands/help.py` `commands_for` (the command-list source).
 - `eidesoul/engine/registry.py` `Handler` (`name`, `description`, `usage`, `parameters`) as the `info` detail source.
-- `eidesoul/engine/context.py:641-683` + `FOOTER` (`:55-58`) — the immutable user-content format.
+- `eidesoul/engine/turn/context.py:641-683` + `FOOTER` (`:55-58`) — the immutable user-content format.
 - `eidesoul/engine/agent.py:279-283,759-788` `_specs(roles)` and the `system_prompt` assembly.
 
 ---

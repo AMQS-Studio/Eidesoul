@@ -166,7 +166,7 @@ turns:
 ## 10. Code references
 
 - `eidesoul/engine/agent.py:917-921` — spawn capture.
-- `eidesoul/engine/context.py:210-225` — `WorkingMemory.append` fail-open.
+- `eidesoul/engine/turn/context.py:210-225` — `WorkingMemory.append` fail-open.
 - `eidesoul/engine/db.py:95-145` — `connect`, `upsert`.
 - `eidesoul/engine/supervisor.py:36-129` — primary/standby lifecycle.
 - `eidesoul/engine/lease.py:103-129`

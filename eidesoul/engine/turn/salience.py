@@ -5,7 +5,7 @@ ADR-0015 §4.1: only the reference blocks compete for the character budget. The 
 """
 
 
-from . import lexicon
+from .. import lexicon
 from .context import keyword_set
 
 PINNED = ("base", "self", "roles", "away", "capabilities")

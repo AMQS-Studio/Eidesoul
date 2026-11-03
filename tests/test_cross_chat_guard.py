@@ -8,9 +8,9 @@ from support import inbound_message, make_agent, role
 from test_whatsapp_gateway import make_gateway
 
 from eidesoul.engine import guard
-from eidesoul.engine.context import Message
 from eidesoul.engine.i18n import t
 from eidesoul.engine.tools import execute
+from eidesoul.engine.turn.context import Message
 from eidesoul.gateways.whatsapp import directory
 
 TARGET = "628999999999@s.whatsapp.net"

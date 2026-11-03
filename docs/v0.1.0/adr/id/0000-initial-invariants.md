@@ -1,4 +1,4 @@
-> Terjemahan turunan — jangan sunting; sumber: 0000-initial-invariants.md (sha256: 04fdf95a6aff)
+> Terjemahan turunan — jangan sunting; sumber: 0000-initial-invariants.md (sha256: cb3c0c1a2375)
 > Ditulis tangan (bukan mesin), mengikuti sumber English baris demi baris.
 
 # ADR-0000: Invarian Awal — Bentuk Permukaan, Data Bahasa, Seam Netral Embodiment
@@ -199,7 +199,7 @@ Body mendeklarasikan nama dan kapabilitasnya di bagian config miliknya, `gateway
 - `eidesoul/engine/inbound.py:18-29` — `Inbound` dan `Gateway` (seam yang diganti).
 - `eidesoul/engine/schema.py:44-67,69,164,187` — `messages`, `chats`, `chat_eras`, `chat_people`.
 - `eidesoul/engine/agent.py` — pemanggilan kirim dan penanganan turn (rename + seam).
-- `eidesoul/engine/prompts.py:141-147` — render role; fakta body masuk payload di sini.
+- `eidesoul/engine/turn/prompts.py:141-147` — render role; fakta body masuk payload di sini.
 - `eidesoul/gateways/whatsapp/tools/send.py` dan `eidesoul/gateways/whatsapp/tools/chat_history.py` — dua tool khusus chat, keduanya sudah keluar dari core.
 - `eidesoul/engine/soul.py:57,221` — default `pronouns` (akan dihapus).
 - `eidesoul/engine/privacy.py:27`, `context.py:317-320`, `character.py:18`, `guard/patterns.py:16`, `prompts.py:97,239,242,277` — data bahasa (akan dipindah).

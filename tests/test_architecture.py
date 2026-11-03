@@ -173,7 +173,8 @@ def test_the_three_protocols_accept_the_right_fakes() -> None:
 
 
 def test_the_old_seam_names_are_gone() -> None:
-    from eidesoul.engine import context, inbound
+    from eidesoul.engine import inbound
+    from eidesoul.engine.turn import context
 
     assert not hasattr(inbound, "Inbound")
     assert not hasattr(context, "ChatMessage")

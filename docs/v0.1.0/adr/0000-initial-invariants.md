@@ -198,7 +198,7 @@ A body declares its name and capabilities in its own config section under `gatew
 - `eidesoul/engine/inbound.py:18-29` — `Inbound` and `Gateway` (the seam to replace).
 - `eidesoul/engine/schema.py:44-67,69,164,187` — `messages`, `chats`, `chat_eras`, `chat_people`.
 - `eidesoul/engine/agent.py` — send calls and turn handling (rename + seam).
-- `eidesoul/engine/prompts.py:141-147` — role rendering; body facts join the payload here.
+- `eidesoul/engine/turn/prompts.py:141-147` — role rendering; body facts join the payload here.
 - `eidesoul/gateways/whatsapp/tools/send.py` and `eidesoul/gateways/whatsapp/tools/chat_history.py` — the two chat-only tools, both out of the core.
 - `eidesoul/engine/soul.py:57,221` — `pronouns` default (to remove).
 - `eidesoul/engine/privacy.py:27`, `context.py:317-320`, `character.py:18`, `guard/patterns.py:16`, `prompts.py:97,239,242,277` — language data (to move).

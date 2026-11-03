@@ -16,10 +16,11 @@ import pytest
 import yaml
 from support import build_config, inbound_message, make_agent, make_runtime
 
-from eidesoul.engine import guard, i18n, lexicon, salience
-from eidesoul.engine.prompts import character_block, system_prompt
+from eidesoul.engine import guard, i18n, lexicon
 from eidesoul.engine.roles import Role
 from eidesoul.engine.soul import Soul, load_soul, normalize_language
+from eidesoul.engine.turn import salience
+from eidesoul.engine.turn.prompts import character_block, system_prompt
 
 CHAT = "cli:local"
 ROOT = Path(__file__).resolve().parents[1]
@@ -30,7 +31,7 @@ WORD_LISTS = ("negations", "stopwords", "assistant_tells", "injection")
 # Language data the pack schema does not model (register particles, style markers) plus the
 # ".ini" file-extension literal that a word-boundary scan reads as the Indonesian demonstrative.
 ALLOWED_LITERALS = {
-    "context.py": {"ini"},
+    "turn/context.py": {"ini"},
     "stores/style.py": {"aja", "deh", "kan", "kok", "loh", "sih"},
     "target.py": {"deh"},
 }

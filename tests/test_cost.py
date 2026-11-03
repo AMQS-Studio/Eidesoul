@@ -9,11 +9,11 @@ from sqlalchemy import select
 from support import build_config, database
 
 from eidesoul.engine.llm import LLM, prompt_prefix_hash
-from eidesoul.engine.prompts import Prompt, system_prompt
 from eidesoul.engine.registry import Handler
 from eidesoul.engine.roles import Role
 from eidesoul.engine.schema import llm_calls
 from eidesoul.engine.tools import ToolContext
+from eidesoul.engine.turn.prompts import Prompt, system_prompt
 
 
 class FakeClient:

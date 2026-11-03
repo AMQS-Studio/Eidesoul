@@ -1,4 +1,4 @@
-> Terjemahan turunan — jangan sunting; sumber: engine/0007-capability-authorization.md (sha256: 4c2c36c0a238)
+> Terjemahan turunan — jangan sunting; sumber: engine/0007-capability-authorization.md (sha256: da7e30a76951)
 > Teks ini ditulis manusia; baris yang tidak bisa diterjemahkan mesin disalin apa adanya ke sumber English, jadi sumber bercampur dua bahasa.
 
 # ADR-0007: Capability vs Authorization — Tiga Kelas Izin dan Approval sebagai Kelanjutan Izin Tool
@@ -447,9 +447,9 @@ peran. Implementasi menyusul di `chat_history`/`send` dengan satu helper bersama
 - `eidesoul/gateways/whatsapp/tools/chat_history.py` — `chat_history` dan pemisahan room ini vs room lain.
 - `eidesoul/engine/memory/rekey.py:83-97` — pola `_chats(db, person_id)` untuk `rooms_of(person_id)`.
 - `eidesoul/engine/inbound.py:29-70` — kontrak `Gateway` (tempat kapabilitas `participants(thread_id)` ditambahkan, opsional).
-- `eidesoul/engine/context.py:72-81,288-300` — `clamp_visibility`, `entry_tag`, `set_visibility`.
+- `eidesoul/engine/turn/context.py:72-81,288-300` — `clamp_visibility`, `entry_tag`, `set_visibility`.
 - `eidesoul/engine/config.py:148-152` — `ApprovalConfig` (mode, ttl, settings).
-- `eidesoul/engine/prompts.py:195-355` — `system_prompt` (tempat aturan “di luar jangkauan → tolak singkat, jangan berspekulasi”).
+- `eidesoul/engine/turn/prompts.py:195-355` — `system_prompt` (tempat aturan “di luar jangkauan → tolak singkat, jangan berspekulasi”).
 - `eidesoul/engine/guard/patterns.py:12,14` — `SENSITIVE`/`INJECTION`, bentuk pola yang sudah ada; kelas kredensial §4.8 **belum ada di kode** (usulan, ikut ADR-0024 saat implementasi).
 - `eidesoul/engine/config.py:227-232` — `GuardConfig`, tempat `credential_patterns` ditambahkan.
 

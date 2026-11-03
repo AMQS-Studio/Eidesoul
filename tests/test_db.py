@@ -112,7 +112,7 @@ def test_state_roundtrip(tmp_path) -> None:
 def test_search_is_ilike_per_term(tmp_path) -> None:
     db = database()
     store = HistoryStore(db)
-    from eidesoul.engine.context import Message
+    from eidesoul.engine.turn.context import Message
 
     def message(mid: str, text: str, when: datetime) -> Message:
         return Message(id=mid, sender_name="Budi", sender_id="1", when=when, text=text)
@@ -130,7 +130,7 @@ def test_search_is_ilike_per_term(tmp_path) -> None:
 def test_search_time_window_and_other_chat_isolation(tmp_path) -> None:
     db = database()
     store = HistoryStore(db)
-    from eidesoul.engine.context import Message
+    from eidesoul.engine.turn.context import Message
 
     def message(mid: str, text: str, stamp: float) -> Message:
         return Message(

@@ -10,8 +10,6 @@ import pytest
 from support import build_config, database, role
 
 from eidesoul.engine.config import Config, VibeConfig
-from eidesoul.engine.decision import build_context
-from eidesoul.engine.prompts import system_prompt
 from eidesoul.engine.roles import Role
 from eidesoul.engine.stores.vibe import (
     PrototypeSource,
@@ -20,6 +18,8 @@ from eidesoul.engine.stores.vibe import (
     advance,
     load_bank,
 )
+from eidesoul.engine.turn.decision import build_context
+from eidesoul.engine.turn.prompts import system_prompt
 
 
 def make_config() -> Config:

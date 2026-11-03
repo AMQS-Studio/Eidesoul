@@ -160,7 +160,7 @@ ADR-0000 owns `Percept`, `Action`, and the `send`/`chat_history` placement; this
 - `eidesoul/engine/inbound.py` — `Percept`, `Action`, `GatewayCore`, `Directory`, `refusal`, `directory_refusal`.
 - `eidesoul/engine/agent.py` — `send_text`, `_gateway_for`, `ask_memory`, `ask_dispute`; the two direct body calls.
 - `eidesoul/engine/automation.py` — `_deliver`, `_gateway`, `_thread_gateway`.
-- `eidesoul/engine/reply.py` — the chat text policy (chunking, rendering).
+- `eidesoul/engine/turn/reply.py` — the chat text policy (chunking, rendering).
 - `eidesoul/engine/privacy.py`, `eidesoul/engine/relay.py` — callers that become door callers.
 - `eidesoul/engine/tools/__init__.py` — `rooms_of`, `cross_refusal`, the flat registry door.
 - `eidesoul/gateways/whatsapp/tools/chat_history.py`, `.../send_to.py` — body tools that become address-aware.

@@ -10,7 +10,7 @@ from neonize.proto.waE2E.WAWebProtobufsE2E_pb2 import Message
 from neonize.utils import extract_text
 
 from ...engine.config import Config
-from ...engine.context import Media, Quote, clean, human_size
+from ...engine.turn.context import Media, Quote, clean, human_size
 
 log = logging.getLogger(__name__)
 

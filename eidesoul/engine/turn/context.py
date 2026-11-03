@@ -10,12 +10,12 @@ from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from . import lexicon
-from .permissions import normalize
+from .. import lexicon
+from ..permissions import normalize
 
 if TYPE_CHECKING:
-    from .config import Config
-    from .stores.history import HistoryStore
+    from ..config import Config
+    from ..stores.history import HistoryStore
 
 log = logging.getLogger(__name__)
 

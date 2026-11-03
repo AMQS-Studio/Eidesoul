@@ -251,7 +251,7 @@ The old `max_index_chars` key is removed along with the index.
 - `eidesoul/engine/commands/skill.py` — the owner command; the model-facing `eidesoul/engine/tools/skill.py` is deleted.
 - `eidesoul/engine/agent.py:637-640` — where the skill index is assembled (the cutover point).
 - `eidesoul/engine/config.py:156-157` — `SkillsConfig.max_index_chars` (replaced, §5).
-- `eidesoul/engine/prompts.py:300,318` — the prompt rule that tells the model to manage its own skills (removed).
+- `eidesoul/engine/turn/prompts.py:300,318` — the prompt rule that tells the model to manage its own skills (removed).
 - `eidesoul/engine/schema.py` — tables `skills`, `skill_files`, `skill_usage` (new form in ADR-0016 §4.7); `turns`/`turn_steps` as the source of step counts.
 - `eidesoul/engine/llm.py:206-255` — the tool loop: the source of each episode's tool-chain signature (material for §4.8).
 - `eidesoul/engine/embed.py:53-62` — the embedder used by procedure retrieval.

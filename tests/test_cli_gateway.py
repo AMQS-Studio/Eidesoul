@@ -7,8 +7,8 @@ import io
 from support import build_config, database
 
 from eidesoul.engine.config import GatewaySettings
-from eidesoul.engine.context import WorkingMemory
 from eidesoul.engine.stores.history import HistoryStore
+from eidesoul.engine.turn.context import WorkingMemory
 
 
 class RecordingAgent:

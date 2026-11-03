@@ -3,8 +3,9 @@
 
 import asyncio
 
-from eidesoul.engine import decision as decision_module
-from eidesoul.engine.decision import (
+from eidesoul.engine.soul import Soul
+from eidesoul.engine.turn import decision as decision_module
+from eidesoul.engine.turn.decision import (
     Decision,
     build_context,
     decide,
@@ -12,7 +13,6 @@ from eidesoul.engine.decision import (
     ground_tone,
     parse_decision,
 )
-from eidesoul.engine.soul import Soul
 
 VALID = """```json
 {"addressed":"me","act":"reply","mode":"daily","tone":"warm",

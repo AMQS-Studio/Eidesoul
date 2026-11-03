@@ -11,13 +11,13 @@ from types import SimpleNamespace
 from sqlalchemy import insert, select
 from support import FakeLLM, build_config, database, inbound_message, make_agent
 
-from eidesoul.engine import observability
 from eidesoul.engine.commands.status import latency, percentile
 from eidesoul.engine.llm import LLM
 from eidesoul.engine.memory.store import MemoryStore
 from eidesoul.engine.roles import Role
 from eidesoul.engine.schema import llm_calls, messages, turns
 from eidesoul.engine.soul import Soul
+from eidesoul.engine.turn import observability
 
 
 class Capture(logging.Handler):

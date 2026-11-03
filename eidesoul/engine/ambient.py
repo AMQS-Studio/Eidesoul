@@ -12,11 +12,11 @@ from datetime import date, datetime
 
 from . import guard
 from .config import Config
-from .context import keyword_set
 from .currents import refresh
 from .roles import Role
 from .tools import ToolContext, execute
 from .tools.web_search import TOOL as WEB_SEARCH
+from .turn.context import keyword_set
 
 log = logging.getLogger(__name__)
 

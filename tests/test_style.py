@@ -7,9 +7,9 @@ from sqlalchemy import select
 from support import database
 
 from eidesoul.engine.config import StyleConfig
-from eidesoul.engine.reply import FENCE, clean_prose, human_chunks, inline_breaks
 from eidesoul.engine.schema import state
 from eidesoul.engine.stores.style import StyleStore
+from eidesoul.engine.turn.reply import FENCE, clean_prose, human_chunks, inline_breaks
 
 
 def humanize_reply(text: str, *, max_parts: int) -> list[str]:

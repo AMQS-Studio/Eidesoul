@@ -433,13 +433,13 @@ def make_agent(
 
     from eidesoul.engine.agent import Agent
     from eidesoul.engine.approvals import ApprovalStore
-    from eidesoul.engine.context import WorkingMemory
     from eidesoul.engine.memory.ledger import ActionLedger
     from eidesoul.engine.stores.affect import AffectStore
     from eidesoul.engine.stores.history import HistoryStore
     from eidesoul.engine.stores.recipes import RecipeStore
     from eidesoul.engine.stores.skills import SkillStore
     from eidesoul.engine.stores.style import StyleStore
+    from eidesoul.engine.turn.context import WorkingMemory
 
     db = database()
     config = build_config(
@@ -523,8 +523,8 @@ def inbound_message(
 ):
     from datetime import datetime
 
-    from eidesoul.engine.context import Message
     from eidesoul.engine.inbound import MESSAGE, Percept
+    from eidesoul.engine.turn.context import Message
 
     hints: dict[str, object] = {"dm": dm, "mention": mention, "reply": reply}
     if role_override:
@@ -560,12 +560,12 @@ def make_runtime(
     from eidesoul.engine.agent import Agent
     from eidesoul.engine.approvals import ApprovalStore
     from eidesoul.engine.config import load_config, load_host
-    from eidesoul.engine.context import WorkingMemory
     from eidesoul.engine.memory.ledger import ActionLedger
     from eidesoul.engine.stores.documents import DocumentStore
     from eidesoul.engine.stores.history import HistoryStore
     from eidesoul.engine.stores.recipes import RecipeStore
     from eidesoul.engine.stores.skills import SkillStore
+    from eidesoul.engine.turn.context import WorkingMemory
 
     base = Path(tmp_path)
     monkeypatch.setenv("K", "x")

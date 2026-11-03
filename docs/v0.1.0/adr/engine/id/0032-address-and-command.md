@@ -1,4 +1,4 @@
-> Terjemahan turunan — jangan sunting; sumber: engine/0032-address-and-command.md (sha256: e2aebaf6df87)
+> Terjemahan turunan — jangan sunting; sumber: engine/0032-address-and-command.md (sha256: 8cca7f51b9aa)
 > Ditulis tangan (bukan mesin), mengikuti sumber English baris demi baris.
 
 # ADR-0032: Satu Alamat, Satu Command — Keluaran Netral terhadap Body, Menolak daripada Menebak
@@ -165,7 +165,7 @@ ADR-0000 memiliki `Percept`, `Action`, dan penempatan `send`/`chat_history`; ADR
 - `eidesoul/engine/inbound.py` — `Percept`, `Action`, `GatewayCore`, `Directory`, `refusal`, `directory_refusal`.
 - `eidesoul/engine/agent.py` — `send_text`, `_gateway_for`, `ask_memory`, `ask_dispute`; dua panggilan body langsung.
 - `eidesoul/engine/automation.py` — `_deliver`, `_gateway`, `_thread_gateway`.
-- `eidesoul/engine/reply.py` — kebijakan teks chat (chunking, rendering).
+- `eidesoul/engine/turn/reply.py` — kebijakan teks chat (chunking, rendering).
 - `eidesoul/engine/privacy.py`, `eidesoul/engine/relay.py` — pemanggil yang menjadi pemanggil pintu.
 - `eidesoul/engine/tools/__init__.py` — `rooms_of`, `cross_refusal`, pintu registry datar.
 - `eidesoul/gateways/whatsapp/tools/chat_history.py`, `.../send_to.py` — tool body yang menjadi sadar-alamat.

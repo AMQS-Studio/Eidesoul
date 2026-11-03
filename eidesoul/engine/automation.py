@@ -33,7 +33,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from sqlalchemy import func, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
-from . import io, observability
+from . import io
 from .config import AutomationConfig, parse_quiet_hours
 from .db import Database
 from .i18n import t
@@ -47,6 +47,7 @@ from .schema import (
     automations,
 )
 from .tools import execute
+from .turn import observability
 
 log = logging.getLogger(__name__)
 
@@ -1747,7 +1748,7 @@ class AutomationWorker:
     async def _compose(self, step: dict, automation: dict, facts: dict) -> None:
         if self.agent.llm is None:
             raise StepError("compose needs the LLM", transient=False)
-        from .prompts import system_prompt
+        from .turn.prompts import system_prompt
 
         owner = str(automation["owner"])
         roles = self.agent.config.roles.for_person(owner)
@@ -1834,7 +1835,7 @@ class AutomationWorker:
         gateway = self._gateway(self._thread_gateway(target))
         if gateway is None:
             raise StepError("no gateway is available for send", transient=False)
-        from .reply import split_text
+        from .turn.reply import split_text
 
         body = str(text)
         if attribution:

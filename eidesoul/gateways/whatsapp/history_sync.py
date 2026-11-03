@@ -8,7 +8,7 @@ from neonize.proto.waCompanionReg.WAWebProtobufsCompanionReg_pb2 import DevicePr
 from neonize.proto.waE2E.WAWebProtobufsE2E_pb2 import Message as ProtoMessage
 from neonize.proto.waHistorySync.WAWebProtobufsHistorySync_pb2 import HistorySync
 
-from ...engine.context import AUTHOR_UNKNOWN, DEFAULT_VISIBILITY, Message
+from ...engine.turn.context import AUTHOR_UNKNOWN, DEFAULT_VISIBILITY, Message
 from . import directory
 from .identity import normalize_jid
 from .media import describe_media, event_time, message_text, quote_from_proto

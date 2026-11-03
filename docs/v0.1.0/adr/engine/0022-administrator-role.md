@@ -79,7 +79,7 @@ Moreover, the soul today only sees role + description (`prompts.py:141-147`), so
 | `eidesoul/engine/stores/recipes.py:29` | `DEFAULT_ROLES = ("administrator", "member")` |
 | `eidesoul/admin/templates.py:143,158-159` | default role in the template |
 | role name check on engine | every literal `"owner"` that means the role → `"administrator"` |
-| `eidesoul/engine/prompts.py:141-147` | `roles_block` includes `label` when present (`; panggil dia "..."`) |
+| `eidesoul/engine/turn/prompts.py:141-147` | `roles_block` includes `label` when present (`; panggil dia "..."`) |
 | `ADR-0015` `redact_infra: non_owner` | → value `non_administrator` |
 | `ADR-0019` `status_owner_only` | → `status_administrator_only` |
 | `ADR-0007` role approver | → `(administrator)` |
@@ -156,7 +156,7 @@ roles:
 - `roles.yaml:31` — the role key `administrator` (rename target).
 - `eidesoul/engine/stores/recipes.py:29` `DEFAULT_ROLES`.
 - `eidesoul/admin/templates.py:143,158-159`
-- `eidesoul/engine/prompts.py:141-147` `roles_block` (where `label` is used).
+- `eidesoul/engine/turn/prompts.py:141-147` `roles_block` (where `label` is used).
 - `eidesoul/engine/permissions.py` `normalize`/`allows` (the role name is normalized here).
 - `eidesoul/engine/config.py` the `roles` section (seed/import).
 - `eidesoul/engine/schema.py` `people.name` (fallback address if the label is empty); no change to the role table.

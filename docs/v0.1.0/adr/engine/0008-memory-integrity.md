@@ -314,7 +314,7 @@ memory:
 - `eidesoul/engine/tools/memory.py:69-105,175-183,230-234` — `add`, `kind`, `supersedes`, `veto`.
 - `eidesoul/engine/commands/memori.py:83-134` — the command door (source `command`).
 - `eidesoul/engine/ambient.py:251-256,310-315` — soul synthesis (source `ambient:<chat>`).
-- `eidesoul/engine/prompts.py:53-56,266,300-316` — the memory and crisis prompt rules.
+- `eidesoul/engine/turn/prompts.py:53-56,266,300-316` — the memory and crisis prompt rules.
 - `eidesoul/engine/schema.py:129-142` — the `people` table (relationship trust, not memory trust).
 
 ---

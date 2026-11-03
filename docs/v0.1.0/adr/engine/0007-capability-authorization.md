@@ -444,9 +444,9 @@ role. The implementation follows in `chat_history`/`send` with one shared helper
 - `eidesoul/gateways/whatsapp/tools/chat_history.py` — `chat_history` and the separation of this room from other rooms.
 - `eidesoul/engine/memory/rekey.py:83-97` — the `_chats(db, person_id)` pattern for `rooms_of(person_id)`.
 - `eidesoul/engine/inbound.py:29-70` — the `Gateway` contract (where the `participants(thread_id)` capability is added, optional).
-- `eidesoul/engine/context.py:72-81,288-300` — `clamp_visibility`, `entry_tag`, `set_visibility`.
+- `eidesoul/engine/turn/context.py:72-81,288-300` — `clamp_visibility`, `entry_tag`, `set_visibility`.
 - `eidesoul/engine/config.py:148-152` — `ApprovalConfig` (mode, ttl, settings).
-- `eidesoul/engine/prompts.py:195-355` — `system_prompt` (where the "out of reach → short refusal, do not speculate" rule lives).
+- `eidesoul/engine/turn/prompts.py:195-355` — `system_prompt` (where the "out of reach → short refusal, do not speculate" rule lives).
 - `eidesoul/engine/guard/patterns.py:12,14` — `SENSITIVE`/`INJECTION`, the existing pattern shape; the §4.8 credential class **does not exist in code** (a proposal, part of ADR-0024 at implementation).
 - `eidesoul/engine/config.py:227-232` — `GuardConfig`, where `credential_patterns` is added.
 

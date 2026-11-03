@@ -562,6 +562,51 @@ def cmd_new(root: Path, title: str, sub: str = "root") -> int:
     return 0
 
 
+def stamp_line(source: Path, root: Path) -> str:
+    """The derivative header: source relative to the ADR home, plus its first 12 hex."""
+    rel = source.relative_to(adr_dir(root)).as_posix()
+    digest = hashlib.sha256(read(source).encode("utf-8")).hexdigest()[:12]
+    return f"> Terjemahan turunan — jangan sunting; sumber: {rel} (sha256: {digest})"
+
+
+def stamp_one(root: Path, source: Path) -> str:
+    """Rewrite line 1 of the source's Indonesian copy; return the copy's relative path."""
+    copy = derivative_of(root, source)
+    if not copy.is_file():
+        raise FileNotFoundError(copy.as_posix())
+    lines = read(copy).splitlines()
+    header = stamp_line(source, root)
+    lines[0] = header
+    copy.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    return copy.relative_to(adr_dir(root)).as_posix()
+
+
+def cmd_stamp(root: Path, target: str = "") -> int:
+    """ADR-0031 §4.6: after an English ADR is edited, write the hash of its copy."""
+    if target:
+        source = Path(target)
+        if not source.is_absolute():
+            source = (root / target).resolve()
+        if not source.is_file():
+            print(f"GAGAL: {source} tidak ada")
+            return 1
+        try:
+            print(f"stamped {stamp_one(root, source)}")
+        except FileNotFoundError as exc:
+            print(f"GAGAL: turunan tidak ada: {exc}")
+            return 1
+        return 0
+    stamped = 0
+    for copy in derivative_files(root):
+        source = source_of_derivative(root, copy)
+        if not source.is_file():
+            continue
+        print(f"stamped {stamp_one(root, source)}")
+        stamped += 1
+    print(f"TURUNAN {stamped} berkas disegarkan")
+    return 0
+
+
 def cmd_translate_check(root: Path) -> int:
     problems: list[str] = []
     files = derivative_files(root)
@@ -598,12 +643,22 @@ def main(argv: list[str] | None = None) -> int:
         help="folder for --new: root (cross-cutting, default), engine, or web",
     )
     group.add_argument("--translate-check", action="store_true", help="verify derivative hashes")
+    group.add_argument(
+        "--stamp",
+        metavar="PATH",
+        nargs="?",
+        const="",
+        default=None,
+        help="rewrite derivative hashes (one source, or every pair)",
+    )
     args = parser.parse_args(argv)
     root = Path(args.root).resolve()
     if args.check:
         return cmd_check(root)
     if args.new:
         return cmd_new(root, args.new, args.dir)
+    if args.stamp is not None:
+        return cmd_stamp(root, args.stamp)
     return cmd_translate_check(root)
 
 

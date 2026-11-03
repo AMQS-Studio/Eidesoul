@@ -6,10 +6,10 @@ The archive belongs to the body that owns one; the engine keeps no archive tool 
 
 from datetime import datetime, timedelta
 
-from ....engine.context import body_note, entry_tag
 from ....engine.inbound import directory_refusal
 from ....engine.registry import Handler
 from ....engine.tools import ToolContext, _int, cross_refusal
+from ....engine.turn.context import body_note, entry_tag
 
 BODY_LIMIT = 600
 CANDIDATE_LIMIT = 20

@@ -6,8 +6,8 @@ import asyncio
 from support import make_agent, role
 from test_whatsapp_gateway import make_gateway
 
-from eidesoul.engine.context import Message
 from eidesoul.engine.tools import execute
+from eidesoul.engine.turn.context import Message
 from eidesoul.gateways.whatsapp import directory
 
 

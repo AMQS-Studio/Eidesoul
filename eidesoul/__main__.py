@@ -26,7 +26,7 @@ log = logging.getLogger(__name__)
 
 def setup_logging() -> None:
     """Boot default: text format; `build_runtime` applies `engine.logging` once loaded."""
-    from .engine import observability
+    from .engine.turn import observability
 
     observability.install("text", "INFO")
 
@@ -57,7 +57,6 @@ async def build_runtime(config_path: str | None, *, console: bool = False):
     from .engine.agent import Agent
     from .engine.ambient import Ambient
     from .engine.config import load_host, resolve_database_url
-    from .engine.context import WorkingMemory
     from .engine.db import Database
     from .engine.lease import Lease, lock_data_dir
     from .engine.llm import LLM
@@ -74,6 +73,7 @@ async def build_runtime(config_path: str | None, *, console: bool = False):
     from .engine.stores.style import StyleStore
     from .engine.stores.vibe import VibeRunner
     from .engine.supervisor import Supervisor
+    from .engine.turn.context import WorkingMemory
     from .gateways import build_gateways, ensure_schemas
 
     host, paths = load_host(config_path)
@@ -86,7 +86,7 @@ async def build_runtime(config_path: str | None, *, console: bool = False):
     documents = DocumentStore(db, paths, sync=host.sync_documents)
     documents.seed()
     config = load_config(paths.config, documents=documents, require_gateway=True)
-    from .engine import observability
+    from .engine.turn import observability
 
     observability.configure(config.logging)
     try:
@@ -284,9 +284,7 @@ async def selftest(config: Config) -> int:
     """Exercise stores, tools, and the LLM against the configured Postgres store."""
 
     from .engine.commands import REGISTRY as COMMANDS
-    from .engine.context import Message
     from .engine.db import Database
-    from .engine.decision import Appraisal, Decision, RelationshipDelta
     from .engine.i18n import t
     from .engine.llm import LLM
     from .engine.mcp import Hub
@@ -301,6 +299,8 @@ async def selftest(config: Config) -> int:
     from .engine.stores.style import StyleStore
     from .engine.tools import REGISTRY, ToolContext, execute
     from .engine.tools.sandbox import resolve_runtime
+    from .engine.turn.context import Message
+    from .engine.turn.decision import Appraisal, Decision, RelationshipDelta
     from .gateways import ensure_schemas
 
     hub = Hub(config.mcp)

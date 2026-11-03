@@ -1,4 +1,4 @@
-> Terjemahan turunan — jangan sunting; sumber: engine/0025-turn-cost.md (sha256: 1b57f7086169)
+> Terjemahan turunan — jangan sunting; sumber: engine/0025-turn-cost.md (sha256: 6207e736689f)
 > Teks ini ditulis manusia; baris yang tidak bisa diterjemahkan mesin disalin apa adanya ke sumber English, jadi sumber bercampur dua bahasa.
 
 # ADR-0025: Biaya Turn — Prefix Stabil, Gating `polish`, dan Anggaran Panggilan
@@ -18,9 +18,9 @@
 
 | Fakta | Bukti |
 |---|---|
-| Semua blok prompt dirangkai menjadi **satu** pesan sistem, ditutup baris bahasa + `Date: ...` | `eidesoul/engine/prompts.py:187,355-389` |
-| Blok `self` memuat `Mode`, `uptime`, `lease` — berubah tanpa perubahan soul/config | `eidesoul/engine/prompts.py:150-186` (`:170`) |
-| Blok `topic`/`currents`/`style`/`person_style`/`skills` masuk `COMPETING` dan urutannya bergantung salience | `eidesoul/engine/salience.py:20-24,48-71`, `eidesoul/engine/prompts.py:373-385` |
+| Semua blok prompt dirangkai menjadi **satu** pesan sistem, ditutup baris bahasa + `Date: ...` | `eidesoul/engine/turn/prompts.py:187,355-389` |
+| Blok `self` memuat `Mode`, `uptime`, `lease` — berubah tanpa perubahan soul/config | `eidesoul/engine/turn/prompts.py:150-186` (`:170`) |
+| Blok `topic`/`currents`/`style`/`person_style`/`skills` masuk `COMPETING` dan urutannya bergantung salience | `eidesoul/engine/turn/salience.py:20-24,48-71`, `eidesoul/engine/turn/prompts.py:373-385` |
 | Panggilan LLM per turn: decision, lingkar balasan dengan tool, lalu dua panggilan perapian | `eidesoul/engine/agent.py:503,758,810,829` |
 | `polish` dan `regulate` tidak punya pemicu: dipanggil setiap turn (kecuali kosong) | `eidesoul/engine/character.py:122,293` |
 | Tells deterministik sudah ada tapi belum dipakai sebagai gerbang | `eidesoul/engine/character.py:62,105` |
@@ -136,11 +136,11 @@ engine:
 
 ## 10. Referensi kode
 
-- `eidesoul/engine/prompts.py:187` — `system_prompt` (tempat pemisahan stabil/volatil).
-- `eidesoul/engine/prompts.py:355-389` — perakitan blok, `salience.select`, join, baris bahasa + `Date`.
-- `eidesoul/engine/prompts.py:150-186` — `self_block` (mode/uptime/lease; kandidat pertama pindah ke blok volatil).
-- `eidesoul/engine/prompts.py:141-147` — `roles_block`.
-- `eidesoul/engine/salience.py:20-24,48-71` — `COMPETING`/`ORDER`/`select`.
+- `eidesoul/engine/turn/prompts.py:187` — `system_prompt` (tempat pemisahan stabil/volatil).
+- `eidesoul/engine/turn/prompts.py:355-389` — perakitan blok, `salience.select`, join, baris bahasa + `Date`.
+- `eidesoul/engine/turn/prompts.py:150-186` — `self_block` (mode/uptime/lease; kandidat pertama pindah ke blok volatil).
+- `eidesoul/engine/turn/prompts.py:141-147` — `roles_block`.
+- `eidesoul/engine/turn/salience.py:20-24,48-71` — `COMPETING`/`ORDER`/`select`.
 - `eidesoul/engine/agent.py:503,758,810,829` — decision, lingkar balasan, `polish`, `regulate`.
 - `eidesoul/engine/character.py:62,105,122,293` — tell deterministik dan dua fungsi perapian.
 - `eidesoul/engine/llm.py:160-200` — lingkar dengan `run_budget_seconds` dan pesan anggaran.

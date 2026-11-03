@@ -1,8 +1,8 @@
 """Prompt block competition contract: mandatory always fits, optional ones compete when tight."""
 
 
-from eidesoul.engine.context import keyword_set
-from eidesoul.engine.salience import COMPETING, MANDATORY, ORDER, select
+from eidesoul.engine.turn.context import keyword_set
+from eidesoul.engine.turn.salience import COMPETING, MANDATORY, ORDER, select
 
 
 def names(kept: list[tuple[str, str]]) -> list[str]:

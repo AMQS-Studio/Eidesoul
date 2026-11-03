@@ -1,4 +1,4 @@
-> Terjemahan turunan — jangan sunting; sumber: 0031-engine-structure.md (sha256: c4656f41e920)
+> Terjemahan turunan — jangan sunting; sumber: 0031-engine-structure.md (sha256: ba8a5bc8ff29)
 > Ditulis tangan (bukan mesin), mengikuti sumber English baris demi baris.
 
 # ADR-0031: Struktur Engine — Tata Letak, Anggaran Pertumbuhan, dan Baseline Toolchain
@@ -189,7 +189,7 @@ ADR-0009 mengatur di mana keputusan ini hidup dan menggerbangi salinannya. ADR-0
 ## 11. Referensi kode
 
 - `eidesoul/engine/agent.py` — handle; pengiriman dan counter keluar darinya di §4.2.
-- `eidesoul/engine/reply.py` — menerima helper pengiriman.
+- `eidesoul/engine/turn/reply.py` — menerima helper pengiriman.
 - `eidesoul/engine/runtime.py` — menerima counter kapabilitas.
 - `eidesoul/engine/memory/store.py` — port tunggal; statement pindah ke `memory/queries.py`.
 - `eidesoul/engine/automation.py` — salinan pengiriman kedua dihapus di §4.2.

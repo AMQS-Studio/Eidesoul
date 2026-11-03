@@ -127,9 +127,9 @@ def test_auto_capture_runs_for_memory_role(tmp_path) -> None:
     from support import build_config, database
 
     from eidesoul.engine.cognition import CognitionWorker
-    from eidesoul.engine.context import Message
     from eidesoul.engine.memory.store import MemoryStore
     from eidesoul.engine.stores.history import HistoryStore
+    from eidesoul.engine.turn.context import Message
 
     memory = FakeMemory()
     env = make_agent(tmp_path, memory=memory)

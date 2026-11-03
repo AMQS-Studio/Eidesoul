@@ -1,4 +1,4 @@
-> Terjemahan turunan — jangan sunting; sumber: engine/0015-capability-manifest.md (sha256: 6c1fdaac0c58)
+> Terjemahan turunan — jangan sunting; sumber: engine/0015-capability-manifest.md (sha256: 5f35d161d950)
 > Teks ini ditulis manusia; baris yang tidak bisa diterjemahkan mesin disalin apa adanya ke sumber English, jadi sumber bercampur dua bahasa.
 
 # ADR-0015: Payload Bertingkat & Manifest Kapabilitas
@@ -458,14 +458,14 @@ engine:
 - `scripts/affect.py`, `scripts/patterns.py` — preseden pola “data + skrip penjaga” (`--check`).
 - `README.md`, `README.id.md` — sumber dokumen produk (indeks subjudul dihitung dari berkas ini).
 - `eidesoul/engine/tools/read.py:28-30` + `tools/__init__.py:120-165` — batas `workspace_roots` (alasan `read` tidak bisa menjangkau direktori proyek).
-- `eidesoul/engine/prompts.py:150-186` — `self_block` (tempat redaksi infra).
-- `eidesoul/engine/prompts.py:190-386` — `system_prompt`, daftar blok, `salience.select`, `language_line`, `Date`.
-- `eidesoul/engine/salience.py:38-60` — `JOIN`, `block_score`, `select` (tempat blok pinned dilewatkan).
+- `eidesoul/engine/turn/prompts.py:150-186` — `self_block` (tempat redaksi infra).
+- `eidesoul/engine/turn/prompts.py:190-386` — `system_prompt`, daftar blok, `salience.select`, `language_line`, `Date`.
+- `eidesoul/engine/turn/salience.py:38-60` — `JOIN`, `block_score`, `select` (tempat blok pinned dilewatkan).
 - `eidesoul/engine/llm.py:150-260` — loop tool: `tools`/`by_name`, `kwargs["tools"]`, `execute`, budget, guard “repeated call”.
 - `eidesoul/engine/tools/__init__.py:180-235` — `execute` (satu gerbang izin) dan pesan error yang sudah menyebut nama tool.
 - `eidesoul/engine/permissions.py:56` + `eidesoul/engine/commands/help.py` — `commands_for` (sumber daftar command).
 - `eidesoul/engine/registry.py` — `Handler` (`name`, `description`, `usage`, `parameters`) sebagai sumber detail `info`.
-- `eidesoul/engine/context.py:641-683` + `FOOTER` (`:55-58`) — format user content yang tidak berubah.
+- `eidesoul/engine/turn/context.py:641-683` + `FOOTER` (`:55-58`) — format user content yang tidak berubah.
 - `eidesoul/engine/agent.py:279-283,759-788` — `_specs(roles)` dan perakitan `system_prompt`.
 
 ---

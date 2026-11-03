@@ -14,7 +14,11 @@ from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from ..config import SearchConfig
-from ..context import (
+from ..db import Database
+from ..memory import CaptureJobSink
+from ..memory.store import MemoryStore
+from ..schema import memories_readable, message_media, messages, threads, turns
+from ..turn.context import (
     AUTHOR_RANK,
     AUTHOR_UNKNOWN,
     Media,
@@ -22,10 +26,6 @@ from ..context import (
     Quote,
     clamp_visibility,
 )
-from ..db import Database
-from ..memory import CaptureJobSink
-from ..memory.store import MemoryStore
-from ..schema import memories_readable, message_media, messages, threads, turns
 
 log = logging.getLogger(__name__)
 

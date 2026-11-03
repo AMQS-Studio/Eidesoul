@@ -6,8 +6,8 @@ from datetime import datetime
 from support import database
 
 from eidesoul.engine.config import SearchConfig
-from eidesoul.engine.context import Message
 from eidesoul.engine.stores.history import HistoryStore
+from eidesoul.engine.turn.context import Message
 
 
 def message(mid: str, text: str, stamp: float = 0.0, sender: str = "1") -> Message:

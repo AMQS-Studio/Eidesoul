@@ -6,7 +6,8 @@ from datetime import datetime
 
 from neonize.proto.waE2E.WAWebProtobufsE2E_pb2 import ProtocolMessage
 
-from ...engine.context import (
+from ...engine.inbound import Percept
+from ...engine.turn.context import (
     AUTHOR_BOT,
     AUTHOR_MANUAL,
     AUTHOR_UNKNOWN,
@@ -14,7 +15,6 @@ from ...engine.context import (
     Message,
     Quote,
 )
-from ...engine.inbound import Percept
 from . import directory
 from .identity import normalize_jid
 from .media import contexts, describe_media, event_time, message_text, views_once

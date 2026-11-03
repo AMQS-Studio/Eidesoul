@@ -8,12 +8,12 @@ state. Every timestamp comes from `message.when` so the replay is deterministic.
 import dataclasses
 from dataclasses import dataclass
 
-from . import salience
 from .config import Config
-from .context import AUTHOR_BOT, AUTHOR_MANUAL, Message, prompt_entry
-from .decision import decide
-from .prompts import system_prompt
 from .roles import Role
+from .turn import salience
+from .turn.context import AUTHOR_BOT, AUTHOR_MANUAL, Message, prompt_entry
+from .turn.decision import decide
+from .turn.prompts import system_prompt
 
 REPLY_WINDOW = 1
 TRANSCRIPT_LINES = 30

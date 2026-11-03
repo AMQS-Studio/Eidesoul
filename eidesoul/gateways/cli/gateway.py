@@ -8,9 +8,9 @@ import sys
 import time
 from datetime import datetime
 
-from ...engine.context import Message
 from ...engine.inbound import MESSAGE, CoreDefaults, Percept
 from ...engine.registry import Handler
+from ...engine.turn.context import Message
 from .config import CliSettings
 
 log = logging.getLogger(__name__)

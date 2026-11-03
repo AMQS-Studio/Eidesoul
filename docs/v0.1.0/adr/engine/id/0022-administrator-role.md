@@ -1,4 +1,4 @@
-> Terjemahan turunan — jangan sunting; sumber: engine/0022-administrator-role.md (sha256: 984cb9c02521)
+> Terjemahan turunan — jangan sunting; sumber: engine/0022-administrator-role.md (sha256: d312e93ce7b1)
 > Teks ini ditulis manusia; baris yang tidak bisa diterjemahkan mesin disalin apa adanya ke sumber English, jadi sumber bercampur dua bahasa.
 
 # ADR-0022: Peran `administrator` — Nama, Proteksi, dan Sebutan
@@ -82,7 +82,7 @@ Selain itu, soul hari ini hanya melihat nama role + deskripsi (`prompts.py:141-1
 | `eidesoul/engine/stores/recipes.py:29` | `DEFAULT_ROLES = ("administrator", "member")` |
 | `eidesoul/admin/templates.py:143,158-159` | template role default |
 | Pemeriksaan nama role di engine | semua literal `"owner"` yang berarti role → `"administrator"` |
-| `eidesoul/engine/prompts.py:141-147` | `roles_block` menyertakan `label` bila ada (`; panggil dia "…"`) |
+| `eidesoul/engine/turn/prompts.py:141-147` | `roles_block` menyertakan `label` bila ada (`; panggil dia "…"`) |
 | `ADR-0015` `redact_infra: non_owner` | nilai → `non_administrator` |
 | `ADR-0019` `status_owner_only` | → `status_administrator_only` |
 | `ADR-0007` role approver | → `(administrator)` |
@@ -159,7 +159,7 @@ roles:
 - `roles.yaml:31` — key role `administrator` (target rename).
 - `eidesoul/engine/stores/recipes.py:29` — `DEFAULT_ROLES`.
 - `eidesoul/admin/templates.py:143,158-159` — template role default.
-- `eidesoul/engine/prompts.py:141-147` — `roles_block` (tempat `label` dipakai).
+- `eidesoul/engine/turn/prompts.py:141-147` — `roles_block` (tempat `label` dipakai).
 - `eidesoul/engine/permissions.py` — `normalize`/`allows` (nama role dinormalisasi di sini).
 - `eidesoul/engine/config.py` — bagian `roles` (seed/import).
 - `eidesoul/engine/schema.py` — `people.name` (fallback alamat bila label kosong); tidak ada perubahan tabel role.

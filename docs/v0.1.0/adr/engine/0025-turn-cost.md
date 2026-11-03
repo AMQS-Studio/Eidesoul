@@ -15,9 +15,9 @@
 
 | Fact | Evidence |
 |---|---|
-| All prompt blocks are joined into **one** system message, closed by the language line + `Date: ...` | `eidesoul/engine/prompts.py:187,355-389` |
-| Block `self` holds `Mode`, `uptime`, `lease` — it changes without a soul/config change | `eidesoul/engine/prompts.py:150-186` (`:170`) |
-| Blocks `topic`/`currents`/`style`/`person_style`/`skills` enter `COMPETING` and their order depends on salience | `eidesoul/engine/salience.py:20-24,48-71`, `eidesoul/engine/prompts.py:373-385` |
+| All prompt blocks are joined into **one** system message, closed by the language line + `Date: ...` | `eidesoul/engine/turn/prompts.py:187,355-389` |
+| Block `self` holds `Mode`, `uptime`, `lease` — it changes without a soul/config change | `eidesoul/engine/turn/prompts.py:150-186` (`:170`) |
+| Blocks `topic`/`currents`/`style`/`person_style`/`skills` enter `COMPETING` and their order depends on salience | `eidesoul/engine/turn/salience.py:20-24,48-71`, `eidesoul/engine/turn/prompts.py:373-385` |
 | LLM calls per turn: decision, reply loop with tools, then two polish calls | `eidesoul/engine/agent.py:503,758,810,829` |
 | `polish` and `regulate` have no trigger: they are called every turn (unless empty) | `eidesoul/engine/character.py:122,293` |
 | Deterministic tells already exist but are not yet used as a gate | `eidesoul/engine/character.py:62,105` |
@@ -133,11 +133,11 @@ engine:
 
 ## 10. Code references
 
-- `eidesoul/engine/prompts.py:187` — `system_prompt` (where the stable/volatile split goes).
-- `eidesoul/engine/prompts.py:355-389` — block assembly, `salience.select`, join, language line + `Date`.
-- `eidesoul/engine/prompts.py:150-186` — `self_block` (mode/uptime/lease; the first candidate moves to the volatile block).
-- `eidesoul/engine/prompts.py:141-147` — `roles_block`.
-- `eidesoul/engine/salience.py:20-24,48-71` — `COMPETING`/`ORDER`/`select`.
+- `eidesoul/engine/turn/prompts.py:187` — `system_prompt` (where the stable/volatile split goes).
+- `eidesoul/engine/turn/prompts.py:355-389` — block assembly, `salience.select`, join, language line + `Date`.
+- `eidesoul/engine/turn/prompts.py:150-186` — `self_block` (mode/uptime/lease; the first candidate moves to the volatile block).
+- `eidesoul/engine/turn/prompts.py:141-147` — `roles_block`.
+- `eidesoul/engine/turn/salience.py:20-24,48-71` — `COMPETING`/`ORDER`/`select`.
 - `eidesoul/engine/agent.py:503,758,810,829` — decision, reply loop, `polish`, `regulate`.
 - `eidesoul/engine/character.py:62,105,122,293` — deterministic tells and the two polish functions.
 - `eidesoul/engine/llm.py:160-200` — the loop with `run_budget_seconds` and the budget message.

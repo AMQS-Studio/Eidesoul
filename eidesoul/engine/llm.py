@@ -8,12 +8,13 @@ import time
 
 from openai import APIError, APITimeoutError, AsyncOpenAI
 
-from . import guard, io, observability
+from . import guard, io
 from .config import Config
 from .i18n import t
 from .registry import Handler, allows
 from .schema import llm_calls
 from .tools import ToolContext, execute
+from .turn import observability
 
 log = logging.getLogger(__name__)
 

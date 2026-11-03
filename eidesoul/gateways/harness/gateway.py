@@ -7,10 +7,10 @@ from datetime import datetime
 from pathlib import Path
 
 from ...engine.config import Config, GatewaySettings
-from ...engine.context import Message
 from ...engine.inbound import TASK, Action, CoreDefaults, Percept
 from ...engine.registry import Handler, discover
 from ...engine.tools import FAMILIES
+from ...engine.turn.context import Message
 
 log = logging.getLogger(__name__)
 

@@ -3,11 +3,12 @@
 
 from datetime import date
 
-from . import lexicon, salience
-from .config import Config
-from .roles import Role
-from .runtime import RuntimeFacts
-from .soul import language_line
+from .. import lexicon
+from ..config import Config
+from ..roles import Role
+from ..runtime import RuntimeFacts
+from ..soul import language_line
+from . import salience
 
 MERGE_SEPARATOR = "\n\n"
 
@@ -42,7 +43,7 @@ def _infra_visible(roles: tuple[Role, ...], mode: str) -> bool:
 
 
 def _capability_index(config: Config, roles: tuple[Role, ...]) -> str:
-    from .self_knowledge import SelfKnowledge
+    from ..self_knowledge import SelfKnowledge
 
     return SelfKnowledge(config).index(roles)
 

@@ -12,27 +12,12 @@ from contextlib import asynccontextmanager
 from dataclasses import asdict, replace
 from pathlib import Path
 
-from . import assembly, guard, io, observability, plugins
+from . import guard, io, plugins
 from .approvals import ApprovalStore
 from .character import effective_limits, polish, regulate
 from .commands import REGISTRY as CORE_COMMANDS
 from .commands import CommandContext
 from .config import Config
-from .context import (
-    Message,
-    WorkingMemory,
-    build_user_content,
-    fallback_content,
-    keyword_set,
-    prompt_entry,
-)
-from .decision import (
-    Appraisal,
-    Decision,
-    RelationshipDelta,
-    decide_turn,
-    decision_from_row,
-)
 from .guard import SafetyPolicy, SandboxGuard, build_safety
 from .i18n import reload_catalogs, t
 from .identity import IdentityStore, display_target
@@ -51,15 +36,31 @@ from .memory.ledger import OutboundLedger
 from .patterns import load_lexicon, room_register, select_patterns
 from .permissions import command_allowed, commands_for, tool_patterns, tools_for
 from .privacy import PrivacyService
-from .prompts import CRISIS_SAFETY, away_block, character_block, research_block, system_prompt
 from .registry import Handler, Registry
-from .reply import Delivery, plan_chunks
 from .roles import Role
 from .runtime import ACTIVE_GENERATION as runtime_generation
 from .runtime import RuntimeFacts
 from .stores.turns import SIDE_EFFECTING, TurnStore, args_hash
 from .tools import REGISTRY as CORE_TOOLS
 from .tools import ToolContext
+from .turn import assembly, observability
+from .turn.context import (
+    Message,
+    WorkingMemory,
+    build_user_content,
+    fallback_content,
+    keyword_set,
+    prompt_entry,
+)
+from .turn.decision import (
+    Appraisal,
+    Decision,
+    RelationshipDelta,
+    decide_turn,
+    decision_from_row,
+)
+from .turn.prompts import CRISIS_SAFETY, away_block, character_block, research_block, system_prompt
+from .turn.reply import Delivery, plan_chunks
 
 log = logging.getLogger(__name__)
 

@@ -186,7 +186,7 @@ ADR-0009 governs where these decisions live and gates the copies. ADR-0016 is un
 ## 11. Code references
 
 - `eidesoul/engine/agent.py` — the handle; delivery and counters leave it in §4.2.
-- `eidesoul/engine/reply.py` — receives the delivery helpers.
+- `eidesoul/engine/turn/reply.py` — receives the delivery helpers.
 - `eidesoul/engine/runtime.py` — receives the capability counters.
 - `eidesoul/engine/memory/store.py` — the single port; statements move to `memory/queries.py`.
 - `eidesoul/engine/automation.py` — second delivery copy removed in §4.2.

@@ -11,9 +11,9 @@ from support import database
 
 from eidesoul.engine import guard
 from eidesoul.engine.config import AffectConfig
-from eidesoul.engine.decision import Appraisal, Decision, RelationshipDelta
 from eidesoul.engine.schema import drives, people, state
 from eidesoul.engine.stores.affect import AffectStore
+from eidesoul.engine.turn.decision import Appraisal, Decision, RelationshipDelta
 
 CHAT = "120363415422117951@g.us"
 OTHER = "120363000000000000@g.us"

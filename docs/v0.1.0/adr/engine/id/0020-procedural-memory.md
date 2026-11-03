@@ -1,4 +1,4 @@
-> Terjemahan turunan — jangan sunting; sumber: engine/0020-procedural-memory.md (sha256: 1b47252689c7)
+> Terjemahan turunan — jangan sunting; sumber: engine/0020-procedural-memory.md (sha256: 787afa6d0479)
 > Teks ini ditulis manusia; baris yang tidak bisa diterjemahkan mesin disalin apa adanya ke sumber English, jadi sumber bercampur dua bahasa.
 
 # ADR-0020: Prosedur Turunan — Skill sebagai Pertumbuhan Soul, Bukan Tool
@@ -254,7 +254,7 @@ Kunci lama `max_index_chars` dihapus bersama indeks.
 - `eidesoul/engine/commands/skill.py` — perintah owner; `eidesoul/engine/tools/skill.py` untuk model sudah dihapus.
 - `eidesoul/engine/agent.py:637-640` — tempat indeks skill disusun (titik cutover).
 - `eidesoul/engine/config.py:156-157` — `SkillsConfig.max_index_chars` (diganti §5).
-- `eidesoul/engine/prompts.py:300,318` — aturan prompt yang menyuruh model mengurus skill sendiri (dihapus).
+- `eidesoul/engine/turn/prompts.py:300,318` — aturan prompt yang menyuruh model mengurus skill sendiri (dihapus).
 - `eidesoul/engine/schema.py` — tabel `skills`, `skill_files`, `skill_usage` (bentuk baru di ADR-0016 §4.7); `turns`/`turn_steps` sebagai sumber angka langkah.
 - `eidesoul/engine/llm.py:206-255` — loop tool: sumber signature rantai tool per episode (bahan §4.8).
 - `eidesoul/engine/embed.py:53-62` — embedder yang dipakai retrieval prosedur.

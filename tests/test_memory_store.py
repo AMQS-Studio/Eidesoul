@@ -13,13 +13,13 @@ from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
 from support import FakeMem0, build_config, database
 
-from eidesoul.engine.context import Message
 from eidesoul.engine.lease import Lease, Superseded
 from eidesoul.engine.memory import MemoryHit
 from eidesoul.engine.memory.integrity import TRUST_INFERENCE, TRUST_OTHER, TRUST_SELF
 from eidesoul.engine.memory.mem0 import Mem0Backend
 from eidesoul.engine.memory.store import MemoryStore
 from eidesoul.engine.stores.history import HistoryStore
+from eidesoul.engine.turn.context import Message
 
 
 class FakeIndex:

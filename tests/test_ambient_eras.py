@@ -8,9 +8,9 @@ from support import FakeLLM, build_config, database
 
 from eidesoul.engine.ambient import Ambient, drift
 from eidesoul.engine.config import AffectConfig
-from eidesoul.engine.context import Message
 from eidesoul.engine.stores.affect import AffectStore
 from eidesoul.engine.stores.history import HistoryStore
+from eidesoul.engine.turn.context import Message
 
 CHAT = "chat"
 

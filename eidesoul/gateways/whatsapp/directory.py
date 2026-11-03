@@ -9,9 +9,9 @@ from pathlib import Path
 
 from sqlalchemy import and_, func, select, update
 
-from ...engine.context import Message
 from ...engine.db import Database
 from ...engine.schema import messages, person_links, threads
+from ...engine.turn.context import Message
 from .schema import wa_contacts, wa_lid_map
 
 log = logging.getLogger(__name__)

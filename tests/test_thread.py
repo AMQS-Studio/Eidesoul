@@ -6,9 +6,9 @@ from datetime import datetime, timedelta
 
 from support import build_config, database
 
-from eidesoul.engine.assembly import TAIL_MAX_MESSAGES, thread
-from eidesoul.engine.context import Message, Quote, build_user_content
 from eidesoul.engine.stores.history import HistoryStore
+from eidesoul.engine.turn.assembly import TAIL_MAX_MESSAGES, thread
+from eidesoul.engine.turn.context import Message, Quote, build_user_content
 
 CHAT = "chat"
 START = datetime(2026, 1, 1, 10)
