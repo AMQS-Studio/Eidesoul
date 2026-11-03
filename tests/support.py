@@ -454,6 +454,8 @@ class FakeLLM:
             "reason": "test",
         }
         self.system = ""
+        self.complete_system = ""
+        self.complete_user = ""
         self.ctx = None
         self.calls = 0
         self.decisions = 0
@@ -462,6 +464,8 @@ class FakeLLM:
     async def complete(self, system, user, **kwargs):
         import json
 
+        self.complete_system = str(system)
+        self.complete_user = str(user)
         self.decisions += 1
         return json.dumps(self.decision)
 

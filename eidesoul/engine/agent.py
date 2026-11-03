@@ -1188,7 +1188,7 @@ class Agent:
                         replied=bool(inbound.hints.get("reply")),
                         away=away,
                         vibe=vibe,
-                        soul=self.soul,
+                        soul=self.soul, feelings=emotion is not None,
                         deadline=deadline,
                         min_call_seconds=min_call,
                         annoyance=annoyance,

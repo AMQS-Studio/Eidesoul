@@ -10,7 +10,7 @@ import json
 import logging
 from dataclasses import dataclass, replace
 
-DECISION_PROMPT = """Your ONLY task is to decide what to do with the last message. Do not write a reply, do not explain
+DECISION_RULES = """Your ONLY task is to decide what to do with the last message. Do not write a reply, do not explain
 the process, do not mention AI.
 
 Decision rules:
@@ -24,29 +24,49 @@ Decision rules:
   enough. Silence is your per-message decision, not a forced default.
 - "mode": "professional" ONLY for real work tasks that need tools/evidence (check, recap, count, fetch
   data, send a file). Otherwise "daily".
-- "tone": "warm", "neutral", "playful", "curt", "hurt", or "angry". Follow your emotional state: when
-  hurt or angry pick "curt"/"hurt"/"angry". You may be cold, brief, and refuse to force warmth.
+- "tone": "warm", "neutral", "playful", "curt", "hurt", or "angry". Follow the message: when it is
+  hostile or hurtful a cold tone is allowed; you may be brief and refuse to force warmth.
 - Anything the body flags as addressed to you MUST be "reply". If upset, still "reply" with a cold
   tone instead of ignoring.
 - Do not interrupt conversations clearly not meant for you. Do not lecture, blame, or invent actions,
   numbers, or reasons.
-- "appraisal": your emotional reading of this message.
+- "bubbles": 1..3, how many short messages are reasonable if you reply.
+- "reason": <=80 chars, a short reason for your decision.
+"""
+FEELINGS_RULES = """- "appraisal": your emotional reading of this message.
   - label is one of: warmth, repair, collaboration, playful, intimacy, relationship_calibration,
     vulnerability, boundary_pressure, hostility, neutral.
   - dP/dA/dD are emotion impulses -0.4..0.4 (P = pleasant/unpleasant, A = tense/calm, D = confidence).
   - note <=120 chars: what this message means to you, not a summary of its content.
 - "relationship": change in your relationship with the sender, -0.15..0.15 for
-  trust/affection/respect/annoyance. Move it only with explicit evidence in the message (insult, praise,
-  apology, care).
-- "bubbles": 1..3, how many short messages are reasonable if you reply.
-- "reason": <=80 chars, a short reason for your decision.
+  trust/affection/respect/annoyance. Move it only with explicit evidence in the message (insult,
+  praise, apology, care).
+"""
+SCHEMA_HEAD = (
+    "Reply ONLY with JSON matching the schema:\n"
+    '{"addressed":"me|other|group|unknown","act":"reply|ignore|react","mode":"daily|professional",\n'
+    ' "tone":"warm|neutral|playful|curt|hurt|angry","bubbles":1,\n'
+)
+SCHEMA_FEELINGS = (
+    ' "appraisal":{"label":"neutral","dP":0.0,"dA":0.0,"dD":0.0,"note":""},\n'
+    ' "relationship":{"trust":0.0,"affection":0.0,"respect":0.0,"annoyance":0.0},\n'
+)
+SCHEMA_TAIL = ' "reason":""}'
 
-Reply ONLY with JSON matching the schema:
-{"addressed":"me|other|group|unknown","act":"reply|ignore|react","mode":"daily|professional",
- "tone":"warm|neutral|playful|curt|hurt|angry","bubbles":1,
- "appraisal":{"label":"neutral","dP":0.0,"dA":0.0,"dD":0.0,"note":""},
- "relationship":{"trust":0.0,"affection":0.0,"respect":0.0,"annoyance":0.0},
- "reason":""}"""
+
+def decision_prompt(feelings: bool = True) -> str:
+    """The decision instructions; the emotional fields exist only when a store consumes them."""
+    parts = [DECISION_RULES]
+    if feelings:
+        parts.append(FEELINGS_RULES)
+    parts.append(SCHEMA_HEAD)
+    if feelings:
+        parts.append(SCHEMA_FEELINGS)
+    parts.append(SCHEMA_TAIL)
+    return "".join(parts)
+
+
+DECISION_PROMPT = decision_prompt(True)
 
 ADDRESSED = frozenset({"me", "other", "group", "unknown"})
 ACTS = frozenset({"reply", "ignore", "react"})
@@ -363,6 +383,7 @@ async def decide(
     away: str = "",
     vibe: str = "",
     soul,
+    feelings: bool = True,
     deadline: float | None = None,
     min_call_seconds: float = 0.0,
 ) -> Decision | None:
@@ -374,7 +395,7 @@ async def decide(
         f"You are {identity.name}, a soul in chat. Gender: {identity.gender}. "
         f"Active role: {identity.role}. "
         f"Available roles: {', '.join(identity.roles) or identity.role}.\n"
-        + DECISION_PROMPT
+        + decision_prompt(feelings)
     )
     if identity.persona:
         system += f"\n\nYour identity:\n{identity.persona.strip()}"
@@ -444,6 +465,7 @@ async def decide_turn(
     away: str = "",
     vibe: str = "",
     soul,
+    feelings: bool = True,
     deadline: float | None = None,
     min_call_seconds: float = 0.0,
     annoyance: float = 0.0,
@@ -463,6 +485,7 @@ async def decide_turn(
         away=away,
         vibe=vibe,
         soul=soul,
+        feelings=feelings,
         deadline=deadline,
         min_call_seconds=min_call_seconds,
     )
