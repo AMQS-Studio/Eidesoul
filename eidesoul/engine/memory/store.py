@@ -24,21 +24,21 @@ from .. import io
 from ..config import PrivacyConfig
 from ..db import Database
 from ..guard import SENSITIVE, is_crisis, is_injection
+from ..lease import Superseded
 from ..schema import (
     memories,
-    messages,
     memories_readable,
     memory_events,
     memory_index,
     memory_tombstones,
     memory_uses,
+    messages,
     thread_people,
 )
-from . import MemoryContext, MemoryHit
+from . import MemoryContext, MemoryHit, gate
 from . import context as memory_context
-from . import gate
-from .privacy import PrivacyPolicy
 from .integrity import (
+    RULE_MIN_CORROBORATION_DAYS,
     TRUST_INFERENCE,
     TRUST_UNLABELED,
     WriteQuota,
@@ -47,6 +47,8 @@ from .integrity import (
     trust_for,
     via_of,
 )
+from .ledger import ActionLedger
+from .privacy import PrivacyPolicy
 from .retention import RetentionPlan, RetentionPolicy, retention_days_from
 
 log = logging.getLogger(__name__)
@@ -142,6 +144,18 @@ def _digest(text: str) -> str:
     return hashlib.sha256(str(text or "").encode("utf-8")).hexdigest()
 
 
+WORD = re.compile(r"\w+", re.UNICODE)
+
+
+def _tokens(text: str) -> set[str]:
+    """Content tokens of four characters or more; short words never match.
+
+    The length floor is the whole filter: it is language-neutral, so the engine holds no
+    per-language stopword list (ADR-0008 keeps language data out of the core).
+    """
+    return {token for token in WORD.findall(str(text or "").lower()) if len(token) >= 4}
+
+
 def _marked_supersede(row: Mapping) -> bool:
     return any(str(item).startswith("supersede:") for item in row.get("refs") or [])
 
@@ -198,6 +212,7 @@ class MemoryStore:
         self._policy = policy or RetentionPolicy()
         self._quota = quota or WriteQuota()
         self._limits = getattr(config, "memory", None)
+        self._guard = None
         self.available = db is not None
         self.reason = "" if db is not None else "no database"
         self.label = "postgres"
@@ -206,6 +221,26 @@ class MemoryStore:
 
     def configure_limits(self, memory) -> None:
         self._limits = memory
+
+    def bind_guard(self, guard) -> None:
+        """ADR-0012 §4.3: the lease guard fences every canonical mutation once bound."""
+        self._guard = guard
+
+    def _fence(self, conn, operation: str) -> None:
+        """Refuse the write when the live lease generation moved on (ADR-0012 §4.3).
+
+        The guard records the refusal in the action ledger; the generation is then read on the
+        writer's own connection, so the check and the write come from one snapshot. A store with
+        no guard (admin CLI, tests, tools that never claim the lease) writes unconditionally.
+        """
+        if self._guard is None:
+            return
+        self._guard.require(operation)
+        live = conn.execute(text("SELECT generation FROM engine_lease WHERE id = 1")).scalar()
+        if not isinstance(live, int) or live != int(self._guard.generation):
+            raise Superseded(
+                f"lease generation moved on: held {self._guard.generation}, live {live}"
+            )
 
     def bind(self, index=None, extractor=None, *, label: str = "") -> None:
         self._index = index
@@ -619,6 +654,7 @@ class MemoryStore:
         values = self._values(params, state, plan, now)
         memory_id = str(values["id"])
         with self.db.connect() as conn:
+            self._fence(conn, "write")
             if params.dedupe:
                 found = self._existing(conn, params)
                 if found:
@@ -668,6 +704,7 @@ class MemoryStore:
         journalled for this message never reaches the journal. The caller owns the transaction;
         a failure here must roll the message and turn back too.
         """
+        self._fence(conn, "intake")
         capture = getattr(self._limits, "capture", None)
         decision = gate.structural(
             text,
@@ -873,6 +910,7 @@ class MemoryStore:
         if not resolved:
             return False
         with self.db.connect() as conn:
+            self._fence(conn, "transition")
             row = (
                 conn.execute(select(memories).where(memories.c.id == resolved).with_for_update())
                 .mappings()
@@ -904,6 +942,7 @@ class MemoryStore:
         if not resolved:
             return False
         with self.db.connect() as conn:
+            self._fence(conn, "label")
             row = (
                 conn.execute(select(memories).where(memories.c.id == resolved).with_for_update())
                 .mappings()
@@ -967,6 +1006,7 @@ class MemoryStore:
             raise ValueError("a pending candidate can only be dropped as failed or not_worth")
         now = time.time()
         with self.db.connect() as conn:
+            self._fence(conn, "_discard")
             ids = self._pending_ids(conn, thread_id, refs)
             for memory_id in ids:
                 row = (
@@ -1011,6 +1051,7 @@ class MemoryStore:
     ) -> list[str]:
         now = time.time()
         with self.db.connect() as conn:
+            self._fence(conn, "_label_pending")
             ids = self._pending_ids(conn, thread_id, refs)
             for memory_id in ids:
                 row = (
@@ -1221,6 +1262,7 @@ class MemoryStore:
         if self.db is None or not refs:
             return
         with self.db.connect() as conn:
+            self._fence(conn, "_raise_visibility")
             conn.execute(
                 update(messages)
                 .where(messages.c.msg_id.in_([str(item) for item in refs]))
@@ -1240,6 +1282,7 @@ class MemoryStore:
             return 0
         now = time.time()
         with self.db.connect() as conn:
+            self._fence(conn, "_drop_pending")
             ids = self._pending_ids(conn, thread_id, refs)
             for memory_id in ids:
                 row = (
@@ -1281,6 +1324,7 @@ class MemoryStore:
         now = time.time()
         touched = 0
         with self.db.connect() as conn:
+            self._fence(conn, "record_uses")
             for memory_id in wanted:
                 inserted = conn.execute(
                     pg_insert(memory_uses)
@@ -1446,8 +1490,44 @@ class MemoryStore:
         await self._drop_index(row)
         return await io.run(self._forget_sync, row)
 
+    async def forget_by_intent(
+        self, text: str, *, person_id: str, thread_id: str
+    ) -> list[str]:
+        """ADR-0005 §4.6: "forget that …" removes the one readable row it can mean.
+
+        Only the speaker's own readable rows in `global` and this thread are candidates, matched
+        by one shared content token of at least four characters. Zero or several candidates is
+        ambiguity, not a guess: nothing is deleted and the caller logs why.
+        """
+        if self.db is None:
+            return []
+        wanted = _tokens(text)
+        who = str(person_id or "").strip()
+        if not wanted or not who:
+            return []
+        rows = self.db.fetch_all(
+            select(memories_readable).where(
+                memories_readable.c.owner_id == who,
+                or_(
+                    memories_readable.c.scope == "global",
+                    memories_readable.c.thread_id == str(thread_id or ""),
+                ),
+            )
+        )
+        matches = [
+            str(row["id"]) for row in rows if wanted & _tokens(str(row.get("text") or ""))
+        ]
+        if len(matches) != 1:
+            log.info("forget intent ambiguous: %d candidates", len(matches))
+            return []
+        memory_id = matches[0]
+        await self.veto(memory_id, subject_id=who)
+        await self.forget(memory_id, requester_id=who, thread_id=thread_id, allow_global=True)
+        return [memory_id]
+
     def _forget_sync(self, row: Mapping) -> bool:
         with self.db.connect() as conn:
+            self._fence(conn, "_forget_sync")
             removed = conn.execute(
                 delete(memories)
                 .where(memories.c.id == str(row["id"]))
@@ -1513,6 +1593,7 @@ class MemoryStore:
     def _purge_rows_sync(self, rows: Sequence[Mapping], cutoff: float, moment: float) -> int:
         purged = 0
         with self.db.connect() as conn:
+            self._fence(conn, "_purge_rows_sync")
             for row in rows:
                 removed = conn.execute(
                     delete(memories)
@@ -1577,6 +1658,7 @@ class MemoryStore:
             return False
         now = time.time()
         with self.db.connect() as conn:
+            self._fence(conn, "_veto_sync")
             conn.execute(
                 memories.update()
                 .where(memories.c.id == str(row["id"]))
@@ -1652,6 +1734,7 @@ class MemoryStore:
             values["vetoed_by"] = str(actor or "") if vetoed else ""
             values["vetoed_at"] = time.time() if vetoed else 0.0
         with self.db.connect() as conn:
+            self._fence(conn, "_set_privacy_sync")
             conn.execute(memories.update().where(memories.c.id == str(row["id"])).values(**values))
         return True
 
@@ -1679,6 +1762,7 @@ class MemoryStore:
 
     def _rekey_update_sync(self, old_id: str, new_id: str) -> int:
         with self.db.connect() as conn:
+            self._fence(conn, "_rekey_update_sync")
             result = conn.execute(
                 memories.update()
                 .where(
@@ -1927,6 +2011,7 @@ class MemoryStore:
             return False
         moment = time.time()
         with self.db.connect() as conn:
+            self._fence(conn, "defer_candidate")
             result = conn.execute(
                 memories.update()
                 .where(memories.c.id == resolved, memories.c.state == "pending")
@@ -2113,6 +2198,7 @@ class MemoryStore:
             return False
         now = time.time()
         with self.db.connect() as conn:
+            self._fence(conn, "label_candidate")
             row = (
                 conn.execute(select(memories).where(memories.c.id == resolved).with_for_update())
                 .mappings()
@@ -2120,12 +2206,23 @@ class MemoryStore:
             )
             if row is None or str(row.get("state") or "") != "pending":
                 return False
+            route = via_of(str(row.get("source") or ""), fallback=str(row.get("via") or "turn"))
+            owner = str(row.get("owner_id") or "")
+            subject = str(subject_id or row.get("subject_id") or "")
+            # ADR-0008 §4.3: the stored kind passes the same quarantine the canonical write
+            # applies, so a `rule` request from a turn is stored as a sourced fact.
+            wanted_kind = quarantine_kind(
+                str(kind or row.get("kind") or "fact"),
+                via=route,
+                trust=trust_for(route, owner, subject),
+                corroboration_days=0,
+            )
             merged = {
                 **dict(row),
-                "subject_id": str(subject_id or row.get("subject_id") or ""),
+                "subject_id": subject,
                 "category": str(category or row.get("category") or "general"),
                 "durability": str(durability or row.get("durability") or "normal"),
-                "kind": str(kind or row.get("kind") or "fact"),
+                "kind": wanted_kind,
             }
             values = self._transition_values(
                 merged, "ok", level=int(level), confirmed=bool(confirmed), reason="", now=now
@@ -2166,6 +2263,7 @@ class MemoryStore:
         if not resolved or not str(source_id or "").strip():
             return False
         with self.db.connect() as conn:
+            self._fence(conn, "mark_supersede_candidate")
             row = (
                 conn.execute(select(memories).where(memories.c.id == resolved).with_for_update())
                 .mappings()
@@ -2286,6 +2384,7 @@ class MemoryStore:
             return 0
         now = time.time()
         with self.db.connect() as conn:
+            self._fence(conn, "_merge_sources")
             result = conn.execute(
                 memories.update()
                 .where(
@@ -2318,6 +2417,7 @@ class MemoryStore:
             return False
         moment = time.time() if now is None else float(now)
         with self.db.connect() as conn:
+            self._fence(conn, "mark_disputed")
             rows = (
                 conn.execute(
                     select(memories)
@@ -2329,7 +2429,10 @@ class MemoryStore:
             )
             if len(rows) != 2 or any(str(row.get("state")) != "ok" for row in rows):
                 return False
-            for row, other in ((rows[0], right), (rows[1], left)):
+            # Pair by id: `IN (left, right)` returns rows in no guaranteed order, so
+            # positional pairing can point a row at itself and leave both sides unweakened.
+            for row in rows:
+                other = right if str(row["id"]) == left else left
                 conn.execute(
                     memories.update()
                     .where(memories.c.id == row["id"])
@@ -2362,6 +2465,7 @@ class MemoryStore:
             return False
         now = time.time()
         with self.db.connect() as conn:
+            self._fence(conn, "resolve_dispute")
             for memory_id, other in ((left, right), (right, left)):
                 values: dict = {
                     "dispute_state": "resolved",
@@ -2387,6 +2491,7 @@ class MemoryStore:
         moment = time.time() if now is None else float(now)
         cutoff = moment - float(ttl_days) * DAY
         with self.db.connect() as conn:
+            self._fence(conn, "stale_disputes")
             rows = (
                 conn.execute(
                     select(memories)
@@ -2422,6 +2527,187 @@ class MemoryStore:
                     memories.update().where(memories.c.id == row["id"]).values(**values)
                 )
         return len(rows)
+
+    # ----------------------------------------------------------- soul rules
+
+    def sync_soul_rules(self, rules: Sequence[str], *, now: float | None = None) -> list[str]:
+        """ADR-0008 §4.3: mirror the soul document's rules as `via=soul_doc` facts.
+
+        One row per rule per UTC day, so a rule restated on separate days accumulates the
+        corroboration `promote_soul_rules` needs. Nothing here creates a `rule`: the write
+        quarantine always lands on `fact`.
+        """
+        if self.db is None:
+            return []
+        moment = time.time() if now is None else float(now)
+        day_start = moment - (moment % DAY)
+        written: list[str] = []
+        for rule in rules or ():
+            body = _flat(rule)
+            if not body or SENSITIVE.search(body):
+                continue
+            seen = self.db.fetch_one(
+                select(memories.c.id)
+                .where(
+                    memories.c.state == "ok",
+                    memories.c.via == "soul_doc",
+                    memories.c.text == body,
+                    memories.c.asserted_at >= day_start,
+                )
+                .limit(1)
+            )
+            if seen:
+                continue
+            written.append(
+                self.write(
+                    body,
+                    scope="global",
+                    kind="fact",
+                    via="soul_doc",
+                    source="soul_doc",
+                    refs=[f"soul:{_digest(body)[:16]}"],
+                    level=0,
+                    owner_id="soul",
+                    subject_id="soul",
+                    asserted_at=moment,
+                    state="ok",
+                )
+            )
+        return written
+
+    def promote_soul_rules(self, *, now: float | None = None) -> int:
+        """ADR-0008 §4.3: a soul rule restated on ≥2 UTC days becomes `kind=rule`.
+
+        Grouping is by normalized text; the row set that earned it is updated together and the
+        promotion lands in the action ledger as one `memory` row.
+        """
+        if self.db is None:
+            return 0
+        moment = time.time() if now is None else float(now)
+        rows = self.db.fetch_all(
+            select(memories).where(
+                memories.c.state == "ok",
+                memories.c.via == "soul_doc",
+                memories.c.kind != "rule",
+            )
+        )
+        groups: dict[str, list[dict]] = {}
+        for row in rows:
+            key = " ".join(str(row.get("text") or "").lower().split())
+            if key:
+                groups.setdefault(key, []).append(row)
+        promoted = 0
+        for body in sorted(groups):
+            group = groups[body]
+            days = {
+                time.strftime("%Y-%m-%d", time.gmtime(float(row.get("asserted_at") or 0)))
+                for row in group
+            }
+            if len(days) < RULE_MIN_CORROBORATION_DAYS:
+                continue
+            level = min(int(row.get("level") or 0) for row in group)
+            plan = self._policy.plan(kind="rule", level=level, state="ok", now=moment)
+            ids = [str(row["id"]) for row in group]
+            with self.db.connect() as conn:
+                self._fence(conn, "promote_soul_rules")
+                conn.execute(
+                    memories.update()
+                    .where(memories.c.id.in_(ids))
+                    .values(
+                        kind="rule",
+                        pinned=plan.pinned,
+                        expires_at=plan.expires_at,
+                        updated_at=moment,
+                    )
+                )
+            digest = _digest(body)[:16]
+            ActionLedger(self.db).log_action(
+                "memory", digest, "memory", f"rule promoted: {digest}"
+            )
+            promoted += 1
+        return promoted
+
+    # ------------------------------------------------------- dispute questions
+
+    def open_disputes(self, *, limit: int = 20) -> list[dict]:
+        """Open dispute pairs, one entry each, oldest first (ADR-0010 §4.7).
+
+        Both rows of a dispute point at each other, so a pair is emitted once and keyed by its
+        sorted id pair. The ids are sorted the same way as the texts, which keeps the question
+        wording stable across passes.
+        """
+        if self.db is None:
+            return []
+        rows = self.db.fetch_all(
+            select(memories)
+            .where(memories.c.dispute_state == "open")
+            .order_by(memories.c.disputed_at, memories.c.id)
+            .limit(max(1, int(limit)))
+        )
+        found: dict[tuple[str, str], dict] = {}
+        for row in rows:
+            partner = self._base_row(str(row.get("disputed_with") or ""))
+            if partner is None:
+                continue
+            pair = tuple(sorted((str(row["id"]), str(partner["id"]))))
+            if pair in found:
+                continue
+            texts = {
+                str(row["id"]): str(row.get("text") or ""),
+                str(partner["id"]): str(partner.get("text") or ""),
+            }
+            found[pair] = {
+                "ids": list(pair),
+                "first": texts[pair[0]],
+                "second": texts[pair[1]],
+                "subject_id": str(row.get("subject_id") or partner.get("subject_id") or ""),
+                "thread_id": str(row.get("thread_id") or partner.get("thread_id") or ""),
+                "disputed_at": float(row.get("disputed_at") or 0),
+            }
+        return list(found.values())
+
+    def disputes_asked_today(self, subject_id: str, *, now: float | None = None) -> int:
+        """How many dispute questions this subject already got today (UTC day).
+
+        One question marks both rows of its pair, so the count is over distinct normalized
+        pairs, never rows; otherwise the budget would halve itself.
+        """
+        if self.db is None or not str(subject_id or "").strip():
+            return 0
+        moment = time.time() if now is None else float(now)
+        day_start = moment - (moment % DAY)
+        left = cast(memories.c.id, String)
+        right = cast(memories.c.disputed_with, String)
+        pair = func.concat(func.least(left, right), "|", func.greatest(left, right))
+        found = self.db.fetch_one(
+            select(func.count(func.distinct(pair)))
+            .select_from(memories)
+            .where(
+                memories.c.subject_id == str(subject_id),
+                memories.c.dispute_asked_at.is_not(None),
+                memories.c.dispute_asked_at >= day_start,
+            )
+        )
+        return int(next(iter(found.values()), 0) or 0) if found else 0
+
+    def mark_dispute_asked(
+        self, memory_ids: Sequence[str], *, now: float | None = None
+    ) -> int:
+        """Record that the dispute pair was asked; the cap reads this column."""
+        if self.db is None:
+            return 0
+        wanted = [str(item) for item in memory_ids if str(item or "").strip()]
+        if not wanted:
+            return 0
+        moment = time.time() if now is None else float(now)
+        with self.db.connect() as conn:
+            self._fence(conn, "mark_dispute_asked")
+            result = conn.execute(
+                memories.update()
+                .where(memories.c.id.in_(wanted))
+                .values(dispute_asked_at=moment, updated_at=moment)
+            )
+        return int(result.rowcount or 0)
 
     def promote_staged(self, *, limit: int = 20) -> int:
         """ADR-0010 §4.8: a staged row with ≥2 `ok` sources in its refs is promoted."""
@@ -2464,6 +2750,7 @@ class MemoryStore:
             return 0
         now = time.time()
         with self.db.connect() as conn:
+            self._fence(conn, "veto_subject")
             result = conn.execute(
                 memories.update()
                 .where(

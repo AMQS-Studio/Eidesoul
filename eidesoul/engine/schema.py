@@ -111,6 +111,8 @@ threads = Table(
     Column("name", String(200), nullable=False, default=""),
     Column("reset_ts", Float, nullable=False, default=0.0),
     Column("kind", String(20), nullable=False, default="dm"),
+    # ADR-0014 §4.6: the first body that sees a thread owns its route; "" means unclaimed.
+    Column("gateway", String(40), nullable=False, default="", server_default=""),
 )
 
 state = Table(
@@ -281,6 +283,12 @@ automations = Table(
     ),
 )
 Index("ix_automations_due", automations.c.state, automations.c.next_occurrence)
+# ADR-0014 §4.3: the message sink looks up active message automations only.
+Index(
+    "ix_automations_message",
+    text("(event->>'kind')"),
+    postgresql_where=text("state = 'active'"),
+)
 Index("ix_automations_owner", automations.c.owner, automations.c.state)
 
 automation_runs = Table(
@@ -301,6 +309,8 @@ automation_runs = Table(
     Column("deferred", Boolean, nullable=False, server_default=text("false")),
     Column("detail", Text, nullable=False, server_default=""),
     Column("apology_sent_at", Float, nullable=True),
+    # ADR-0014 §4.4: what the occurrence carries for the condition and step payloads.
+    Column("payload", JSONB, nullable=False, server_default=text("'{}'::jsonb")),
     Column("started_at", Float, nullable=True),
     Column("finished_at", Float, nullable=True),
     Column("created_at", Float, nullable=False),
@@ -475,6 +485,7 @@ skills = Table(
     Column("last_used", Float, nullable=True),
     Column("revision", Integer, nullable=False, server_default="1"),
     Column("trust", String(8), nullable=False, server_default="T2"),
+    Column("priority", Integer, nullable=False, server_default="0"),
     CheckConstraint("scope IN ('thread','person','global')", name="ck_skills_scope"),
     CheckConstraint("trust IN ('T0','T1','T2','T3')", name="ck_skills_trust"),
 )
@@ -606,6 +617,7 @@ memories = Table(
     Column("disputed_with", Uuid(as_uuid=False), nullable=True),
     Column("dispute_reason", Text, nullable=False, server_default=""),
     Column("disputed_at", Float, nullable=False, server_default="0"),
+    Column("dispute_asked_at", Float, nullable=True),
     Column("asserted_at", Float, nullable=False, server_default="0"),
     Column("created_at", Float, nullable=False),
     Column("updated_at", Float, nullable=False),
@@ -636,6 +648,8 @@ Index(
     postgresql_where=memories.c.expires_at.is_not(None),
 )
 Index("memories_refs_gin", memories.c.refs, postgresql_using="gin")
+# ADR-0010 §4.7: the per-subject question budget reads by subject and ask time.
+Index("ix_memories_subject_asked", memories.c.subject_id, memories.c.dispute_asked_at)
 Index(
     "memories_supersede_pair",
     memories.c.id,
@@ -692,6 +706,7 @@ memories_readable = table(
     column("disputed_with", Uuid(as_uuid=False)),
     column("dispute_reason", Text),
     column("disputed_at", Float),
+    column("dispute_asked_at", Float),
     column("asserted_at", Float),
     column("created_at", Float),
     column("updated_at", Float),
@@ -790,6 +805,8 @@ cognition_jobs = Table(
     Column("next_attempt_at", Float, nullable=False, server_default="0"),
     Column("result_ref", Text, nullable=False, server_default=""),
     Column("idempotency_key", Text, nullable=False),
+    # ADR-0012 §4.4: the lease generation the job was claimed under; a newer generation wins.
+    Column("generation", BigInteger, nullable=False, server_default="0"),
     Column("created_at", Float, nullable=False),
     Column("updated_at", Float, nullable=False),
     CheckConstraint(
@@ -850,6 +867,8 @@ turns = Table(
     Column("lease_owner", String(80), nullable=False, default="", server_default=""),
     Column("lease_until", Float, nullable=False, default=0.0, server_default="0"),
     Column("generation", BigInteger, nullable=False, default=0, server_default="0"),
+    # ADR-0013 §11: `action` turns are never consolidated away by the backlog selector.
+    Column("category", String(20), nullable=False, default="chat", server_default="chat"),
     Column("decision_json", JSONB, nullable=True),
     Column("draft_text", Text, nullable=True),
     Column("reviewed_text", Text, nullable=True),

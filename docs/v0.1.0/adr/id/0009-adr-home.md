@@ -1,4 +1,4 @@
-> Terjemahan turunan — jangan sunting; sumber: 0009-adr-home.md (sha256: 5bed593648ad)
+> Terjemahan turunan — jangan sunting; sumber: 0009-adr-home.md (sha256: a77249863ae2)
 > Teks ini ditulis manusia; baris yang tidak bisa diterjemahkan mesin disalin apa adanya ke sumber English, jadi sumber bercampur dua bahasa.
 
 # ADR-0009: Rumah ADR, Folder Dokumen Berversi & Penjaganya
@@ -313,8 +313,8 @@ Tabel ini sumbernya, dan istilah kanonik baru masuk di commit yang sama saat ia 
 | `gateway` | sebuah body: transport plus aksi tubuhnya sendiri; dipasang sebagai gateway, bukan plugin atau tool | 0027 (kontrak: engine/0018) | `connector` (prosa), `bridge` (prosa) |
 | `tool` | kapabilitas yang dipanggil engine; hanya diberikan role, tidak pernah oleh plugin; prosedur turunan adalah skill (ADR-0020), bukan tool | 0027 | `skill` (prosa), `action` (prosa) |
 | `plugin` | unit kapabilitas terinstall yang diunduh saat diaktifkan; bukan gateway dan bukan tool | 0028 | `extension` (prosa), `addon` (prosa) |
-| `plugin manifest` | `components/<name>/plugin.yaml`: name, version, rentang engine, entry, provides, requires, secrets, credits | 0028 | `metadata file` (prosa), `plugin.json` (prosa) |
-| `components` | folder workspace tempat kode gateway/plugin hasil unduhan dan dependency-nya | 0028 | `extensions` (prosa), `modules` (prosa) |
+| `plugin manifest` | `plugins/<name>/plugin.yaml`: name, version, rentang engine, entry, provides, requires, secrets, credits | 0028 | `metadata file` (prosa), `plugin.json` (prosa) |
+| `plugins` | folder install workspace tempat kode plugin hasil unduhan dan dependency-nya | 0028 | `extensions` (prosa), `modules` (prosa) |
 | `digest` | hash terpin yang harus cocok sebelum komponen terpasang menulis apa pun | 0027 (aturan: 0028) | `checksum` (prosa) |
 | `panel` | permukaan operator web: proses terpisah di akar repo yang memakai jalur import config | 0027 | `dashboard` (prosa), `admin ui` (prosa) |
 | `clean by default` | gateway, tool, dan plugin masing-masing mati sampai diaktifkan; spine satu-satunya pengecualian | 0027 | `opt-in` (prosa), `default off` (prosa) |

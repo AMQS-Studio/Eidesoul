@@ -10,6 +10,7 @@ from collections.abc import Sequence
 from datetime import datetime
 
 from sqlalchemy import Text, and_, case, cast, func, literal, or_, select
+from sqlalchemy import text as text_
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
@@ -109,11 +110,14 @@ class HistoryStore:
         memories: MemoryStore | None = None,
         job_sink: CaptureJobSink | None = None,
         search: SearchConfig | None = None,
+        event_sink=None,
     ):
         self.db = db
         self.workspace = workspace
         self.memories = memories or MemoryStore(db)
         self.job_sink = job_sink
+        # ADR-0014 §4.3: the message-event sink writes inside the intake transaction.
+        self.event_sink = event_sink
         self.search_config = search or SearchConfig()
 
     # ------------------------------------------------------------ write
@@ -266,6 +270,8 @@ class HistoryStore:
         *,
         language: str = "id",
         audience: str = "private",
+        category: str = "chat",
+        gateway: str = "",
     ) -> bool:
         """The one intake transaction (ADR-0011 §4.1): message + turn + memory journal + candidate.
 
@@ -280,6 +286,7 @@ class HistoryStore:
         with self.db.connect() as conn:
             self._upsert_messages(conn, [row])
             self._upsert_media(conn, [(thread_id, message)])
+            self._route(conn, str(thread_id), str(gateway or ""), audience)
             created = conn.execute(
                 pg_insert(turns)
                 .values(
@@ -288,6 +295,7 @@ class HistoryStore:
                     person_id=str(person_id or "")[:80],
                     status="received",
                     step="received",
+                    category="action" if str(category) == "action" else "chat",
                     attempt=0,
                     lease_owner="",
                     lease_until=0.0,
@@ -317,7 +325,40 @@ class HistoryStore:
             )
             if candidate is not None and self.job_sink is not None:
                 self.job_sink.enqueue(conn, candidate)
+            if self.event_sink is not None:
+                self.event_sink.enqueue_message(
+                    conn,
+                    thread_id=str(thread_id),
+                    gateway=str(gateway or ""),
+                    message=message,
+                    person_id=str(person_id or ""),
+                    now=now,
+                )
         return True
+
+    def _route(self, conn, thread_id: str, gateway: str, audience: str) -> None:
+        """ADR-0014 §4.6: the first body that sees a thread owns its durable route."""
+        insert = pg_insert(threads).values(
+            thread_id=thread_id,
+            name="",
+            reset_ts=0.0,
+            kind="group" if str(audience) == "group" else "dm",
+            gateway=gateway,
+        )
+        conn.execute(
+            insert.on_conflict_do_update(
+                index_elements=["thread_id"],
+                set_={"gateway": insert.excluded.gateway},
+                where=threads.c.gateway == "",
+            )
+        )
+
+    def gateway_of(self, thread_id: str) -> str:
+        """The body that owns this thread's route; "" when no body claimed it yet."""
+        found = self.db.fetch_one(
+            select(threads.c.gateway).where(threads.c.thread_id == str(thread_id))
+        )
+        return str((found or {}).get("gateway") or "")
 
     def add_notice(
         self, thread_id: str, text: str, *, kind: str, message_id: str = ""
@@ -619,6 +660,26 @@ class HistoryStore:
             )
         }
         return {thread for thread in sent | remembered if thread}
+
+    def dm_thread(self, person_id: str) -> str:
+        """The one direct thread a person holds, or `""` (ADR-0010 §4.7 question target).
+
+        A DM is a `threads.kind='dm'` row whose `thread_people` membership is exactly this person.
+        The body sets `kind`; the core never parses a transport address to decide.
+        """
+        who = str(person_id or "").strip()
+        if not who:
+            return ""
+        found = self.db.fetch_one(
+            text_(
+                "SELECT t.thread_id FROM threads AS t "
+                "JOIN thread_people AS p ON p.thread_id = t.thread_id "
+                "WHERE t.kind = 'dm' AND p.person_id = :person "
+                "GROUP BY t.thread_id HAVING count(*) = 1 LIMIT 1"
+            ),
+            {"person": who},
+        )
+        return str(found["thread_id"]) if found else ""
 
     def message_count(self) -> int:
         return int(self.db.scalar(select(func.count()).select_from(messages)) or 0)

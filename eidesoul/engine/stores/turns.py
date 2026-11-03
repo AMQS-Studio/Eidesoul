@@ -10,6 +10,7 @@ from __future__ import annotations
 import hashlib
 import json
 import time
+from collections.abc import Sequence
 
 from sqlalchemy import func, select, text, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
@@ -242,6 +243,33 @@ class TurnStore:
                     updated_at=now,
                 )
             )
+
+    def release(self, turn_ids: Sequence[str]) -> int:
+        """Return claimed but unselected turns to `received` without burning an attempt.
+
+        A backlog pass claims more than the minute's budget allows; the rest must not look like
+        a failed attempt, so the attempt counter is given back (ADR-0013 §11).
+        """
+        wanted = [str(item) for item in turn_ids if str(item or "").strip()]
+        if not wanted:
+            return 0
+        now = time.time()
+        with self.db.connect() as conn:
+            result = conn.execute(
+                update(turns)
+                .where(
+                    turns.c.id.in_(wanted),
+                    turns.c.status.in_(("running", "sending")),
+                )
+                .values(
+                    status="received",
+                    lease_owner="",
+                    lease_until=0.0,
+                    attempt=func.greatest(0, turns.c.attempt - 1),
+                    updated_at=now,
+                )
+            )
+        return int(result.rowcount or 0)
 
     def claim_expired(
         self,

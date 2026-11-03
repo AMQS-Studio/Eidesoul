@@ -20,6 +20,10 @@ background: ""
 #   ...
 persona: ""
 
+# Behavior rules (ADR-0008 §4.3): a rule becomes `kind=rule` memory only from this document,
+# after it is restated on two separate days. One line each, no names and no secrets.
+rules: []
+
 style:
   patterns: []
   facts: []

@@ -288,6 +288,14 @@ def rooms_of(ctx: ToolContext) -> set[str]:
         return set()
 
 
+def _count_capability(ctx: ToolContext, field: str) -> None:
+    """Count a body capability the request needed and the body did not have (ADR-0014 §4.5)."""
+    runtime = getattr(getattr(ctx, "agent", None), "runtime", None)
+    if runtime is None or not hasattr(runtime, field):
+        return
+    setattr(runtime, field, int(getattr(runtime, field) or 0) + 1)
+
+
 def cross_refusal(ctx: ToolContext, thread_id: str) -> str:
     """`""` when the requester may read that room, `denied: room` otherwise.
 
@@ -305,8 +313,10 @@ def cross_refusal(ctx: ToolContext, thread_id: str) -> str:
         members = gateway.participants(thread_id)
         if members is not None:
             return "" if requester and requester in members else "denied: room"
+        _count_capability(ctx, "participants_unknown_total")
         # The gateway cannot prove membership: fall through to the recorded layer.
     elif rooms.source != "recorded" and gateway is not None:
+        _count_capability(ctx, "directory_missing_total")
         return "denied: room"
     if requester and thread_id in rooms_of(ctx):
         known = set(ctx.reads) - {ctx.thread_id}

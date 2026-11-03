@@ -11,9 +11,12 @@ import time
 from dataclasses import replace
 
 import pytest
+from sqlalchemy import select
+
 from support import FakeGateway, FakeLLM, HumanizeConfig, inbound_message, make_agent
 
 from eidesoul.engine.config import TurnConfig
+from eidesoul.engine.schema import turns
 from eidesoul.engine.i18n import t
 from eidesoul.engine.memory.ledger import OutboundLedger
 
@@ -376,3 +379,134 @@ def test_time_is_bounded_by_the_deadline_not_per_call(tmp_path) -> None:
     elapsed = time.monotonic() - started
     assert elapsed < 0.8
     assert env.agent.turns.get("budget-1")["status"] in {"delivered", "interrupted"}
+
+
+def backlog(env, thread: str, count: int, *, action: bool = False) -> list[str]:
+    """One message + turn per row, all claimable (an expired lease) and never processed."""
+    ids: list[str] = []
+    prefix = "action" if action else "chat"
+    for index in range(count):
+        message = inbound_message(
+            f"pesan {index}", thread=thread, message_id=f"{thread}-{prefix}-{index}"
+        )
+        env.history.intake(
+            thread,
+            message.payload,
+            message.actor,
+            category="action" if action else "chat",
+        )
+        ids.append(str(message.payload.id))
+    return ids
+
+
+def turns_state(env, thread: str) -> dict[str, tuple[str, int]]:
+    rows = env.db.fetch_all(
+        select(turns.c.id, turns.c.status, turns.c.attempt)
+        .where(turns.c.thread_id == thread)
+        .order_by(turns.c.created_at)
+    )
+    return {str(row["id"]): (str(row["status"]), int(row["attempt"])) for row in rows}
+
+
+def record_resumes(env) -> list[str]:
+    """Replace the turn runner so a pass is observable without processing anything."""
+
+    async def fake_handle(inbound, gateway, *, claimed=None):
+        return []
+
+    started: list[str] = []
+
+    def spawn(coro) -> None:
+        coro.close()
+        started.append("closed")
+
+    env.agent.handle = fake_handle
+    env.agent.spawn = spawn
+    return started
+
+
+def test_the_backlog_pass_is_paced_and_round_robin(tmp_path) -> None:
+    """ADR-0013 §11: a minute's budget, one row per chat per lap, the rest released."""
+    env = make_agent(tmp_path)
+    threads = ["a@s.whatsapp.net", "b@s.whatsapp.net", "c@s.whatsapp.net"]
+    for thread in threads:
+        backlog(env, thread, 5)
+    env.agent.config = replace(
+        env.config,
+        turns=replace(
+            env.config.turns,
+            max_resume_per_chat=2,
+            max_resume_per_minute=4,
+            backlog_policy="per_message",
+        ),
+    )
+
+    started = record_resumes(env)
+    assert asyncio.run(env.agent.recover()) == 4
+    assert len(started) == 4
+    assert len(env.agent._resume_times) == 4
+
+    states = {thread: turns_state(env, thread) for thread in threads}
+    running = {
+        thread: [key for key, value in states[thread].items() if value[0] == "running"]
+        for thread in threads
+    }
+    # Round-robin: the two oldest rows of `a`, one of `b`, one of `c`.
+    assert [len(running[thread]) for thread in threads] == [2, 1, 1]
+    assert running[threads[0]] == [f"{threads[0]}-chat-0", f"{threads[0]}-chat-1"]
+    assert running[threads[1]] == [f"{threads[1]}-chat-0"]
+    assert running[threads[2]] == [f"{threads[2]}-chat-0"]
+    assert all(
+        value == ("received", 0)
+        for thread in threads
+        for key, value in states[thread].items()
+        if value[0] != "running"
+    )
+
+
+def test_the_next_minute_takes_the_next_batch(tmp_path) -> None:
+    env = make_agent(tmp_path)
+    thread = "a@s.whatsapp.net"
+    backlog(env, thread, 5)
+    env.agent.config = replace(
+        env.config,
+        turns=replace(
+            env.config.turns,
+            max_resume_per_chat=2,
+            max_resume_per_minute=2,
+            backlog_policy="per_message",
+        ),
+    )
+    record_resumes(env)
+
+    assert asyncio.run(env.agent.recover()) == 2
+    assert asyncio.run(env.agent.recover()) == 0  # the minute is spent: claims are released
+    states = turns_state(env, thread)
+    assert [value[1] for value in states.values()].count(0) == 3  # attempt was given back
+    env.agent._resume_times.clear()  # one minute later
+    assert asyncio.run(env.agent.recover()) == 2
+
+
+def test_consolidation_expires_the_tail_but_never_an_action(tmp_path) -> None:
+    env = make_agent(tmp_path)
+    thread = "a@s.whatsapp.net"
+    ids = backlog(env, thread, 3)
+    action_ids = backlog(env, thread, 1, action=True)
+    env.agent.config = replace(
+        env.config,
+        turns=replace(
+            env.config.turns,
+            max_resume_per_chat=1,
+            max_resume_per_minute=4,
+            backlog_policy="per_message_then_consolidate",
+        ),
+    )
+    record_resumes(env)
+
+    assert asyncio.run(env.agent.recover()) == 2  # one chat row and the action row
+
+    states = turns_state(env, thread)
+    assert states[ids[0]][0] == "running"
+    assert states[action_ids[0]][0] == "running"  # the action turn is never consolidated
+    assert [states[ids[1]][0], states[ids[2]][0]] == ["expired", "expired"]
+    assert env.agent.backlog[thread] == 2

@@ -1,13 +1,13 @@
 # ADR-0012: Lease Safety: CAS, Fencing Token, and Database Clock
 
 - **Status:** accepted
-- **Implementation:** partial — present: CAS acquire, `generation`, DB clock, takeover audit, generation-keyed renew/release, `LeaseGuard.require()`, revision 2; remaining: generation checks wired into delivery and memory writes (W2/W3 acceptance rows)
+- **Implementation:** implemented — evidence: CAS acquire, `generation`, DB clock, takeover audit, generation-keyed renew/release, `LeaseGuard.require()` bound to `MemoryStore` (`_fence` on every canonical mutation, read on the writer's own connection) and to `CognitionQueue` claim/complete/fail, revisions 2 and 13; gate: `pytest -q` 831 passed, `scripts/adr.py --check`
 - **Date:** 2026-11-01
 - **Deciders:** Muqsith (owner), omp (reviewer)
 - **Context:** follow-up to ADR-0011 (crash safety & recovery) and architectural review findings: lease without compare-and-swap, using local clocks
 - **Supersedes:** —
 - **Related:** ADR-0011 (recovery), ADR-0013 (resume turn)
-- **Amendments:** 2026-11-02 — normalization of the skeleton (ADR-0009 §4.4): added the Interaction with other ADRs section; Code references shifted to §11. 2026-11-03 — audit: the range `supervisor.py` was corrected to `36-129`; the stale line "waiting for the ADR-0009 decision" was aligned (ADR-0009 is already accepted, the migration to `docs/v0.1.0/adr/`). 2026-11-03 — audit: the fencing column was standardized to `generation` (not `lease_generation`); the migration path points to ADR-0016.
+- **Amendments:** 2026-11-02 — normalization of the skeleton (ADR-0009 §4.4): added the Interaction with other ADRs section; Code references shifted to §11. 2026-11-03 — audit: the range `supervisor.py` was corrected to `36-129`; the stale line "waiting for the ADR-0009 decision" was aligned (ADR-0009 is already accepted, the migration to `docs/v0.1.0/adr/`). 2026-11-03 — audit: the fencing column was standardized to `generation` (not `lease_generation`); the migration path points to ADR-0016. 2026-11-03 — §4.3 now runs on the writer's own connection: `MemoryStore._fence` calls `LeaseGuard.require` (which records the refusal) and then reads `engine_lease.generation` inside the same transaction as the write, so the check and the mutation share one snapshot; job updates carry the claimed generation and refuse when the live one moved.
 - **Location note:** ADR lives in `docs/v0.1.0/adr/engine/`; the Indonesian copy is `docs/v0.1.0/adr/engine/id/0012-lease-safety.md`.
 
 ---
@@ -77,6 +77,7 @@ RETURNING generation;
   - marking a job complete.
 - Before writing, check the current `generation` in the DB. If it has already changed, cancel that operation and mark `superseded` — the old holder must not finish the job after being replaced.
 - For delivery: `send_text` cannot be undone, so the generation check must happen **before** the transport call, not after it.
+- The check runs on the writer's own connection: `MemoryStore._fence` reads `engine_lease.generation` inside the same transaction as the write, after `LeaseGuard.require` recorded the refusal, so the comparison and the mutation share one snapshot.
 
 ### 4.4 Clock
 

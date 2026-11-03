@@ -1,10 +1,10 @@
-> Terjemahan turunan — jangan sunting; sumber: engine/0005-retention-decay.md (sha256: fbec29655191)
+> Terjemahan turunan — jangan sunting; sumber: engine/0005-retention-decay.md (sha256: c4d4d21baa2c)
 > Teks ini ditulis manusia; baris yang tidak bisa diterjemahkan mesin disalin apa adanya ke sumber English, jadi sumber bercampur dua bahasa.
 
 # ADR-0005: Retention & Decay — Hybrid TTL, Renewal Saat Dipakai, dan Pin Otomatis
 
 - **Status:** accepted
-- **Implementasi:** partial — ada: `pinned`/`durability`/`category`/`use_*`/`expires_at`/`max_lifetime_at`, renewal per turn delivered, auto-pin, `memory purge` dengan `--dry-run` dan penghapusan salinan library, `tests/test_memory_store.py`; sisa: prototipe intent remember/forget MiniLM dan loop purge terjadwal (W3.2/W6)
+- **Implementasi:** implemented — bukti: `pinned`/`durability`/`category`/`use_*`/`expires_at`/`max_lifetime_at`, renewal per turn delivered, auto-pin, `memory purge` dengan `--dry-run` dan penghapusan salinan library, prototipe MiniLM remember/forget (`eidesoul/library/intent/`, `eidesoul/engine/memory/intent.py`, `scripts/intent.py --check`), hint remember di capture, jalur deterministik "lupakan itu …", dan purge terjadwal dengan `memory.retention.purge.{grace_days,batch}` pada job audit harian; gate: `pytest -q` 831 lulus, `scripts/adr.py --check`
 - **Tanggal:** 2026-11-01
 - **Deciders:** Muqsith (owner), omp (reviewer)
 - **Konteks:** lanjutan ADR-0001 (canonical), ADR-0003 (worker & konsolidasi), ADR-0004 (TTL state non-`ok`); memori default-on memerlukan kebijakan umur

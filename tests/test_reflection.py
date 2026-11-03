@@ -140,3 +140,57 @@ def test_stale_dispute_weakens_the_inferred_side(tmp_path) -> None:
     assert states[left] == ("stale", "ok")
     assert states[right][0] == "stale"
     assert states[right][1] == "staged"
+
+
+def test_a_pass_reports_the_pairs_it_opened(tmp_path) -> None:
+    """ADR-0010 §4.7: the pass hands its opened pairs to whoever asks the question."""
+    memory = store(tmp_path)
+    left = write(memory, "aku suka kopi")
+    right = write(memory, "aku tidak suka kopi")
+
+    report = asyncio.run(reflect.run_pass(memory, scope=f"person:{PERSON}", llm=None))
+
+    assert report.disputes == 1
+    assert len(report.opened) == 1
+    pair = report.opened[0]
+    assert set(pair["ids"]) == {left, right}
+    assert {pair["first"], pair["second"]} == {"aku suka kopi", "aku tidak suka kopi"}
+    assert pair["subject_id"] == PERSON
+
+    open_pairs = memory.open_disputes()
+    assert len(open_pairs) == 1 and set(open_pairs[0]["ids"]) == {left, right}
+    assert memory.disputes_asked_today(PERSON) == 0
+    assert memory.mark_dispute_asked(pair["ids"]) == 2
+    assert memory.disputes_asked_today(PERSON) == 1
+
+
+def test_the_worker_asks_one_question_per_pass(tmp_path) -> None:
+    from eidesoul.engine.cognition import CognitionWorker, Job
+
+    memory = store(tmp_path)
+    write(memory, "aku suka kopi")
+    write(memory, "aku tidak suka kopi")
+    asked: list[tuple[str, dict]] = []
+    worker = CognitionWorker(
+        database(),
+        build_config(tmp_path),
+        memory,
+        ask_dispute=lambda subject, pair: asked.append((subject, pair)),
+    )
+
+    result = asyncio.run(
+        worker._reflect(
+            Job(
+                id="j1",
+                kind="reflect",
+                scope=f"person:{PERSON}",
+                payload_ref="",
+                attempts=1,
+                idempotency_key="reflect:test",
+            )
+        )
+    )
+
+    assert "disputes 1" in result
+    assert len(asked) == 1 and asked[0][0] == PERSON
+    assert memory.disputes_asked_today(PERSON) == 0  # asking is the agent's side effect

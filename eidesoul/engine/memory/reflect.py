@@ -58,6 +58,8 @@ class ReflectionReport:
     staged_promoted: int = 0
     stale: int = 0
     skipped: str = ""
+    # ADR-0010 §4.7: the pairs this pass opened, in the order they were marked.
+    opened: tuple[dict, ...] = ()
     notes: list[str] = field(default_factory=list)
 
 
@@ -310,11 +312,33 @@ async def run_pass(
         else:
             allowed = set()
             report.notes.append("below min_candidates")
+        opened: list[dict] = []
+        texts = {str(row.get("id") or ""): str(row.get("text") or "") for row in live}
         for pair in pairs:
             if pair.id not in allowed:
                 continue
             if store.mark_disputed(pair.left, pair.right, reason=pair.reason, now=moment):
                 report.disputes += 1
+                opened.append(
+                    {
+                        "ids": [pair.left, pair.right],
+                        "first": texts.get(pair.left, ""),
+                        "second": texts.get(pair.right, ""),
+                        "subject_id": str(pair.subject or ""),
+                        "thread_id": str(
+                            next(
+                                (
+                                    row.get("thread_id")
+                                    for row in live
+                                    if str(row.get("id") or "") == pair.left
+                                ),
+                                "",
+                            )
+                            or ""
+                        ),
+                    }
+                )
+        report.opened = tuple(opened)
 
     report.staged_promoted = store.promote_staged(limit=max_writes)
     report.stale = store.stale_disputes(ttl_days=float(dispute_ttl_days))

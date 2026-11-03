@@ -272,6 +272,23 @@ def _schedule_event(raw: dict, event: dict, config: AutomationConfig) -> None:
     event["every"] = interval
 
 
+def _message_event(raw: dict) -> dict:
+    """`event.thread`/`event.sender`: empty means any; a list means those rooms only."""
+    thread = raw.get("thread")
+    if isinstance(thread, (list, tuple)):
+        rooms = [str(item).strip() for item in thread if str(item or "").strip()]
+        if not rooms:
+            raise ManifestError("event.thread must name at least one chat, or be omitted")
+    elif thread in (None, ""):
+        rooms = []
+    else:
+        rooms = [str(thread).strip()]
+    sender = raw.get("sender")
+    if sender is not None and not isinstance(sender, str):
+        raise ManifestError("event.sender must be a person id or omitted")
+    return {"thread": rooms, "sender": str(sender or "").strip()}
+
+
 def _validate_event(raw: object, config: AutomationConfig) -> dict:
     if not isinstance(raw, dict):
         raise ManifestError("event is required")
@@ -281,9 +298,9 @@ def _validate_event(raw: object, config: AutomationConfig) -> dict:
     event: dict = {"kind": kind, "tz": str(raw.get("tz") or DEFAULT_TZ).strip()}
     zone(event["tz"])
     if kind == "message":
-        raise ManifestError(
-            "message events are not implemented yet; use a schedule (explicit refusal)"
-        )
+        # ADR-0014 §4.3: the sink queues a run per matching message; there is no clock.
+        event.update(_message_event(raw))
+        return event
     _schedule_event(raw, event, config)
     for field in ("start", "until"):
         found = _date(raw.get(field), field)
@@ -914,15 +931,72 @@ class AutomationStore:
     # ---------------------------------------------------------- occurrences
 
     def due_automations(self, now: float, limit: int = 200) -> list[dict]:
+        """Clock-driven rows only: a message automation is fed by the intake sink."""
         return self.db.fetch_all(
             select(automations)
             .where(
                 automations.c.state == "active",
+                automations.c.next_occurrence > 0,
                 automations.c.next_occurrence <= float(now),
+                func.coalesce(automations.c.event["kind"].astext, "") != "message",
             )
             .order_by(automations.c.next_occurrence)
             .limit(max(1, int(limit)))
         )
+
+    def enqueue_message(
+        self,
+        conn,
+        *,
+        thread_id: str,
+        gateway: str,
+        message,
+        person_id: str,
+        now: float,
+    ) -> int:
+        """ADR-0014 §4.3: one queued run per active message automation that matches.
+
+        The sink runs inside the intake transaction, so the run and the message commit together
+        or not at all. The occurrence key is the message id: a redelivered message inserts
+        nothing, and the payload carries what the condition and the steps read.
+        """
+        rows = conn.execute(
+            select(automations).where(
+                automations.c.state == "active",
+                automations.c.event["kind"].astext == "message",
+            )
+        ).mappings().all()
+        created = 0
+        for row in rows:
+            event = row["event"] if isinstance(row["event"], dict) else {}
+            rooms = event.get("thread") or []
+            if rooms and str(thread_id) not in {str(item) for item in rooms}:
+                continue
+            sender = str(event.get("sender") or "")
+            if sender and str(person_id) != sender:
+                continue
+            found = conn.execute(
+                pg_insert(automation_runs)
+                .values(
+                    automation_id=int(row["id"]),
+                    occurrence_key=f"message:{int(row['id'])}:{str(message.id)}",
+                    scheduled_at=float(message.when.timestamp()) if message.when else float(now),
+                    status="queued",
+                    payload={
+                        "message_id": str(message.id),
+                        "thread": str(thread_id),
+                        "gateway": str(gateway),
+                        "person_id": str(person_id),
+                    },
+                    created_at=now,
+                    updated_at=now,
+                )
+                .on_conflict_do_nothing(index_elements=["occurrence_key"])
+                .returning(automation_runs.c.id)
+            ).scalar()
+            if found is not None:
+                created += 1
+        return created
 
     def materialize(self, now: float | None = None) -> dict[str, int]:
         """Turn every due schedule into its own run row; a duplicate never doubles."""
@@ -1508,6 +1582,9 @@ class AutomationWorker:
             "notified": 0,
         }
         await io.run(self._mark_running, run["id"], now)
+        if not await self._message_facts(run, facts):
+            self.store.finish(run["id"], "skipped", "message gone", now=now)
+            return "skipped"
         try:
             async with asyncio.timeout(int(self.config.run_timeout_seconds)):
                 start = await self._readers(steps, automation, run, facts)
@@ -1540,6 +1617,21 @@ class AutomationWorker:
         self.store.finish(run["id"], "succeeded", now=now)
         self.store.maybe_expire(automation["id"], now=None)
         return "succeeded"
+
+    async def _message_facts(self, run: dict, facts: dict) -> bool:
+        """A message run carries its message: the condition and the steps read real fields."""
+        payload = run.get("payload") if isinstance(run.get("payload"), dict) else {}
+        message_id = str(payload.get("message_id") or "")
+        if not message_id:
+            return True
+        thread = str(payload.get("thread") or "")
+        message = await io.run(self.agent.history.find, thread, message_id)
+        if message is None:
+            return False
+        facts["text"] = str(message.text or "")
+        facts["sender"] = str(payload.get("person_id") or message.sender_id or "")
+        facts["thread"] = thread
+        return True
 
     async def _readers(
         self, steps: list[dict], automation: dict, run: dict, facts: dict
@@ -1710,6 +1802,18 @@ class AutomationWorker:
             return str(automation["event"].get("thread") or owner)
         return target
 
+    def _thread_gateway(self, thread_id: str) -> str:
+        """ADR-0014 §4.6: the body that first saw this thread owns its route."""
+        found = getattr(self.agent, "history", None)
+        lookup = getattr(found, "gateway_of", None)
+        if not callable(lookup):
+            return ""
+        try:
+            return str(lookup(str(thread_id)) or "")
+        except Exception:
+            log.debug("gateway_of failed thread=%s", thread_id, exc_info=True)
+            return ""
+
     def _gateway(self, prefer: str = ""):
         gateways = tuple(getattr(self.agent, "gateways", ()) or ())
         if prefer:
@@ -1728,7 +1832,7 @@ class AutomationWorker:
         *,
         attribution: bool = False,
     ) -> None:
-        gateway = self._gateway()
+        gateway = self._gateway(self._thread_gateway(target))
         if gateway is None:
             raise StepError("no gateway is available for send", transient=False)
         from .reply import split_text

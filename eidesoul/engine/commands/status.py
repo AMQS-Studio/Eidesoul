@@ -299,6 +299,13 @@ def _body_lines(ctx: CommandContext, agent, lang: str, now: float) -> list[str]:
             )
         )
     lines.append(t("command.status.approvals", lang, value=agent.approvals.count_pending()))
+    for key, value in (
+        ("gateway_core", agent.runtime.gateway_core_ok),
+        ("rich_missing", agent.runtime.rich_missing_total),
+        ("directory_missing", agent.runtime.directory_missing_total),
+        ("participants_unknown", agent.runtime.participants_unknown_total),
+    ):
+        lines.append(t(f"command.status.capabilities.{key}", lang, count=int(value)))
     if agent.runtime.notice_failed:
         lines.append(
             t(

@@ -1,10 +1,10 @@
-> Terjemahan turunan — jangan sunting; sumber: engine/0008-memory-integrity.md (sha256: 14dc622085c3)
+> Terjemahan turunan — jangan sunting; sumber: engine/0008-memory-integrity.md (sha256: 86f8a58df915)
 > Teks ini ditulis manusia; baris yang tidak bisa diterjemahkan mesin disalin apa adanya ke sumber English, jadi sumber bercampur dua bahasa.
 
 # ADR-0008: Integritas Memori — Provenance, Trust, Karantina Instruksi, Anti-Poisoning
 
 - **Status:** accepted
-- **Implementasi:** partial — ada: `via`/`refs`/`asserted_at`/`trust` T0-T3, `integrity.py` deterministik, karantina, tombstone, bukti supersede, kuota bertingkat ke `staged`, promosi recall-miss, penanda trust di prompt; sisa: `kind=rule` hanya dari `soul_doc` + T0 + corroboration 2 hari (reflection W3.2)
+- **Implementasi:** implemented — bukti: `via`/`refs`/`asserted_at`/`trust` T0-T3, `integrity.py` deterministik, karantina pada tulis kanonik dan pada `label_candidate`, tombstone, bukti supersede, kuota bertingkat ke `staged`, promosi recall-miss, penanda trust di prompt, dan `kind=rule` yang lahir hanya dari `MemoryStore.sync_soul_rules`/`promote_soul_rules` (`soul.rules`, T0, corroboration dua hari UTC); gate: `pytest -q` 831 lulus, `scripts/adr.py --check`
 - **Tanggal:** 2026-11-02
 - **Deciders:** Muqsith (owner), omp (reviewer)
 - **Konteks:** lanjutan ADR-0001 (canonical), ADR-0002 (gate capture), ADR-0004 (labeling), ADR-0005 (retention), ADR-0006 (privasi grup), ADR-0007 (capability vs authorization)

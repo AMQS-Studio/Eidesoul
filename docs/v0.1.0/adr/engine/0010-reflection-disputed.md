@@ -1,7 +1,7 @@
 # ADR-0010: Reflection, Contradiction & Status `disputed`
 
 - **Status:** accepted
-- **Implementation:** partial — present: scheduled reflection (`cognition.py`), `dispute_state` + `mark_disputed`/`resolve_dispute`/`stale_disputes`, one-level `derived_from` at T2, dispute hides rows, `tests/test_reflection.py`; remaining: the `questions_per_day` cap on dispute questions
+- **Implementation:** implemented — evidence: scheduled reflection (`cognition.py`), `dispute_state` + `mark_disputed`/`resolve_dispute`/`stale_disputes`, one-level derivation at T2, dispute hides rows, the `questions_per_day` cap (`disputes_asked_today`/`mark_dispute_asked`) with one DM question per pass (`Agent.ask_dispute`, `HistoryStore.dm_thread`), `tests/test_reflection.py`, `tests/test_agent.py`; gate: `pytest -q` 831 passed, `scripts/adr.py --check`
 - **Date:** 2026-11-02
 - **Deciders:** Muqsith (owner), omp (reviewer)
 - **Context:** paying off the ADR-0008 §4.9C debt (`disputed` was deferred to here) and closing the last slot in the ADR-0001 §14 queue

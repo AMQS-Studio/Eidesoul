@@ -38,6 +38,10 @@ background: ""
 #   ## Personality
 #   ...
 persona: ""
+
+# Behavior rules (ADR-0008 §4.3): a rule becomes `kind=rule` memory only from this document,
+# after it is restated on two separate days. One line each, no names and no secrets.
+rules: []
 """
 
 
@@ -64,6 +68,8 @@ class Soul:
     persona: str = ""
     style: SoulStyle = field(default_factory=SoulStyle)
     examples: tuple[dict[str, str], ...] = ()
+    # ADR-0008 §4.3: behavior rules live in the soul document, and only there.
+    rules: tuple[str, ...] = ()
     source: Path | None = None
 
     def __post_init__(self) -> None:
@@ -156,6 +162,16 @@ def _examples(value: object) -> tuple[dict[str, str], ...]:
     return tuple(found)
 
 
+def _rules(value: object) -> tuple[str, ...]:
+    """`rules` is a list of one-line behavior rules; an empty entry is dropped, order kept."""
+    if value is None:
+        return ()
+    if not isinstance(value, (list, tuple)):
+        log.warning("soul rules must be a list; ignoring %s", type(value).__name__)
+        return ()
+    return tuple(_text(item) for item in value if _text(item))
+
+
 def _style(raw: object) -> SoulStyle:
     body = raw if isinstance(raw, Mapping) else {}
     return SoulStyle(
@@ -241,6 +257,7 @@ def load_soul(
         persona=_text(raw.get("persona")),
         style=style,
         examples=_examples(raw.get("examples")),
+        rules=_rules(raw.get("rules")),
         source=source_path,
     )
     return Soul(
@@ -256,5 +273,6 @@ def load_soul(
         persona=render_persona(soul),
         style=soul.style,
         examples=soul.examples,
+        rules=soul.rules,
         source=soul.source,
     )

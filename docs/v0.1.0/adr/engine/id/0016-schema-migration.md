@@ -1,16 +1,16 @@
-> Terjemahan turunan — jangan sunting; sumber: engine/0016-schema-migration.md (sha256: bc1f03ce9ea6)
+> Terjemahan turunan — jangan sunting; sumber: engine/0016-schema-migration.md (sha256: 1bc1b9052454)
 > Teks ini ditulis manusia; baris yang tidak bisa diterjemahkan mesin disalin apa adanya ke sumber English, jadi sumber bercampur dua bahasa.
 
 # ADR-0016: Skema Kanonik & Migrasi — Satu DDL, Satu Baseline Alembic
 
 - **Status:** accepted
-- **Implementasi:** implemented — bukti: satu rantai Alembic (revisi 1-12: baseline, fencing lease, siklus turn, spine memori, cognition/episodes/skills, relay, approval class, `llm_calls`, search, automation, set FK/CHECK/index P0-3, `message_media`), `upgrade` primary-only di bawah advisory lock, upsert parent `threads` saat ingest, clamp `visibility` di jalur tulis, byte media hanya lewat `message_media`; gerbang: `pytest -q` 792 passed, `--check` 31/31, `--translate-check` 0 masalah
+- **Implementasi:** implemented — bukti: satu rantai Alembic (revisi 1-13: baseline, fencing lease, siklus turn, spine memori, cognition/episodes/skills, relay, approval class, `llm_calls`, search, automation, set FK/CHECK/index P0-3, `message_media`, kolom fences/events/efficiency), `upgrade` primary-only di bawah advisory lock, upsert parent `threads` saat ingest, clamp `visibility` di jalur tulis, byte media hanya lewat `message_media`; gerbang: `pytest -q` 831 passed, `--check` 31/31, `--translate-check` 0 masalah
 - **Tanggal:** 2026-11-03
 - **Deciders:** Muqsith (owner), omp (reviewer)
 - **Konteks:** audit 2026-11-03 menemukan DDL `memories` di ADR-0001 basi (tanpa kolom `state`, `level not null default 2`, `confirmed default true`), constraint ADR-0004 menabrak `state='superseded'` dari ADR-0008, dan tidak ada pemilik migrasi untuk kolom yang lahir di ADR-0005/0008/0010/0012/0013/0014.
 - **Supersedes:** —
 - **Terkait:** ADR-0001 (canonical), ADR-0004 (state/level), ADR-0005 (retensi), ADR-0008 (provenance/trust), ADR-0010 (dispute), ADR-0011 (reaper/ledger), ADR-0012 (`generation`), ADR-0013 (`turns`/outbound), ADR-0014 (automation), ADR-0009 (rumah ADR)
-- **Amandemen:** 2026-11-03 — keputusan pemilik: ADR-0019 (observability) masuk set; bentuk kolom `llm_calls` ditambahkan di §4.6 sebagai milik tunggal DDL, dengan retensi `engine.metrics.retention_days` (ADR-0005).
+- **Amandemen:** 2026-11-03 — keputusan pemilik: ADR-0019 (observability) masuk set; bentuk kolom `llm_calls` ditambahkan di §4.6 sebagai milik tunggal DDL, dengan retensi `engine.metrics.retention_days` (ADR-0005). 2026-11-03 — revisi 13 menambah kolom yang dibutuhkan ADR tersisa: `cognition_jobs.generation` (ADR-0012 §4.4), `memories.dispute_asked_at` dengan `ix_memories_subject_asked` (ADR-0010 §4.7), `threads.gateway` (ADR-0014 §4.6), `turns.category` (ADR-0013 §11), `skills.priority` (ADR-0020 §4.6), `automation_runs.payload` dan indeks parsial `ix_automations_message` (ADR-0014 §4.3); `memories_readable` dibuat ulang supaya kolom tambahan tetap terlihat di basis data hasil upgrade.
 - **Catatan lokasi:** ADR hidup di `docs/v0.1.0/adr/engine/`; salinan Indonesia di `docs/v0.1.0/adr/engine/id/0016-schema-migration.md`.
 
 ---

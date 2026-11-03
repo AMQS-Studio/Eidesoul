@@ -1,5 +1,88 @@
 # LOG
 
+## 2026-11-03 — Eight partial ADRs land, one schema revision
+
+ADR-0012, 0010, 0008, 0005, 0013, 0014, 0020, and 0001 were `partial` for code reasons; each now has
+the code, the tests, and the gate result to say `implemented`. ADR-0027 and ADR-0030 stay `partial`,
+because the panel and the registry publish are still outside this box.
+
+**Schema (revision 13)** — one append-only revision carries every column the eight needed:
+`cognition_jobs.generation`, `memories.dispute_asked_at` + `ix_memories_subject_asked`,
+`threads.gateway`, `turns.category`, `skills.priority`, `automation_runs.payload`, and the partial
+`ix_automations_message` index. `memories_readable` is recreated so the appended column stays
+visible on an upgraded database, and it is the reason `create_all` and the chain agree.
+
+**ADR-0012** — `MemoryStore._fence` runs inside the writer's transaction on every canonical
+mutation (write, transition, label, intake journal, disputes, veto, privacy, rekey, forget, purge),
+and `CognitionQueue` claim/complete/fail carry the claimed generation. The supervisor binds
+`LeaseGuard` to the store once the primary is acquired; admin, CLI, and tests stay unbound.
+
+**ADR-0010** — `questions_per_day` bounds dispute questions per subject per UTC day, counted over
+distinct pairs because one question marks both rows. `Agent.ask_dispute` targets the subject's
+single-member DM (`HistoryStore.dm_thread`, `threads.kind='dm'`), and the reflection pass hands it
+the pairs it opened. Fixing this exposed two live defects: the reflection job handed an
+un-awaited coroutine to `io.run`, so no pass had ever run, and `mark_disputed` paired rows by
+position over an unordered `IN (…)`.
+
+**ADR-0008** — `label_candidate` passes the stored kind through the same quarantine as the
+canonical write, `soul.rules` is the only source of `kind=rule`, and `sync_soul_rules` +
+`promote_soul_rules` require two UTC days of corroboration before a rule exists.
+
+**ADR-0005** — MiniLM remember/forget prototypes live in `eidesoul/library/intent/` with
+`scripts/intent.py --check` as their gate; the remember hint raises durability in capture, the
+deterministic "forget that …" path vetoes and forgets exactly one readable row or nothing at all,
+and the daily audit job purges with `memory.retention.purge.{grace_days,batch}`.
+
+**ADR-0013** — the backlog pass is paced: a rolling sixty-second budget, `max_resume_per_chat`
+per room, round-robin across rooms, `TurnStore.release` for what was claimed but not selected, and
+`per_message_then_consolidate` expiring the tail unless `turns.category='action'`.
+
+**ADR-0014** — `message` automations become real: the intake transaction writes one run per
+matching message, the condition reads that message's text and sender, gateway capability counters
+appear on `/status`, and `threads.gateway` makes delivery routing durable across restarts.
+
+**ADR-0020** — failed tool steps are recorded as `failed`, the episode signature names scope, tools,
+and target types, `eidesoul/engine/memory/efficiency.py` measures the evidence, and the ladder
+applies keep/merge/promote/archive/propose as one deterministic action; a proposal is an approval
+and nothing else.
+
+**ADR-0001** — `tests/test_memory_eval.py` plus `tests/data/memory_eval.json` measure the canonical
+lexical path (12 cases, recall 1.0, precision 1.0, duplicate rate 0.0) and prove
+`backfill_index` idempotence; the ADR's stale `remaining` line (capture retry) is corrected.
+
+**Verification** — `pytest -q` 831 passed on Postgres+pgvector; `scripts/adr.py --check` 31/31,
+implemented=29 partial=2 draft=0; `--translate-check` 31 files, 0 issues; `scripts/intent.py --check`
+OK; `uv lock --check` clean.
+
+## 2026-11-03 — One term for the unit: `plugin`
+
+The installable unit was called `component` in code, config, and the CLI while ADR-0028 and the
+config map already said `plugin`. Collapsed to one term, with no alias and no shim.
+
+**Code** — `eidesoul/engine/components.py` is `eidesoul/engine/plugins.py`; `ComponentError`,
+`Component`, `Loaded.components`, and `ComponentSettings` are `PluginError`, `Plugin`,
+`Loaded.plugins`, and `PluginLoader` (the per-plugin config row keeps its name `PluginSettings`).
+The synthetic import package is `eidesoul_plugin_<name>`. Config: `ComponentsConfig` →
+`PluginConfig`, `HostConfig.components`/`Config.components` → `.plugin`, the YAML section is
+`plugin: {root, fetch, source}`, and the default install root is `<workspace>/plugins`. The CLI verb
+is `eidesoul plugins list|install|enable|disable|remove`, and the loader's own strings/audit
+literals follow (`invalid plugin name`, `plugin.fetch is false`, `plugin.source is not set`,
+`plugins cannot register gateways`, `log_action("plugin", ...)`, `config_changes.file = "plugin"`).
+
+**Unchanged on purpose** — the manifest file name `plugin.yaml`, the `plugins.<name>.enabled|digest`
+map, the `plugins/google/` source tree, the credits table's generic "component" wording, and
+`Dockerfile --strip-components`.
+
+**Migration** — `config.yaml` never carried a `components:` block, so nothing is rewritten. An
+install that already unpacked code under `<workspace>/components` is moved by hand:
+`mv <workspace>/components <workspace>/plugins`, as ADR-0028 §8 says.
+
+**Docs** — ADR-0028 §4.1/§4.2/§4.3/§4.4/§5/§8/§10, the ADR-0027 §5 key table and §7 acceptance
+criteria, and the ADR-0009 register rows (plugin manifest path, install root, digest) now read
+`plugin`; the `id/` copies match and their `sha256:` stamps are restamped. `AGENTS.md`, `README.md`,
+and `README.id.md` follow. Editing the Google plugin's docstrings changes its code tree, so
+`plugins/google/plugin.yaml` carries the recomputed `digest:` again.
+
 ## 2026-11-03 — ADR waves W0-W7: the recorded decisions land
 
 Implementation of the approved ADR set, one wave at a time, each gated before the next. **W0**:

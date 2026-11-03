@@ -1,13 +1,13 @@
 # ADR-0016: Canonical Schema & Migration Scheme, One DDL, One Alembic Baseline
 
 - **Status:** accepted
-- **Implementation:** implemented — evidence: one Alembic chain (revisions 1-12: baseline, lease fencing, turn lifecycle, memory spine, cognition/episodes/skills, relay, approval class, `llm_calls`, search, automation, P0-3 FK/CHECK/index set, `message_media`), primary-only `upgrade` under the advisory lock, the `threads` parent upsert on ingest, the write-side `visibility` clamp, media bytes read/written only through `message_media`; gate: `pytest -q` 792 passed, `--check` 31/31, `--translate-check` 0 masalah
+- **Implementation:** implemented — evidence: one Alembic chain (revisions 1-13: baseline, lease fencing, turn lifecycle, memory spine, cognition/episodes/skills, relay, approval class, `llm_calls`, search, automation, P0-3 FK/CHECK/index set, `message_media`, fences/events/efficiency columns), primary-only `upgrade` under the advisory lock, the `threads` parent upsert on ingest, the write-side `visibility` clamp, media bytes read/written only through `message_media`; gate: `pytest -q` 831 passed, `--check` 31/31, `--translate-check` 0 masalah
 - **Date:** 2026-11-03
 - **Deciders:** Muqsith (owner), omp (reviewer)
 - **Context:** the 2026-11-03 audit found the `memories` DDL in ADR-0001 stale (no `state` column, `level not null default 2`, `confirmed default true`), the ADR-0004 constraint clashing with `state='superseded'` from ADR-0008, and no migration owner for the columns born in ADR-0005/0008/0010/0012/0013/0014.
 - **Supersedes:** —
 - **Related:** ADR-0001 (canonical), ADR-0004 (state/level), ADR-0005 (retention), ADR-0008 (provenance/trust), ADR-0010 (dispute), ADR-0011 (reaper/ledger), ADR-0012 (`generation`), ADR-0013 (`turns`), ADR-0014 (automation), ADR-0009 (ADR home)
-- **Amendments:** 2026-11-03 — §4.4 now mirrors the landed chain (revisions 1-12); the P0-3 set landed in 11 and the media split in 12. 2026-11-03 — owner's decision: ADR-0019 (observability) joins the set; the `llm_calls` column shape is added in §4.6 as the single DDL owner, with retention `engine.metrics.retention_days` (ADR-0005). 2026-11-03 — ADR-0000 §4.4 rename: `thread_id` → `thread_id`, `chats`/`thread_eras`/`thread_people` → `threads`/`thread_eras`/`thread_people`, scope `thread` → `thread`; the baseline revision carries the new names.
+- **Amendments:** 2026-11-03 — §4.4 now mirrors the landed chain (revisions 1-12); the P0-3 set landed in 11 and the media split in 12. 2026-11-03 — owner's decision: ADR-0019 (observability) joins the set; the `llm_calls` column shape is added in §4.6 as the single DDL owner, with retention `engine.metrics.retention_days` (ADR-0005). 2026-11-03 — ADR-0000 §4.4 rename: `thread_id` → `thread_id`, `chats`/`thread_eras`/`thread_people` → `threads`/`thread_eras`/`thread_people`, scope `thread` → `thread`; the baseline revision carries the new names. 2026-11-03 — revision 13 adds the columns the remaining ADRs needed: `cognition_jobs.generation` (ADR-0012 §4.4), `memories.dispute_asked_at` with `ix_memories_subject_asked` (ADR-0010 §4.7), `threads.gateway` (ADR-0014 §4.6), `turns.category` (ADR-0013 §11), `skills.priority` (ADR-0020 §4.6), `automation_runs.payload` and the partial `ix_automations_message` index (ADR-0014 §4.3); `memories_readable` is recreated so the appended column stays visible on an upgraded database.
 - **Location note:** ADR lives in `docs/v0.1.0/adr/engine/`; the Indonesian copy is `docs/v0.1.0/adr/engine/id/0016-schema-migration.md`.
 
 ---
@@ -146,6 +146,7 @@ CREATE UNIQUE INDEX memories_supersede_pair ON memories (id, supersedes) WHERE s
 | 10 | `automations`, `automation_runs`, `automation_state_log` | ADR-0014 |
 | 11 | P0-3 FK/CHECK/index set | ADR-0016 |
 | 12 | `message_media` split; `messages` keeps metadata only | ADR-0016 |
+| 13 | fences/events/efficiency columns: `cognition_jobs.generation`, `memories.dispute_asked_at` `(+ ix_memories_subject_asked)`, `threads.gateway`, `turns.category`, `skills.priority`, `automation_runs.payload`, partial `ix_automations_message`; `memories_readable` recreated | ADR-0010, 0012, 0013, 0014, 0020 |
 
 Rules per revision:
 

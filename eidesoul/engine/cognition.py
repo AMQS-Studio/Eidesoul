@@ -24,11 +24,12 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from . import io, observability
 from .config import Config
 from .db import Database
+from .lease import Superseded
 from .memory import assess as memory_assess
+from .memory import efficiency, gate, intent
 from .memory import episodes as memory_episodes
-from .memory import gate
 from .memory import reflect as memory_reflect
-from .schema import cognition_jobs
+from .schema import actions, cognition_jobs
 
 log = logging.getLogger(__name__)
 
@@ -46,6 +47,23 @@ class Job:
     payload_ref: str
     attempts: int
     idempotency_key: str
+    generation: int = 0
+
+
+def _json_object(text: str) -> dict | None:
+    """The first JSON object in one model answer; anything else is unusable, never guessed."""
+    raw = str(text or "").strip()
+    if not raw:
+        return None
+    start = raw.find("{")
+    end = raw.rfind("}")
+    if start < 0 or end <= start:
+        return None
+    try:
+        body = json.loads(raw[start : end + 1])
+    except (TypeError, ValueError):
+        return None
+    return body if isinstance(body, dict) else None
 
 
 def _scope_of(scope: str) -> tuple[str, str]:
@@ -158,25 +176,28 @@ class CognitionQueue:
         lease_seconds: float = 60.0,
         kind: str = "",
         now: float | None = None,
+        generation: int = 0,
     ) -> list[Job]:
-        """`FOR UPDATE SKIP LOCKED`: two workers never take the same job."""
+        """`FOR UPDATE SKIP LOCKED`: two workers never take the same job (ADR-0012 §4.4)."""
         if self.db is None:
             return []
         moment = time.time() if now is None else float(now)
         wanted = " AND kind = :kind" if kind else ""
         statement = text(
             "UPDATE cognition_jobs SET status = 'claimed', claimed_by = :worker, "
-            "lease_until = :lease, attempts = attempts + 1, updated_at = :now "
+            "lease_until = :lease, attempts = attempts + 1, updated_at = :now, "
+            "generation = :generation "
             "WHERE id IN (SELECT id FROM cognition_jobs "
             "WHERE status = 'queued' AND next_attempt_at <= :now" + wanted + " "
             "ORDER BY created_at FOR UPDATE SKIP LOCKED LIMIT :limit) "
-            "RETURNING id, kind, scope, payload_ref, attempts, idempotency_key"
+            "RETURNING id, kind, scope, payload_ref, attempts, idempotency_key, generation"
         )
         params = {
             "worker": str(worker),
             "lease": moment + max(1.0, float(lease_seconds)),
             "now": moment,
             "limit": max(1, int(limit)),
+            "generation": int(generation or 0),
         }
         if kind:
             params["kind"] = str(kind)
@@ -190,23 +211,27 @@ class CognitionQueue:
                 payload_ref=str(row["payload_ref"] or ""),
                 attempts=int(row["attempts"] or 0),
                 idempotency_key=str(row["idempotency_key"]),
+                generation=int(row["generation"] or 0),
             )
             for row in rows
         ]
 
-    def complete(self, job_id: str, result: str = "") -> None:
-        self._set(
+    def complete(self, job_id: str, result: str = "", *, generation: int | None = None) -> bool:
+        return self._set(
             job_id,
             status="done",
             result_ref=str(result or "")[:2000],
             claimed_by="",
             lease_until=0.0,
+            generation=generation,
         )
 
-    def fail(self, job_id: str, reason: str) -> None:
+    def fail(
+        self, job_id: str, reason: str, *, generation: int | None = None
+    ) -> bool:
         """Retry with backoff; after `dead_letter_after` the job is `dead` and visible."""
         if self.db is None:
-            return
+            return False
         row = self.db.fetch_one(
             select(cognition_jobs.c.attempts).where(cognition_jobs.c.id == str(job_id))
         )
@@ -216,25 +241,41 @@ class CognitionQueue:
         delay = 0.0
         if not dead:
             delay = float(retry.backoff_seconds) * (2 ** max(0, attempts - 1))
-        self._set(
+        return self._set(
             job_id,
             status="dead" if dead else "queued",
             next_attempt_at=time.time() + delay,
             claimed_by="",
             lease_until=0.0,
             result_ref=("error:" + " ".join(str(reason or "").split()))[:2000],
+            generation=generation,
         )
 
-    def _set(self, job_id: str, **values) -> None:
+    def _set(self, job_id: str, *, generation: int | None = None, **values) -> bool:
+        """Update one job; `False` when the lease generation moved on (ADR-0012 §4.4).
+
+        A lease-bound worker checks the live generation on its own connection and matches the
+        row's claim generation, so a replaced primary can neither finish nor retry a job the
+        new one now owns. `generation=None` (or 0) is the unbound path: admin, reaper, tests.
+        """
         if self.db is None:
-            return
+            return False
         values["updated_at"] = time.time()
+        statement = cognition_jobs.update().where(cognition_jobs.c.id == str(job_id))
         with self.db.connect() as conn:
-            conn.execute(
-                cognition_jobs.update()
-                .where(cognition_jobs.c.id == str(job_id))
-                .values(**values)
-            )
+            if generation:
+                live = conn.execute(
+                    text("SELECT generation FROM engine_lease WHERE id = 1")
+                ).scalar()
+                if not isinstance(live, int) or live != int(generation):
+                    log.warning("job %s superseded: generation moved", job_id)
+                    return False
+                statement = statement.where(cognition_jobs.c.generation == int(generation))
+            changed = conn.execute(statement.values(**values)).rowcount
+        if generation and not changed:
+            log.warning("job %s superseded: generation moved", job_id)
+            return False
+        return True
 
     def reap(self, *, now: float | None = None) -> int:
         """A lease that passed returns to `queued`; a spent attempt count goes `dead`."""
@@ -333,6 +374,9 @@ class CognitionWorker:
         known_tools: Sequence[str] = (),
         ask=None,
         worker_id: str = "",
+        lease=None,
+        ask_dispute=None,
+        propose=None,
     ) -> None:
         self.db = db
         self.config = config
@@ -343,6 +387,9 @@ class CognitionWorker:
         self.language = str(language or "id")
         self.known_tools = tuple(str(item) for item in known_tools if str(item or ""))
         self.ask = ask
+        self.lease = lease
+        self.ask_dispute = ask_dispute
+        self.propose = propose
         self.queue = CognitionQueue(db, config)
         self.worker_id = str(worker_id or f"{uuid.uuid4().hex[:8]}")
         self.running = False
@@ -408,7 +455,13 @@ class CognitionWorker:
             self.counters["reaped"] += await io.run(self.queue.reap, now=now)
         await self._schedule(now)
         limit = int(getattr(self.config.memory.worker, "concurrency", 2))
-        jobs = await io.run(self.queue.claim, worker=self.worker_id, limit=limit, now=now)
+        jobs = await io.run(
+            self.queue.claim,
+            worker=self.worker_id,
+            limit=limit,
+            now=now,
+            generation=self._generation(),
+        )
         if not jobs:
             return
         batches: dict[str, list[Job]] = {}
@@ -422,6 +475,10 @@ class CognitionWorker:
             return_exceptions=True,
         )
 
+    def _generation(self) -> int:
+        """The lease generation this worker writes under; 0 when no lease is attached."""
+        return int(getattr(self.lease, "generation", 0) or 0)
+
     async def _run_batch(self, label: str, jobs: list[Job]) -> None:
         if not jobs:
             return
@@ -434,26 +491,44 @@ class CognitionWorker:
                 results = await self._consolidate(jobs)
             else:
                 results = {jobs[0].id: await self._handle(jobs[0])}
+        except Superseded:
+            # The lease moved on mid-batch: the writes were refused, so the job stays claimed
+            # and the reaper hands it to the new primary (ADR-0012 §4.4).
+            log.warning("cognition %s superseded: generation moved", label)
+            return
         except asyncio.CancelledError:
             for job in jobs:
-                await io.run(self.queue.fail, job.id, "cancelled")
+                await io.run(
+                    self.queue.fail, job.id, "cancelled", generation=job.generation
+                )
             raise
         except Exception as exc:
             log.warning("cognition %s failed: %s: %s", label, type(exc).__name__, exc)
             for job in jobs:
-                await io.run(self.queue.fail, job.id, f"{type(exc).__name__}: {exc}")
+                await io.run(
+                    self.queue.fail,
+                    job.id,
+                    f"{type(exc).__name__}: {exc}",
+                    generation=job.generation,
+                )
             self.counters["jobs_failed"] += len(jobs)
             return
         finally:
             observability.leave(tokens)
         for job in jobs:
-            await io.run(self.queue.complete, job.id, results.get(job.id, ""))
+            await io.run(
+                self.queue.complete, job.id, results.get(job.id, ""), generation=job.generation
+            )
         self.counters["jobs_done"] += len(jobs)
 
     async def drain(self, *, kind: str = "", limit: int = 1) -> dict[str, str]:
         """Claim and run one batch now (deterministic tests, a manual kick, a slow lane)."""
         jobs = await io.run(
-            self.queue.claim, worker=self.worker_id, limit=limit, kind=kind
+            self.queue.claim,
+            worker=self.worker_id,
+            limit=limit,
+            kind=kind,
+            generation=self._generation(),
         )
         if not jobs:
             return {}
@@ -471,7 +546,9 @@ class CognitionWorker:
                 for job in group:
                     results[job.id] = await self._handle(job)
         for job in jobs:
-            await io.run(self.queue.complete, job.id, results.get(job.id, ""))
+            await io.run(
+                self.queue.complete, job.id, results.get(job.id, ""), generation=job.generation
+            )
         self.counters["jobs_done"] += len(jobs)
         return results
 
@@ -668,14 +745,15 @@ class CognitionWorker:
         if group and verdict.ask and not rules.ask_in_group:
             await io.run(self.memory.defer_candidate, memory_id, reason="ask in group")
             return "ask pending"
+        category, durability = await self._remember_hint(row, verdict)
         labelled = await io.run(
             self.memory.label_candidate,
             memory_id,
             level=int(verdict.level),
             confirmed=not bool(verdict.ask),
             subject_id=subject or owner,
-            category=str(verdict.category or ""),
-            durability=str(verdict.durability or ""),
+            category=category,
+            durability=durability,
             kind=str(verdict.kind or ""),
             text=str(verdict.text or ""),
         )
@@ -695,6 +773,24 @@ class CognitionWorker:
             except Exception:
                 log.debug("ask callback failed", exc_info=True)
         return f"ok L{verdict.level}"
+
+    async def _remember_hint(self, row: Mapping, verdict) -> tuple[str, str]:
+        """ADR-0005 §4.6: "remember this" raises durability and pins only a core memory.
+
+        The hint never overrides a verdict: a `not worth` candidate is dropped before this runs,
+        and the hard exclusion already refused credentials and instructions at intake. The
+        embedding runs on the bounded pool, never on the event loop (ADR-0017 §4.1).
+        """
+        category = str(verdict.category or "")
+        durability = str(verdict.durability or "")
+        settings = getattr(self.config.memory, "intent", None)
+        text = str(verdict.text or row.get("text") or "")
+        kind = await io.run(intent.classify, text, self.language, settings)
+        if kind != "remember":
+            return category, durability
+        if durability != "core":
+            durability = "core"
+        return category, durability
 
     async def _visibility(self, row: Mapping, level: int) -> None:
         if self.history is None:
@@ -743,9 +839,10 @@ class CognitionWorker:
         settings = self.config.reflection
         if not settings.enabled:
             return "reflection disabled"
+        # `run_pass` is a coroutine (it awaits the ruling model); `io.run` would hand back an
+        # un-awaited coroutine, so the pass is awaited directly under the same budget.
         report = await asyncio.wait_for(
-            io.run(
-                memory_reflect.run_pass,
+            memory_reflect.run_pass(
                 self.memory,
                 scope=job.scope,
                 llm=self.llm,
@@ -759,11 +856,191 @@ class CognitionWorker:
             timeout=float(settings.seconds_per_pass),
         )
         self.counters["reflected"] += 1
+        await self._ladder()
+        await self._ask_dispute(report)
         return (
             f"candidates {report.candidates} writes {report.writes} "
             f"disputes {report.disputes} promoted {report.staged_promoted} "
             f"stale {report.stale} {report.skipped}".strip()
         )
+
+    # -------------------------------------------------------------- ladder
+
+    LADDER_ACTIONS = ("keep", "merge", "promote", "archive", "propose_automation")
+    LADDER_BATCH = 5
+    LADDER_PROMPT = (
+        "You compare episodes of the same procedure and pick one ladder action. Reply ONLY with "
+        "JSON {\"action\":\"keep|merge|promote|archive|propose_automation\",\"skill\":\"\","
+        "\"reason\":\"\",\"refs\":[],\"manifest\":null}. Choose keep when the evidence is "
+        "unclear, merge when two procedures are the same job, promote when the procedure "
+        "clearly saves work, archive when it keeps failing, and propose_automation when the "
+        "same steps repeat on a schedule. Never invent a skill name; use only the ones given."
+    )
+
+    async def _ladder(self) -> None:
+        """ADR-0020 §4.6: compare eligible signatures and apply one deterministic action."""
+        settings = self.config.skills
+        if not getattr(settings, "efficiency_enabled", False) or self.skills is None:
+            return
+        if self.db is None or self.llm is None:
+            return
+        moment = time.time()
+        window_days = float(getattr(settings, "efficiency_window_days", 30.0))
+        signatures = await io.run(
+            efficiency.signatures, self.db, window_days=window_days, now=moment
+        )
+        for signature in signatures[: self.LADDER_BATCH]:
+            found = await io.run(
+                efficiency.evidence, self.db, signature, window_days=window_days, now=moment
+            )
+            if not efficiency.eligible(
+                found,
+                min_episodes=int(getattr(settings, "efficiency_min_evidence_episodes", 2)),
+            ):
+                continue
+            names = await io.run(self.skills.evidence_for_signature, signature)
+            if not names:
+                continue
+            decided = await self._ladder_decision(found, names)
+            if decided is None or str(decided.get("action")) == "keep":
+                continue
+            await self._ladder_apply(str(decided.get("action")), decided, names, found)
+
+    async def _ladder_decision(self, found, names: list[str]) -> dict | None:
+        payload = {
+            "signature": found.signature,
+            "episodes": found.as_dict(),
+            "skills": [str(name) for name in names],
+            "language": self.language,
+        }
+        try:
+            raw = await self.llm.complete(
+                self.LADDER_PROMPT, json.dumps(payload), max_tokens=500
+            )
+        except Exception:
+            log.debug("ladder decision failed", exc_info=True)
+            return None
+        body = _json_object(raw)
+        if body is None:
+            return None
+        action = str(body.get("action") or "").strip().lower()
+        skill = str(body.get("skill") or "").strip().lower()
+        if action not in self.LADDER_ACTIONS:
+            return None
+        if action != "keep" and skill not in names:
+            return None
+        body["action"] = action
+        body["skill"] = skill
+        return body
+
+    async def _ladder_apply(self, action: str, decided: dict, names: list[str], found) -> None:
+        skill = str(decided.get("skill") or "")
+        reason = str(decided.get("reason") or "")[:200]
+        if action == "promote":
+            current = await io.run(self.skills.get, skill)
+            if current is None:
+                return
+            await io.run(
+                self.skills.revise,
+                current.name,
+                current.description,
+                current.body,
+                scope=current.scope,
+                stated_by=current.stated_by,
+                trust=current.trust,
+            )
+            await io.run(self.skills.set_priority, current.name, current.priority + 1)
+            await io.run(self.skills.record_notice, current.name, f"promoted: {reason}")
+            self.counters["distilled"] += 1
+            return
+        if action == "merge":
+            survivor = await io.run(self.skills.get, skill)
+            if survivor is None:
+                return
+            others = [item for item in names if item != skill]
+            merged = survivor.body + "\n\n" + "\n".join(
+                f"# {item}" for item in others
+            )
+            await io.run(
+                self.skills.revise,
+                survivor.name,
+                survivor.description,
+                merged[: int(getattr(self.config.skills, "max_body_chars", 18000))],
+                scope=survivor.scope,
+                stated_by=survivor.stated_by,
+                trust=survivor.trust,
+            )
+            await io.run(self.skills.record_notice, survivor.name, f"merged: {reason}")
+            return
+        if action == "archive":
+            try:
+                await io.run(self.skills.archive, skill)
+            except KeyError:
+                return
+            await io.run(self.skills.record_notice, skill, f"archived: {reason}")
+            return
+        if action == "propose_automation":
+            await self._ladder_propose(skill, decided, found, reason)
+
+    async def _ladder_propose(self, skill: str, decided: dict, found, reason: str) -> None:
+        """Ladder step 8: one approval, nothing stored until the owner approves it."""
+        settings = self.config.skills
+        if not getattr(settings, "ladder_enabled", False) or self.propose is None:
+            return
+        if await io.run(self._proposal_recent, skill):
+            await io.run(
+                self.skills.record_notice, skill, f"proposal skipped (cooldown): {reason}"
+            )
+            return
+        manifest = decided.get("manifest")
+        if not isinstance(manifest, dict):
+            await io.run(self.skills.record_notice, skill, "proposal skipped (no manifest)")
+            return
+        person = found.person_ids[0] if found.person_ids else ""
+        thread = ""
+        if person and self.history is not None:
+            thread = await io.run(self.history.dm_thread, person)
+        if not thread:
+            await io.run(self.skills.record_notice, skill, "proposal skipped (no dm)")
+            return
+        try:
+            await self.propose(manifest, thread, None)
+        except Exception as exc:
+            await io.run(
+                self.skills.record_notice, skill, f"proposal refused: {type(exc).__name__}"
+            )
+            return
+        await io.run(self.skills.record_notice, skill, f"proposal:{skill}: {reason}")
+
+    def _proposal_recent(self, skill: str) -> bool:
+        """Cooldown: the same skill was proposed inside `proposal_cooldown_days`."""
+        days = float(getattr(self.config.skills, "ladder_proposal_cooldown_days", 14.0))
+        if days <= 0:
+            return False
+        cutoff = time.time() - days * DAY
+        found = self.db.fetch_one(
+            select(actions.c.id)
+            .where(
+                actions.c.kind == "skill",
+                actions.c.ts >= cutoff,
+                actions.c.summary.like(f"proposal:{skill}:%"),
+            )
+            .limit(1)
+        )
+        return found is not None
+
+    async def _ask_dispute(self, report) -> None:
+        """One question per pass for the first opened pair that names a subject (ADR-0010 §4.7)."""
+        if self.ask_dispute is None:
+            return
+        for pair in getattr(report, "opened", ()) or ():
+            if not str(pair.get("subject_id") or "").strip():
+                continue
+            try:
+                await self.ask_dispute(str(pair["subject_id"]), pair)
+            except Exception:
+                log.warning("dispute question failed", exc_info=True)
+            return
 
     async def _distill(self, job: Job) -> str:
         settings = self.config.skills
@@ -871,7 +1148,11 @@ class CognitionWorker:
         return f"indexed {added}"
 
     async def _audit(self, job: Job) -> str:
-        report = await self.memory.purge()
+        settings = self.config.memory.retention
+        report = await self.memory.purge(
+            grace_days=float(settings.purge_grace_days),
+            batch=int(settings.purge_batch),
+        )
         stale = await io.run(
             self.memory.stale_disputes,
             ttl_days=float(self.config.reflection.dispute_ttl_days),

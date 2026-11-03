@@ -9,7 +9,7 @@ from datetime import UTC, datetime
 
 import pytest
 from sqlalchemy import select
-from support import make_agent
+from support import inbound_message, make_agent
 
 from eidesoul.engine.automation import (
     AutomationStore,
@@ -444,3 +444,97 @@ def test_automation_tables_follow_the_migration(tmp_path) -> None:
     assert len(rows) == 1 and rows[0]["owner"] == OWNER
     assert rows[0]["owner_roles_at_creation"] == ["member"]
     assert time.time() > 0
+
+
+def message_manifest(**overrides) -> dict:
+    body = manifest(
+        name="reaksi",
+        event={"kind": "message"},
+        steps=[{"kind": "send", "to": "origin"}],
+        **{},
+    )
+    body.update(overrides)
+    return body
+
+
+def test_a_message_event_queues_one_run_per_matching_message(tmp_path) -> None:
+    """ADR-0014 §4.3: the intake sink writes the run, and its payload carries the message."""
+    env = build(tmp_path)
+    env.history.event_sink = env.store
+    thread_id = "628111@s.whatsapp.net"
+    create(env, message_manifest(), now=time.time())
+
+    first = inbound_message("halo", thread=thread_id, message_id="msg-1")
+    duplicate = inbound_message("halo", thread=thread_id, message_id="msg-1")
+    assert env.history.intake(
+        thread_id, first.payload, first.actor, gateway="fake"
+    ) is True
+    assert env.history.intake(
+        thread_id, duplicate.payload, duplicate.actor, gateway="fake"
+    ) is False
+
+    rows = runs(env)
+    assert len(rows) == 1
+    assert rows[0]["status"] == "queued"
+    assert rows[0]["payload"]["message_id"] == "msg-1"
+    assert rows[0]["payload"]["thread"] == thread_id
+    assert rows[0]["payload"]["person_id"] == first.actor
+
+
+def test_a_message_event_only_matches_its_room_and_sender(tmp_path) -> None:
+    env = build(tmp_path)
+    env.history.event_sink = env.store
+    create(
+        env,
+        message_manifest(event={"kind": "message", "thread": ["room-a"], "sender": "628222"}),
+        now=time.time(),
+    )
+
+    other_room = inbound_message("halo", thread="room-b", sender="628222", person_id="628222")
+    env.history.intake("room-b", other_room.payload, other_room.actor)
+    other_sender = inbound_message("halo", thread="room-a", sender="628999", person_id="628999")
+    env.history.intake("room-a", other_sender.payload, other_sender.actor)
+    assert runs(env) == []
+
+    matching = inbound_message("halo", thread="room-a", sender="628222", person_id="628222")
+    env.history.intake("room-a", matching.payload, matching.actor)
+    assert len(runs(env)) == 1
+
+
+def test_a_message_run_reads_its_text_and_sender(tmp_path) -> None:
+    env = build(tmp_path)
+    env.history.event_sink = env.store
+    thread_id = "628111@s.whatsapp.net"
+    create(
+        env,
+        message_manifest(
+            condition={"all": [{"kind": "keyword", "value": "halo"}]},
+            steps=[{"kind": "compose"}, {"kind": "send", "to": "origin"}],
+        ),
+        now=time.time(),
+    )
+    message = inbound_message("halo semuanya", thread=thread_id, message_id="msg-9")
+    env.history.intake(thread_id, message.payload, message.actor, gateway="fake")
+
+    worker = AutomationWorker(env.agent, store=env.store)
+    facts: dict = {}
+    assert asyncio.run(worker._message_facts(runs(env)[0], facts)) is True
+    assert facts["text"] == "halo semuanya"
+    assert facts["sender"] == message.actor
+    assert facts["thread"] == thread_id
+
+
+def test_the_durable_route_survives_a_restart(tmp_path) -> None:
+    """ADR-0014 §4.6: the first body owns the thread; delivery follows that route."""
+    from support import FakeGateway
+
+    other = FakeGateway(name="other")
+    env = build(tmp_path)
+    env.agent.gateways = (env.gateway, other)
+    thread_id = "628111@s.whatsapp.net"
+    message = inbound_message("halo", thread=thread_id, message_id="msg-route")
+    env.history.intake(thread_id, message.payload, message.actor, gateway="other")
+
+    assert env.history.gateway_of(thread_id) == "other"
+    env.agent._turn_gateways.clear()  # a fresh boot keeps no in-memory map
+    assert env.agent._gateway_for(thread_id) is other

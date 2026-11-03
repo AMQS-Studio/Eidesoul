@@ -7,7 +7,7 @@ import contextlib
 import logging
 import random
 import time
-from collections import OrderedDict
+from collections import OrderedDict, deque
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from contextvars import ContextVar
@@ -15,7 +15,7 @@ from dataclasses import asdict, replace
 from datetime import datetime
 from pathlib import Path
 
-from . import assembly, components, guard, io, observability
+from . import assembly, guard, io, observability, plugins
 from .approvals import ApprovalStore
 from .character import effective_limits, polish, regulate
 from .commands import REGISTRY as CORE_COMMANDS
@@ -55,7 +55,7 @@ from .inbound import (
 )
 from .knowledge import select_facts
 from .llm import LLM, DeadlineExceeded
-from .memory import MemoryBackend, MemoryContext, memory_status
+from .memory import MemoryBackend, MemoryContext, intent, memory_status
 from .memory.ledger import OutboundLedger
 from .patterns import load_lexicon, room_register, select_patterns
 from .permissions import command_allowed, commands_for, tool_patterns, tools_for
@@ -77,6 +77,8 @@ RESTART_FIELDS = ("workspace", "gateways", "sandbox", "web_search", "mcp", "data
 DECISION_HISTORY = 30
 DECISION_FALLBACK_HISTORY = 20
 DECISION_LINE_CHARS = 500
+# ADR-0013 §11: the resume budget is a rolling minute, not a fixed per-pass cap.
+RESUME_WINDOW = 60.0
 MAX_TEXT = 10_000
 MENTION_HEAD_RE = r"^@([^\s@]+)\s*"
 
@@ -197,6 +199,7 @@ class Agent:
         self._turn_tasks: dict[str, asyncio.Task] = {}
         self._pending_tasks: dict[str, asyncio.Task] = {}
         self._turn_gateways: dict[str, GatewayCore] = {}
+        self._resume_times: deque[float] = deque()
         self._shutdown_gateways: dict[str, GatewayCore] = {}
         self._cancel_reasons: dict[str, str] = {}
         self.draining = False
@@ -207,8 +210,8 @@ class Agent:
         gateway_commands = [
             handler for gateway in self.gateways for handler in gateway.commands()
         ]
-        self.components = components.load(
-            components.ComponentSettings.from_config(config),
+        self.plugins = plugins.load(
+            plugins.PluginLoader.from_config(config),
             tools=[
                 *CORE_TOOLS.reserved(),
                 *(value for h in gateway_tools for value in (h.name, *h.aliases)),
@@ -218,14 +221,15 @@ class Agent:
                 *(value for h in gateway_commands for value in (h.name, *h.aliases)),
             ],
         )
-        handlers = [*CORE_TOOLS.by_name.values(), *gateway_tools, *self.components.tools]
+        handlers = [*CORE_TOOLS.by_name.values(), *gateway_tools, *self.plugins.tools]
         self.tools = Registry(handlers, "tool")
         handlers = [
             *CORE_COMMANDS.by_name.values(),
             *gateway_commands,
-            *self.components.commands,
+            *self.plugins.commands,
         ]
         self.commands = Registry(handlers, "command")
+        self._sync_soul_rules()
         self.runtime = runtime or RuntimeFacts(
             db_label=getattr(db, "label", ""), paths=config.paths
         )
@@ -237,6 +241,27 @@ class Agent:
         self.privacy = PrivacyService(self)
 
     # ------------------------------------------------------------- util
+
+    def _sync_soul_rules(self) -> str:
+        """ADR-0008 §4.3: mirror the soul's rules and promote the ones that earned it.
+
+        Best effort: a store without the port (a fake, a read-only backend) or a DB failure
+        logs one line and never blocks the boot.
+        """
+        rules = tuple(getattr(self.soul, "rules", ()) or ())
+        sync = getattr(self.memory, "sync_soul_rules", None)
+        promote = getattr(self.memory, "promote_soul_rules", None)
+        try:
+            if callable(sync) and rules:
+                sync(rules)
+            if callable(promote):
+                promoted = int(promote() or 0)
+                if promoted:
+                    log.info("soul rules promoted: %d", promoted)
+        except Exception:
+            log.warning("soul rule sync failed; continuing", exc_info=True)
+            return "failed"
+        return "ok"
 
     def spawn(self, coro) -> None:
         task = asyncio.create_task(coro)
@@ -364,7 +389,7 @@ class Agent:
             return None
 
     def _step_recorder(self, turn_id: str, step: str):
-        def record(tool, args, result, started, finished):
+        def record(tool, args, result, started, finished, status: str = "executed"):
             try:
                 self.turns.record_step(
                     turn_id,
@@ -372,6 +397,7 @@ class Agent:
                     tool=str(tool),
                     args=args,
                     result=result,
+                    status=str(status or "executed"),
                     started_at=started,
                     finished_at=finished,
                 )
@@ -550,31 +576,136 @@ class Agent:
     # --------------------------------------------------------- recovery
 
     def _gateway_for(self, thread_id: str) -> GatewayCore | None:
+        """The body that serves this thread: turn map, then the durable route, then the first."""
         found = self._turn_gateways.get(thread_id)
         if found is not None:
             return found
+        lookup = getattr(self.history, "gateway_of", None)
+        if callable(lookup):
+            try:
+                name = str(lookup(str(thread_id)) or "")
+            except Exception:
+                log.debug("route lookup failed thread=%s", thread_id, exc_info=True)
+                name = ""
+            if name:
+                match = next((item for item in self.gateways if item.name == name), None)
+                if match is not None:
+                    return match
         return self.gateways[0] if self.gateways else None
 
-    def _select_resume(self, rows: list[dict]) -> list[dict]:
-        """Apply the backlog policy, per-chat limit, and the global minute free (ADR-0013 §11)."""
+    @staticmethod
+    def _is_action(row: dict) -> bool:
+        """`turns.category` marks a single-action turn: never consolidated away (ADR-0013 §11)."""
+        return str(row.get("category") or "chat") == "action"
+
+    def _expire_consolidated(self, thread: str, turn_ids: list[str]) -> int:
+        """Expire the consolidated tail of one chat and let the away block explain it."""
+        expired = 0
+        for turn_id in turn_ids:
+            try:
+                self.turns.expire(turn_id, "consolidate")
+            except Exception:
+                log.exception("failed to expire consolidated turn %s", turn_id)
+                continue
+            expired += 1
+        if expired:
+            self.backlog[thread] = self.backlog.get(thread, 0) + expired
+            log.info("recovery: %d turn(s) consolidated chat=%s", expired, thread)
+        return expired
+
+    def _select_resume(self, rows: list[dict], allowed: int) -> list[dict]:
+        """Pace, fair-share, and consolidate one backlog (ADR-0013 §11).
+
+        Selection is round-robin across chats so one busy room cannot starve the others; the
+        global minute budget bounds the whole pass and the per-chat quota bounds one room. Under
+        `per_message_then_consolidate` the rows past that quota are expired with
+        `reason=consolidate`, which the away block turns into one consolidated answer; an
+        `action` turn is always selected on its own and never expired.
+        """
         cfg = self.config.turns
         policy = str(cfg.backlog_policy)
-        ordered = sorted(rows, key=lambda row: float(row["created_at"]))
-        if policy in {"last_only"}:
-            newest: dict[str, dict] = {}
-            for row in ordered:
-                newest[str(row["thread_id"])] = row
-            ordered = list(newest.values())
-        per_chat: dict[str, int] = {}
+        budget = max(0, int(allowed))
+        if not budget:
+            return []
+        groups = self._backlog_groups(rows)
+        if policy == "last_only":
+            return [group[-1] for group in groups.values()][:budget]
+        if policy == "consolidate":
+            return self._consolidate(groups)[:budget]
+        quota = max(1, int(cfg.max_resume_per_chat))
+        actions, chats = self._split_actions(groups)
+        taken = dict.fromkeys(groups, 0)
+        selected = self._round_robin(groups, actions, chats, taken, quota, budget)
+        if policy == "per_message_then_consolidate":
+            for thread in sorted(groups):
+                if taken[thread] < quota:
+                    continue
+                self._expire_consolidated(thread, [str(row["id"]) for row in chats[thread]])
+        return selected
+
+    @staticmethod
+    def _backlog_groups(rows: list[dict]) -> dict[str, list[dict]]:
+        groups: dict[str, list[dict]] = {}
+        for row in sorted(
+            rows, key=lambda item: (str(item["thread_id"]), float(item["created_at"]))
+        ):
+            groups.setdefault(str(row["thread_id"]), []).append(row)
+        return groups
+
+    @staticmethod
+    def _split_actions(
+        groups: dict[str, list[dict]],
+    ) -> tuple[dict[str, list[dict]], dict[str, list[dict]]]:
+        actions = {
+            thread: [row for row in group if Agent._is_action(row)]
+            for thread, group in groups.items()
+        }
+        chats = {
+            thread: [row for row in group if not Agent._is_action(row)]
+            for thread, group in groups.items()
+        }
+        return actions, chats
+
+    def _consolidate(self, groups: dict[str, list[dict]]) -> list[dict]:
+        """`consolidate`: the last chat row per room plus every action row, oldest first."""
+        chosen: list[dict] = []
+        for thread in sorted(groups):
+            group = groups[thread]
+            chats = [row for row in group if not self._is_action(row)]
+            chosen.extend(row for row in group if self._is_action(row))
+            if chats:
+                chosen.append(chats[-1])
+            self._expire_consolidated(thread, [str(row["id"]) for row in chats[:-1]])
+        chosen.sort(key=lambda row: float(row["created_at"]))
+        return chosen
+
+    def _round_robin(
+        self,
+        groups: dict[str, list[dict]],
+        actions: dict[str, list[dict]],
+        chats: dict[str, list[dict]],
+        taken: dict[str, int],
+        quota: int,
+        budget: int,
+    ) -> list[dict]:
+        """One row per room per lap: an action row first, then a chat row under the quota."""
         selected: list[dict] = []
-        for row in ordered:
-            if len(selected) >= int(cfg.max_resume_per_minute):
+        while len(selected) < budget:
+            progressed = False
+            for thread in sorted(groups):
+                if len(selected) >= budget:
+                    break
+                if actions[thread]:
+                    selected.append(actions[thread].pop(0))
+                    progressed = True
+                    continue
+                if taken[thread] >= quota or not chats[thread]:
+                    continue
+                selected.append(chats[thread].pop(0))
+                taken[thread] += 1
+                progressed = True
+            if not progressed:
                 break
-            thread = str(row["thread_id"])
-            if per_chat.get(thread, 0) >= int(cfg.max_resume_per_chat):
-                continue
-            per_chat[thread] = per_chat.get(thread, 0) + 1
-            selected.append(row)
         return selected
 
     async def recover(self) -> int:
@@ -599,7 +730,18 @@ class Agent:
         )
         if dead:
             log.warning("recovery: %d turn(s) abandoned after attempts were exhausted", dead)
-        selected = self._select_resume(rows)
+        moment = time.time()
+        self._resume_times = deque(
+            stamp for stamp in self._resume_times if moment - stamp < RESUME_WINDOW
+        )
+        allowed = max(0, int(cfg.max_resume_per_minute) - len(self._resume_times))
+        selected = self._select_resume(rows, allowed)
+        picked = {str(row["id"]) for row in selected}
+        unselected = [str(row["id"]) for row in rows if str(row["id"]) not in picked]
+        if unselected:
+            released = await io.run(self.turns.release, unselected)
+            if released:
+                log.info("recovery: %d turn(s) released for a later pass", released)
         resumed = 0
         noticed: set[str] = set()
         for row in selected:
@@ -647,6 +789,7 @@ class Agent:
                 payload=message,
                 hints={},
             )
+            self._resume_times.append(time.time())
             self.spawn(self.handle(inbound, gateway, claimed=row))
             resumed += 1
         if resumed:
@@ -851,6 +994,7 @@ class Agent:
     ) -> str:
         path = Path(path)
         if not isinstance(gateway, Rich):
+            self.runtime.rich_missing_total += 1
             return await self.deliver_text(
                 thread_id,
                 file_fallback_text(path, caption, self.soul.language),
@@ -878,6 +1022,7 @@ class Agent:
         self, thread_id: str, message_id: str, *, gateway: GatewayCore
     ) -> str | None:
         if not isinstance(gateway, Rich):
+            self.runtime.rich_missing_total += 1
             return None
         self._send_gate()
         label = await gateway.send_sticker(thread_id, message_id)
@@ -898,12 +1043,16 @@ class Agent:
 
     async def _typing(self, gateway: GatewayCore, thread_id: str, composing: bool) -> None:
         """A body without `Rich` has no presence indicator; skip, never fail."""
-        if isinstance(gateway, Rich):
-            await gateway.typing(thread_id, composing)
+        if not isinstance(gateway, Rich):
+            self.runtime.rich_missing_total += 1
+            return
+        await gateway.typing(thread_id, composing)
 
     async def _prepare_media(self, gateway: GatewayCore, thread_id: str, entry: Message) -> None:
-        if isinstance(gateway, Rich):
-            await gateway.prepare_media(thread_id, entry)
+        if not isinstance(gateway, Rich):
+            self.runtime.rich_missing_total += 1
+            return
+        await gateway.prepare_media(thread_id, entry)
 
     async def send_text(self, thread_id: str, text: str, *, gateway: GatewayCore | None) -> str:
         """Tool-facing: render the gateway dialect, split, send, return ok:/error:."""
@@ -925,6 +1074,40 @@ class Agent:
         name = gateway.chat_name(thread_id)
         suffix = f" ({len(chunks)} parts)" if len(chunks) > 1 else ""
         return f"ok: text sent to {name or thread_id}{suffix}"
+
+    async def ask_dispute(self, subject_id: str, pair: dict) -> str:
+        """ADR-0010 §4.7: one dispute question per subject per day, in that subject's DM.
+
+        The target is a real DM thread (`threads.kind='dm'`, single member); when the body cannot
+        prove one, or the daily budget is spent, nothing is sent and nothing is asked. The answer
+        arrives as an ordinary turn, so no approval row is created here.
+        """
+        subject = str(subject_id or "").strip()
+        ids = [str(item) for item in (pair.get("ids") or [])]
+        if not subject or not ids:
+            return "skipped: no subject"
+        budget = int(getattr(self.config.reflection, "questions_per_day", 1))
+        if budget <= 0:
+            return "skipped: questions are off"
+        thread = str(self.history.dm_thread(subject) or "")
+        if not thread:
+            log.info("dispute question skipped: no dm for %s", subject)
+            return "skipped: no dm"
+        if int(self.memory.disputes_asked_today(subject)) >= budget:
+            log.info("dispute question skipped: daily budget for %s", subject)
+            return "skipped: budget"
+        text = t(
+            "memory.dispute_question",
+            self.soul.language,
+            first=str(pair.get("first") or "").strip()[:160],
+            second=str(pair.get("second") or "").strip()[:160],
+        )
+        sent = await self.send_text(thread, text, gateway=self._gateway_for(thread))
+        if not str(sent).startswith("ok:"):
+            return f"failed: {sent}"
+        self.memory.mark_dispute_asked(ids)
+        log.info("dispute question asked thread=%s subject=%s", thread, subject)
+        return "ok: asked"
 
     async def ask_memory(
         self,
@@ -972,6 +1155,38 @@ class Agent:
         return f"ok: file sent: {Path(path).name}"
 
     # ------------------------------------------------------------- turn
+
+    async def _forget_intent(self, inbound: Percept, message) -> None:
+        """ADR-0005 §4.6: a "forget that …" turn removes the one entry it can mean.
+
+        The deterministic veto+forget path runs before the turn, so the ordinary reply can
+        confirm it. Ambiguity deletes nothing and the turn continues unchanged.
+        """
+        settings = getattr(self.config.memory, "intent", None)
+        kind = await io.run(
+            intent.classify, str(message.text or ""), self.soul.language, settings
+        )
+        if kind != "forget":
+            return
+        forget = getattr(self.memory, "forget_by_intent", None)
+        if not callable(forget):
+            return
+        try:
+            removed = await forget(
+                str(message.text or ""),
+                person_id=str(inbound.actor or ""),
+                thread_id=str(inbound.thread or ""),
+            )
+        except Exception:
+            log.warning("forget intent failed; the turn continues", exc_info=True)
+            return
+        if removed:
+            log.info(
+                "forget intent removed %d entr%s chat=%s",
+                len(removed),
+                "y" if len(removed) == 1 else "ies",
+                inbound.thread,
+            )
 
     def _identify(self, inbound: Percept, gateway: GatewayCore) -> Percept:
         """Core-owned identity: the body hands in an address, the core assigns the id."""
@@ -1041,6 +1256,9 @@ class Agent:
                 inbound.actor,
                 language=str(self.soul.language or "id"),
                 audience="private" if bool(inbound.hints.get("dm")) else "group",
+                # ADR-0013 §11: the body marks a single-action turn; the backlog never folds it.
+                category="action" if inbound.hints.get("action") is True else "chat",
+                gateway=getattr(gateway, "name", "") or "",
             )
         except Exception:
             log.exception(
@@ -1050,6 +1268,7 @@ class Agent:
         self.windows.append(thread_id, message, persist=False)
         if self.ambient is not None:
             self.ambient.note(thread_id, message)
+        await self._forget_intent(inbound, message)
         existing = self.turns.get(turn_id)
         if existing is not None and str(existing["status"]) in TERMINAL_TURN:
             log.info("turn %s already %s; no repeat", turn_id, existing["status"])
@@ -1964,6 +2183,7 @@ class Agent:
             self.ambient.llm = self.llm
         self.runtime.paths = loaded.paths
         self.runtime.memory_status = memory_status(self.memory)
+        self._sync_soul_rules()
         return "config/soul/roles reloaded"
 
     async def apply_settings_payload(self, payload: dict) -> str:

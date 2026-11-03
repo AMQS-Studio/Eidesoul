@@ -1,0 +1,25 @@
+{
+  "version": 1,
+  "language": "id",
+  "model": "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2",
+  "prototypes": [
+    "lupakan kalau aku bilang pindah ke Surabaya",
+    "hapus memori soal pekerjaan lamaku",
+    "tolong buang yang aku cerita soal mantanku",
+    "berhenti mengingat kalau aku merokok",
+    "hapus catatan soal gajiku",
+    "bersihkan memori alamat lamaku",
+    "yang aku bilang tadi sudah tidak benar, buang saja",
+    "jangan simpan fakta kalau aku sudah resign"
+  ],
+  "negative": [
+    "jangan lupa beli susu",
+    "aku gampang lupa akhir-akhir ini",
+    "jangan pernah lupakan liburan kita tahun lalu",
+    "kenapa kamu lupa namaku",
+    "aku lupa kata sandi lagi",
+    "sudah lupakan saja tidak apa apa",
+    "ingat hapus berkas lama itu",
+    "bisa simpan itu untuk aku"
+  ]
+}

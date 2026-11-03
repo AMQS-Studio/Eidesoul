@@ -20,7 +20,7 @@ from sqlalchemy import delete, select, update
 from .. import embed
 from ..db import Database
 from ..guard import SENSITIVE, is_injection
-from ..schema import skill_files, skill_revisions, skills
+from ..schema import episodes, skill_files, skill_revisions, skills
 
 log = logging.getLogger(__name__)
 
@@ -61,6 +61,7 @@ class Skill:
     scope: str = "thread"
     trust: str = "T2"
     revision: int = 1
+    priority: int = 0
     uses: int = 0
     last_used: float | None = None
     stated_by: str = ""
@@ -74,6 +75,48 @@ class SkillStore:
         self._vectors: dict[tuple[str, int], list[float]] = {}
 
     # ------------------------------------------------------------ query
+
+    def evidence_for_signature(self, signature: str, *, limit: int = 5) -> list[str]:
+        """The skills distilled from the episodes of one signature, newest first."""
+        if not str(signature or ""):
+            return []
+        wanted = [
+            f"distill:{row['id']}"
+            for row in self.db.fetch_all(
+                select(episodes.c.id).where(episodes.c.signature == str(signature))
+            )
+        ]
+        if not wanted:
+            return []
+        rows = self.db.fetch_all(
+            select(skills.c.name)
+            .where(
+                skills.c.archived.is_(False),
+                skills.c.source_episode.in_(wanted),
+            )
+            .order_by(skills.c.updated_at.desc())
+            .limit(max(1, int(limit)))
+        )
+        return [str(row["name"]) for row in rows]
+
+    def set_priority(self, name: str, priority: int) -> int:
+        """Set the retrieval rank of one procedure (ADR-0020 §4.6); returns the new value."""
+        slug = str(name or "").strip().lower()
+        with self.db.connect() as conn:
+            conn.execute(
+                update(skills)
+                .where(skills.c.name == slug)
+                .values(priority=int(priority), updated_at=time.time())
+            )
+        return int(priority)
+
+    def record_notice(self, name: str, summary: str) -> int:
+        """One operator-visible ledger row for a ladder action; never a chat message."""
+        from ..memory.ledger import ActionLedger
+
+        return ActionLedger(self.db).log_action(
+            "skill", str(name or ""), "skill", str(summary or "")[:300]
+        )
 
     def names(self) -> list[str]:
         rows = self.db.fetch_all(
@@ -95,6 +138,7 @@ class SkillStore:
             scope=str(row["scope"] or "thread"),
             trust=str(row["trust"] or "T2"),
             revision=int(row["revision"] or 1),
+            priority=int(row["priority"] or 0),
             uses=int(row["uses"] or 0),
             last_used=float(row["last_used"]) if row["last_used"] is not None else None,
             stated_by=str(row["stated_by"] or ""),
@@ -135,6 +179,7 @@ class SkillStore:
             scope=str(row["scope"] or "thread"),
             trust=str(row["trust"] or "T2"),
             revision=int(row["revision"] or 1),
+            priority=int(row["priority"] or 0),
             uses=int(row["uses"] or 0),
             last_used=float(row["last_used"]) if row["last_used"] is not None else None,
             stated_by=str(row["stated_by"] or ""),
@@ -196,7 +241,10 @@ class SkillStore:
         return self._inject(scored, max_chars=max_chars, limit=limit)
 
     def _inject(self, scored: list[tuple[float, Skill]], *, max_chars: int, limit: int) -> str:
-        scored.sort(key=lambda item: (item[0], item[1].uses), reverse=True)
+        # ADR-0020 §4.6: the efficiency ladder's priority outranks score, then usage.
+        scored.sort(
+            key=lambda item: (item[1].priority, item[0], item[1].uses), reverse=True
+        )
         lines: list[str] = []
         used = 0
         for score, skill in scored[: max(1, int(limit))]:

@@ -1,10 +1,10 @@
-> Terjemahan turunan — jangan sunting; sumber: engine/0010-reflection-disputed.md (sha256: 0e5b4d5cf97e)
+> Terjemahan turunan — jangan sunting; sumber: engine/0010-reflection-disputed.md (sha256: 4596e4645850)
 > Teks ini ditulis manusia; baris yang tidak bisa diterjemahkan mesin disalin apa adanya ke sumber English, jadi sumber bercampur dua bahasa.
 
 # ADR-0010: Reflection, Kontradiksi & Status `disputed`
 
 - **Status:** accepted
-- **Implementasi:** partial — ada: refleksi terjadwal (`cognition.py`), `dispute_state` + `mark_disputed`/`resolve_dispute`/`stale_disputes`, `derived_from` satu level di T2, baris bersengketa tersembunyi, `tests/test_reflection.py`; sisa: batas `questions_per_day` untuk pertanyaan sengketa
+- **Implementasi:** implemented — bukti: refleksi terjadwal (`cognition.py`), `dispute_state` + `mark_disputed`/`resolve_dispute`/`stale_disputes`, derivasi satu level di T2, baris bersengketa tersembunyi, batas `questions_per_day` (`disputes_asked_today`/`mark_dispute_asked`) dengan satu pertanyaan DM per pass (`Agent.ask_dispute`, `HistoryStore.dm_thread`), `tests/test_reflection.py`, `tests/test_agent.py`; gate: `pytest -q` 831 lulus, `scripts/adr.py --check`
 - **Tanggal:** 2026-11-02
 - **Deciders:** Muqsith (owner), omp (reviewer)
 - **Konteks:** melunasi utang ADR-0008 §4.9C (`disputed` ditunda ke sini) dan menutup slot terakhir antrean ADR-0001 §14

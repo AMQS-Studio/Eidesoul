@@ -51,12 +51,20 @@ def _who(entry) -> str:
     return entry.sender_name or entry.sender_id or "-"
 
 
+def _count_refusal(ctx: ToolContext) -> None:
+    """Record that the body had no `Directory` to resolve a cross-room target (ADR-0014 §4.5)."""
+    runtime = getattr(getattr(ctx, "agent", None), "runtime", None)
+    if runtime is not None and hasattr(runtime, "directory_missing_total"):
+        runtime.directory_missing_total = int(runtime.directory_missing_total or 0) + 1
+
+
 def _target(raw: str, ctx: ToolContext) -> str | tuple[str, str]:
     """Resolve `(thread_id, name)` for another chat, or an `error: ...` text."""
     if ctx.gateway is None:
         return "error: no gateway available; only this chat can be read"
     reason = directory_refusal(ctx.gateway)
     if reason:
+        _count_refusal(ctx)
         return f"error: {reason}"
     target, candidates = ctx.gateway.resolve_target(raw)
     if target is None and candidates:

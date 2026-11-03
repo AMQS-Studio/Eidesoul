@@ -6,9 +6,9 @@
 - **Context:** follows ADR-0027 (distribution and default-off capability), ADR-0001 (surfaces), ADR-0015 (capability manifest), ADR-0007 (permission classes), ADR-0022 (`administrator`)
 - **Supersedes:** —
 - **Related:** ADR-0018 (gateway contract), ADR-0019 (ledger), ADR-0021 (tool contracts), ADR-0026 (a core tool that stays core)
-- **Implementation:** implemented — evidence: `eidesoul/engine/components.py` (manifest, tree digest, fetch-by-digest, one entry import, lifecycle/state), `plugins/google/` (manifest + credits + tool), `google` extra removed, `eidesoul components` CLI, `tests/test_plugins.py`, `tests/test_google_plugin.py`; gate result: `pytest -q` 798 passed, `uv lock --check` clean
+- **Implementation:** implemented — evidence: `eidesoul/engine/plugins.py` (manifest, tree digest, fetch-by-digest, one entry import, lifecycle/state), `plugins/google/` (manifest + credits + tool), `google` extra removed, `eidesoul plugins` CLI, `tests/test_plugins.py`, `tests/test_google_plugin.py`; gate result: `pytest -q` 798 passed, `uv lock --check` clean
 - **Location note:** this ADR is cross-cutting (it defines a distribution unit used by every surface), so it sits at the root of the ADR home. The Indonesian copy is `docs/v0.1.0/adr/id/0028-plugin-model.md`.
-- **Amendments:** 2026-11-03 — first version.
+- **Amendments:** 2026-11-03 — first version. 2026-11-03 — the unit is called `plugin` everywhere: the loader is `eidesoul/engine/plugins.py` (`PluginLoader`, `Plugin`, `PluginError`), the config section is `plugin.{root,fetch,source}` and the CLI verb is `eidesoul plugins list|install|enable|disable|remove`. The manifest file name `plugin.yaml`, the `plugins.<name>.enabled|digest` map, and the `plugins/google/` source tree keep their names; there is no alias and no shim.
 
 ---
 
@@ -42,7 +42,7 @@ it is a packaging unit the engine must know how to load without importing its co
 
 | Option | Summary | Value |
 |---|---|---|
-| **A. Plugin as an installable unit, fetched on enable** | Manifest + code in `components/<name>`; engine loads through the existing registries | **Chosen** |
+| **A. Plugin as an installable unit, fetched on enable** | Manifest + code in `plugins/<name>`; engine loads through the existing registries | **Chosen** |
 | **B. Keep packaging Python extras, add only config switches** | `--extra google` stays, plugin means "enabled" | Rejected: enablement remains a build decision and the image carries every optional dependency |
 | **C. Plugin as a separate service** | Every plugin runs out of process behind an API | Rejected for now: latency, failure modes, and a new transport for something that is a library call |
 | **D. Fold plugins into gateways** | Treat `google` as a gateway | Rejected: a gateway is a body (transport), Google is capability code; the two vocabularies must stay separate (ADR-0001 §4.3) |
@@ -73,7 +73,7 @@ registered as a gateway — never as "a plugin gateway".
 
 ### 4.2 Manifest
 
-`components/<name>/plugin.yaml`:
+`plugins/<name>/plugin.yaml`:
 
 ```
 name: google                  # ^[a-z0-9][a-z0-9-]{0,63}$ (same rule as library packs)
@@ -107,7 +107,7 @@ credits:                      # the README credits row this plugin owes (license
 
 | Step | Actor | Effect |
 |---|---|---|
-| `installing` | operator | fetch by digest, verify, unpack under `components/<name>`, fetch `requires` into `components/<name>/deps` |
+| `installing` | operator | fetch by digest, verify, unpack under `plugins/<name>`, fetch `requires` into `plugins/<name>/deps` |
 | `installed` | operator | code present, nothing granted, nothing imported |
 | `enabled` | operator | the loader imports `entry`, registers what `provides` names, writes the config document; the role must still grant each capability |
 | `disabled` | operator | capability off; files and state stay; fast to reverse |
@@ -121,7 +121,7 @@ credits:                      # the README credits row this plugin owes (license
 
 ### 4.4 Loading, isolation, dependencies
 
-- A single engine module (`eidesoul/engine/components.py`, new) owns manifests, digest verification,
+- A single engine module (`eidesoul/engine/plugins.py`) owns manifests, digest verification,
   the fetch step, and the one import of `entry`. Nothing else in the engine imports plugin code.
 - The loader hands `provides` to the existing registries: tools as `TOOL = Handler(...)` modules,
   commands as `COMMAND = Handler(...)` modules, gateways through the gateway registry (ADR-0018). The
@@ -160,9 +160,9 @@ credits:                      # the README credits row this plugin owes (license
 
 | Key | Default | Meaning |
 |---|---|---|
-| `components.root` | `<workspace>/components` | where fetched plugin code and their dependencies live |
-| `components.fetch` | `true` | fetch code during install; `false` = operator pre-places artifacts |
-| `components.source` | unset | the operator-named source (registry/URL) installs are fetched from |
+| `plugin.root` | `<workspace>/plugins` | where fetched plugin code and their dependencies live |
+| `plugin.fetch` | `true` | fetch code during install; `false` = operator pre-places artifacts |
+| `plugin.source` | unset | the operator-named source (registry/URL) installs are fetched from |
 | `plugins.<name>.enabled` | `false` | whether the loader registers the plugin at boot |
 | `plugins.<name>.digest` | unset | the pinned digest the installed copy must match |
 
@@ -199,7 +199,7 @@ Secrets are `.env` names only; a plugin that needs a value it cannot find is `un
 |---|---|
 | A plugin becomes a way to smuggle in an unguarded tool | §4.6: same guard, approval, and output contracts; collision check at load |
 | Dependency drift between plugin and engine | Manifest `engine` range checked before import; dependencies live with the plugin |
-| Fetch-on-enable breaks air-gapped installs | `components.fetch: false` plus operator-placed artifacts; explicit failure otherwise |
+| Fetch-on-enable breaks air-gapped installs | `plugin.fetch: false` plus operator-placed artifacts; explicit failure otherwise |
 | Plugin vocabulary leaks into the core | §4.4: one loader module, registries unchanged, no plugin name in engine logic (AST-checkable) |
 | `google` removal breaks an existing install | Pre-release, so the cutover is clean: no shim and no alias (repo rule); the runbook says to install the plugin |
 | A plugin claims a license it does not carry | Manifest `credits` are validated against the installed distribution at load; missing license is reported, never guessed |
@@ -222,7 +222,7 @@ Secrets are `.env` names only; a plugin that needs a value it cannot find is `un
 - `eidesoul/engine/commands/__init__.py` — the command registry.
 - `eidesoul/gateways/` — the gateway packages the loader may expose.
 - `eidesoul/library/**` — the pack-id rule (`^[a-z0-9][a-z0-9-]{0,63}$`) the plugin name reuses.
-- `eidesoul/engine/components.py` — new module: manifest, digest, fetch, one import (proposal).
+- `eidesoul/engine/plugins.py` — manifest, digest, fetch, one import, lifecycle.
 
 ---
 

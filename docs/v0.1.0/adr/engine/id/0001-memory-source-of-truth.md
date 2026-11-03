@@ -1,10 +1,10 @@
-> Terjemahan turunan — jangan sunting; sumber: engine/0001-memory-source-of-truth.md (sha256: 268d73ddc214)
+> Terjemahan turunan — jangan sunting; sumber: engine/0001-memory-source-of-truth.md (sha256: 522cee758fff)
 > Teks ini ditulis manusia; baris yang tidak bisa diterjemahkan mesin disalin apa adanya ke sumber English, jadi sumber bercampur dua bahasa.
 
 # ADR-0001: Sumber Kebenaran Memori — Postgres Canonical, Mem0 sebagai Memory Intelligence
 
 - **Status:** accepted
-- **Implementasi:** partial — ada: `memories`/`memory_events`/`memory_uses`/`memory_index`/`memory_tombstones` kanonik, `MemoryStore` port tulis tunggal + baca hanya view, Mem0 jadi extractor/index, rekey, veto, forget/purge, seam intake, `tests/test_memory_store.py`; sisa: retry/status capture saat Mem0/Postgres gagal (`cognition_jobs`, W3.2) dan eval recall-precision
+- **Implementation:** implemented — evidence: kanonik `memories`/`memory_events`/`memory_uses`/`memory_index`/`memory_tombstones`, `MemoryStore` port tulis tunggal dengan baca hanya view, Mem0 jadi extractor/index, rekey, veto, forget/purge, seam intake, retry/backoff/dead-letter capture di `cognition.py`, dan eval recall/precision (`tests/test_memory_eval.py`: recall 1.0, precision 1.0, duplicate rate 0.0 atas 12 kasus); gate: `pytest -q` 831 lulus, `scripts/adr.py --check`
 - **Tanggal:** 2026-11-01
 - **Deciders:** Muqsith (owner), omp (reviewer)
 - **Konteks:** sesi review arsitektur Eidesoul commit `5dc004c`; diskusi lanjutan soal memori default-on dan peran Mem0

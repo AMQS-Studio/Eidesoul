@@ -1,7 +1,7 @@
 # ADR-0008: Memory Integrity — Provenance, Trust, Instruction Quarantine, Anti-Poisoning
 
 - **Status:** accepted
-- **Implementation:** partial — present: `via`/`refs`/`asserted_at`/`trust` T0-T3, deterministic `integrity.py`, quarantine, tombstones, supersede proof, tiered quota into `staged`, recall-miss promotion, prompt trust markers; remaining: `kind=rule` born only from `soul_doc` + T0 + 2-day corroboration (W3.2 reflection)
+- **Implementation:** implemented — evidence: `via`/`refs`/`asserted_at`/`trust` T0-T3, deterministic `integrity.py`, quarantine on the canonical write and on `label_candidate`, tombstones, supersede proof, tiered quota into `staged`, recall-miss promotion, prompt trust markers, and `kind=rule` born only from `MemoryStore.sync_soul_rules`/`promote_soul_rules` (`soul.rules`, T0, two UTC days of corroboration); gate: `pytest -q` 831 passed, `scripts/adr.py --check`
 - **Date:** 2026-11-02
 - **Deciders:** Muqsith (owner), omp (reviewer)
 - **Context:** follows from ADR-0001 (canonical), ADR-0002 (gate capture), ADR-0004 (labeling), ADR-0005 (retention), ADR-0006 (group privacy), ADR-0007 (capability vs authorization)

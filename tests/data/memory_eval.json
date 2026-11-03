@@ -1,0 +1,453 @@
+{
+  "version": 1,
+  "name": "canonical lexical recall/precision",
+  "note": "MemoryStore._rows is ILIKE over the readable view: this measures the canonical lexical path, never Mem0 semantic quality. A query matches a row only when every term appears in its text or kind.",
+  "cases": [
+    {
+      "id": "global-coffee",
+      "person_id": "628111",
+      "thread_id": "628111@s.whatsapp.net",
+      "audience": "private",
+      "facts": [
+        {
+          "id": "g1",
+          "text": "suka kopi pahit tanpa gula",
+          "scope": "global",
+          "kind": "preference",
+          "level": 1,
+          "pinned": true
+        },
+        {
+          "id": "g2",
+          "text": "suka teh manis hangat",
+          "scope": "global",
+          "kind": "preference",
+          "level": 1,
+          "pinned": true
+        }
+      ],
+      "queries": [
+        {
+          "q": "kopi",
+          "expect": [
+            "g1"
+          ],
+          "expect_absent": [
+            "g2"
+          ],
+          "limit": 5
+        },
+        {
+          "q": "teh",
+          "expect": [
+            "g2"
+          ],
+          "expect_absent": [
+            "g1"
+          ],
+          "limit": 5
+        }
+      ]
+    },
+    {
+      "id": "person-work",
+      "person_id": "628111",
+      "thread_id": "628111@s.whatsapp.net",
+      "audience": "private",
+      "facts": [
+        {
+          "id": "p1",
+          "text": "bekerja shift malam di gudang",
+          "scope": "person",
+          "kind": "fact",
+          "level": 2,
+          "pinned": false
+        },
+        {
+          "id": "p2",
+          "text": "hobi bersepeda gunung setiap minggu",
+          "scope": "person",
+          "kind": "fact",
+          "level": 2,
+          "pinned": false
+        }
+      ],
+      "queries": [
+        {
+          "q": "gudang",
+          "expect": [
+            "p1"
+          ],
+          "expect_absent": [
+            "p2"
+          ],
+          "limit": 5
+        },
+        {
+          "q": "bersepeda",
+          "expect": [
+            "p2"
+          ],
+          "expect_absent": [
+            "p1"
+          ],
+          "limit": 5
+        }
+      ]
+    },
+    {
+      "id": "thread-project",
+      "person_id": "628111",
+      "thread_id": "120363000000000001@g.us",
+      "audience": "group",
+      "facts": [
+        {
+          "id": "t1",
+          "text": "rapat proyek anggaran hari kamis",
+          "scope": "thread",
+          "kind": "event",
+          "level": 2,
+          "pinned": false
+        },
+        {
+          "id": "t2",
+          "text": "jadwal libur kantor bulan depan",
+          "scope": "thread",
+          "kind": "note",
+          "level": 2,
+          "pinned": false
+        }
+      ],
+      "queries": [
+        {
+          "q": "anggaran",
+          "expect": [
+            "t1"
+          ],
+          "expect_absent": [
+            "t2"
+          ],
+          "limit": 5
+        },
+        {
+          "q": "libur",
+          "expect": [
+            "t2"
+          ],
+          "expect_absent": [
+            "t1"
+          ],
+          "limit": 5
+        }
+      ]
+    },
+    {
+      "id": "person-scope-is-own-only",
+      "person_id": "628222",
+      "thread_id": "628222@s.whatsapp.net",
+      "audience": "private",
+      "facts": [
+        {
+          "id": "o1",
+          "text": "menyimpan rahasia rekening bank pribadi",
+          "scope": "person",
+          "kind": "fact",
+          "level": 3,
+          "pinned": false,
+          "owner": "628111",
+          "person": "628111",
+          "subject": "628111"
+        }
+      ],
+      "queries": [
+        {
+          "q": "rekening",
+          "expect": [],
+          "expect_absent": [
+            "o1"
+          ],
+          "limit": 5
+        }
+      ]
+    },
+    {
+      "id": "vetoed-row-is-never-read",
+      "person_id": "628111",
+      "thread_id": "628111@s.whatsapp.net",
+      "audience": "private",
+      "facts": [
+        {
+          "id": "v1",
+          "text": "alamat rumah lama di jalan melati",
+          "scope": "person",
+          "kind": "fact",
+          "level": 2,
+          "pinned": false,
+          "veto": "628111"
+        },
+        {
+          "id": "v2",
+          "text": "alamat kantor baru di jalan mawar",
+          "scope": "person",
+          "kind": "fact",
+          "level": 2,
+          "pinned": false
+        }
+      ],
+      "queries": [
+        {
+          "q": "alamat",
+          "expect": [
+            "v2"
+          ],
+          "expect_absent": [
+            "v1"
+          ],
+          "limit": 5
+        }
+      ]
+    },
+    {
+      "id": "level-four-is-still-canonical",
+      "person_id": "628111",
+      "thread_id": "628111@s.whatsapp.net",
+      "audience": "private",
+      "facts": [
+        {
+          "id": "l4",
+          "text": "diagnosis medis rahasia dari dokter",
+          "scope": "person",
+          "kind": "fact",
+          "level": 4,
+          "pinned": true
+        }
+      ],
+      "queries": [
+        {
+          "q": "diagnosis",
+          "expect": [
+            "l4"
+          ],
+          "expect_absent": [],
+          "limit": 5
+        }
+      ]
+    },
+    {
+      "id": "group-audience-stays-in-its-thread",
+      "person_id": "628111",
+      "thread_id": "628111@s.whatsapp.net",
+      "audience": "private",
+      "facts": [
+        {
+          "id": "ga",
+          "text": "jadwal piket kelompok belajar malam",
+          "scope": "person",
+          "kind": "fact",
+          "level": 2,
+          "pinned": false,
+          "audience": "group",
+          "thread": "120363000000000001@g.us",
+          "owner": "628111"
+        }
+      ],
+      "queries": [
+        {
+          "q": "piket",
+          "expect": [],
+          "expect_absent": [
+            "ga"
+          ],
+          "limit": 5
+        }
+      ]
+    },
+    {
+      "id": "commitment-and-note",
+      "person_id": "628111",
+      "thread_id": "628111@s.whatsapp.net",
+      "audience": "private",
+      "facts": [
+        {
+          "id": "c1",
+          "text": "janji mengantar dokumen besok pagi",
+          "scope": "person",
+          "kind": "commitment",
+          "level": 2,
+          "pinned": false
+        },
+        {
+          "id": "c2",
+          "text": "catatan belanja bulanan sudah lunas",
+          "scope": "person",
+          "kind": "note",
+          "level": 2,
+          "pinned": false
+        }
+      ],
+      "queries": [
+        {
+          "q": "janji",
+          "expect": [
+            "c1"
+          ],
+          "expect_absent": [
+            "c2"
+          ],
+          "limit": 5
+        },
+        {
+          "q": "belanja",
+          "expect": [
+            "c2"
+          ],
+          "expect_absent": [
+            "c1"
+          ],
+          "limit": 5
+        }
+      ]
+    },
+    {
+      "id": "kind-is-searchable",
+      "person_id": "628111",
+      "thread_id": "628111@s.whatsapp.net",
+      "audience": "private",
+      "facts": [
+        {
+          "id": "k1",
+          "text": "menyukai musik dangdut koplo",
+          "scope": "person",
+          "kind": "preference",
+          "level": 1,
+          "pinned": false
+        },
+        {
+          "id": "k2",
+          "text": "menyukai film dokumenter alam",
+          "scope": "person",
+          "kind": "preference",
+          "level": 1,
+          "pinned": false
+        }
+      ],
+      "queries": [
+        {
+          "q": "dangdut",
+          "expect": [
+            "k1"
+          ],
+          "expect_absent": [
+            "k2"
+          ],
+          "limit": 5
+        }
+      ]
+    },
+    {
+      "id": "two-term-query-narrows",
+      "person_id": "628111",
+      "thread_id": "628111@s.whatsapp.net",
+      "audience": "private",
+      "facts": [
+        {
+          "id": "n1",
+          "text": "kucing oren suka makan ikan",
+          "scope": "person",
+          "kind": "fact",
+          "level": 2,
+          "pinned": false
+        },
+        {
+          "id": "n2",
+          "text": "anjing kecil suka makan daging",
+          "scope": "person",
+          "kind": "fact",
+          "level": 2,
+          "pinned": false
+        }
+      ],
+      "queries": [
+        {
+          "q": "kucing makan",
+          "expect": [
+            "n1"
+          ],
+          "expect_absent": [
+            "n2"
+          ],
+          "limit": 5
+        }
+      ]
+    },
+    {
+      "id": "limit-bounds-the-recall",
+      "person_id": "628111",
+      "thread_id": "628111@s.whatsapp.net",
+      "audience": "private",
+      "facts": [
+        {
+          "id": "r1",
+          "text": "resep sambal pertama",
+          "scope": "person",
+          "kind": "note",
+          "level": 2,
+          "pinned": false
+        },
+        {
+          "id": "r2",
+          "text": "resep sambal kedua",
+          "scope": "person",
+          "kind": "note",
+          "level": 2,
+          "pinned": false
+        },
+        {
+          "id": "r3",
+          "text": "resep sambal ketiga",
+          "scope": "person",
+          "kind": "note",
+          "level": 2,
+          "pinned": false
+        }
+      ],
+      "queries": [
+        {
+          "q": "sambal",
+          "expect": [
+            "r3"
+          ],
+          "expect_absent": [],
+          "limit": 1
+        }
+      ]
+    },
+    {
+      "id": "other-thread-is-not-visible",
+      "person_id": "628111",
+      "thread_id": "628999@s.whatsapp.net",
+      "audience": "private",
+      "facts": [
+        {
+          "id": "x1",
+          "text": "jadwal vaksin anak kedua",
+          "scope": "thread",
+          "kind": "event",
+          "level": 2,
+          "pinned": false,
+          "thread": "120363000000000001@g.us"
+        }
+      ],
+      "queries": [
+        {
+          "q": "vaksin",
+          "expect": [],
+          "expect_absent": [
+            "x1"
+          ],
+          "limit": 5
+        }
+      ]
+    }
+  ]
+}

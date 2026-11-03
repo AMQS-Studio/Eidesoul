@@ -97,3 +97,41 @@ def test_a_stale_lease_does_not_block(fresh_database) -> None:
         assert db.upgrade() == SCHEMA_VERSION
     finally:
         db.dispose()
+
+
+def test_revision_0013_adds_the_fence_event_and_efficiency_columns(fresh_database) -> None:
+    """ADR-0012/0010/0013/0014/0020: one revision carries every new column."""
+    db = Database(fresh_database)
+    try:
+        db.upgrade()
+        inspector = inspect(db.engine)
+        expected = {
+            "cognition_jobs": ("generation",),
+            "memories": ("dispute_asked_at",),
+            "threads": ("gateway",),
+            "turns": ("category",),
+            "skills": ("priority",),
+            "automation_runs": ("payload",),
+        }
+        for table, names in expected.items():
+            found = {column["name"] for column in inspector.get_columns(table)}
+            for name in names:
+                assert name in found, f"{table}.{name}"
+        assert "ix_memories_subject_asked" in {
+            index["name"] for index in inspector.get_indexes("memories")
+        }
+        assert "ix_automations_message" in {
+            index["name"] for index in inspector.get_indexes("automations")
+        }
+        # The readable view stays in step with `memories` after the column is appended.
+        with db.connect() as conn:
+            view_columns = conn.execute(
+                text(
+                    "SELECT column_name FROM information_schema.columns "
+                    "WHERE table_name = 'memories_readable'"
+                )
+            ).scalars().all()
+        assert "dispute_asked_at" in set(view_columns)
+        assert SCHEMA_VERSION == 13
+    finally:
+        db.dispose()

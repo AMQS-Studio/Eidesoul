@@ -1,4 +1,4 @@
-> Terjemahan turunan — jangan sunting; sumber: 0027-distribution-web-config.md (sha256: b95dbab18209)
+> Terjemahan turunan — jangan sunting; sumber: 0027-distribution-web-config.md (sha256: f6b46736b39a)
 > Ditulis tangan (bukan mesin), mengikuti sumber English baris demi baris.
 
 # ADR-0027: Distribusi dan Konfigurasi Web-First — Satu Image Core, Kapabilitas Clean by Default
@@ -11,7 +11,7 @@
 - **Terkait:** ADR-0009 (rumah dokumen), ADR-0012 (lease), ADR-0019 (observability), ADR-0028 (unit plugin yang didistribusikan ADR ini)
 - **Implementasi:** partial — ada: build image lokal (core-only, `EXTRAS` kosong), pemisahan plugin/gateway, isi image di `eidesoul selftest`, gate panel-atau-CLI di installer; sisa: `panel/` (milik operator; `web.enabled: false` sampai mendarat) dan publikasi image ke GHCR (tidak ada kredensial registry di sini)
 - **Catatan lokasi:** ADR ini lintas-potong (mengikat setiap permukaan dan setiap deployment), jadi ia duduk di akar rumah ADR. Salinan Indonesia di `docs/v0.1.0/adr/id/0027-distribution-web-config.md`.
-- **Amandemen:** 2026-11-03 — versi pertama. 2026-11-03 — lapisan suara (emosi, humanize, karakter) dinyatakan aktif secara default dan bisa dimatikan per bagian; clean by default tetap hanya mencakup gateway, tool, dan plugin.
+- **Amandemen:** 2026-11-03 — versi pertama. 2026-11-03 — lapisan suara (emosi, humanize, karakter) dinyatakan aktif secara default dan bisa dimatikan per bagian; clean by default tetap hanya mencakup gateway, tool, dan plugin. 2026-11-03 — kunci kode hasil unduhan di §5 adalah `plugin.root`/`plugin.fetch`/`plugin.source`, mengikuti penamaan ulang plugin (ADR-0028 §5); root install bawaan `<workspace>/plugins`.
 
 ---
 
@@ -27,7 +27,7 @@
 | Spine tidak opsional | Postgres+pgvector, Mem0, embedder bersama, prototipe affect, guard, dan lease (`AGENTS.md` §Capability spine) |
 
 Keputusan pemilik: distribusi lewat `ghcr.io`, permukaan web jadi jalur utama init dan konfigurasi,
-komponen dipasang dari situ, dan **tidak ada yang aktif secara default kecuali spine** — kode komponen
+plugin dipasang dari situ, dan **tidak ada yang aktif secara default kecuali spine** — kode plugin
 baru diunduh saat diaktifkan. Permukaan web sendiri direncanakan aktif secara default begitu selesai,
 dengan saklar untuk mematikannya.
 
@@ -37,7 +37,7 @@ dengan saklar untuk mematikannya.
 |---|---|
 | Clean by default | Gateway, tool, dan plugin masing-masing mati sampai diaktifkan — install baru menjalankan spine dan tidak ada yang bisa bertindak ke dunia |
 | Kategori berbeda | Gateway adalah body, tool adalah kapabilitas, plugin adalah bundel; tidak ada kategori yang menelan yang lain |
-| Kode mengikuti pengaktifan | Image tetap kecil dan bisa diaudit; komponen yang aktif diunduh, dipin digest |
+| Kode mengikuti pengaktifan | Image tetap kecil dan bisa diaudit; plugin yang aktif diunduh, dipin digest |
 | Satu kebenaran konfigurasi | Permukaan web menulis dokumen yang sama dengan CLI; tanpa penyimpanan kedua |
 | Permukaan untuk operator | Init, inspeksi, aktifkan, beri izin, cabut izin — tanpa menyunting YAML dengan tangan |
 | Bisa dibalik | Setiap pengaktifan punya penonaktifan; mematikan permukaan web tidak mematahkan engine |
@@ -47,7 +47,7 @@ dengan saklar untuk mematikannya.
 
 | Opsi | Ringkas | Nilai |
 |---|---|---|
-| **A. Satu image core, unduh saat aktif** | Publikasikan satu image berisi spine saja; mengaktifkan komponen mengunduh kodenya | **Dipilih** |
+| **A. Satu image core, unduh saat aktif** | Publikasikan satu image berisi spine saja; mengaktifkan plugin mengunduh kodenya | **Dipilih** |
 | **B. Image gemuk per bundel** | `core`, `core-google`, `core-whatsapp`, … | Ditolak sebagai default: matriks build/verifikasi membesar dan "tidak ada yang default" jadi tidak benar |
 | **C. Hanya extra pip** | Pertahankan `--extra google`, konfigurasi lewat YAML | Ditolak: pengaktifan jadi keputusan build-time, bukan aksi operator |
 | **D. Tanpa image, install dari sumber** | Dokumentasikan `uv sync` + unit systemd | Ditolak: reproduksibilitas dan upgrade jadi lebih buruk |
@@ -72,7 +72,7 @@ tidak ada tag yang menyerupai rilis (§Versioning di `AGENTS.md`).
 
 Panel web adalah permukaan operator untuk init dan konfigurasi: jalan pertama (database, workspace,
 provider dan model, administrator pertama), inspeksi (data `/status`, ledger, automation, kebenaran
-memori), dan pengaktifan komponen (§4.3). CLI tetap setara untuk install headless (`eidesoul init`,
+memori), dan pengaktifan plugin (§4.3). CLI tetap setara untuk install headless (`eidesoul init`,
 `eidesoul config import`, `eidesoul selftest`, `eidesoul models`).
 
 - Panel adalah **proses terpisah** di akar repo (`panel/`), bukan modul di dalam `eidesoul/engine/`,
@@ -85,7 +85,7 @@ memori), dan pengaktifan komponen (§4.3). CLI tetap setara untuk install headle
 - Setiap perubahan dicatat di `config_changes` dengan aktor dan diff, dan panel menampilkan nilai
   efektif di samping sumbernya (`document`, `yaml mirror`, `env`, `default`).
 - Panel tidak memiliki kebijakan apa pun: izin, approval, dan guard hidup di engine; panel tidak bisa
-  memberi izin kepada dirinya sendiri, dan pengaktifan komponen adalah aksi operator (§4.3).
+  memberi izin kepada dirinya sendiri, dan pengaktifan plugin adalah aksi operator (§4.3).
 
 ### 4.3 Tidak ada yang aktif secara default kecuali spine
 
@@ -112,7 +112,7 @@ plugin tidak pernah berubah menjadi tool core.
 - "Aktif" berarti dua hal terpisah dan keduanya wajib: kodenya ada **dan** ada role yang memberi
   kapabilitasnya. Aktif tanpa izin membuatnya inert; izin tanpa kode dilaporkan `unavailable`, bukan
   `denied`.
-- Mengaktifkan komponen **mengunduh kodenya** (wheel atau layer OCI) yang dipin dengan digest,
+- Mengaktifkan plugin **mengunduh kodenya** (wheel atau layer OCI) yang dipin dengan digest,
   memverifikasi digest, baru menulis dokumen konfigurasi. Tanpa jaringan, pengaktifan gagal dengan satu
   pesan eksplisit dan tidak mengubah apa pun — tanpa salinan cadangan di dalam paket dan tanpa install
   separuh jalan.
@@ -169,8 +169,8 @@ jalur yang sama (§4.2).
 | `web.enabled` | `true` begitu selesai, `false` selama belum | proses panel |
 | `web.host` | `127.0.0.1` | alamat bind; selain itu butuh `web.remote_ack: true` dan rahasia `.env` |
 | `web.port` | dipilih operator saat jalan pertama | listener panel |
-| `components.root` | `<workspace>/components` | tempat kode gateway/plugin hasil unduhan (§ADR-0028) |
-| `components.fetch` | `true` | boleh mengunduh kode saat aktif; `false` = hanya install offline |
+| `plugin.root` | `<workspace>/plugins` | tempat kode gateway/plugin hasil unduhan (§ADR-0028) |
+| `plugin.fetch` | `true` | boleh mengunduh kode saat aktif; `false` = hanya install offline |
 | `image.tag` | kosong selama belum rilis | tag image yang berjalan, dilaporkan `eidesoul selftest` |
 
 Rahasia hanya di `.env` (`WEB_TOKEN`, kunci provider); YAML memuat nama, bukan nilai.
@@ -182,7 +182,7 @@ Rahasia hanya di `.env` (`WEB_TOKEN`, kunci provider); YAML memuat nama, bukan n
 | Kapabilitas aktif pada install baru (di luar spine dan pemberian izin role) | 0 |
 | Isi image bisa diperiksa | `eidesoul selftest` mencantumkan ada/tidaknya gateway/plugin; label cocok |
 | Divergensi panel ↔ CLI pada perubahan yang sama | 0 (satu jalur import) |
-| Komponen terunduh tanpa verifikasi digest | 0 (fail closed) |
+| Plugin terunduh tanpa verifikasi digest | 0 (fail closed) |
 | Perubahan tanpa baris `config_changes` | 0 |
 | Rahasia tertulis ke YAML oleh panel | 0 (test) |
 | Mengaktifkan di mesin tanpa jaringan | gagal eksplisit, tanpa perubahan state (test) |
@@ -194,8 +194,8 @@ Rahasia hanya di `.env` (`WEB_TOKEN`, kunci provider); YAML memuat nama, bukan n
 - [ ] Satu image terbangun lokal dengan `EXTRAS` kosong dan menjalankan `eidesoul selftest`; tag rilis baru dipublikasikan kalau rilisnya ada.
 - [ ] Image tidak memuat dependency gateway/plugin: `pip list` di container tidak menampilkan `neonize` maupun `google-api-python-client`.
 - [ ] Install baru mulai dengan spine saja: `/status` melaporkan setiap gateway dan plugin `absent/mati`, dan tidak ada kapabilitas yang diberikan.
-- [ ] Mengaktifkan komponen mengunduh kode per digest; digest salah membatalkan tanpa perubahan config dan tanpa berkas terpasang.
-- [ ] Mengaktifkan komponen tanpa izin role membuatnya inert (`unavailable`, bukan `denied`) dan `/tools` menjelaskan alasannya.
+- [ ] Mengaktifkan plugin mengunduh kode per digest; digest salah membatalkan tanpa perubahan config dan tanpa berkas terpasang.
+- [ ] Mengaktifkan plugin tanpa izin role membuatnya inert (`unavailable`, bukan `denied`) dan `/tools` menjelaskan alasannya.
 - [ ] Menonaktifkan menyimpan berkas dan menghentikan kapabilitas; menghapus membuang kode dan status; keduanya muncul di ledger.
 - [ ] Panel menulis perubahan konfigurasi yang sama dengan hasil `eidesoul config import`, dengan baris `config_changes`; suntingan YAML manual tampil sebagai drift sampai di-import.
 - [ ] `web.enabled: false` menghentikan panel dan membiarkan engine beserta gateway-nya tetap jalan.
@@ -210,7 +210,7 @@ Rahasia hanya di `.env` (`WEB_TOKEN`, kunci provider); YAML memuat nama, bukan n
 | Risiko | Mitigasi |
 |---|---|
 | "Tidak ada yang default" meluruh dan extra merembes kembali ke image | Metrik §6: daftar dependency container diperiksa; plugin membawa dependency-nya sendiri |
-| Unduh-saat-aktif butuh jaringan di saat yang tidak nyaman | `components.fetch: false` memungkinkan operator menaruh artefak terverifikasi lebih dulu; kegagalannya eksplisit |
+| Unduh-saat-aktif butuh jaringan di saat yang tidak nyaman | `plugin.fetch: false` memungkinkan operator menaruh artefak terverifikasi lebih dulu; kegagalannya eksplisit |
 | Panel jadi jalur konfigurasi kedua yang paralel | Satu jalur import (§4.2), baris `config_changes`, dan tampilan drift di panel |
 | Panel yang terbuka di luar loopback jadi permukaan serang | Default loopback, `remote_ack` eksplisit, rahasia `.env`, tanpa mode anonim |
 | Web-first memancing logika engine masuk ke panel | §4.5 plus aturan repo bahwa `eidesoul/engine/` tidak pernah mengimpor panel |

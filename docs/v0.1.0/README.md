@@ -34,25 +34,25 @@ re-stamp the hash. No machine translator ships with the repo.
 | [0028](adr/0028-plugin-model.md) | Plugin Model — One Installable Unit for Fetched Capability | root | implemented |
 | [0029](adr/0029-test-store.md) | Test Store Is the Real Store — Postgres+pgvector, One Test Database, Truncate per Test | root | implemented |
 | [0030](adr/0030-install-and-init.md) | On-Machine Install and Interactive Init — Our Own Wizard, One Installer, Two Stacks | root | partial |
-| [0001](adr/engine/0001-memory-source-of-truth.md) | Memory Source of Truth — Postgres Canonical, Mem0 as Memory Intelligence | engine | partial |
+| [0001](adr/engine/0001-memory-source-of-truth.md) | Memory Source of Truth — Postgres Canonical, Mem0 as Memory Intelligence | engine | implemented |
 | [0002](adr/engine/0002-capture-trigger.md) | Capture Trigger — Deterministic Gate, Novelty Check, Batch Assess | engine | implemented |
 | [0003](adr/engine/0003-cognition-worker.md) | Cognition Worker & Model Batching — Gate vs Label Boundary | engine | implemented |
 | [0004](adr/engine/0004-labeling-fallback.md) | Fallback Labeling — Provisional Canonical with `level NULL` as a Sentinel | engine | partial |
-| [0005](adr/engine/0005-retention-decay.md) | Retention & Decay — hybrid TTL, Renewal On Use, and Auto Pin | engine | partial |
+| [0005](adr/engine/0005-retention-decay.md) | Retention & Decay — hybrid TTL, Renewal On Use, and Auto Pin | engine | implemented |
 | [0006](adr/engine/0006-group-privacy.md) | Group Privacy & Pre-Filter — Ceiling Before Prompt, Self-Capture | engine | implemented |
 | [0007](adr/engine/0007-capability-authorization.md) | Capability vs Authorization — Three Permission Classes and Approval as a Continuation of Tool Permissions | engine | implemented |
-| [0008](adr/engine/0008-memory-integrity.md) | Memory Integrity — Provenance, Trust, Instruction Quarantine, Anti-Poisoning | engine | partial |
-| [0010](adr/engine/0010-reflection-disputed.md) | Reflection, Contradiction & Status `disputed` | engine | partial |
+| [0008](adr/engine/0008-memory-integrity.md) | Memory Integrity — Provenance, Trust, Instruction Quarantine, Anti-Poisoning | engine | implemented |
+| [0010](adr/engine/0010-reflection-disputed.md) | Reflection, Contradiction & Status `disputed` | engine | implemented |
 | [0011](adr/engine/0011-crash-safety.md) | Crash Safety & Durability: Transactional Queue, Job Claim, Neat Shutdown | engine | implemented |
-| [0012](adr/engine/0012-lease-safety.md) | Lease Safety: CAS, Fencing Token, and Database Clock | engine | partial |
-| [0013](adr/engine/0013-turn-lifecycle.md) | Turn Lifecycle, Resume, Backlog & Notice | engine | partial |
-| [0014](adr/engine/0014-automation.md) | Automation → Event → Action, Owner Authority, and Sandbox as Steps | engine | partial |
+| [0012](adr/engine/0012-lease-safety.md) | Lease Safety: CAS, Fencing Token, and Database Clock | engine | implemented |
+| [0013](adr/engine/0013-turn-lifecycle.md) | Turn Lifecycle, Resume, Backlog & Notice | engine | implemented |
+| [0014](adr/engine/0014-automation.md) | Automation → Event → Action, Owner Authority, and Sandbox as Steps | engine | implemented |
 | [0015](adr/engine/0015-capability-manifest.md) | Layered Payload & Capability Manifest | engine | implemented |
 | [0016](adr/engine/0016-schema-migration.md) | Canonical Schema & Migration Scheme, One DDL, One Alembic Baseline | engine | partial |
 | [0017](adr/engine/0017-turn-isolation-timeout.md) | Turn Isolation, Deadline, and Primary Gate | engine | implemented |
 | [0018](adr/engine/0018-gateway-contract.md) | Gateway Contract — Core, Rich, Directory | engine | implemented |
 | [0019](adr/engine/0019-observability.md) | Observability — Structured Log, Token Accounting, and `/status` | engine | implemented |
-| [0020](adr/engine/0020-procedural-memory.md) | Derivative Procedure — Skill as Soul Growth, Not a Tool | engine | partial |
+| [0020](adr/engine/0020-procedural-memory.md) | Derivative Procedure — Skill as Soul Growth, Not a Tool | engine | implemented |
 | [0021](adr/engine/0021-tool-output-contract.md) | Tool Output Contract, `grep`, and `fetch` | engine | implemented |
 | [0022](adr/engine/0022-administrator-role.md) | Role `administrator` | engine | implemented |
 | [0023](adr/engine/0023-relay-consent.md) | Relay Consent — Forwarding Personal Answers to Others | engine | implemented |
@@ -70,7 +70,7 @@ Indonesian copies in its own `id/` subfolder.
 
 ```
 python scripts/adr.py --check
-OK: 31/31 ADR lolos check; implemented=18 partial=13 draft=0; sinonim digerbang=111 baris prosa=42
+OK: 31/31 ADR lolos check; implemented=29 partial=2 draft=0; sinonim digerbang=111 baris prosa=42
 
 python scripts/adr.py --translate-check
 TURUNAN 31 berkas, 0 masalah

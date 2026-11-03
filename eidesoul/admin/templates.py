@@ -37,8 +37,8 @@ HOST: dict = {
     "web_search": {"base_url": "", "timeout_seconds": 10},
     "mcp": {"servers": {}},
     # Clean by default (ADR-0027/0028): nothing is installed or enabled. An empty root means
-    # `<workspace>/components`; enabling a plugin fetches its code by digest.
-    "components": {"root": "", "fetch": True, "source": ""},
+    # `<workspace>/plugins`; enabling a plugin fetches its code by digest.
+    "plugin": {"root": "", "fetch": True, "source": ""},
     "plugins": {"google": {"enabled": False, "digest": ""}},
 }
 
@@ -145,6 +145,11 @@ ENGINE: dict = {
             "auditor": True,
             "group_capture": {"self_only": True, "third_party": "drop", "ask_in_group": False},
         },
+        "intent": {
+            "remember": {"enabled": True, "floor": 0.62, "margin": 0.06},
+            "forget": {"enabled": True, "floor": 0.64, "margin": 0.06},
+        },
+        "retention": {"purge": {"grace_days": 1, "batch": 500}},
         "telemetry": False,
     },
     "reflection": {
@@ -160,6 +165,7 @@ ENGINE: dict = {
         "passes_per_day": 24,
         "derive_depth": 1,
         "dispute_ttl_days": 30,
+        "questions_per_day": 1,
     },
     "approval": {
         "mode": "yolo",
@@ -176,6 +182,8 @@ ENGINE: dict = {
         "max_chars": 800,
         "max_body_chars": 18000,
         "use_renewal_days": 30,
+        "efficiency": {"enabled": True, "min_evidence_episodes": 2, "window_days": 30},
+        "ladder": {"enabled": True, "proposal_cooldown_days": 14},
     },
     "prompt": {"salience": True, "max_chars": 9000, "thread_chars": 4000},
     "humanize": {

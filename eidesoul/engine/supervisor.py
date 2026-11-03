@@ -42,6 +42,14 @@ class Supervisor:
         self.stopping = False
         self._first = True
         self.agent.lease = lease
+        # ADR-0012 §4.3: every canonical memory write now asks this guard first. Admin/CLI
+        # stores stay unbound, so only the live primary writes under a generation.
+        bind = getattr(getattr(agent, "memory", None), "bind_guard", None)
+        if bind is not None:
+            bind(lease.guard)
+        self.automations = (
+            AutomationWorker(agent) if getattr(agent, "db", None) is not None else None
+        )
         self.cognition = CognitionWorker(
             getattr(agent, "db", None),
             agent.config,
@@ -52,11 +60,17 @@ class Supervisor:
             language=getattr(getattr(agent, "soul", None), "language", "id"),
             known_tools=tuple(getattr(getattr(agent, "tools", None), "by_name", {}) or ()),
             ask=getattr(agent, "ask_memory", None),
+            lease=lease,
+            ask_dispute=getattr(agent, "ask_dispute", None),
+            propose=(
+                self.automations.store.propose if self.automations is not None else None
+            ),
         )
         self.agent.cognition = self.cognition
-        self.automations = (
-            AutomationWorker(agent) if getattr(agent, "db", None) is not None else None
-        )
+        # ADR-0014 §4.3: the message-event sink shares the automations store, so a run and its
+        # message commit in the same intake transaction.
+        if self.automations is not None and hasattr(agent, "history"):
+            agent.history.event_sink = self.automations.store
 
     # ------------------------------------------------------------ lifecycle
 

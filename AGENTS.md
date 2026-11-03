@@ -24,7 +24,7 @@ Hard rules for changes in this repo.
   `python scripts/adr.py --check`.
 - Allowed root trees are `docs/`, `scripts/`, `tests/`, `migrations/`, `plugins/`, `panel/`
   (the operator app), and `apps/` (any future application that imports the engine). Schema changes live only in `migrations/`; the engine may hold
-  `components.py` (plugin loader) and `self_knowledge.py` (capability index) beside its other modules.
+  `plugins.py` (plugin loader) and `self_knowledge.py` (capability index) beside its other modules.
 - Core lives in `eidesoul/engine/` and must not import `eidesoul.gateways` or `neonize`.
   Root `eidesoul/` only holds `__main__.py`, `admin/`, `gateways/`, `library/`, `lang/`, `providers/`,
   `vendor/`.
@@ -185,19 +185,19 @@ Hard rules for changes in this repo.
   them is another: a gateway is a body (transport plus its own body actions), a tool is a capability
   the engine calls, a plugin is an installable bundle of capability code (ADR-0027, ADR-0028). All
   three are off until an operator installs and enables them; only the spine is always on.
-- A plugin lives in `components/<name>/plugin.yaml` (`components.root`, default
-  `<workspace>/components`). The manifest is data: name, version, engine range, `entry`, the
+- A plugin lives in `plugins/<name>/plugin.yaml` (`plugin.root`, default
+  `<workspace>/plugins`). The manifest is data: name, version, engine range, `entry`, the
   `sha256:` digest of the code tree, `provides` (tools/commands), `requires`, `secrets` (env names
   only), and `credits`. The loader verifies the digest before the one import of `entry`; a mismatch
   leaves no files and no config change. Plugin dependencies install inside the plugin's own `deps/`,
   never in the image's locked set; the manifest carries the credits rows they owe.
-- Enabling fetches code by digest (`components.fetch: true`, source in `components.source`) and
-  writes `plugins.<name>.enabled: true` only after verification. With `components.fetch: false` the
+- Enabling fetches code by digest (`plugin.fetch: true`, source in `plugin.source`) and
+  writes `plugins.<name>.enabled: true` only after verification. With `plugin.fetch: false` the
   operator pre-places verified code; otherwise the enable fails with one message and changes
   nothing. Disable keeps the files; remove deletes code and the config entry.
 - Google is a **plugin** (`google`, source tree `plugins/google/`), not a core tool and not an
   extra: there is no `--extra google`, and `eidesoul/engine/tools/` holds no Google module. While
-  the plugin is absent or disabled the capability is `unavailable` (`eidesoul components list`,
+  the plugin is absent or disabled the capability is `unavailable` (`eidesoul plugins list`,
   `eidesoul selftest`) — never fabricated and never a plugin traceback; a role grant without code
   is unavailable, not denied (ADR-0027 §4.3).
 - The image is the spine plus the core tools only (ADR-0027): it carries no gateway and no plugin

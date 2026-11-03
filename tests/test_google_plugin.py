@@ -11,8 +11,8 @@ import yaml
 from support import build_config, database
 
 from eidesoul.admin.templates import ROLES
-from eidesoul.engine import components
-from eidesoul.engine.config import ComponentsConfig, PluginSettings
+from eidesoul.engine import plugins
+from eidesoul.engine.config import PluginConfig, PluginSettings
 from eidesoul.engine.roles import Role
 from eidesoul.engine.schema import google_identity, people
 from eidesoul.engine.tools import REGISTRY as CORE_TOOLS
@@ -28,16 +28,16 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 def google_module(tmp_path, monkeypatch):
-    """Load the real plugin tree through the component loader and return its tool module."""
+    """Load the real plugin tree through the plugin loader and return its tool module."""
     monkeypatch.setenv("GOOGLE_SERVICE_ACCOUNT_PATH", str(tmp_path / "service.json"))
     config = build_config(
         tmp_path,
-        components=ComponentsConfig(root=ROOT / "plugins", fetch=False),
+        plugin=PluginConfig(root=ROOT / "plugins", fetch=False),
         plugins={"google": PluginSettings(enabled=True)},
     )
-    loaded = components.load(components.ComponentSettings.from_config(config))
-    assert loaded.state("google") == "enabled", loaded.components
-    key = components.module_name("google")
+    loaded = plugins.load(plugins.PluginLoader.from_config(config))
+    assert loaded.state("google") == "enabled", loaded.plugins
+    key = plugins.module_name("google")
     return importlib.import_module(f"{key}.tools.google")
 
 

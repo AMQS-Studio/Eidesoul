@@ -1,7 +1,7 @@
 # ADR-0005: Retention & Decay — hybrid TTL, Renewal On Use, and Auto Pin
 
 - **Status:** accepted
-- **Implementation:** partial — present: `pinned`/`durability`/`category`/`use_*`/`expires_at`/`max_lifetime_at`, renewal per delivered turn, auto-pin, `memory purge` with `--dry-run` and library-copy removal, `tests/test_memory_store.py`; remaining: MiniLM remember/forget intent prototypes and the scheduled purge loop (W3.2/W6)
+- **Implementation:** implemented — evidence: `pinned`/`durability`/`category`/`use_*`/`expires_at`/`max_lifetime_at`, renewal per delivered turn, auto-pin, `memory purge` with `--dry-run` and library-copy removal, the MiniLM remember/forget prototypes (`eidesoul/library/intent/`, `eidesoul/engine/memory/intent.py`, `scripts/intent.py --check`), the remember hint in capture, the deterministic "forget that …" path, and the scheduled purge with `memory.retention.purge.{grace_days,batch}` on the daily audit job; gate: `pytest -q` 831 passed, `scripts/adr.py --check`
 - **Date:** 2026-11-01
 - **Deciders:** Muqsith (owner), omp (reviewer)
 - **Context:** follows from ADR-0001 (canonical), ADR-0003 (worker & consolidation), ADR-0004 (TTL for non-`ok` states); default-on memory needs an age policy

@@ -14,6 +14,7 @@ from support import FakeLLM, build_config, database
 from eidesoul.admin import templates
 from eidesoul.engine.cognition import CognitionQueue, CognitionWorker
 from eidesoul.engine.context import Message
+from eidesoul.engine.lease import Lease
 from eidesoul.engine.memory import gate
 from eidesoul.engine.memory.store import MemoryStore
 from eidesoul.engine.stores.history import HistoryStore
@@ -188,3 +189,49 @@ def test_template_keys_load_and_are_read(tmp_path) -> None:
     assert config.skills.max_chars == skills["max_chars"]
     assert config.skills.use_renewal_days == skills["use_renewal_days"]
     assert config.skills.task_idle_minutes == skills["task_idle_minutes"]
+
+
+def test_a_claimed_job_cannot_complete_after_the_generation_moves(tmp_path) -> None:
+    """A replaced primary's job update is refused, so the reaper hands the job on (ADR-0012 §4.4)."""
+    db = database()
+    config = build_config(tmp_path)
+    queue = CognitionQueue(db, config)
+    assert queue.enqueue_job("audit", "global", key="audit:gen") is True
+
+    old = Lease(db, instance_id="old", host="host-a", pid=1)
+    assert old.acquire() is not None
+    job = queue.claim(worker="a", limit=1, generation=old.generation)[0]
+    assert job.generation == old.generation
+
+    new = Lease(db, instance_id="new", host="host-b", pid=2)
+    assert new.acquire(takeover=True) is not None
+
+    assert queue.complete(job.id, "done", generation=job.generation) is False
+    row = db.fetch_one(sql("SELECT status FROM cognition_jobs WHERE id = :id"), {"id": job.id})
+    assert row["status"] == "claimed"
+
+    # The reaper requeues it; only then does the new primary own and finish the job.
+    with db.connect() as conn:
+        conn.execute(sql("UPDATE cognition_jobs SET status = 'queued', lease_until = 0"))
+    owned = queue.claim(worker="b", limit=1, generation=new.generation)[0]
+    assert owned.id == job.id and owned.generation == new.generation
+    assert queue.complete(owned.id, "done", generation=new.generation) is True
+    row = db.fetch_one(sql("SELECT status FROM cognition_jobs WHERE id = :id"), {"id": job.id})
+    assert row["status"] == "done"
+
+
+def test_a_stale_fail_does_not_requeue_under_a_new_generation(tmp_path) -> None:
+    db = database()
+    queue = CognitionQueue(database(), build_config(tmp_path))
+    assert queue.enqueue_job("audit", "global", key="audit:gen2") is True
+    old = Lease(db, instance_id="old", host="host-a", pid=1)
+    assert old.acquire() is not None
+    job = queue.claim(worker="a", limit=1, generation=old.generation)[0]
+    new = Lease(db, instance_id="new", host="host-b", pid=2)
+    assert new.acquire(takeover=True) is not None
+
+    assert queue.fail(job.id, "boom", generation=job.generation) is False
+    row = db.fetch_one(
+        sql("SELECT status, result_ref FROM cognition_jobs WHERE id = :id"), {"id": job.id}
+    )
+    assert row["status"] == "claimed" and row["result_ref"] == ""

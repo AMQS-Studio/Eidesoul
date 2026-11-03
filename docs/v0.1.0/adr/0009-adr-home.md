@@ -309,9 +309,9 @@ This table is the source, and a canonical term enters it in the same commit in w
 | `gateway` | a body: transport plus its own body actions; installed as a gateway, never as a plugin or a tool | 0027 (contract: engine/0018) | `connector` (prosa), `bridge` (prosa) |
 | `tool` | a capability the engine calls; granted only by a role, never by a plugin; a derived procedure is a skill (ADR-0020), not a tool | 0027 | `skill` (prosa), `action` (prosa) |
 | `plugin` | an installable capability unit fetched when enabled; not a gateway and not a tool | 0028 | `extension` (prosa), `addon` (prosa) |
-| `plugin manifest` | `components/<name>/plugin.yaml`: name, version, engine range, entry, provides, requires, secrets, credits | 0028 | `metadata file` (prosa), `plugin.json` (prosa) |
-| `components` | the workspace folder that holds fetched gateway/plugin code and its dependencies | 0028 | `extensions` (prosa), `modules` (prosa) |
-| `digest` | the pinned hash an installed component must match before anything is written | 0027 (rule: 0028) | `checksum` (prosa) |
+| `plugin manifest` | `plugins/<name>/plugin.yaml`: name, version, engine range, entry, provides, requires, secrets, credits | 0028 | `metadata file` (prosa), `plugin.json` (prosa) |
+| `plugins` | the workspace install root that holds fetched plugin code and its dependencies | 0028 | `extensions` (prosa), `modules` (prosa) |
+| `digest` | the pinned hash an installed plugin must match before anything is written | 0027 (rule: 0028) | `checksum` (prosa) |
 | `panel` | the web operator surface: a separate process at the repo root that reuses the config import path | 0027 | `dashboard` (prosa), `admin ui` (prosa) |
 | `clean by default` | gateway, tool, and plugin are each off until enabled; the spine is the only exception | 0027 | `opt-in` (prosa), `default off` (prosa) |
 | `voice layer` | emotion, humanize, and character: on by default, asked once at `init` with keep-on as the default answer, each one switchable off; not a capability category | 0027 | `persona layer` (prosa), `tone layer` (prosa) |

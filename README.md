@@ -493,8 +493,8 @@ local network even when it is allowed to run.
 
 ```bash
 uv sync --extra whatsapp                  # the optional gateway
-eidesoul components install google        # a plugin: fetch + verify by digest
-eidesoul components enable google         # register its tools into the same catalog
+eidesoul plugins install google        # a plugin: fetch + verify by digest
+eidesoul plugins enable google         # register its tools into the same catalog
 ```
 
 ```bash

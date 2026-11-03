@@ -9,6 +9,8 @@ from support import (
     FakeGateway,
     FakeLLM,
     FakeMemory,
+    build_config,
+    database,
     default_soul,
     inbound_message,
     make_agent,
@@ -16,11 +18,12 @@ from support import (
 )
 
 from eidesoul.engine.config import ApprovalConfig, CharacterConfig, HumanizeConfig
-from eidesoul.engine.schema import people, person_links
+from eidesoul.engine.schema import people, person_links, thread_people, threads
 from eidesoul.engine.tools import execute
 
 DM = "628111@s.whatsapp.net"
 GROUP = "123@g.us"
+OTHER = "628222@s.whatsapp.net"
 
 
 def handle(env, inbound):
@@ -386,3 +389,135 @@ def test_konteks_command_prints_the_stored_block(tmp_path) -> None:
 
     assert "rupiah: rupiah melemah" in env.gateway.sent[-1][1]
     assert env.llm.calls == 0
+
+
+def _dm(env, thread_id: str, person_id: str, *, kind: str = "dm", extra: str = "") -> None:
+    with env.db.connect() as conn:
+        conn.execute(
+            threads.insert().values(
+                thread_id=thread_id, name="", reset_ts=0.0, kind=kind, gateway=""
+            )
+        )
+        conn.execute(people.insert().values(person_id=person_id, name="Budi"))
+        conn.execute(
+            thread_people.insert().values(
+                thread_id=thread_id, person_id=person_id, last_seen=0.0, interactions=1
+            )
+        )
+        if extra:
+            conn.execute(people.insert().values(person_id=extra, name="Ani"))
+            conn.execute(
+                thread_people.insert().values(
+                    thread_id=thread_id, person_id=extra, last_seen=0.0, interactions=1
+                )
+            )
+
+
+def _dispute(
+    store, subject: str, first: str = "aku suka kopi", second: str = "aku tidak suka kopi"
+):
+    left = store.write(
+        first, scope="person", person_id=subject, thread_id=DM, owner_id=subject,
+        subject_id=subject, level=2,
+    )
+    right = store.write(
+        second, scope="person", person_id=subject, thread_id=DM, owner_id=subject,
+        subject_id=subject, level=2, via="reflection",
+    )
+    assert store.mark_disputed(left, right) is True
+    return [left, right]
+
+
+def test_a_dispute_question_goes_to_the_dm_once_per_day(tmp_path) -> None:
+    """ADR-0010 §4.7: one question per subject per day, in the subject's own DM."""
+    from eidesoul.engine.memory.store import MemoryStore
+
+    store = MemoryStore(database(), build_config(tmp_path))
+    env = make_agent(tmp_path, memory=store)
+    _dm(env, DM, "628111")
+    ids = _dispute(store, "628111")
+
+    pair = {"ids": ids, "first": "aku suka kopi", "second": "aku tidak suka kopi"}
+    assert asyncio.run(env.agent.ask_dispute("628111", pair)) == "ok: asked"
+    assert [item[0] for item in env.gateway.sent] == [DM]
+    assert "kopi" in env.gateway.sent[0][1]
+    assert store.disputes_asked_today("628111") == 1
+
+    assert asyncio.run(env.agent.ask_dispute("628111", pair)) == "skipped: budget"
+    assert len(env.gateway.sent) == 1
+
+
+def test_a_dispute_question_needs_a_single_member_dm(tmp_path) -> None:
+    from eidesoul.engine.memory.store import MemoryStore
+
+    store = MemoryStore(database(), build_config(tmp_path))
+    env = make_agent(tmp_path, memory=store)
+    _dm(env, GROUP, "628111", kind="group", extra="628222")
+
+    pair = {"ids": _dispute(store, "628111"), "first": "a", "second": "b"}
+    assert asyncio.run(env.agent.ask_dispute("628111", pair)) == "skipped: no dm"
+    assert env.gateway.sent == []
+
+
+def test_questions_per_day_two_allows_two_pairs(tmp_path) -> None:
+    from eidesoul.engine.memory.store import MemoryStore
+
+    store = MemoryStore(database(), build_config(tmp_path))
+    env = make_agent(tmp_path, memory=store)
+    env.agent.config = replace(
+        env.config, reflection=replace(env.config.reflection, questions_per_day=2)
+    )
+    _dm(env, DM, "628111")
+
+    first = _dispute(store, "628111", "aku suka teh", "aku tidak suka teh")
+    second = _dispute(store, "628111", "aku suka kopi", "aku tidak suka kopi")
+    one = {"ids": first, "first": "a", "second": "b"}
+    two = {"ids": second, "first": "c", "second": "d"}
+    assert asyncio.run(env.agent.ask_dispute("628111", one)) == "ok: asked"
+    assert asyncio.run(env.agent.ask_dispute("628111", two)) == "ok: asked"
+    assert len(env.gateway.sent) == 2
+    assert store.disputes_asked_today("628111") == 2
+
+
+def test_a_body_without_rich_or_directory_is_counted(tmp_path) -> None:
+    """ADR-0014 §4.5: what a body cannot do is counted, not assumed away."""
+    from support import FakeGateway
+
+    from eidesoul.engine.inbound import Directory
+    from eidesoul.engine.tools import cross_refusal
+
+    env = make_agent(tmp_path, gateway=FakeGateway())
+    assert not isinstance(env.gateway, Directory)
+
+    asyncio.run(
+        env.agent.deliver_file(DM, tmp_path / "a.txt", gateway=env.gateway)
+    )
+    assert env.agent.runtime.rich_missing_total >= 1
+
+    ctx = env.agent.tool_context(
+        DM, "628111", (env.config.roles.get("member"),), env.gateway, person_id="628111"
+    )
+    assert cross_refusal(ctx, OTHER) == "denied: room"
+    assert env.agent.runtime.directory_missing_total == 1
+
+
+def test_status_shows_the_gateway_capability_counters(tmp_path) -> None:
+    from eidesoul.engine.commands.status import COMMAND as STATUS
+    from eidesoul.engine.roles import Role
+
+    admin = Role("administrator", tools=("*",), commands=("*",), memory_admin=True)
+    env = make_agent(tmp_path, roles={"administrator": admin}, default_role="administrator")
+    env.agent.runtime.gateway_core_ok = 1
+    env.agent.runtime.rich_missing_total = 2
+    env.agent.runtime.directory_missing_total = 3
+    env.agent.runtime.participants_unknown_total = 4
+
+    ctx = env.agent.command_context(
+        DM, "628111", (env.config.roles.get("administrator"),), env.gateway, "1"
+    )
+    card = asyncio.run(STATUS.fn(ctx))
+
+    assert "Gateways: 1 conforming" in card or "Gateway: 1 sesuai kontrak" in card
+    assert "Rich surface missing: 2" in card or "Permukaan rich tidak ada: 2" in card
+    assert "Directory missing: 3" in card or "Direktori tidak ada: 3" in card
+    assert "Participants unknown: 4" in card or "Peserta tidak diketahui: 4" in card

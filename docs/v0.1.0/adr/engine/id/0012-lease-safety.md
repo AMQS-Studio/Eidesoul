@@ -1,16 +1,16 @@
-> Terjemahan turunan — jangan sunting; sumber: engine/0012-lease-safety.md (sha256: 46be1890a8d2)
+> Terjemahan turunan — jangan sunting; sumber: engine/0012-lease-safety.md (sha256: 36f681ebae8c)
 > Teks ini ditulis manusia; baris yang tidak bisa diterjemahkan mesin disalin apa adanya ke sumber English, jadi sumber bercampur dua bahasa.
 
 # ADR-0012: Lease Safety — CAS, Fencing Token, dan Jam Database
 
 - **Status:** accepted
-- **Implementasi:** sebagian — ada: CAS acquire, `generation`, jam DB, audit takeover, renew/release berkunci generasi, `LeaseGuard.require()`, revisi 2; sisa: cek generasi terpasang di jalur kirim dan tulis memori (baris acceptance W2/W3)
+- **Implementasi:** implemented — bukti: CAS acquire, `generation`, jam DB, audit takeover, renew/release berkunci generasi, `LeaseGuard.require()` terikat ke `MemoryStore` (`_fence` pada setiap mutasi kanonik, dibaca di koneksi penulis itu sendiri) dan ke klaim/complete/fail `CognitionQueue`, revisi 2 dan 13; gate: `pytest -q` 831 lulus, `scripts/adr.py --check`
 - **Tanggal:** 2026-11-01
 - **Deciders:** Muqsith (owner), omp (reviewer)
 - **Konteks:** lanjutan ADR-0011 (crash safety & recovery) dan temuan review arsitektur: lease tanpa compare-and-swap, memakai jam lokal
 - **Supersedes:** —
 - **Terkait:** ADR-0011 (recovery), ADR-0013 (resume turn)
-- **Amandemen:** 2026-11-02 — normalisasi kerangka (ADR-0009 §4.4): menambah bagian Interaksi dengan ADR lain; Referensi bergeser ke §11. 2026-11-03 — audit: rentang `supervisor.py` diperbaiki menjadi `36-129`; baris basi "menunggu keputusan ADR-0009" diselaraskan (ADR-0009 sudah accepted, migrasi `docs/v0.1.0/adr/`). 2026-11-03 — audit: kolom fencing diseragamkan menjadi `generation` (bukan `lease_generation`); jalur migrasi menunjuk ADR-0016.
+- **Amandemen:** 2026-11-02 — normalisasi kerangka (ADR-0009 §4.4): menambah bagian Interaksi dengan ADR lain; Referensi bergeser ke §11. 2026-11-03 — audit: rentang `supervisor.py` diperbaiki menjadi `36-129`; baris basi "menunggu keputusan ADR-0009" diselaraskan (ADR-0009 sudah accepted, migrasi `docs/v0.1.0/adr/`). 2026-11-03 — audit: kolom fencing diseragamkan menjadi `generation` (bukan `lease_generation`); jalur migrasi menunjuk ADR-0016. 2026-11-03 — §4.3 kini berjalan di koneksi penulis itu sendiri: `MemoryStore._fence` memanggil `LeaseGuard.require` (yang mencatat penolakan) lalu membaca `engine_lease.generation` di dalam transaksi yang sama dengan tulisannya, sehingga cek dan mutasi memakai satu snapshot; update job membawa generasi klaim dan menolak saat generasi hidup sudah bergerak.
 - **Catatan lokasi:** ADR hidup di `docs/v0.1.0/adr/engine/`; salinan Indonesia di `docs/v0.1.0/adr/engine/id/0012-lease-safety.md`.
 
 ---
@@ -80,6 +80,7 @@ RETURNING generation;
   - menandai job selesai.
 - Sebelum menulis, periksa `generation` saat ini di DB. Kalau sudah berubah, batalkan operasi itu dan tandai `superseded` — pemegang lama tidak boleh menyelesaikan pekerjaan setelah digantikan.
 - Untuk pengiriman: `send_text` tidak bisa “diurungkan”, jadi pemeriksaan generation harus terjadi **sebelum** panggilan transport, bukan sesudahnya.
+- Cek berjalan di koneksi penulis itu sendiri: `MemoryStore._fence` membaca `engine_lease.generation` di dalam transaksi yang sama dengan tulisannya, setelah `LeaseGuard.require` mencatat penolakan, sehingga perbandingan dan mutasi memakai satu snapshot.
 
 ### 4.4 Jam
 

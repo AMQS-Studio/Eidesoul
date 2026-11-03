@@ -8,7 +8,7 @@
 - **Related:** ADR-0009 (document home), ADR-0012 (lease), ADR-0019 (observability), ADR-0028 (the plugin unit that this ADR distributes)
 - **Implementation:** partial — present: the local image build (core-only, `EXTRAS` empty), the plugin/gateway separation, `eidesoul selftest` image contents, the installer's panel-or-CLI finish gate; remaining: `panel/` (operator-owned; `web.enabled: false` until it lands) and publishing the image to GHCR (no registry credentials here)
 - **Location note:** this ADR is cross-cutting (it binds every surface and every deployment), so it sits at the root of the ADR home. The Indonesian copy is `docs/v0.1.0/adr/id/0027-distribution-web-config.md`.
-- **Amendments:** 2026-11-03 — first version. 2026-11-03 — the voice layer (emotion, humanize, character) is stated as on by default and switchable off per part; clean by default still covers only gateway, tool, and plugin.
+- **Amendments:** 2026-11-03 — first version. 2026-11-03 — the voice layer (emotion, humanize, character) is stated as on by default and switchable off per part; clean by default still covers only gateway, tool, and plugin. 2026-11-03 — the fetched-code keys in §5 are `plugin.root`/`plugin.fetch`/`plugin.source`, following the plugin rename (ADR-0028 §5); the default install root is `<workspace>/plugins`.
 
 ---
 
@@ -24,8 +24,8 @@
 | The spine is not optional | Postgres+pgvector, Mem0, the shared embedder, affect prototypes, the guard, and the lease (`AGENTS.md` §Capability spine) |
 
 The owner's decision: distribution happens through `ghcr.io`, the web surface is the primary way to
-initialise and configure an install, components are added from there, and **nothing is on by default
-except the spine** — a component's code is fetched only when it is enabled. The web surface itself is
+initialise and configure an install, plugins are added from there, and **nothing is on by default
+except the spine** — a plugin's code is fetched only when it is enabled. The web surface itself is
 meant to be on by default once it is finished, with a switch to turn it off.
 
 ## 2. Decision drivers
@@ -34,7 +34,7 @@ meant to be on by default once it is finished, with a switch to turn it off.
 |---|---|
 | Clean by default | Gateway, tool, and plugin are each off until enabled — a fresh install runs the spine and nothing that can act on the world |
 | Distinct categories | A gateway is a body, a tool is a capability, a plugin is a bundle; no category absorbs another |
-| Code follows enablement | The image stays small and auditable; enabled components are fetched, digest-pinned |
+| Code follows enablement | The image stays small and auditable; enabled plugins are fetched, digest-pinned |
 | One configuration truth | The web surface writes the same documents as the CLI; no second store |
 | Operator-first surface | Initialise, inspect, enable, grant, and revoke without editing YAML by hand |
 | Reversible | Every enable has a disable; turning the web surface off never breaks a running engine |
@@ -44,7 +44,7 @@ meant to be on by default once it is finished, with a switch to turn it off.
 
 | Option | Summary | Value |
 |---|---|---|
-| **A. One core image, fetch on enable** | Publish a single spine-only image; enabling a component downloads it | **Chosen** |
+| **A. One core image, fetch on enable** | Publish a single spine-only image; enabling a plugin downloads it | **Chosen** |
 | **B. Fat image per bundle** | `core`, `core-google`, `core-whatsapp`, … | Rejected as default: build/verify matrix grows and "nothing by default" becomes untrue |
 | **C. pip extras only** | Keep `--extra google` installs and configure by YAML | Rejected: enablement is a build-time decision, not an operator action |
 | **D. No image, source install** | Document `uv sync` and a systemd unit | Rejected: reproducibility and upgrades get worse, not better |
@@ -69,7 +69,7 @@ based — no release-looking tag is invented (§Versioning in `AGENTS.md`).
 
 The web panel is the operator surface for init and configuration: first run (database, workspace,
 provider and model, first administrator), inspection (`/status` data, ledger, automations, memory
-truth), and component enablement (§4.3). The CLI keeps parity for headless installs
+truth), and plugin enablement (§4.3). The CLI keeps parity for headless installs
 (`eidesoul init`, `eidesoul config import`, `eidesoul selftest`, `eidesoul models`).
 
 - The panel is a **separate process** at the repository root (`panel/`), never a module inside
@@ -82,7 +82,7 @@ truth), and component enablement (§4.3). The CLI keeps parity for headless inst
 - Every change is recorded in `config_changes` with actor and diff, and the panel shows the effective
   value next to its source (`document`, `yaml mirror`, `env`, `default`).
 - The panel owns no policy: permissions, approvals, and the guard live in the engine; the panel cannot
-  grant itself anything, and a component enable is an operator action (§4.3).
+  grant itself anything, and a plugin enable is an operator action (§4.3).
 
 ### 4.3 Nothing is enabled by default except the spine
 
@@ -109,7 +109,7 @@ plugin never turns into a core tool.
 - "Enabled" means two separate things and both are required: the code is present **and** a role grants
   the capability. Enabling without a grant leaves the capability inert; a grant without code is
   reported as unavailable, never as denied.
-- Enabling a component **fetches its code** (wheel or OCI layer) pinned by digest, verifies the digest,
+- Enabling a plugin **fetches its code** (wheel or OCI layer) pinned by digest, verifies the digest,
   and only then writes the config document. With no network the enable fails with one explicit message
   and changes nothing — there is no bundled fallback and no partial install.
 - Disabling switches the capability off and keeps the files (fast, reversible); removing deletes them
@@ -167,8 +167,8 @@ same path (§4.2).
 | `web.enabled` | `true` once finished, `false` while unfinished | the panel process |
 | `web.host` | `127.0.0.1` | bind address; anything else needs `web.remote_ack: true` and an `.env` secret |
 | `web.port` | operator-chosen at first run | panel listener |
-| `components.root` | `<workspace>/components` | where fetched gateway/plugin code lands (§ADR-0028) |
-| `components.fetch` | `true` | allow fetching code on enable; `false` = offline installs only |
+| `plugin.root` | `<workspace>/plugins` | where fetched gateway/plugin code lands (§ADR-0028) |
+| `plugin.fetch` | `true` | allow fetching code on enable; `false` = offline installs only |
 | `image.tag` | unset while unreleased | the running image tag, reported by `eidesoul selftest` |
 
 Secrets live in `.env` only (`WEB_TOKEN`, provider keys); YAML carries names, never values.
@@ -180,7 +180,7 @@ Secrets live in `.env` only (`WEB_TOKEN`, provider keys); YAML carries names, ne
 | Capabilities active on a fresh install (outside the spine and permission grants) | 0 |
 | Image contents checkable | `eidesoul selftest` lists gateway/plugin presence; label matches |
 | Panel ↔ CLI divergence on the same change | 0 (one import path) |
-| Fetched component without digest verification | 0 (fails closed) |
+| Fetched plugin without digest verification | 0 (fails closed) |
 | Changes without a `config_changes` row | 0 |
 | Secrets written into YAML by the panel | 0 (test) |
 | Enable on a machine without network | explicit failure, no state change (test) |
@@ -192,9 +192,9 @@ Secrets live in `.env` only (`WEB_TOKEN`, provider keys); YAML carries names, ne
 - [ ] One image builds locally with `EXTRAS` empty and runs `eidesoul selftest`; the release tag is published only when a release exists.
 - [ ] The image contains no gateway/plugin dependency: `pip list` in the container shows no `neonize`, no `google-api-python-client`.
 - [ ] A fresh install starts with the spine only: `/status` reports every gateway and plugin as absent/off, and no capability is granted.
-- [ ] Enabling a component fetches code by digest; a wrong digest aborts with no config change and no files installed.
-- [ ] Enabling a component without a role grant leaves it inert (unavailable, not denied) and `/tools` says why.
-- [ ] Disabling a component keeps its files and stops the capability; removing deletes both code and state, and both actions appear in the ledger.
+- [ ] Enabling a plugin fetches code by digest; a wrong digest aborts with no config change and no files installed.
+- [ ] Enabling a plugin without a role grant leaves it inert (unavailable, not denied) and `/tools` says why.
+- [ ] Disabling a plugin keeps its files and stops the capability; removing deletes both code and state, and both actions appear in the ledger.
 - [ ] The panel writes a configuration change that `eidesoul config import` would have written, with a `config_changes` row; a manual YAML edit shows up as drift until imported.
 - [ ] `web.enabled: false` stops the panel and leaves the engine and its gateways running.
 - [ ] No secret value appears in `config.yaml`, `roles.yaml`, or `soul.yaml` after a panel session (test).
@@ -208,7 +208,7 @@ Secrets live in `.env` only (`WEB_TOKEN`, provider keys); YAML carries names, ne
 | Risk | Mitigation |
 |---|---|
 | "Nothing by default" drifts into extras creeping back into the image | §6 metric: container dependency list is checked; plugins carry their own dependencies |
-| Fetch-on-enable needs network at an awkward time | `components.fetch: false` allows an operator to pre-place verified artifacts; the failure is explicit |
+| Fetch-on-enable needs network at an awkward time | `plugin.fetch: false` allows an operator to pre-place verified artifacts; the failure is explicit |
 | The panel becomes a second, parallel configuration path | One import path (§4.2), `config_changes` rows, and a drift view in the panel |
 | A panel exposed beyond loopback becomes an attack surface | Loopback default, explicit `remote_ack`, `.env` secret, no anonymous mode |
 | Web-first tempts engine logic into the panel | §4.5 plus the repo rule that `eidesoul/engine/` never imports the panel |

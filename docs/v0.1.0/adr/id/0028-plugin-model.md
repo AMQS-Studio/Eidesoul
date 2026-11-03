@@ -1,4 +1,4 @@
-> Terjemahan turunan — jangan sunting; sumber: 0028-plugin-model.md (sha256: 6fd6670d004b)
+> Terjemahan turunan — jangan sunting; sumber: 0028-plugin-model.md (sha256: 6182c2d926cb)
 > Ditulis tangan (bukan mesin), mengikuti sumber English baris demi baris.
 
 # ADR-0028: Model Plugin — Satu Unit Terinstall untuk Kapabilitas Terunduh
@@ -9,9 +9,9 @@
 - **Konteks:** lanjutan ADR-0027 (distribusi dan kapabilitas clean by default), ADR-0001 (permukaan), ADR-0015 (manifest kapabilitas), ADR-0007 (kelas izin), ADR-0022 (`administrator`)
 - **Supersedes:** —
 - **Terkait:** ADR-0018 (kontrak gateway), ADR-0019 (ledger), ADR-0021 (kontrak tool), ADR-0026 (tool core yang tetap di core)
-- **Implementasi:** implemented — bukti: `eidesoul/engine/components.py` (manifest, digest tree, fetch-by-digest, satu import `entry`, siklus/status), `plugins/google/` (manifest + kredit + tool), extra `google` dihapus, CLI `eidesoul components`, `tests/test_plugins.py`, `tests/test_google_plugin.py`; hasil gate: `pytest -q` 798 lulus, `uv lock --check` bersih
+- **Implementasi:** implemented — bukti: `eidesoul/engine/plugins.py` (manifest, digest tree, fetch-by-digest, satu import `entry`, siklus/status), `plugins/google/` (manifest + kredit + tool), extra `google` dihapus, CLI `eidesoul plugins`, `tests/test_plugins.py`, `tests/test_google_plugin.py`; hasil gate: `pytest -q` 798 lulus, `uv lock --check` bersih
 - **Catatan lokasi:** ADR ini lintas-potong (mendefinisikan unit distribusi yang dipakai setiap permukaan), jadi ia duduk di akar rumah ADR. Salinan Indonesia di `docs/v0.1.0/adr/id/0028-plugin-model.md`.
-- **Amandemen:** 2026-11-03 — versi pertama.
+- **Amandemen:** 2026-11-03 — versi pertama. 2026-11-03 — unit ini disebut `plugin` di semua tempat: loader-nya `eidesoul/engine/plugins.py` (`PluginLoader`, `Plugin`, `PluginError`), seksi config `plugin.{root,fetch,source}`, dan verb CLI `eidesoul plugins list|install|enable|disable|remove`. Nama berkas manifest `plugin.yaml`, peta `plugins.<name>.enabled|digest`, dan pohon sumber `plugins/google/` tetap; tanpa alias dan tanpa shim.
 
 ---
 
@@ -45,7 +45,7 @@ yang harus bisa dimuat engine tanpa mengimpor kodenya saat import.
 
 | Opsi | Ringkas | Nilai |
 |---|---|---|
-| **A. Plugin sebagai unit terinstall, diunduh saat diaktifkan** | Manifest + kode di `components/<name>`; engine memuat lewat registry yang sudah ada | **Dipilih** |
+| **A. Plugin sebagai unit terinstall, diunduh saat diaktifkan** | Manifest + kode di `plugins/<name>`; engine memuat lewat registry yang sudah ada | **Dipilih** |
 | **B. Tetap pakai extra Python, tambah saklar config** | `--extra google` tetap, plugin hanya berarti "aktif" | Ditolak: pengaktifan tetap keputusan build dan image membawa semua dependency opsional |
 | **C. Plugin sebagai layanan terpisah** | Setiap plugin berjalan di luar proses di balik API | Ditolak untuk sekarang: latensi, mode kegagalan, dan transport baru untuk sesuatu yang sebenarnya pemanggilan library |
 | **D. Melipat plugin ke gateway** | Perlakukan `google` sebagai gateway | Ditolak: gateway adalah body (transport), Google adalah kode kapabilitas; dua kosakata itu harus tetap terpisah (ADR-0001 §4.3) |
@@ -77,7 +77,7 @@ didaftarkan sebagai gateway — tidak pernah sebagai "gateway plugin".
 
 ### 4.2 Manifest
 
-`components/<name>/plugin.yaml`:
+`plugins/<name>/plugin.yaml`:
 
 ```
 name: google                  # ^[a-z0-9][a-z0-9-]{0,63}$ (aturan sama dengan paket library)
@@ -111,7 +111,7 @@ credits:                      # baris kredit README yang harus dibayar plugin in
 
 | Langkah | Aktor | Efek |
 |---|---|---|
-| `installing` | operator | unduh per digest, verifikasi, urai di `components/<name>`, unduh `requires` ke `components/<name>/deps` |
+| `installing` | operator | unduh per digest, verifikasi, urai di `plugins/<name>`, unduh `requires` ke `plugins/<name>/deps` |
 | `installed` | operator | kode ada, tidak ada izin, tidak ada yang diimpor |
 | `enabled` | operator | loader mengimpor `entry`, mendaftarkan yang disebut `provides`, menulis dokumen konfigurasi; role tetap harus memberi setiap kapabilitas |
 | `disabled` | operator | kapabilitas mati; berkas dan status tetap; cepat dibalik |
@@ -125,7 +125,7 @@ credits:                      # baris kredit README yang harus dibayar plugin in
 
 ### 4.4 Pemuatan, isolasi, dependency
 
-- Satu modul engine (`eidesoul/engine/components.py`, baru) memegang manifest, verifikasi digest,
+- Satu modul engine (`eidesoul/engine/plugins.py`) memegang manifest, verifikasi digest,
   langkah unduh, dan satu impor `entry`. Tidak ada bagian lain engine yang mengimpor kode plugin.
 - Loader menyerahkan `provides` ke registry yang sudah ada: tool sebagai modul `TOOL = Handler(...)`,
   command sebagai modul `COMMAND = Handler(...)`, gateway lewat registry gateway (ADR-0018). Loader
@@ -163,9 +163,9 @@ credits:                      # baris kredit README yang harus dibayar plugin in
 
 | Kunci | Default | Arti |
 |---|---|---|
-| `components.root` | `<workspace>/components` | tempat kode plugin hasil unduhan dan dependency-nya |
-| `components.fetch` | `true` | unduh kode saat install; `false` = operator menaruh artefak lebih dulu |
-| `components.source` | kosong | sumber yang dinamai operator (registry/URL) tempat install diunduh |
+| `plugin.root` | `<workspace>/plugins` | tempat kode plugin hasil unduhan dan dependency-nya |
+| `plugin.fetch` | `true` | unduh kode saat install; `false` = operator menaruh artefak lebih dulu |
+| `plugin.source` | kosong | sumber yang dinamai operator (registry/URL) tempat install diunduh |
 | `plugins.<name>.enabled` | `false` | apakah loader mendaftarkan plugin saat boot |
 | `plugins.<name>.digest` | kosong | digest terpin yang harus cocok dengan salinan terpasang |
 
@@ -203,7 +203,7 @@ bukan rusak.
 |---|---|
 | Plugin jadi cara menyelundupkan tool tanpa guard | §4.6: kontrak guard, approval, dan keluaran yang sama; cek tabrakan saat pemuatan |
 | Dependency drift antara plugin dan engine | Rentang `engine` di manifest diperiksa sebelum impor; dependency tinggal bersama plugin |
-| Unduh-saat-aktif mematahkan install air-gapped | `components.fetch: false` plus artefak yang ditaruh operator; kalau tidak, gagal eksplisit |
+| Unduh-saat-aktif mematahkan install air-gapped | `plugin.fetch: false` plus artefak yang ditaruh operator; kalau tidak, gagal eksplisit |
 | Kosakata plugin merembes ke core | §4.4: satu modul loader, registry tidak berubah, tanpa nama plugin di logika engine (bisa dicek AST) |
 | Penghapusan `google` mematahkan install yang sudah ada | Pra-rilis, jadi cutover-nya bersih: tanpa shim dan tanpa alias (aturan repo); runbook menyebutkan memasang plugin |
 | Plugin mengklaim lisensi yang tidak dibawanya | `credits` di manifest divalidasi terhadap distribusi terpasang saat pemuatan; lisensi yang hilang dilaporkan, tidak pernah ditebak |
@@ -225,7 +225,7 @@ bukan rusak.
 - `eidesoul/engine/commands/__init__.py` — registry command.
 - `eidesoul/gateways/` — paket gateway yang bisa diekspos loader.
 - `eidesoul/library/**` — aturan id paket (`^[a-z0-9][a-z0-9-]{0,63}$`) yang dipakai ulang untuk nama plugin.
-- `eidesoul/engine/components.py` — modul baru: manifest, digest, unduh, satu impor (usulan).
+- `eidesoul/engine/plugins.py` — manifest, digest, unduh, satu impor, siklus hidup.
 
 ---
 

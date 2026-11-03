@@ -1,4 +1,4 @@
-"""Entrypoint: `eidesoul run|console|init|config|db|memory|components|selftest|backfill|library`."""
+"""Entrypoint: `eidesoul run|console|init|config|db|memory|plugins|selftest|backfill|library`."""
 
 from __future__ import annotations
 
@@ -134,6 +134,9 @@ async def build_runtime(config_path: str | None, *, console: bool = False):
         gateways=tuple(gateways),
         documents=documents,
     )
+    # ADR-0014 §4.5: every registered gateway passed `ensure_core` in `build_gateways`.
+    agent.runtime.gateways = tuple(gateway.name for gateway in gateways)
+    agent.runtime.gateway_core_ok = len(gateways)
     lease = Lease(db)
     if console:
         lock = None
@@ -317,17 +320,17 @@ async def selftest(config: Config) -> int:
     recipes = RecipeStore(db)
     memory = await build_memory(config, db=db)
     results: list[bool] = []
-    from .engine import components
+    from .engine import plugins
     from .engine.registry import Registry
 
-    component_settings = components.ComponentSettings.from_config(config)
-    component_report = components.states(component_settings)
-    if not component_report:
-        print("component: none configured", flush=True)
-    for item in component_report:
+    plugin_settings = plugins.PluginLoader.from_config(config)
+    plugin_report = plugins.states(plugin_settings)
+    if not plugin_report:
+        print("plugins: none configured", flush=True)
+    for item in plugin_report:
         detail = f" - {item.reason}" if item.reason else ""
-        print(f"component {item.name}: {item.state}{detail}", flush=True)
-    enabled = components.load(component_settings)
+        print(f"plugin {item.name}: {item.state}{detail}", flush=True)
+    enabled = plugins.load(plugin_settings)
     plugin_tools = Registry(list(enabled.tools), "tool")
     try:
         role = _role(config)
@@ -809,7 +812,7 @@ def _memory_purge(args: argparse.Namespace) -> int:
     return 0
 
 
-def _component_db(host):
+def _plugin_db(host):
     """Best-effort audit store; a missing or unreachable DB never blocks the host-file action."""
     url = resolve_database_url(host.database)
     if not url:
@@ -822,43 +825,43 @@ def _component_db(host):
         return None
 
 
-def _components_dispatch(args: argparse.Namespace) -> int:
+def _plugins_dispatch(args: argparse.Namespace) -> int:
     """ADR-0028 lifecycle: list/install/enable/disable/remove, host files only."""
-    from .engine import components
+    from .engine import plugins
 
     host, paths = load_host(args.config)
-    settings = components.ComponentSettings.from_host(host, paths)
-    action = args.components_command
+    settings = plugins.PluginLoader.from_host(host, paths)
+    action = args.plugins_command
     if action not in {"list", "install", "enable", "disable", "remove"}:
         build_parser().print_help()
         return 2
-    db = None if action == "list" else _component_db(host)
+    db = None if action == "list" else _plugin_db(host)
     try:
         if action == "list":
-            found = components.states(settings)
+            found = plugins.states(settings)
             if not found:
-                print("components: none configured", flush=True)
+                print("plugins: none configured", flush=True)
             for item in found:
                 detail = f" - {item.reason}" if item.reason else ""
-                print(f"component {item.name}: {item.state}{detail}", flush=True)
+                print(f"plugin {item.name}: {item.state}{detail}", flush=True)
             return 0
         actor = os.environ.get("USER", "") or os.environ.get("USERNAME", "")
         if action == "install":
-            item = components.install(settings, args.name, actor=actor, db=db)
+            item = plugins.install(settings, args.name, actor=actor, db=db)
         elif action == "enable":
-            item = components.enable(settings, args.name, actor=actor, db=db)
+            item = plugins.enable(settings, args.name, actor=actor, db=db)
         elif action == "disable":
-            item = components.disable(settings, args.name, actor=actor, db=db)
+            item = plugins.disable(settings, args.name, actor=actor, db=db)
         else:
-            item = components.remove(settings, args.name, actor=actor, db=db)
-    except (components.ComponentError, OSError) as exc:
+            item = plugins.remove(settings, args.name, actor=actor, db=db)
+    except (plugins.PluginError, OSError) as exc:
         print(f"eidesoul: {exc}", file=sys.stderr, flush=True)
         return 2
     finally:
         if db is not None:
             db.dispose()
     detail = f" - {item.reason}" if item.reason else ""
-    print(f"component {item.name}: {item.state}{detail}", flush=True)
+    print(f"plugin {item.name}: {item.state}{detail}", flush=True)
     return 0
 
 
@@ -948,19 +951,19 @@ def build_parser() -> argparse.ArgumentParser:
         "--dry-run", action="store_true", help="report what would be purged, change nothing"
     )
     memory_purge.add_argument("--batch", type=int, default=500, help="rows per batch")
-    components = sub.add_parser("components", help="component (plugin) lifecycle")
-    components_sub = components.add_subparsers(dest="components_command")
-    components_sub.add_parser(
+    plugin_parser = sub.add_parser("plugins", help="plugin lifecycle")
+    plugin_sub = plugin_parser.add_subparsers(dest="plugins_command")
+    plugin_sub.add_parser(
         "list", help="show absent, installed, enabled, and unavailable plugins"
     )
     for verb, text in (
-        ("install", "place verified component code under components.root"),
-        ("enable", "install if needed, then register the component at boot"),
-        ("disable", "switch the component off and keep its files"),
-        ("remove", "delete a disabled component's code and config entry"),
+        ("install", "place verified plugin code under plugin.root"),
+        ("enable", "install if needed, then register the plugin at boot"),
+        ("disable", "switch the plugin off and keep its files"),
+        ("remove", "delete a disabled plugin's code and config entry"),
     ):
-        item = components_sub.add_parser(verb, help=text)
-        item.add_argument("name", help="component name, e.g. google")
+        item = plugin_sub.add_parser(verb, help=text)
+        item.add_argument("name", help="plugin name, e.g. google")
     return parser
 
 
@@ -983,7 +986,7 @@ def main(argv: list[str] | None = None) -> int:
             "library": _library_dispatch,
             "people": _people_dispatch,
             "memory": _memory_dispatch,
-            "components": _components_dispatch,
+            "plugins": _plugins_dispatch,
         }
         if args.command in dispatch:
             return dispatch[args.command](args)

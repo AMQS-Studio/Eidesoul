@@ -124,12 +124,14 @@ def _start(db: Database, thread_id: str) -> dict | None:
     return _open_episode(db, thread_id)
 
 
-def _evidence(db: Database, thread_id: str, started_at: float) -> tuple[list[dict], list[dict]]:
-    rows = db.fetch_all(
-        select(turns)
-        .where(turns.c.thread_id == thread_id, turns.c.created_at >= started_at)
-        .order_by(turns.c.created_at)
-    )
+def _evidence(
+    db: Database, thread_id: str, started_at: float, ended_at: float | None = None
+) -> tuple[list[dict], list[dict]]:
+    """Turn and step evidence of one window; `ended_at` bounds a closed episode."""
+    window = [turns.c.thread_id == thread_id, turns.c.created_at >= started_at]
+    if ended_at is not None:
+        window.append(turns.c.created_at <= float(ended_at))
+    rows = db.fetch_all(select(turns).where(*window).order_by(turns.c.created_at))
     ids = [str(row["id"]) for row in rows]
     steps = (
         db.fetch_all(
@@ -143,9 +145,40 @@ def _evidence(db: Database, thread_id: str, started_at: float) -> tuple[list[dic
     return rows, steps
 
 
-def _signature(steps: list[dict]) -> str:
-    names = [str(step.get("tool") or "") for step in steps if str(step.get("tool") or "")]
-    return "→".join(names)
+# ADR-0020 §4.6: the target type a tool acts on. Two runs match only with the same targets.
+TARGET_TYPES: dict[str, str] = {
+    "read": "file",
+    "write": "file",
+    "grep": "file",
+    "fetch": "file",
+    "send": "room",
+    "send_to": "room",
+    "chat_history": "room",
+    "google": "document",
+    "shell": "process",
+    "sandbox": "process",
+}
+
+
+def _signature(steps: list[dict], thread_id: str = "") -> str:
+    """`scope=…;tools=…;targets=…`: the comparable identity of one episode's work.
+
+    Tool names are collapsed to one entry per run (a retry is not a different procedure), and
+    the target types come from a constant map, so the signature never carries a path or a text.
+    """
+    names: list[str] = []
+    targets: list[str] = []
+    for step in steps:
+        tool = str(step.get("tool") or "")
+        if not tool:
+            continue
+        if tool not in names:
+            names.append(tool)
+        target = TARGET_TYPES.get(tool, tool)
+        if target not in targets:
+            targets.append(target)
+    scope = "thread" if str(thread_id or "") else "global"
+    return f"scope={scope};tools={','.join(names)};targets={','.join(targets)}"
 
 
 def _correction(steps: list[dict]) -> bool:
@@ -269,7 +302,7 @@ def scan(
             {
                 "turns": len(turn_rows),
                 "tool_calls": tool_calls,
-                "signature": _signature(steps),
+                "signature": _signature(steps, thread_id),
                 "refs": refs,
             },
         )
@@ -321,7 +354,11 @@ def admission(episode: Episode, steps: list[dict]) -> tuple[bool, str]:
 
 
 def slug(signature: str, limit: int = 60) -> str:
-    body = re.sub(r"[^a-z0-9]+", "-", str(signature or "").lower()).strip("-")
+    """A readable procedure name: the tool chain of a structured signature, else the text."""
+    raw = str(signature or "")
+    if "tools=" in raw:
+        raw = raw.split("tools=", 1)[1].split(";", 1)[0] or raw
+    body = re.sub(r"[^a-z0-9]+", "-", raw.lower()).strip("-")
     if not body:
         body = "episode"
     return body[:limit].strip("-") or "episode"
@@ -332,7 +369,13 @@ def steps_of(db: Database, episode_id: str) -> list[dict]:
     episode = db.fetch_one(select(episodes).where(episodes.c.id == str(episode_id)))
     if episode is None:
         return []
-    _, steps = _evidence(db, str(episode["thread_id"]), float(episode["started_at"]))
+    closed = episode.get("closed_at")
+    _, steps = _evidence(
+        db,
+        str(episode["thread_id"]),
+        float(episode["started_at"]),
+        float(closed) if closed else None,
+    )
     return steps
 
 

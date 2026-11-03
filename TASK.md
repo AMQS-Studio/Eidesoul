@@ -70,25 +70,27 @@ Eidesoul checklist. Every item is done when the listed surface exists and works 
 - [x] ADR-0007/0022/0023: `consent`/`authorization` with `scope_proof`, the protected
       `administrator`, relay grants with expiry and revocation.
 - [x] ADR-0011/0012/0013/0017: transactional intake, turn checkpoints and resume, per-chunk
-      delivery ledger, CAS lease with generations, per-thread locks, one-turn deadline, send gate.
+      delivery ledger, CAS lease with generations (fenced into canonical memory writes and job
+      claims), per-thread locks, one-turn deadline, send gate, paced backlog with
+      `per_message_then_consolidate` and a `turns.category='action'` exemption.
 - [x] ADR-0014/0019: declarative automations with occurrence idempotency, quiet hours, budget and
-      kill switch; `turn_id`, JSON logs, `llm_calls`, the `/status` card.
+      kill switch, the `message` event source, capability counters and durable `threads.gateway`
+      routing; `turn_id`, JSON logs, `llm_calls`, the `/status` card.
 - [x] ADR-0015/0021/0024/0025/0026: capability index + `info`, per-tool caps with `grep`/`fetch`,
       input/coroutine validation, `max_calls_per_turn` and cost rows, FTS/trigram search.
-- [x] ADR-0016/0029: one Alembic chain (head 10), primary-only `db upgrade`, Postgres+pgvector test
+- [x] ADR-0016/0029: one Alembic chain (head 13), primary-only `db upgrade`, Postgres+pgvector test
       store with a deterministic stub embedder.
-- [x] ADR-0028/0030: plugin model with digest fetch, installer and interactive `init`.
+- [x] ADR-0028/0030: plugin model with digest fetch, installer and interactive `init`; the unit,
+      its loader, its config section, and its CLI verb are `plugin`/`plugins` everywhere.
+- [x] ADR-0001/0005/0008/0010/0020: the recall/precision eval, MiniLM remember/forget intent
+      prototypes with the scheduled purge, `kind=rule` born only from the soul document, the
+      per-subject dispute-question cap, and the efficiency ladder.
 - [ ] ADR-0027: `panel/` (operator-owned, planned; `web.enabled: false` until it lands) and
       publishing the image to GHCR (no registry credentials here).
 
 ## Still open
 
-- [ ] ADR-0010: the per-person daily cap on dispute questions.
-- [ ] ADR-0013: backlog pacing/fairness (`per_message_then_consolidate`, per-chat and per-minute
-      resume limits).
-- [ ] ADR-0014: the `message` event source, gateway capability counters, and routing a target on a
-      non-first gateway.
-- [ ] ADR-0020: §4.8/§4.9 efficiency comparison and the automation ladder (after `llm_calls`).
+- [ ] ADR-0030: the panel half of the first-run wizard.
 
 ## v2 spine
 

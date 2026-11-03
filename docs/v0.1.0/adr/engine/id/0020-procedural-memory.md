@@ -1,10 +1,10 @@
-> Terjemahan turunan — jangan sunting; sumber: engine/0020-procedural-memory.md (sha256: 6b52ac71b01c)
+> Terjemahan turunan — jangan sunting; sumber: engine/0020-procedural-memory.md (sha256: 1b47252689c7)
 > Teks ini ditulis manusia; baris yang tidak bisa diterjemahkan mesin disalin apa adanya ke sumber English, jadi sumber bercampur dua bahasa.
 
 # ADR-0020: Prosedur Turunan — Skill sebagai Pertumbuhan Soul, Bukan Tool
 
 - **Status:** accepted
-- **Implementasi:** partial — ada: `episodes` + enam sinyal penutup, `distill` (satu revisi per episode), `skill_revisions`, retrieval sadar-scope + `uses`/`last_used`, global ditolak tanpa T0/approval, permukaan owner `/skill`, `tests/test_episodes.py`; sisa: perbandingan efisiensi §4.8/§4.9 + tangga automation (butuh `llm_calls`, W6); tool `skill` untuk model dihapus sesuai §4.1
+- **Implementasi:** implemented — bukti: `episodes` + enam sinyal penutup, `distill` (satu revisi per episode), `skill_revisions`, retrieval sadar-scope berurut prioritas, status langkah gagal lewat `llm.run` → `turn_steps`, perbandingan `signature`/`evidence`/`eligible` (`eidesoul/engine/memory/efficiency.py`), aksi tangga dengan cooldown proposal dan usulan automation yang hanya berupa approval, `tests/test_episodes.py`, `tests/test_efficiency.py`; gate: `pytest -q` 831 lulus, `scripts/adr.py --check`
 - **Tanggal:** 2026-11-03
 - **Deciders:** Muqsith (owner), omp (reviewer)
 - **Konteks:** tool `skill` yang eksplisit tidak terpakai, tetapi menagih indeks ±3000 karakter di setiap prompt untuk setiap role yang memilikinya; skema `skills` tanpa scope/provenance/versi membuatnya menjadi kanal instruksi global yang bisa ditulis model — jalur yang ADR-0008 tutup untuk memori

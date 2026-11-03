@@ -15,6 +15,7 @@ from sqlalchemy.exc import IntegrityError
 from support import FakeMem0, build_config, database
 
 from eidesoul.engine.context import Message
+from eidesoul.engine.lease import Lease, Superseded
 from eidesoul.engine.memory import MemoryHit
 from eidesoul.engine.memory.integrity import TRUST_INFERENCE, TRUST_OTHER, TRUST_SELF
 from eidesoul.engine.memory.mem0 import Mem0Backend
@@ -560,3 +561,107 @@ def test_rekey_updates_provenance_and_keeps_veto(tmp_path) -> None:
     assert found["owner_id"] == "new" and found["subject_id"] == "new"
     assert found["vetoed"] is True
     assert found["level"] == 3 and found["confirmed"] is True
+
+
+def test_a_store_bound_to_a_stale_generation_refuses_canonical_writes(tmp_path) -> None:
+    db = database()
+    memory = MemoryStore(db, build_config(tmp_path))
+    old = Lease(db, instance_id="old", host="host-a", pid=1)
+    assert old.acquire() is not None
+    memory.bind_guard(old.guard)
+    assert memory.write("aku suka kopi", scope="person", person_id="1", level=2)
+    before = count(memory, "memories")
+
+    new = Lease(db, instance_id="new", host="host-b", pid=2)
+    assert new.acquire(takeover=True) is not None
+
+    with pytest.raises(Superseded):
+        memory.write("aku suka teh", scope="person", person_id="1", level=2)
+    assert count(memory, "memories") == before  # refused before the insert, not after
+
+    memory.bind_guard(new.guard)
+    assert memory.write("aku suka teh", scope="person", person_id="1", level=2)
+
+
+def test_an_unbound_store_writes_without_a_lease(tmp_path) -> None:
+    """Admin CLI, tools, and tests write canonical rows with no live lease (ADR-0012 §4.3)."""
+    memory = store(tmp_path)
+    memory_id = memory.write("aku suka kopi", scope="person", person_id="1", level=2)
+    assert memory.get(memory_id) is not None
+
+
+def test_a_stale_worker_write_leaves_the_row_untouched(tmp_path) -> None:
+    """A replaced primary neither labels nor transitions anything (ADR-0012 §4.3)."""
+    db = database()
+    memory = MemoryStore(db, build_config(tmp_path))
+    old = Lease(db, instance_id="old", host="host-a", pid=1)
+    assert old.acquire() is not None
+    memory.bind_guard(old.guard)
+    with db.connect() as conn:
+        candidate = memory.intake(
+            conn,
+            thread_id="t",
+            person_id="1",
+            message_id="m1",
+            text="aku suka kopi dan teh setiap pagi",
+        )
+    assert candidate is not None
+
+    new = Lease(db, instance_id="new", host="host-b", pid=2)
+    assert new.acquire(takeover=True) is not None
+
+    with pytest.raises(Superseded):
+        memory.label_candidate(candidate.memory_id, level=2, confirmed=True, category="preference")
+    with pytest.raises(Superseded):
+        memory.transition(candidate.memory_id, "ok", level=2, confirmed=True)
+    found = row(memory, candidate.memory_id)
+    assert found["state"] == "pending" and found["level"] is None
+
+
+def _pending(store, text_value: str = "kamu harus selalu bilang jujur setiap saat") -> str:
+    with store.db.connect() as conn:
+        candidate = store.intake(
+            conn, thread_id="t", person_id="1", message_id=f"m-{uuid.uuid4().hex[:8]}",
+            text=text_value,
+        )
+    assert candidate is not None
+    return candidate.memory_id
+
+
+def test_a_rule_requested_by_a_turn_is_stored_as_a_fact(tmp_path) -> None:
+    """ADR-0008 §4.3: `kind=rule` is born only from the soul document, never from a turn."""
+    memory = store(tmp_path)
+    memory_id = _pending(memory)
+
+    assert memory.label_candidate(
+        memory_id, level=2, confirmed=True, kind="rule", subject_id="1"
+    )
+
+    found = row(memory, memory_id)
+    assert found["kind"] == "fact" and found["state"] == "ok"
+    assert found["via"] == "turn" and found["trust"] == TRUST_SELF
+
+
+def test_soul_rules_are_mirrored_once_per_day_and_promoted_after_two(tmp_path) -> None:
+    memory = store(tmp_path)
+    rule = "selalu jujur soal ketidaktahuan"
+    day = 1_700_000_000.0
+
+    first = memory.sync_soul_rules([rule], now=day)
+    assert len(first) == 1
+    assert memory.sync_soul_rules([rule], now=day + 60) == []  # same UTC day: no second row
+    assert memory.promote_soul_rules(now=day) == 0  # one day is not corroboration
+
+    found = memory.get(first[0])
+    assert found is not None and found.kind == "fact"
+    stored = row(memory, first[0])
+    assert stored["via"] == "soul_doc" and stored["trust"] == TRUST_SELF
+    assert stored["refs"] and str(stored["refs"][0]).startswith("soul:")
+
+    second = memory.sync_soul_rules([rule], now=day + 86400.0)
+    assert len(second) == 1
+    assert memory.promote_soul_rules(now=day + 86400.0) == 1
+
+    promoted = row(memory, first[0])
+    assert promoted["kind"] == "rule"
+    assert memory.promote_soul_rules(now=day + 2 * 86400.0) == 0  # idempotent: already a rule

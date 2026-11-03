@@ -98,6 +98,7 @@ def test_new_scaffold_goes_into_the_requested_folder(tmp_path):
 def test_duplicate_number_is_refused(tmp_path):
     root = _copy_home(tmp_path)
     adr = root / "docs" / "v0.1.0" / "adr"
+    (adr / "web").mkdir(exist_ok=True)  # an empty folder is not tracked by git
     shutil.copy(adr / "engine" / "0026-search.md", adr / "web" / "0026-search.md")
     result = _run("--check", root=root)
     assert result.returncode != 0

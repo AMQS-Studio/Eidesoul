@@ -517,8 +517,8 @@ bahkan ketika ia diizinkan berjalan.
 
 ```bash
 uv sync --extra whatsapp                  # gateway opsional
-eidesoul components install google        # plugin: unduh + verifikasi digest
-eidesoul components enable google         # daftarkan tool-nya ke katalog yang sama
+eidesoul plugins install google        # plugin: unduh + verifikasi digest
+eidesoul plugins enable google         # daftarkan tool-nya ke katalog yang sama
 ```
 
 ```bash

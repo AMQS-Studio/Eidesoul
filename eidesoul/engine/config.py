@@ -454,6 +454,7 @@ class ReflectionConfig:
     passes_per_day: int = 24
     derive_depth: int = 1
     dispute_ttl_days: float = 30.0
+    questions_per_day: int = 1  # ADR-0010 §4.7: one dispute question per subject per day
 
 
 @dataclass(frozen=True)
@@ -464,6 +465,26 @@ class RoomConfig:
     max_messages: int = 20
     require_membership: bool = True
     source: str = "gateway_first"  # gateway_first | recorded
+
+
+@dataclass(frozen=True)
+class IntentConfig:
+    """ADR-0005 §4.6: prototype intent hints; a floor and a margin per intent, never a model."""
+
+    remember_enabled: bool = True
+    remember_floor: float = 0.62
+    remember_margin: float = 0.06
+    forget_enabled: bool = True
+    forget_floor: float = 0.64
+    forget_margin: float = 0.06
+
+
+@dataclass(frozen=True)
+class RetentionConfig:
+    """ADR-0005 §4.7: the daily purge runs with a grace window and a bounded batch."""
+
+    purge_grace_days: float = 1.0
+    purge_batch: int = 500
 
 
 @dataclass(frozen=True)
@@ -478,6 +499,8 @@ class MemoryConfig:
     privacy: PrivacyConfig = field(default_factory=PrivacyConfig)
     worker: CognitionConfig = field(default_factory=CognitionConfig)
     rooms: RoomConfig = field(default_factory=RoomConfig)
+    intent: IntentConfig = field(default_factory=IntentConfig)
+    retention: RetentionConfig = field(default_factory=RetentionConfig)
 
 
 @dataclass(frozen=True)
@@ -501,6 +524,12 @@ class SkillsConfig:
     max_chars: int = 800
     max_body_chars: int = 18000
     use_renewal_days: float = 30.0
+    # ADR-0020 §4.6/§4.7: the efficiency comparison and the automation ladder.
+    efficiency_enabled: bool = True
+    efficiency_min_evidence_episodes: int = 2
+    efficiency_window_days: float = 30.0
+    ladder_enabled: bool = True
+    ladder_proposal_cooldown_days: float = 14.0
 
 
 @dataclass(frozen=True)
@@ -628,17 +657,17 @@ class GatewaySettings:
 
 @dataclass(frozen=True)
 class PluginSettings:
-    """ADR-0028 §5: a component is off and unpinned until an operator enables it."""
+    """ADR-0028 §5: a plugin is off and unpinned until an operator enables it."""
 
     enabled: bool = False
     digest: str = ""
 
 
 @dataclass(frozen=True)
-class ComponentsConfig:
-    """ADR-0027 §5 / ADR-0028 §5: where fetched component code lives and whether we may fetch."""
+class PluginConfig:
+    """ADR-0027 §5 / ADR-0028 §5: where fetched plugin code lives and whether we may fetch."""
 
-    root: Path | None = None  # unset = <workspace>/components
+    root: Path | None = None  # unset = <workspace>/plugins
     fetch: bool = True
     source: str = ""
 
@@ -661,7 +690,7 @@ class HostConfig:
     roles_file: Path
     soul_file: Path
     sync_documents: bool
-    components: ComponentsConfig = field(default_factory=ComponentsConfig)
+    plugin: PluginConfig = field(default_factory=PluginConfig)
     plugins: dict[str, PluginSettings] = field(default_factory=dict)
 
 
@@ -703,7 +732,7 @@ class Config:
     metrics: MetricsConfig = field(default_factory=MetricsConfig)
     automations: AutomationConfig = field(default_factory=AutomationConfig)
     self_knowledge: SelfKnowledgeConfig = field(default_factory=SelfKnowledgeConfig)
-    components: ComponentsConfig = field(default_factory=ComponentsConfig)
+    plugin: PluginConfig = field(default_factory=PluginConfig)
     plugins: dict[str, PluginSettings] = field(default_factory=dict)
 
     def api_key(self) -> str:
@@ -1010,14 +1039,37 @@ def _self_knowledge_config(raw: Mapping) -> SelfKnowledgeConfig:
     )
 
 
-def _components_config(raw: Mapping, base: Path, workspace: Path) -> ComponentsConfig:
-    """`components` (ADR-0027 §5): root, fetch, and the operator-named source."""
-    body = _section(raw, "components")
+def _plugin_config(raw: Mapping, base: Path, workspace: Path) -> PluginConfig:
+    """`plugin` (ADR-0027 §5): root, fetch, and the operator-named source."""
+    body = _section(raw, "plugin")
     root_text = str(body.get("root") or "").strip()
-    return ComponentsConfig(
-        root=_expand(root_text, base) if root_text else workspace / "components",
+    return PluginConfig(
+        root=_expand(root_text, base) if root_text else workspace / "plugins",
         fetch=_bool(body.get("fetch"), True),
         source=str(body.get("source") or "").strip(),
+    )
+
+
+def _intent_config(raw: Mapping) -> IntentConfig:
+    """`memory.intent.{remember,forget}` (ADR-0005 §4.6): enabled, floor, and margin each."""
+    remember = _section(raw, "remember")
+    forget = _section(raw, "forget")
+    return IntentConfig(
+        remember_enabled=_bool(remember.get("enabled"), True),
+        remember_floor=_num_clamped(remember.get("floor"), 0.62, 0.0, 1.0),
+        remember_margin=_num_clamped(remember.get("margin"), 0.06, 0.0, 1.0),
+        forget_enabled=_bool(forget.get("enabled"), True),
+        forget_floor=_num_clamped(forget.get("floor"), 0.64, 0.0, 1.0),
+        forget_margin=_num_clamped(forget.get("margin"), 0.06, 0.0, 1.0),
+    )
+
+
+def _retention_config(raw: Mapping) -> RetentionConfig:
+    """`memory.retention.purge` (ADR-0005 §4.7): grace before deletion and one batch size."""
+    body = _section(raw, "purge")
+    return RetentionConfig(
+        purge_grace_days=_num_clamped(body.get("grace_days"), 1.0, 0.0, 365.0),
+        purge_batch=_clamped(body.get("batch"), 500, 1, 100000),
     )
 
 
@@ -1063,7 +1115,7 @@ def load_host(path: str | Path | None = None) -> tuple[HostConfig, Paths]:
         roles_file=roles_file,
         soul_file=soul_file,
         sync_documents=_bool(raw.get("sync_documents"), True),
-        components=_components_config(raw, base, workspace),
+        plugin=_plugin_config(raw, base, workspace),
         plugins=_plugins_config(raw),
     )
     paths = Paths(
@@ -1336,6 +1388,7 @@ def _reflection_config(raw: Mapping) -> ReflectionConfig:
         passes_per_day=_clamped(raw.get("passes_per_day"), 24, 0, 1440),
         derive_depth=_clamped(raw.get("derive_depth"), 1, 1, 1),
         dispute_ttl_days=_num_clamped(raw.get("dispute_ttl_days"), 30.0, 0.0, 3650.0),
+        questions_per_day=_clamped(raw.get("questions_per_day"), 1, 0, 10),
     )
 
 
@@ -1350,6 +1403,17 @@ def _skills_config(raw: Mapping) -> SkillsConfig:
         max_chars=_clamped(raw.get("max_chars"), 800, 0, 20000),
         max_body_chars=_clamped(raw.get("max_body_chars"), 18000, 100, 100000),
         use_renewal_days=_num_clamped(raw.get("use_renewal_days"), 30.0, 0.0, 3650.0),
+        efficiency_enabled=_bool(_section(raw, "efficiency").get("enabled"), True),
+        efficiency_min_evidence_episodes=_clamped(
+            _section(raw, "efficiency").get("min_evidence_episodes"), 2, 1, 50
+        ),
+        efficiency_window_days=_num_clamped(
+            _section(raw, "efficiency").get("window_days"), 30.0, 1.0, 3650.0
+        ),
+        ladder_enabled=_bool(_section(raw, "ladder").get("enabled"), True),
+        ladder_proposal_cooldown_days=_num_clamped(
+            _section(raw, "ladder").get("proposal_cooldown_days"), 14.0, 0.0, 3650.0
+        ),
     )
 
 
@@ -1603,6 +1667,8 @@ def load_config(
                 require_membership=_bool(rooms_raw.get("require_membership"), True),
                 source=rooms_source,
             ),
+            intent=_intent_config(_section(memory_raw, "intent")),
+            retention=_retention_config(_section(memory_raw, "retention")),
         ),
         skills=skills,
         reflection=reflection,
@@ -1705,6 +1771,6 @@ def load_config(
         logging=_logging_config(_section(engine, "logging")),
         automations=_automation_config(_section(engine, "automations")),
         self_knowledge=self_knowledge,
-        components=host.components,
+        plugin=host.plugin,
         plugins=host.plugins,
     )
