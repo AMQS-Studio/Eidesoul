@@ -6,7 +6,7 @@
 - **Context:** follows ADR-0001 (surfaces and bodies), ADR-0015 (capability manifest), ADR-0016 (schema), ADR-0018 (gateway contract), ADR-0022 (`administrator`), ADR-0028 (plugins)
 - **Supersedes:** —
 - **Related:** ADR-0009 (document home), ADR-0012 (lease), ADR-0019 (observability), ADR-0028 (the plugin unit that this ADR distributes)
-- **Implementation:** draft — the image exists as a build file, but nothing is published and no web surface exists yet. No engine change in this ADR.
+- **Implementation:** partial — present: the local image build (core-only, `EXTRAS` empty), the plugin/gateway separation, `eidesoul selftest` image contents, the installer's panel-or-CLI finish gate; remaining: `panel/` (operator-owned; `web.enabled: false` until it lands) and publishing the image to GHCR (no registry credentials here)
 - **Location note:** this ADR is cross-cutting (it binds every surface and every deployment), so it sits at the root of the ADR home. The Indonesian copy is `docs/v0.1.0/adr/id/0027-distribution-web-config.md`.
 - **Amendments:** 2026-11-03 — first version. 2026-11-03 — the voice layer (emotion, humanize, character) is stated as on by default and switchable off per part; clean by default still covers only gateway, tool, and plugin.
 
@@ -59,7 +59,7 @@ with `EXTRAS` empty. While nothing is released, the image is built locally only 
 based — no release-looking tag is invented (§Versioning in `AGENTS.md`).
 
 - The image contains the **spine and the core tools only**: `read`, `write`, `shell`, `sandbox`,
-  `web_search`, `mcp`, `memory`, `recipe`, `skill`, `settings`, plus the core commands.
+  `web_search`, `mcp`, `memory`, `recipe`, `settings`, `grep`, `fetch`, `info`, plus the core commands.
 - The image contains **no gateway, no provider extra, and no plugin**; those are enabled later
   (§4.3) and their Python dependencies are not part of the locked core set.
 - The image declares its contents in a build label and prints them in `eidesoul selftest`, so what a
@@ -231,7 +231,7 @@ Secrets live in `.env` only (`WEB_TOKEN`, provider keys); YAML carries names, ne
 
 - `Dockerfile:1,28-35` — current image build with `ARG EXTRAS=""`.
 - `pyproject.toml` `[project.optional-dependencies]` — `whatsapp`, `google`, `dev` extras.
-- `eidesoul/engine/tools/google.py`, `eidesoul/engine/tools/chat_history.py` — capabilities to move out of the core.
+- `plugins/google/` — the Google capability after the move; `eidesoul/gateways/whatsapp/tools/chat_history.py` — the archive tool after the move.
 - `eidesoul/__main__.py` — `init`, `models`, `config import`, `selftest` (the CLI parity surface).
 - `eidesoul/admin/templates.py:1,151,253` — the single default source for the four host files.
 - `eidesoul/admin/init.py:26-46` — the only writer (`0600` for `.env`/`roles.yaml`, `--force` to overwrite).

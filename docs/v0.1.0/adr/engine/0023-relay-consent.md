@@ -1,7 +1,7 @@
 # ADR-0023: Relay Consent — Forwarding Personal Answers to Others
 
 - **Status:** accepted
-- **Implementation:** partial — present: `relay_grants` (revision 6), `RelayStore.ask`/`decide`/`revoke`/`check` with expiry + `none` refusal + content-free audit, `/approve` records the mode, `send_to` checks the grant, `tests/test_relay.py`; remaining: the ADR-0014 task step does not call `RelayStore.ask` yet (W6)
+- **Implementation:** implemented — evidence: `relay_grants` (revision 6), `RelayStore.ask`/`decide`/`revoke`/`check` with expiry + `none` refusal + content-free audit, `/approve` records the mode, `send_to` checks the grant, the ADR-0014 `relay` step asks with the run deadline, `tests/test_relay.py`, `tests/test_automation.py`
 - **Date:** 2026-11-03
 - **Deciders:** Muqsith (owner), omp (reviewer)
 - **Context:** manager (A) asked the soul to remind B, C, D, then ask about obstacles/ETA and offer help; B's answer in the DM is B's personal space, so forwarding it to A is not a `cross_read` matter — it is a **relay** that requires the content owner's permission

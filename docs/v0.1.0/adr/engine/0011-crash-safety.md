@@ -1,7 +1,7 @@
 # ADR-0011: Crash Safety & Durability: Transactional Queue, Job Claim, Neat Shutdown
 
 - **Status:** accepted
-- **Implementation:** partial — present: transactional intake (`HistoryStore.intake`), turn claim/reaper with backoff + dead-letter, delivery ledger, phased shutdown, recovery, `tests/test_turn_shutdown.py`; remaining: `cognition_jobs` claim/retry (ADR-0003, W3) and the memory writes in the same intake transaction (W3)
+- **Implementation:** implemented — evidence: transactional intake (`HistoryStore.intake` writes messages+turns+memory candidates+events+`cognition_jobs`), claim with `FOR UPDATE SKIP LOCKED`, reaper, backoff + dead-letter, `outbound_messages` ledger, phased shutdown, recovery, `tests/test_cognition.py`, `tests/test_turn_shutdown.py`; gate result: `pytest -q` 798 passed
 - **Date:** 2026-11-01
 - **Deciders:** Muqsith (owner), omp (reviewer)
 - **Context:** follow-up to ADR-0001 (canonical), ADR-0002 (capture), ADR-0003 (worker C/D), ADR-0004 (labeling fallback)
@@ -71,7 +71,7 @@ LIMIT:n
 
 ### 4.3 Delivery ledger
 
-`outbound_messages(scope_key, chunk_index, gateway, chat_id, provider_id, status)` — status `intent|sent|unknown`; `scope_key` = `turn:<id>` or `automation:<run_id>`, so an automation delivery uses the same idempotency path (detail in ADR-0013).
+`outbound_messages(scope_key, chunk_index, gateway, thread_id, provider_id, status)` — status `intent|sent|unknown`; `scope_key` = `turn:<id>` or `automation:<run_id>`, so an automation delivery uses the same idempotency path (detail in ADR-0013).
 
 ### 4.4 Neat shutdown
 

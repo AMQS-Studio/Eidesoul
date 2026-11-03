@@ -6,8 +6,8 @@ Eidesoul checklist. Every item is done when the listed surface exists and works 
 
 - [x] One Python process: `eidesoul run|console|selftest|backfill`, no HTTP gateway, no bridge.
 - [x] `eidesoul/engine/` is gateway-free: no `eidesoul.gateways` or `neonize` import in core.
-- [x] One `Database` + one `MetaData`; `SCHEMA_VERSION = 1`; no legacy tables, no SQLite import,
-      no split-config migration path.
+- [x] One `Database` + one `MetaData`; `SCHEMA_VERSION` mirrors the Alembic head (currently 10);
+      no legacy tables, no SQLite import, no split-config migration path.
 - [x] One primary enforced by `engine_lease`; `/freeze` and takeover go through the lease only.
 
 ## soul.yaml
@@ -42,9 +42,9 @@ Eidesoul checklist. Every item is done when the listed surface exists and works 
 ## Optional features
 
 - [x] Spine in core dependencies (Postgres+pgvector, Mem0, MiniLM embedder, affect prototypes,
-      guard, lease); extras: `whatsapp`, `google`, `dev`; `uv.lock` regenerated.
-- [x] Google is a lazy optional extra: the tool stays discoverable and returns a clear `error:`
-      without the extra.
+      guard, lease); extras: `whatsapp`, `dev`; `uv.lock` regenerated.
+- [x] Google is a **plugin** (`plugins/google/`): fetched and verified by digest when enabled, and
+      reported `unavailable` while absent; no build-time extra.
 - [x] WhatsApp is an optional gateway extra: default config never enables it, core never imports it,
       and the default member role has no WhatsApp-only `send`.
 - [x] Docker image takes `EXTRAS` as a build argument instead of hardcoded extras.
@@ -56,6 +56,39 @@ Eidesoul checklist. Every item is done when the listed surface exists and works 
 - [x] `AGENTS.md` states the English default, the allowed non-English data surfaces, and the
       removability rules.
 - [x] `pytest -q` and `python -m eidesoul selftest` pass.
+
+## Shipped in v1 (ADR)
+
+- [x] ADR-0000: `Percept`/`Action`, the `thread`/`Message` vocabulary, lexicon packs, a non-chat
+      harness body, and the architecture AST guard.
+- [x] ADR-0001/0004/0005/0008: `memories` is the source of truth, `MemoryStore` is the single write
+      port, `memories_readable`, the six-state machine, retention/purge, trust/quarantine.
+- [x] ADR-0002/0003: deterministic capture gate, MiniLM novelty, `cognition_jobs` worker with
+      retries and dead-letter.
+- [x] ADR-0006/0010: group ceiling, subject veto, disclosure verdict before the model, scheduled
+      reflection and disputes.
+- [x] ADR-0007/0022/0023: `consent`/`authorization` with `scope_proof`, the protected
+      `administrator`, relay grants with expiry and revocation.
+- [x] ADR-0011/0012/0013/0017: transactional intake, turn checkpoints and resume, per-chunk
+      delivery ledger, CAS lease with generations, per-thread locks, one-turn deadline, send gate.
+- [x] ADR-0014/0019: declarative automations with occurrence idempotency, quiet hours, budget and
+      kill switch; `turn_id`, JSON logs, `llm_calls`, the `/status` card.
+- [x] ADR-0015/0021/0024/0025/0026: capability index + `info`, per-tool caps with `grep`/`fetch`,
+      input/coroutine validation, `max_calls_per_turn` and cost rows, FTS/trigram search.
+- [x] ADR-0016/0029: one Alembic chain (head 10), primary-only `db upgrade`, Postgres+pgvector test
+      store with a deterministic stub embedder.
+- [x] ADR-0028/0030: plugin model with digest fetch, installer and interactive `init`.
+- [ ] ADR-0027: `panel/` (operator-owned, planned; `web.enabled: false` until it lands) and
+      publishing the image to GHCR (no registry credentials here).
+
+## Still open
+
+- [ ] ADR-0010: the per-person daily cap on dispute questions.
+- [ ] ADR-0013: backlog pacing/fairness (`per_message_then_consolidate`, per-chat and per-minute
+      resume limits).
+- [ ] ADR-0014: the `message` event source, gateway capability counters, and routing a target on a
+      non-first gateway.
+- [ ] ADR-0020: §4.8/§4.9 efficiency comparison and the automation ladder (after `llm_calls`).
 
 ## v2 spine
 

@@ -1,5 +1,25 @@
 # LOG
 
+## 2026-11-03 — ADR waves W0-W7: the recorded decisions land
+
+Implementation of the approved ADR set, one wave at a time, each gated before the next. **W0**:
+Alembic baseline + primary-only `db upgrade`, lease CAS with `generation` and the DB clock, and the
+test suite moved to the real Postgres+pgvector store (`tests/conftest.py`, no SQLite). **W1**: language
+packs under `library/lexicon/`, the `Percept`/`Message`/`thread` cutover, `GatewayCore`/`Rich`/
+`Directory`, the harness body, and `tests/test_architecture.py`. **W2**: `turns`, `turn_steps`,
+`outbound_messages`, checkpointed resume, the delivery ledger, phased shutdown, per-thread locks, the
+turn deadline, and the primary send gate. **W3**: `MemoryStore` as the single write port,
+`memories_readable`, retention, provenance/trust, the deterministic capture gate, the cognition worker,
+reflection/disputes, group privacy, episodes/skills. **W4**: approval classes with `scope_proof`,
+the capability index + `info`, per-tool caps with `grep`/`fetch`, input validation, cost rows with
+`max_calls_per_turn`, FTS/trigram search. **W5**: the protected `administrator` role and `relay_grants`.
+**W6**: `turn_id` + JSON logs + the `/status` card and declarative automations. **W7**: the plugin model
+with digest fetch (Google moved to `plugins/google/`), the installer and interactive `init`. The web
+panel remains operator-owned and planned, so ADR-0027 and ADR-0030 stay `partial` on that box.
+**Verification** — `pytest -q` 798 passed on Postgres+pgvector; `scripts/adr.py --check` 31/31,
+implemented=18 partial=13 draft=0; `--translate-check` 31 files, 0 issues; `scripts/selfcheck.py
+--check` ok; `uv lock --check` clean; `bash install.sh --dry-run` writes nothing.
+
 ## 2026-11-03 — ADR truth audit before implementation
 
 All 31 ADRs were re-read against the code before any of them was implemented. The recorded split

@@ -65,7 +65,7 @@ The real token cost: a 300-line file ≈ 12 KB (≈3 000 tokens). Finding one sy
 ### 4.2 `grep` (family `read`)
 
 - Parameters: `pattern` (regex), `path` optional, `glob` optional, `mode` (`matches|count|files`), `limit` (max 200).
-- **The root follows `read`**: `workspace_roots(config, roles, chat_id)` → `public/` + `scratch/<chat>` for a regular role, the whole workspace for a trusted role. Outside the root → `PermissionError`, not an empty result.
+- **The root follows `read`**: `workspace_roots(config, roles, thread_id)` → `public/` + `scratch/<chat>` for a regular role, the whole workspace for a trusted role. Outside the root → `PermissionError`, not an empty result.
 - Resolution uses the existing `resolve_path` (`.resolve()` + `is_relative_to`) so a symlink cannot escape the root.
 - It rejects files that `read` also rejects (host configuration, `.env`) and skips binary files/those larger than `max_file_bytes`.
 - Deterministic result order (path, then line number); it stops when the cap is reached and supplies `next`.

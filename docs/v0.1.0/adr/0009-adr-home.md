@@ -8,7 +8,7 @@
 - **Supersedes:** —
 - **Related:** ADR-0001 (§14 queue), ADR-0015 (§4.9 product document)
 - **Location note:** the ADR lives at `docs/v0.1.0/adr/` and has no second copy.
-- **Amendments:** 2026-11-02 — the §4.4 skeleton contract was tightened (canonical titles, relative order, the regions where extra sections may go, `Amendments` as a header line, `§...` references that must resolve) and an **audit of the 15 ADRs** was added: 7 conforming, 8 missing sections; **the fixes were applied on the same day → 15/15 conforming** (`0002`/`0004` also moved `Amendments` into the header); §4.10 now only moves files. 2026-11-03 — audit: the check rules gained "a heading must not sit inside a fence; the check must be fence-aware"; the earlier audit (2026-11-02) reported 15/15 even though ADR-0015 had a heading inside a fence — that defect class is now recorded, and §4.4 mentions it. 2026-11-03 — **ADR-0016** (schema & migration) joined the set: the count became 16 files, ownership of the `memories` DDL moved from ADR-0001 to ADR-0016 §4.1, and ADR-0001 §4 now holds only a table + role list. 2026-11-03 — the ADR-0015 document allowlist is path-based, so `docs/v0.1.0/README.md` (the ADR index) can be distinguished from the product `README.md`. 2026-11-03 — owner decision: the §4.12 **term register** was added (canonical terms + owner + forbidden synonyms), and `--check` rejects forbidden synonyms inside YAML/SQL fences; the root problem was not one term pair but the absence of a vocabulary owner. 2026-11-03 — the register was updated: `send` is the only send capability (tools + automation steps use the same implementation); `send_to` is recorded as a name that is **merged once the code catches up**, not as a forbidden synonym today. 2026-11-03 — audit: §4.4 adds the `Code references` label rule (a real citation, or the label `proposal`). **2026-11-03** — the set moved into the repo (`docs/v0.1.0/adr/` + the index `docs/v0.1.0/README.md`); the `Implementation` header (`implemented`/`partial`/`draft` + evidence) entered the §4.4 contract; the register's synonym cells gained a scope (no parentheses = every definition line, `(kolom)`/`(column)` = SQL columns, `(nama role)` = `roles:` blocks, a mention of another entity = prose that is not gated) with the `kolom lama`/`legacy` marker exception; `scripts/adr.py` (`--check`/`--new`/`--translate`/`--translate-check`, no LLM) and `tests/test_adr.py` became its enforcers. **2026-11-03** — §4.7/§4.8: two derivative backends (`glossary` = structure only, an honest `konten 0/N`; `opus` = content via a local NMT, dev tooling without a dependency), plus a shape limit locked by tests: fence lines are never sent, markers (`###`/`>`/`1.`/`-`) and table column counts are preserved, `**tebal**`/bold markers are protected while their text is still translated, a paragraph >400 characters is split per sentence, the output cap follows `model.config.max_length`, and memory is bounded (4 threads, batch 8).
+- **Amendments:** 2026-11-02 — the §4.4 skeleton contract was tightened (canonical titles, relative order, the regions where extra sections may go, `Amendments` as a header line, `§...` references that must resolve) and an **audit of the 15 ADRs** was added: 7 conforming, 8 missing sections; **the fixes were applied on the same day → 15/15 conforming** (`0002`/`0004` also moved `Amendments` into the header); §4.10 now only moves files. 2026-11-03 — audit: the check rules gained "a heading must not sit inside a fence; the check must be fence-aware"; the earlier audit (2026-11-02) reported 15/15 even though ADR-0015 had a heading inside a fence — that defect class is now recorded, and §4.4 mentions it. 2026-11-03 — **ADR-0016** (schema & migration) joined the set: the count became 16 files, ownership of the `memories` DDL moved from ADR-0001 to ADR-0016 §4.1, and ADR-0001 §4 now holds only a table + role list. 2026-11-03 — the ADR-0015 document allowlist is path-based, so `docs/v0.1.0/README.md` (the ADR index) can be distinguished from the product `README.md`. 2026-11-03 — owner decision: the §4.12 **term register** was added (canonical terms + owner + forbidden synonyms), and `--check` rejects forbidden synonyms inside YAML/SQL fences; the root problem was not one term pair but the absence of a vocabulary owner. 2026-11-03 — the register was updated: `send` is the only send capability (tools + automation steps use the same implementation); `send_to` is recorded as a name that is **merged once the code catches up**, not as a forbidden synonym today. 2026-11-03 — audit: §4.4 adds the `Code references` label rule (a real citation, or the label `proposal`). **2026-11-03** — the set moved into the repo (`docs/v0.1.0/adr/` + the index `docs/v0.1.0/README.md`); the `Implementation` header (`implemented`/`partial`/`draft` + evidence) entered the §4.4 contract; the register's synonym cells gained a scope (no parentheses = every definition line, `(kolom)`/`(column)` = SQL columns, `(nama role)` = `roles:` blocks, a mention of another entity = prose that is not gated) with the `kolom lama`/`legacy` marker exception; `scripts/adr.py` (`--check`/`--new`/`--translate`/`--translate-check`, no LLM) and `tests/test_adr.py` became its enforcers. **2026-11-03** — §4.7/§4.8: two derivative backends (`glossary` = structure only, an honest `konten 0/N`; `opus` = content via a local NMT, dev tooling without a dependency), plus a shape limit locked by tests: fence lines are never sent, markers (`###`/`>`/`1.`/`-`) and table column counts are preserved, `**tebal**`/bold markers are protected while their text is still translated, a paragraph >400 characters is split per sentence, the output cap follows `model.config.max_length`, and memory is bounded (4 threads, batch 8). 2026-11-03 — the machine translator and its backends are removed; the Indonesian copy is hand-written and `--translate-check` is the only gate.
 
 ---
 
@@ -239,28 +239,11 @@ local → a code comment or `TASK.md` is enough.
   `implemented | partial | draft`.
 - The **Indonesian copy** lives in the `id/` folder of the same folder —
   `docs/v*/adr/id/NNNN-slug.md` for a root ADR, `docs/v*/adr/engine/id/NNNN-slug.md` for an engine ADR —
-  and opens with
-  `> Naskah asli Indonesia — jangan sunting; sumber: <path relatif ke adr/> (sha256: <digest>)`
-  followed by a note on how it was produced. A copy is optional per file; a **stale** copy (source hash
-  moved) fails `--translate-check`.
-- The copy may be the human original text (the state after the 2026-11-03 language flip) or a machine
-  derivative; `scripts/adr.py --translate <N|all>` regenerates the machine kind. Only operators run
-  it, and nothing calls it inside a turn. Two backends:
-  - `--translator glossary` (default): **structure only** — section headings, header labels, footer —
-    from the table inside the script. Content lines stay English and are counted honestly as
-    `konten 0/N`.
-  - `--translator opus`: content as well, through a local NMT model (`Helsinki-NLP/opus-mt-en-id`).
-    The environment is **dev tooling, never a package dependency**: `pyproject.toml`/`uv.lock` do not
-    change, there is no credits row, and without the stack the tool fails with an install hint instead
-    of writing a half-translated file.
-- Bounds the model needs: lines inside a code or diagram fence are never sent; `ADR-XXXX`/`§N`
-  references, inline code, links, and URLs are protected by placeholders and restored; bold markers
-  are masked so their text is still translated; paragraphs are split at 400 characters **before**
-  masking; the output cap follows the model's own `max_length`; four torch threads and batches of
-  eight pieces keep RSS near 2 GB. Knobs: `ADR_MT_DEVICE`, `ADR_MT_THREADS`, `ADR_MT_BATCH`.
-- A piece whose protected spans do not come back intact keeps its source text, and a piece the model
-  leaves in the source language keeps that text too: a copy is never dressed up as a translation it is
-  not.
+  and opens with a derivative header naming the source and its `sha256`. It is **written by hand**;
+  there is no machine translator and no translation dependency in `pyproject.toml` or `uv.lock`.
+- A copy is optional per file; a **stale** copy (source hash moved) fails `--translate-check`. The
+  rule is: edit the English source, edit the copy on the same lines, re-stamp the hash. A copy is never
+  regenerated as a structure-only shell.
 
 ### 4.8 `scripts/adr.py`
 
@@ -268,9 +251,7 @@ local → a code comment or `TASK.md` is enough.
 |---|---|
 | `--check` | file names and number format; a number unique across the whole home, chronological, never reused (a move leaves a gap; `0000` is the foundations ADR); exactly one `docs/*/adr`; canonical English sections present and ordered; valid `Status`; ISO date; forbidden register synonyms (§4.12) in YAML/SQL fences; resolvable `ADR-XXXX`/`ADR-<folder>/XXXX`/`§N` references (a bare number must be unique; `ADR-<folder>/XXXX` is the explicit form); balanced fences and no bare fence inside a table cell; footer path; valid `Implementation` |
 | `--new "<title>" [--dir root\|engine\|web]` | writes the skeleton of the next ADR, in the chosen folder, from the template, inventing nothing |
-| `--translate <N\|all>` | writes or refreshes the copy inside its own folder's `id/`, recording the source hash, the backend, and the counters on the opening lines |
 | `--translate-check` | compares each copy's recorded hash with its source; a stale or hash-less copy fails |
-| `--translator glossary\|opus` | backend for `--translate`: glossary (structure only, default) or local NMT for content (dev tooling) |
 
 `--check` prints every violation with file and line and exits non-zero. `pytest -q` runs it through
 `tests/test_adr.py`, next to the `patterns.py`/`fakta.py`/`affect.py` guards. The
@@ -352,7 +333,7 @@ This table is the source, and a canonical term enters it in the same commit in w
 | `automation_state_log` | trace of automation state transitions | 0014 (form:0016) | `automation_events` |
 | `draft`/`active`/`paused`/`stopped`/`expired` | the five automation states (terminal: `stopped`, `expired`) | 0014 | `disabled` (per automation), `denied` (as state) |
 | `occurrence` | one schedule occurrence = one run; `occurrence_key = hash(automation_id, scheduled_at_utc)` | 0014 | `tick`, `slot`, `instance` |
-| `participants(chat_id)` | membership fact from the gateway | 0007 (seam) | `members`, `roster` |
+| `participants(thread_id)` | membership fact from the gateway | 0007 (seam) | `members`, `roster` |
 | `level` | privacy of memory rows and ceilings (0–4) | 0008/0006 | `privacy` (columns), `sensitivity` (columns) |
 | `visibility` | archive level of messages read across rooms | 0007 | `level` (for archive) |
 | trust `T0`–`T3` | trust provenance | 0008 | `confidence`, `Tier` (for trust) |
@@ -380,7 +361,7 @@ This table is the source, and a canonical term enters it in the same commit in w
 | `Percept` | what enters the engine: source/thread/actor/kind/payload/hints | 0000 | `Inbound` (old name), `Event`, `Envelope` |
 | `Action` | what leaves the engine: capability/target/payload/approval_class | 0000 | `Outbound`, `Reply`, `Command` (for an action) |
 | `body` | a gateway that supplies surface capabilities (chat, robot, harness, editor) | 0000 | `surface`, `embodiment`, `transport` |
-| `thread_id` / `threads` / `thread_people` | the neutral replacement for `chat_id`/`chats`/`chat_people` | 0000 (bentuk: 0016) | `chat_id` (prosa), `chat_people` (prosa) |
+| `thread_id` / `threads` / `thread_people` | the neutral replacement for `thread_id`/`chats`/`thread_people` | 0000 (bentuk: 0016) | `thread_id` (prosa), `thread_people` (prosa) |
 | `hints` | surface facts declared by the body (`dm`, `mention`, `reply`, `group`, `presence`) | 0000 | `flags`, `is_*` (as a column) |
 | `dispute_state` | dispute metadata (not `state`) | 0010 | `disputed` (as state) |
 | `superseded` | state of a row that has been replaced | 0008/0016 | `replaced`, `obsolete` |
@@ -398,7 +379,7 @@ This table is the source, and a canonical term enters it in the same commit in w
 | `grep` `fetch` | two token-saving read tools (find file contents / read text URLs) | 0021 | `rg`, `curl`, `wget` |
 | `consent` `authorization` | approval class by **target**: the asker's scope (consent) / outside the scope (authorization); sensitivity only decides whether it is needed | 0007 | `self_approve`, `auto_approve` |
 | `scope_proof` | deterministic evidence of the action range when approval is requested | 0007 (form:0016) | `scope_hash` (as a column) |
-| `administrator` | highest role, protected, free `label` | 0022 | `owner` (name role), `admin`, `root`, `master` |
+| `administrator` | highest role, protected, free `label` | 0022 | `admin`, `root`, `master` (name role) |
 | `label` | **optional** name for any role holder; used by the prompt to address them | 0022 | `nickname`, `title`, `alias` (for role) |
 
 Enforcement rules:

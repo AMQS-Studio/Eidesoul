@@ -27,9 +27,10 @@
 <a id="status-hari-ini"></a>
 ## Status hari ini
 
-Engine, konsol CLI, gateway WhatsApp (extra opsional), memori, affect, dan guard sudah jalan hari ini.
-Panel web dan installer on-machine masih rencana, belum dibangun. Sisa berkas ini menggambarkan desain
-target; bagian ini adalah selisih yang berjalan sekarang.
+Engine, konsol CLI, gateway WhatsApp (extra opsional), memori, affect, guard, installer on-machine,
+dan model plugin sudah jalan hari ini. Panel web masih rencana, belum dibangun; ia proses terpisah
+yang tidak akan pernah diimpor engine. Sisa berkas ini menggambarkan desain yang sudah dikirim;
+bagian ini adalah selisih yang berjalan sekarang.
 
 <a id="apa-arti-slogan-ini"></a>
 ## Apa arti slogan ini
@@ -211,6 +212,17 @@ satu giliran, dan kemampuan yang dipegang saat itu.
 Kebutuhan: Python 3.12, Postgres 14+ dengan `pgvector`, dan endpoint LLM yang kompatibel dengan
 OpenAI. Image container sudah memakai Python 3.12; menjalankan dari source di 3.11+ juga bisa.
 
+Jalur terpendek adalah installer; ia tidak pernah menjalankan `sudo`, mem-pin `uv`, menulis empat
+berkas host, lalu menyerahkan ke `eidesoul init`:
+
+```bash
+bash install.sh                 # native
+bash install.sh --stack compose # Postgres dan engine dalam container
+bash install.sh --dry-run       # cetak setiap aksi, tulis apa pun
+```
+
+Dari source, langkah yang sama secara manual:
+
 ```bash
 # 1. Scaffold config.yaml, roles.yaml, soul.yaml, dan .env; provider adalah pilihan operator
 eidesoul init --provider openai
@@ -247,20 +259,32 @@ gateway-nya, dan `eidesoul people adopt` memindahkan alamat lama (nomor telepon,
 `per_…`, ikut membawa state affect dan style-nya serta menulis ulang dokumen peran; ia idempoten,
 jadi deployment yang di-upgrade cukup menjalankannya sekali.
 
+Tes berjalan di toko asli, Postgres+pgvector. Jalankan database sekali pakai (container ini bukan
+dev atau produksi) lalu ekspor DSN-nya; tanpa variabel itu suite gagal dengan perintah tersebut,
+bukan jatuh ke SQLite:
+
+```bash
+podman run -d --name eidesoul-test-pg -p 5433:5432 \
+  -e POSTGRES_DB=eidesoul_test -e POSTGRES_USER=eidesoul -e POSTGRES_PASSWORD=eidesoul \
+  docker.io/pgvector/pgvector:pg17
+export EIDESOL_TEST_DATABASE_URL='postgresql+psycopg://eidesoul:eidesoul@127.0.0.1:5433/eidesoul_test'
+pytest -q
+```
+
 `uv sync` memasang tulang punggung kemampuan: penyimpanan Postgres+pgvector, memori Mem0, embedder
 multibahasa, prototipe affect, dan guard. Hanya transport dan integrasi yang berupa extra:
 
 | Extra | Membawa | Dibutuhkan untuk |
 |---|---|---|
 | `whatsapp` | Neonize + segno | gateway WhatsApp |
-| `google` | Google API client, google-auth, httpx | tool Google Workspace |
 
 ```bash
-uv sync --extra whatsapp --extra google
+uv sync --extra whatsapp
 ```
 
 Setiap extra bisa dilepas: tidak ada bagian core yang mengimpornya secara eager, dan tanpa extra,
-tool atau gateway terkait menjelaskan mengapa ia inert.
+tool atau gateway terkait melaporkan alasannya. Google bukan extra: ia **plugin**, diunduh dan
+diverifikasi saat diaktifkan (lihat Integrasi opsional).
 
 <a id="soulyaml"></a>
 ## soul.yaml
@@ -423,7 +447,7 @@ roles:
     commands: [help, ping, link, unlink, whoami, status, tools]
     context: ""
     memory_admin: false
-  owner:
+  administrator:
     priority: 100
     users: ["per_xxxxxxxxxx"]
     tools: ["*"]
@@ -492,22 +516,24 @@ bahkan ketika ia diizinkan berjalan.
 ## Integrasi opsional
 
 ```bash
-uv sync --extra whatsapp --extra google                 # gateway dan integrasi opsional
+uv sync --extra whatsapp                  # gateway opsional
+eidesoul components install google        # plugin: unduh + verifikasi digest
+eidesoul components enable google         # daftarkan tool-nya ke katalog yang sama
 ```
 
 ```bash
-docker build --build-arg EXTRAS="--extra whatsapp --extra google" .
+podman build --build-arg EXTRAS="--extra whatsapp" .
 ```
 
 Memori, embedder, dan prototipe affect adalah bagian dari instalasi core; tidak ada extra untuk
-mereka. Di SQLite, Mem0 tidak aktif dan `status` melaporkan alasannya.
+mereka. Penyimpanan hanya Postgres+pgvector, toko yang sama dengan tes.
 
 - **Vibe affect** membaca embedder bersama terhadap `eidesoul/library/affect/*.json`; tanpa embedder
   suasana ruangan tetap netral, bukan menebak.
 - **WhatsApp** (`whatsapp`): gateway opsional. Tidak pernah aktif secara default.
-- **Google Workspace** (`google`): tool in-process untuk berkas yang dibagikan ke service account,
-  dengan penautan identitas per pengirim. Tanpa extra ini tool tetap terdaftar tetapi inert dan
-  mengembalikan error yang jelas, bukan traceback.
+- **Google Workspace** (`google`): plugin, bukan tool core dan bukan extra. Selama absen,
+  kemampuannya dilaporkan `unavailable`, tidak pernah difabrikasi; mengaktifkan akan mengunduh kode
+  berdasarkan digest dan tanpa jaringan gagal eksplisit tanpa mengubah apa pun.
 
 Rahasia hanya boleh ada di `.env`. `config.yaml`, `roles.yaml`, `soul.yaml`, dan `.env` tidak pernah
 di-commit.
@@ -536,8 +562,8 @@ yang dipasang lock file; kolom terakhir menjelaskan untuk apa Eidesoul memakainy
 | Transformers | Apache-2.0 | Hugging Face | https://github.com/huggingface/transformers | pemuatan model |
 | Neonize | tidak dinyatakan upstream | krypton-byte | https://github.com/krypton-byte/neonize | transport WhatsApp |
 | segno | BSD-3-Clause | Lars Heuer | https://github.com/heuer/segno | pemasangan QR |
-| google-api-python-client | Apache-2.0 | Google | https://github.com/googleapis/google-api-python-client | tool Workspace |
-| google-auth | Apache-2.0 | Google | https://github.com/googleapis/google-auth-library-python | autentikasi Google |
+| google-api-python-client | Apache-2.0 | Google | https://github.com/googleapis/google-api-python-client | plugin Workspace (manifest) |
+| google-auth | Apache-2.0 | Google | https://github.com/googleapis/google-auth-library-python | plugin Workspace (manifest) |
 | httpx | BSD-3-Clause | Encode | https://github.com/encode/httpx | klien HTTP |
 | emotion-engine | MIT | PioneerJeff Labs | https://github.com/pioneerjeff-labs/emotion-engine | engine affect yang di-vendor |
 | EmoSense-ID classifier | lihat model card | Aardiiiiy | https://huggingface.co/Aardiiiiy/EmoSense-ID-Indonesian-Emotion-Classifier | acuan kalibrasi saja |

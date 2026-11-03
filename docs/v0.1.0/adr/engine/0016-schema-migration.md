@@ -7,7 +7,7 @@
 - **Context:** the 2026-11-03 audit found the `memories` DDL in ADR-0001 stale (no `state` column, `level not null default 2`, `confirmed default true`), the ADR-0004 constraint clashing with `state='superseded'` from ADR-0008, and no migration owner for the columns born in ADR-0005/0008/0010/0012/0013/0014.
 - **Supersedes:** —
 - **Related:** ADR-0001 (canonical), ADR-0004 (state/level), ADR-0005 (retention), ADR-0008 (provenance/trust), ADR-0010 (dispute), ADR-0011 (reaper/ledger), ADR-0012 (`generation`), ADR-0013 (`turns`), ADR-0014 (automation), ADR-0009 (ADR home)
-- **Amendments:** 2026-11-03 — owner's decision: ADR-0019 (observability) joins the set; the `llm_calls` column shape is added in §4.6 as the single DDL owner, with retention `engine.metrics.retention_days` (ADR-0005). 2026-11-03 — ADR-0000 §4.4 rename: `chat_id` → `thread_id`, `chats`/`chat_eras`/`chat_people` → `threads`/`thread_eras`/`thread_people`, scope `chat` → `thread`; the baseline revision carries the new names.
+- **Amendments:** 2026-11-03 — owner's decision: ADR-0019 (observability) joins the set; the `llm_calls` column shape is added in §4.6 as the single DDL owner, with retention `engine.metrics.retention_days` (ADR-0005). 2026-11-03 — ADR-0000 §4.4 rename: `thread_id` → `thread_id`, `chats`/`thread_eras`/`thread_people` → `threads`/`thread_eras`/`thread_people`, scope `thread` → `thread`; the baseline revision carries the new names.
 - **Location note:** ADR lives in `docs/v0.1.0/adr/engine/`; the Indonesian copy is `docs/v0.1.0/adr/engine/id/0016-schema-migration.md`.
 
 ---

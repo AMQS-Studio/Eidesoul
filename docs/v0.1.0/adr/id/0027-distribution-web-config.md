@@ -1,4 +1,4 @@
-> Terjemahan turunan — jangan sunting; sumber: 0027-distribution-web-config.md (sha256: 404c5985800f)
+> Terjemahan turunan — jangan sunting; sumber: 0027-distribution-web-config.md (sha256: b95dbab18209)
 > Ditulis tangan (bukan mesin), mengikuti sumber English baris demi baris.
 
 # ADR-0027: Distribusi dan Konfigurasi Web-First — Satu Image Core, Kapabilitas Clean by Default
@@ -9,7 +9,7 @@
 - **Konteks:** lanjutan ADR-0001 (permukaan dan body), ADR-0015 (manifest kapabilitas), ADR-0016 (skema), ADR-0018 (kontrak gateway), ADR-0022 (`administrator`), ADR-0028 (plugin)
 - **Supersedes:** —
 - **Terkait:** ADR-0009 (rumah dokumen), ADR-0012 (lease), ADR-0019 (observability), ADR-0028 (unit plugin yang didistribusikan ADR ini)
-- **Implementasi:** draft — image sudah ada sebagai berkas build, tapi belum dipublikasikan dan belum ada permukaan web. Tidak ada perubahan engine di ADR ini.
+- **Implementasi:** partial — ada: build image lokal (core-only, `EXTRAS` kosong), pemisahan plugin/gateway, isi image di `eidesoul selftest`, gate panel-atau-CLI di installer; sisa: `panel/` (milik operator; `web.enabled: false` sampai mendarat) dan publikasi image ke GHCR (tidak ada kredensial registry di sini)
 - **Catatan lokasi:** ADR ini lintas-potong (mengikat setiap permukaan dan setiap deployment), jadi ia duduk di akar rumah ADR. Salinan Indonesia di `docs/v0.1.0/adr/id/0027-distribution-web-config.md`.
 - **Amandemen:** 2026-11-03 — versi pertama. 2026-11-03 — lapisan suara (emosi, humanize, karakter) dinyatakan aktif secara default dan bisa dimatikan per bagian; clean by default tetap hanya mencakup gateway, tool, dan plugin.
 
@@ -230,7 +230,7 @@ Rahasia hanya di `.env` (`WEB_TOKEN`, kunci provider); YAML memuat nama, bukan n
 
 - `Dockerfile:1,28-35` — build image hari ini dengan `ARG EXTRAS=""`.
 - `pyproject.toml` `[project.optional-dependencies]` — extra `whatsapp`, `google`, `dev`.
-- `eidesoul/engine/tools/google.py`, `eidesoul/engine/tools/chat_history.py` — kapabilitas yang akan keluar dari core.
+- `plugins/google/` — kapabilitas Google setelah pindah; `eidesoul/gateways/whatsapp/tools/chat_history.py` — tool arsip setelah pindah.
 - `eidesoul/__main__.py` — `init`, `models`, `config import`, `selftest` (permukaan CLI yang setara).
 - `eidesoul/engine/config.py`, `eidesoul/engine/stores/documents.py` — jalur konfigurasi yang dipakai ulang panel.
 - `eidesoul/engine/schema.py` — ledger `config_changes`.

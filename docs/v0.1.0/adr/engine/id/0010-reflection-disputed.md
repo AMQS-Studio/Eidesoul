@@ -1,4 +1,4 @@
-> Terjemahan turunan — jangan sunting; sumber: engine/0010-reflection-disputed.md (sha256: a1127f93b7b8)
+> Terjemahan turunan — jangan sunting; sumber: engine/0010-reflection-disputed.md (sha256: 0e5b4d5cf97e)
 > Teks ini ditulis manusia; baris yang tidak bisa diterjemahkan mesin disalin apa adanya ke sumber English, jadi sumber bercampur dua bahasa.
 
 # ADR-0010: Reflection, Kontradiksi & Status `disputed`
@@ -21,7 +21,7 @@
 `grep -iE 'reflect|rumina'` hanya menemukan `ambient.py:1` yang menyebut “summarise topics and
 research while idle”. Yang benar-benar berjalan sekarang adalah `Ambient` — loop latar yang, saat
 sebuah chat menganggur, membuat digest topik dan riset `web_search`, lalu menulis baris
-`scope=chat, kind=note, source=ambient:<chat_id>` (`ambient.py:203-315`), dan **tidak pernah mengirim
+`scope=chat, kind=note, source=ambient:<thread_id>` (`ambient.py:203-315`), dan **tidak pernah mengirim
 pesan ke chat mana pun** (`ambient.py:1-4`). ADR-0003 sudah menetapkan tempatnya: pekerjaan
 `kind=reflect` di tabel `cognition_jobs`, jalur dingin, default **hourly**, dijalankan Worker C yang
 memegang lease. Slotnya kosong; bentuknya belum diputuskan — di sini.
@@ -253,7 +253,7 @@ Pass yang sama meninjau `staged` di scope itu:
 - Keterlihatan: `/status` menampilkan jumlah pass, tulisan, dispute dibuka/diselesaikan/di-`stale`,
   dan pertanyaan yang dikirim — angka, bukan narasi.
 - Tanpa LLM (`llm is None`) reflection tidak berjalan sama sekali; tidak ada jalur cadangan yang
-  menebak. Lapisan deterministik tetap boleh **dijalankan manual** lewat `scripts/reflect.py --dry-run`
+  menebak. Lapisan deterministik ada di `eidesoul/engine/memory/reflect.py`; pembungkus CLI manual belum dibuat.
   untuk memeriksa kandidat tanpa menulis apa pun.
 
 ## 5. Konfigurasi
@@ -310,7 +310,7 @@ Kunci ini bagian dari dokumen `engine` (seed `config.yaml`, mirror di DB); mengu
 - [ ] Semua tulisan lewat `MemoryStore.apply_reflection` dengan kunci idempotensi `reflect:<scope>:<window_start>`; pass ulang tidak menghasilkan baris baru.
 - [ ] Anggaran per pass dan `passes_per_day` ditegakkan; melewati batas berhenti rapi, bukan dipotong diam-diam.
 - [ ] `/status` menampilkan angka pass/tulisan/dispute/pertanyaan; tidak ada narasi.
-- [ ] `scripts/reflect.py --dry-run` menampilkan kandidat dan rencana tulisan **tanpa menulis apa pun** (read-only, pola `scripts/ablate.py`).
+- [ ] CLI manual `reflect --dry-run` menampilkan kandidat dan rencana tulisan **tanpa menulis apa pun** (read-only, pola `scripts/ablate.py`).
 
 ## 8. Risiko dan mitigasi
 
@@ -353,7 +353,7 @@ Kunci ini bagian dari dokumen `engine` (seed `config.yaml`, mirror di DB); mengu
 ## 10. Referensi kode
 
 - `eidesoul/engine/ambient.py:1-4`, `:103-200`, `:203-315` — loop menganggur yang ada; batas “tidak pernah
-  mengirim pesan” dan bentuk tulisan `scope=chat, kind=note, source=ambient:<chat_id>`.
+  mengirim pesan” dan bentuk tulisan `scope=chat, kind=note, source=ambient:<thread_id>`.
 - `eidesoul/engine/config.py:236-252` — `AmbientConfig` (preseden kunci anggaran: `tick_seconds`,
   `idle_minutes`, `research_per_day`).
 - `eidesoul/engine/memory/mem0.py:340-392` — jalur metadata; `refs`, `derive_depth`, `dispute_state`

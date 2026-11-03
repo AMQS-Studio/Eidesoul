@@ -1,4 +1,4 @@
-> Terjemahan turunan — jangan sunting; sumber: 0009-adr-home.md (sha256: 41d8b4fc9dfb)
+> Terjemahan turunan — jangan sunting; sumber: 0009-adr-home.md (sha256: 5bed593648ad)
 > Teks ini ditulis manusia; baris yang tidak bisa diterjemahkan mesin disalin apa adanya ke sumber English, jadi sumber bercampur dua bahasa.
 
 # ADR-0009: Rumah ADR, Folder Dokumen Berversi & Penjaganya
@@ -11,7 +11,7 @@
 - **Supersedes:** —
 - **Terkait:** ADR-0001 (§14 antrean), ADR-0015 (§4.9 dokumen produk)
 - **Catatan lokasi:** ADR hidup di `docs/v0.1.0/adr/` dan tidak punya salinan kedua.
-- **Amandemen:** 2026-11-02 — §4.4 kontrak kerangka dipertegas (judul kanonik, urutan relatif, wilayah bagian tambahan, `Amandemen` sebagai baris header, rujukan `§…` wajib terselesaikan) dan ditambah **audit 15 ADR**: 7 sesuai, 8 kurang bagian; **perbaikan diterapkan pada hari yang sama → 15/15 sesuai** (`0002`/`0004` sekaligus memindahkan `Amandemen` ke header); §4.10 kini hanya memindahkan berkas. 2026-11-03 — audit: aturan check ditambah "heading tidak boleh di dalam fence; pemeriksaan wajib fence-aware"; audit sebelumnya (2026-11-02) melaporkan 15/15 padahal ADR-0015 punya heading di dalam fence — kelas cacat itu kini tercatat, dan §4.4 menyebutnya. 2026-11-03 — **ADR-0016** (skema & migrasi) masuk set: hitungan menjadi 16 berkas, kepemilikan DDL `memories` pindah dari ADR-0001 ke ADR-0016 §4.1, dan ADR-0001 §4 kini hanya memuat daftar tabel + peran. 2026-11-03 — allowlist dokumen ADR-0015 berbasis path, jadi `docs/v0.1.0/README.md` (indeks ADR) dapat dibedakan dari `README.md` produk. 2026-11-03 — keputusan pemilik: §4.12 **register istilah** ditambahkan (istilah kanonik + pemilik + sinonim terlarang), dan `--check` menolak sinonim di fence YAML/SQL; akar masalahnya bukan satu pasangan istilah, melainkan tidak ada pemilik kosakata. 2026-11-03 — register diperbarui: `send` satu-satunya kapabilitas kirim (tool + langkah otomasi memakai implementasi yang sama); `send_to` dicatat sebagai nama yang **dilebur setelah kode menyusul**, bukan sinonim terlarang hari ini. 2026-11-03 — audit: §4.4 menambah aturan label `Referensi kode` (sitasi nyata atau label `usulan`). **2026-11-03** — set pindah ke repo (`docs/v0.1.0/adr/` + indeks `docs/v0.1.0/README.md`); header `Implementasi` (`implemented`/`sebagian`/`draft` + bukti) masuk kontrak §4.4; sel sinonim register diberi lingkup (tanpa kurung = semua baris definisi, `(kolom)` = kolom SQL, `(nama role)` = blok `roles:`, sebutan entitas lain = prosa yang tidak digerbang) dengan pengecualian penanda `kolom lama`/`legacy`; `scripts/adr.py` (`--check`/`--new`/`--translate`/`--translate-check`, tanpa LLM) dan `tests/test_adr.py` menjadi penegaknya. **2026-11-03** — §4.7/§4.8: dua backend turunan (`glossary` = struktur saja, jujur `konten 0/N`; `opus` = konten via NMT lokal, perkakas dev tanpa dependency), plus batas bentuk yang dikunci test: baris fence tidak pernah dikirim, marker (`###`/`>`/`1.`/`-`) dan jumlah kolom tabel terjaga, penanda `**tebal**` dilindungi sementara teksnya tetap diterjemahkan, paragraf >400 karakter dipecah per kalimat, cap keluaran mengikuti `model.config.max_length`, dan memori dibatasi (thread 4, batch 8).
+- **Amandemen:** 2026-11-02 — §4.4 kontrak kerangka dipertegas (judul kanonik, urutan relatif, wilayah bagian tambahan, `Amandemen` sebagai baris header, rujukan `§…` wajib terselesaikan) dan ditambah **audit 15 ADR**: 7 sesuai, 8 kurang bagian; **perbaikan diterapkan pada hari yang sama → 15/15 sesuai** (`0002`/`0004` sekaligus memindahkan `Amandemen` ke header); §4.10 kini hanya memindahkan berkas. 2026-11-03 — audit: aturan check ditambah "heading tidak boleh di dalam fence; pemeriksaan wajib fence-aware"; audit sebelumnya (2026-11-02) melaporkan 15/15 padahal ADR-0015 punya heading di dalam fence — kelas cacat itu kini tercatat, dan §4.4 menyebutnya. 2026-11-03 — **ADR-0016** (skema & migrasi) masuk set: hitungan menjadi 16 berkas, kepemilikan DDL `memories` pindah dari ADR-0001 ke ADR-0016 §4.1, dan ADR-0001 §4 kini hanya memuat daftar tabel + peran. 2026-11-03 — allowlist dokumen ADR-0015 berbasis path, jadi `docs/v0.1.0/README.md` (indeks ADR) dapat dibedakan dari `README.md` produk. 2026-11-03 — keputusan pemilik: §4.12 **register istilah** ditambahkan (istilah kanonik + pemilik + sinonim terlarang), dan `--check` menolak sinonim di fence YAML/SQL; akar masalahnya bukan satu pasangan istilah, melainkan tidak ada pemilik kosakata. 2026-11-03 — register diperbarui: `send` satu-satunya kapabilitas kirim (tool + langkah otomasi memakai implementasi yang sama); `send_to` dicatat sebagai nama yang **dilebur setelah kode menyusul**, bukan sinonim terlarang hari ini. 2026-11-03 — audit: §4.4 menambah aturan label `Referensi kode` (sitasi nyata atau label `usulan`). **2026-11-03** — set pindah ke repo (`docs/v0.1.0/adr/` + indeks `docs/v0.1.0/README.md`); header `Implementasi` (`implemented`/`sebagian`/`draft` + bukti) masuk kontrak §4.4; sel sinonim register diberi lingkup (tanpa kurung = semua baris definisi, `(kolom)` = kolom SQL, `(nama role)` = blok `roles:`, sebutan entitas lain = prosa yang tidak digerbang) dengan pengecualian penanda `kolom lama`/`legacy`; `scripts/adr.py` (`--check`/`--new`/`--translate`/`--translate-check`, tanpa LLM) dan `tests/test_adr.py` menjadi penegaknya. **2026-11-03** — §4.7/§4.8: dua backend turunan (`glossary` = struktur saja, jujur `konten 0/N`; `opus` = konten via NMT lokal, perkakas dev tanpa dependency), plus batas bentuk yang dikunci test: baris fence tidak pernah dikirim, marker (`###`/`>`/`1.`/`-`) dan jumlah kolom tabel terjaga, penanda `**tebal**` dilindungi sementara teksnya tetap diterjemahkan, paragraf >400 karakter dipecah per kalimat, cap keluaran mengikuti `model.config.max_length`, dan memori dibatasi (thread 4, batch 8). 2026-11-03 — penerjemah mesin dan backend-nya dihapus; salinan Indonesia ditulis tangan dan `--translate-check` satu-satunya gate.
 
 ---
 
@@ -243,27 +243,11 @@ reversible dan lokal → cukup komentar kode atau `TASK.md`.
   `implemented | partial | draft`.
 - **Salinan Indonesia** hidup di folder `id/` dalam folder yang sama —
   `docs/v*/adr/id/NNNN-slug.md` untuk ADR root, `docs/v*/adr/engine/id/NNNN-slug.md` untuk ADR engine —
-  dan dibuka dengan
-  `> Naskah asli Indonesia — jangan sunting; sumber: <path relatif ke adr/> (sha256: <digest>)` plus
-  satu baris catatan cara pembuatannya. Salinan **opsional** per berkas; salinan **basi** (hash sumber
-  berubah) menggagalkan `--translate-check`.
-- Salinan boleh berupa naskah asli manusia (keadaan sesudah pembalikan bahasa 2026-11-03) atau turunan
-  mesin; `scripts/adr.py --translate <N|all>` memperbarui jenis mesinnya. Hanya operator yang
-  menjalankannya, dan tidak ada pemanggilan otomatis di dalam turn. Dua backend:
-  - `--translator glossary` (default): **hanya struktur** — judul bagian, label header, footer — dari
-    tabel di dalam skrip; konten dibiarkan English dan dihitung jujur `konten 0/N`.
-  - `--translator opus`: konten juga, lewat NMT lokal (`Helsinki-NLP/opus-mt-en-id`). Lingkungannya
-    **perkakas dev, bukan dependency paket**: `pyproject.toml`/`uv.lock` tidak berubah, tanpa baris
-    kredit baru, dan tanpa stack-nya skrip gagal dengan pesan pemasangan, bukan menulis berkas
-    setengah jadi.
-- Batas yang dibutuhkan model: baris di dalam fence kode/diagram tidak pernah dikirim; rujukan
-  `ADR-XXXX`/`§N`, inline code, tautan, dan URL dilindungi placeholder lalu dipulihkan; penanda tebal
-  dimasking supaya teksnya tetap diterjemahkan; paragraf dipecah 400 karakter **sebelum** masking;
-  cap keluaran mengikuti `max_length` model; empat thread torch dan batch delapan potongan menjaga RSS
-  sekitar 2 GB. Knob: `ADR_MT_DEVICE`, `ADR_MT_THREADS`, `ADR_MT_BATCH`.
-- Potongan yang span terlindunginya tidak kembali utuh memakai teks sumbernya, dan potongan yang
-  ditinggal model dalam bahasa sumber juga memakai teks itu: salinan tidak pernah didandani sebagai
-  terjemahan yang bukan.
+  dan dibuka dengan header turunan yang menyebut sumber dan `sha256`-nya. Salinan **ditulis tangan**;
+  tidak ada penerjemah mesin dan tidak ada dependency terjemahan di `pyproject.toml` atau `uv.lock`.
+- Salinan **opsional** per berkas; salinan **basi** (hash sumber berubah) menggagalkan
+  `--translate-check`. Aturannya: sunting sumber English, sunting salinan di baris yang sama, lalu
+  stempel ulang hash. Salinan tidak pernah diregenerasi sebagai kerangka struktur saja.
 
 ### 4.8 `scripts/adr.py`
 
@@ -271,9 +255,7 @@ reversible dan lokal → cukup komentar kode atau `TASK.md`.
 |---|---|
 | `--check` | nama & format nomor berkas; nomor unik di seluruh rumah ADR, kronologis, tidak pernah dipakai ulang (pindah ADR meninggalkan lubang; `0000` adalah ADR fondasi); tepat satu `docs/*/adr`; bagian kanonik English ada dan berurutan; `Status` sah; tanggal ISO; sinonim terlarang (§4.12) di fence YAML/SQL; rujukan `ADR-XXXX`/`ADR-<folder>/XXXX`/`§N` terselesaikan (nomor telanjang wajib unik; `ADR-<folder>/XXXX` bentuk eksplisit); fence seimbang dan tidak ada pagar telanjang di sel tabel; path footer; `Implementasi` sah |
 | `--new "<judul>" [--dir root\|engine\|web]` | menyusun kerangka ADR berikutnya di folder yang dipilih, dari template, tanpa mengarang isi |
-| `--translate <N\|all>` | menulis/menyegarkan salinan di `id/` folder yang sama, mencatat hash sumber, backend, dan hitungannya di baris pembuka |
 | `--translate-check` | membandingkan hash tercatat dengan sumbernya; salinan basi atau tanpa hash = gagal |
-| `--translator glossary\|opus` | backend untuk `--translate`: glosarium (struktur saja, default) atau NMT lokal untuk konten (perkakas dev) |
 
 `--check` mencetak setiap pelanggaran dengan berkas dan baris lalu keluar non-nol. `pytest -q`
 menjalankannya lewat `tests/test_adr.py`, bersebelahan dengan penjaga `patterns.py`/`fakta.py`/
@@ -355,7 +337,7 @@ Tabel ini sumbernya, dan istilah kanonik baru masuk di commit yang sama saat ia 
 | `automation_state_log` | jejak transisi state automation | 0014 (bentuk: 0016) | `automation_events` |
 | `draft`/`active`/`paused`/`stopped`/`expired` | lima state automation (terminal: `stopped`, `expired`) | 0014 | `disabled` (per automation), `denied` (sebagai state) |
 | `occurrence` | satu kemunculan jadwal = satu run; `occurrence_key = hash(automation_id, scheduled_at_utc)` | 0014 | `tick`, `slot`, `instance` |
-| `participants(chat_id)` | fakta keanggotaan dari gateway | 0007 (seam) | `members`, `roster` |
+| `participants(thread_id)` | fakta keanggotaan dari gateway | 0007 (seam) | `members`, `roster` |
 | `level` | privasi baris memori dan ceiling (0–4) | 0008/0006 | `privacy` (kolom), `sensitivity` (kolom) |
 | `visibility` | level arsip pesan yang dibaca lintas room | 0007 | `level` (untuk arsip) |
 | trust `T0`–`T3` | provenance kepercayaan | 0008 | `confidence`, `Tier` (untuk trust) |
@@ -395,7 +377,7 @@ Tabel ini sumbernya, dan istilah kanonik baru masuk di commit yang sama saat ia 
 | `grep` / `fetch` | dua tool baca hemat token (cari isi berkas / baca URL teks) | 0021 | `rg`, `curl`, `wget` |
 | `consent` / `authorization` | kelas approval dari **target**: scope penanya (consent) / di luar scope (authorization); sensitivitas hanya menentukan perlu-tidak | 0007 | `self_approve`, `auto_approve` |
 | `scope_proof` | bukti deterministik jangkauan aksi saat approval diminta | 0007 (bentuk: 0016) | `scope_hash` (sebagai kolom) |
-| `administrator` | role tertinggi, terproteksi, `label` bebas | 0022 | `owner` (nama role), `admin`, `root`, `master` |
+| `administrator` | role tertinggi, terproteksi, `label` bebas | 0022 | `admin`, `root`, `master` (nama role) |
 | `label` | sebutan **opsional** untuk pemegang role mana pun; dipakai prompt untuk memanggil mereka | 0022 | `nickname`, `title`, `alias` (untuk role) |
 
 Aturan penegakan:
@@ -427,7 +409,6 @@ adalah argumen skrip.
 ```
 python scripts/adr.py --check                        # gerbang bentuk (dipakai pytest)
 python scripts/adr.py --new "Judul ADR" --dir engine # kerangka di folder engine/
-python scripts/adr.py --translate 9                  # turunan English (operator)
 ```
 
 Konteks dokumen yang sudah ada tidak berubah: `docs/v0.1.0/README.md` bisa masuk allowlist berbasis path

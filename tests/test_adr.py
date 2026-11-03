@@ -134,132 +134,30 @@ def test_folder_qualified_reference_resolves(tmp_path):
     assert _run("--check", root=root).returncode == 0
 
 
-def test_translate_writes_the_indonesian_copy_and_detects_staleness(tmp_path):
+def test_translate_check_detects_a_stale_or_missing_hash(tmp_path):
     root = _copy_home(tmp_path)
-    assert _run("--translate", "all", root=root).returncode == 0
-    derivative = root / "docs" / "v0.1.0" / "adr" / "engine" / "id" / "0026-search.md"
-    assert derivative.is_file()
-    head = derivative.read_text(encoding="utf-8").splitlines()[0]
-    assert "sumber: engine/0026-search.md" in head
-    assert "(sha256: " in head
-    assert _run("--translate-check", root=root).returncode == 0
     source = root / "docs" / "v0.1.0" / "adr" / "engine" / "0026-search.md"
-    source.write_text(source.read_text(encoding="utf-8") + "\n", encoding="utf-8")
+    derivative = root / "docs" / "v0.1.0" / "adr" / "engine" / "id" / "0026-search.md"
+    import hashlib
+
+    digest = hashlib.sha256(source.read_bytes()).hexdigest()[:12]
+    derivative.parent.mkdir(parents=True, exist_ok=True)
+    derivative.write_text(
+        f"> Terjemahan turunan — jangan sunting; sumber: engine/0026-search.md "
+        f"(sha256: {digest})\n> Ditulis tangan.\n\n## 1. Konteks\n",
+        encoding="utf-8",
+    )
+    assert _run("--translate-check", root=root).returncode == 0
+    derivative.write_text(
+        derivative.read_text(encoding="utf-8").replace(digest, "000000000000", 1),
+        encoding="utf-8",
+    )
     assert _run("--translate-check", root=root).returncode == 1
 
 
-def _load_tool():
-    spec = importlib.util.spec_from_file_location("adr_tool", SCRIPT)
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
-
-
-def test_split_long_respects_limit_and_order():
-    tool = _load_tool()
-    text = "Kalimat pertama. Kalimat kedua yang lebih panjang sedikit. " + "y" * 450
-    parts = tool.split_long(text, limit=100)
-    assert parts and all(len(part) <= 100 for part in parts)
-    assert parts[0].startswith("Kalimat pertama.")
-    assert any(part.startswith("y") for part in parts)
-    assert tool.split_long("  ") == ["  "]
-
-
-def test_inline_spans_are_masked_and_restored_completely():
-    tool = _load_tool()
-    text = "Use `scope_key` and **wajib**, see https://example.org/x"
-    masked, tokens = tool.protect_inline(text)
-    assert "scope_key" not in masked
-    assert "@@" not in masked
-    restored, complete = tool.restore_inline(masked, tokens)
-    assert complete is True
-    assert restored == text
-
-
-def test_bold_markers_are_masked_but_their_text_is_translatable():
-    tool = _load_tool()
-    masked, tokens = tool.protect_inline("Dua hal yang **tidak** berubah, pakai `x`.")
-    assert "tidak" in masked  # the word reaches the translator
-    assert "**" not in masked  # the markers do not
-    restored, complete = tool.restore_inline(masked, tokens)
-    assert complete is True
-    assert restored == "Dua hal yang **tidak** berubah, pakai `x`."
-
-
-def test_incomplete_restore_is_reported_not_guessed():
-    tool = _load_tool()
-    restored, complete = tool.restore_inline("text [[0]] and [[7]]", ["**", "**"])
-    assert complete is False
-    assert "[[" not in restored
-    assert "@" not in restored
-
-
-def test_stub_backend_translates_content_and_keeps_structure():
-    tool = _load_tool()
-    source = (
-        "# ADR-9999: Test\n\n- **Status:** accepted\n\n## 1. Context\n\n"
-        "A long English paragraph that must be translated.\n"
-    )
-    seen: list[str] = []
-
-    def stub(pieces: list[str]) -> list[str]:
-        seen.extend(pieces)
-        return ["ID(" + piece + ")" for piece in pieces]
-
-    out, s_hits, s_total, c_hits, c_total = tool.translate_text(source, stub)
-    assert seen == ["[[0]]: Test", "A long English paragraph that must be translated."]
-    assert (c_hits, c_total) == (2, 2)
-    assert "ADR-9999" in out
-    assert "## 1. Konteks" in out
-    assert "- **Status:** accepted" in out
-    assert (s_hits, s_total) == (1, 1)
-
-
-def test_header_labels_and_markers_render_in_indonesian():
-    tool = _load_tool()
-    source = (
-        "- **Context:** earlier ADRs set the stage.\n"
-        "> **Note** asserted here.\n"
-        "1. The first important step.\n"
-        "### Phase 1 - structural gate\n"
-        "- **Implementation:** partial — the rest is missing\n"
-    )
-    seen: list[str] = []
-
-    def stub(pieces: list[str]) -> list[str]:
-        seen.extend(pieces)
-        return ["ID(" + piece + ")" for piece in pieces]
-
-    out, s_hits, s_total, c_hits, c_total = tool.translate_text(source, stub)
-    lines = out.splitlines()
-    assert lines[0] == "- **Konteks:** ID(earlier ADRs set the stage.)"
-    assert lines[1] == "> ID(**Note** asserted here.)"
-    assert lines[2] == "1. ID(The first important step.)"
-    assert lines[3] == "### ID(Phase 1 - structural gate)"
-    assert lines[4] == "- **Implementasi:** sebagian ID(— the rest is missing)"
-    assert (c_hits, c_total) == (5, 5)
-    assert len(seen) == 5
-
-
-def test_backend_never_sees_fences_and_tables_keep_columns():
-    tool = _load_tool()
-    source = (
-        "## 1. Context\n\n"
-        "| Fact | Evidence |\n|---|---|\n| Messages stored | `x.py:1` |\n\n"
-        "```yaml\nengine:\n  turn: 90\n```\n\n"
-        "- A first bullet that needs translation.\n"
-    )
-    seen: list[str] = []
-
-    def stub(pieces: list[str]) -> list[str]:
-        seen.extend(pieces)
-        return [f"ID({piece})" for piece in pieces]
-
-    out, _s_hits, _s_total, c_hits, c_total = tool.translate_text(source, stub)
-    joined = " ".join(seen)
-    assert "engine:" not in joined and "turn: 90" not in joined
-    assert "```yaml\nengine:\n  turn: 90\n```" in out
-    assert out.count("|") == source.count("|")
-    assert "ID(Fact)" in out and "ID(Evidence)" in out
-    assert "ID(A first bullet that needs translation.)" in out
-    assert (c_hits, c_total) == (3, 3)
+def test_there_is_no_machine_translator():
+    source = SCRIPT.read_text(encoding="utf-8")
+    assert '"--translator"' not in source
+    assert "opus-mt" not in source
+    assert "def translate_text" not in source
+    assert "def cmd_translate(" not in source

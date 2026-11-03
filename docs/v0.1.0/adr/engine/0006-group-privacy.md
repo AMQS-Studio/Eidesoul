@@ -8,7 +8,7 @@
 - **Supersedes:** —
 - **Related:** ADR-0003 (worker), ADR-0007 (capability vs authority), ADR-0008 (integrity), ADR-0011 (crash safety)
 - **Location note:** ADR lives in `docs/v0.1.0/adr/engine/`; the Indonesian copy is `docs/v0.1.0/adr/engine/id/0006-group-privacy.md`.
-- **Amendments:** 2026-11-02 — skeleton normalization (ADR-0009 §4.4): Configuration promoted from subsection 4.5 to section 5; the sections after it shifted. 2026-11-03 — audit: the caller list of `PrivacyPolicy` was completed (the auditor review path, `engine/privacy.py:160,192`), not only tools and commands. 2026-11-03 — audit: the `capture_turn`/`_assess`/`render` ranges were aligned with the actual `def`s in the repo. 2026-11-03 — ADR-0000 §4.4 rename: `inbound.chat_id` → `inbound.thread`, memory scope `chat` → `thread`.
+- **Amendments:** 2026-11-02 — skeleton normalization (ADR-0009 §4.4): Configuration promoted from subsection 4.5 to section 5; the sections after it shifted. 2026-11-03 — audit: the caller list of `PrivacyPolicy` was completed (the auditor review path, `engine/privacy.py:160,192`), not only tools and commands. 2026-11-03 — audit: the `capture_turn`/`_assess`/`render` ranges were aligned with the actual `def`s in the repo. 2026-11-03 — ADR-0000 §4.4 rename: `inbound.thread_id` → `inbound.thread`, memory scope `thread` → `thread`.
 
 ---
 

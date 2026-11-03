@@ -1,4 +1,4 @@
-> Terjemahan turunan — jangan sunting; sumber: engine/0014-automation.md (sha256: 4f870d79ef84)
+> Terjemahan turunan — jangan sunting; sumber: engine/0014-automation.md (sha256: 6bdb3667ab7c)
 > Teks ini ditulis manusia; baris yang tidak bisa diterjemahkan mesin disalin apa adanya ke sumber English, jadi sumber bercampur dua bahasa.
 
 # ADR-0014: Automation — Event → Aksi, Wewenang Pemilik, dan Sandbox sebagai Langkah
@@ -430,7 +430,7 @@ automations:
 
 ## 7. Acceptance criteria
 
-- [ ] Automation disimpan sebagai baris dengan `event`, `condition`, `steps`, `owner`, `policy`, `state`.
+- [ ] Automation disimpan sebagai baris dengan `event`, `condition`, `steps`, `administrator`, `policy`, `state`.
 - [ ] Setiap langkah diperiksa terhadap wewenang pemilik **saat dibuat**; yang tidak berhak ditolak.
 - [ ] Wewenang diperiksa **ulang** saat jatuh tempo; `denied` → `paused` + kabar sekali ke pemilik.
 - [ ] `owner_roles_at_creation` tidak pernah dipakai sebagai sumber izin.

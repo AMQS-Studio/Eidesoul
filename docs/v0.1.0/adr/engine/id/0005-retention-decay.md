@@ -1,4 +1,4 @@
-> Terjemahan turunan — jangan sunting; sumber: engine/0005-retention-decay.md (sha256: 23610848dc42)
+> Terjemahan turunan — jangan sunting; sumber: engine/0005-retention-decay.md (sha256: fbec29655191)
 > Teks ini ditulis manusia; baris yang tidak bisa diterjemahkan mesin disalin apa adanya ke sumber English, jadi sumber bercampur dua bahasa.
 
 # ADR-0005: Retention & Decay — Hybrid TTL, Renewal Saat Dipakai, dan Pin Otomatis
@@ -10,7 +10,7 @@
 - **Konteks:** lanjutan ADR-0001 (canonical), ADR-0003 (worker & konsolidasi), ADR-0004 (TTL state non-`ok`); memori default-on memerlukan kebijakan umur
 - **Supersedes:** —
 - **Terkait:** ADR-0006 (privasi grup), ADR-0008 (integritas), ADR-0010 (reflection), ADR-0011 (purge job), ADR-0016 (kolom retensi)
-- **Amandemen:** 2026-11-03 — keputusan pemilik: purge/`forget` juga menghapus **salinan library** (`mem0_history.db`: baris `history`/`messages`), karena berkas itu menyimpan `old_memory`/`new_memory` termasuk teks yang sudah dihapus. 2026-11-03 — audit: `commitment` dikeluarkan dari `core_durability_pin_categories` (pin tanpa syarat bertentangan dengan aturan "pin hanya selama tugas terbuka"); ditambah `commitment_pin_when_open: true`. Kolom retensi kini berbentuk final di ADR-0016 §4.2. 2026-11-03 — artefak `skills`/`skill_revisions` (ADR-0020) masuk §4.7: arsip saat tak dipakai, revisi append-only. 2026-11-03 — rename ADR-0000 §4.4: chat_id → thread_id, chats/chat_eras/chat_people → threads/thread_eras/thread_people, scope 'chat' → 'thread'.
+- **Amandemen:** 2026-11-03 — keputusan pemilik: purge/`forget` juga menghapus **salinan library** (`mem0_history.db`: baris `history`/`messages`), karena berkas itu menyimpan `old_memory`/`new_memory` termasuk teks yang sudah dihapus. 2026-11-03 — audit: `commitment` dikeluarkan dari `core_durability_pin_categories` (pin tanpa syarat bertentangan dengan aturan "pin hanya selama tugas terbuka"); ditambah `commitment_pin_when_open: true`. Kolom retensi kini berbentuk final di ADR-0016 §4.2. 2026-11-03 — artefak `skills`/`skill_revisions` (ADR-0020) masuk §4.7: arsip saat tak dipakai, revisi append-only. 2026-11-03 — rename ADR-0000 §4.4: thread_id → thread_id, chats/thread_eras/thread_people → threads/thread_eras/thread_people, scope 'chat' → 'thread'.
 - **Catatan lokasi:** ADR hidup di `docs/v0.1.0/adr/engine/`; salinan Indonesia di `docs/v0.1.0/adr/engine/id/0005-retention-decay.md`.
 
 ---

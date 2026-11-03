@@ -1,13 +1,13 @@
-> Terjemahan turunan — jangan sunting; sumber: engine/0018-gateway-contract.md (sha256: d1c630f11f10)
+> Terjemahan turunan — jangan sunting; sumber: engine/0018-gateway-contract.md (sha256: d8ec25a0d1ae)
 > Teks ini ditulis manusia; baris yang tidak bisa diterjemahkan mesin disalin apa adanya ke sumber English, jadi sumber bercampur dua bahasa.
 
 # ADR-0018: Kontrak Gateway — Core, Rich, Directory
 
 - **Status:** accepted
-- **Implementasi:** sebagian — ada: `GatewayCore`/`Rich`/`Directory`, `send_sticker`, `participants`, boot check + `gateway_capabilities`, tes degradasi, body harness; sisa: refusal `participants()` terpasang di tool `chat_history`/`send_to` (ADR-0007, W4)
+- **Implementasi:** implemented — bukti: `GatewayCore`/`Rich`/`Directory`, `send_sticker`, `participants`, boot check + `gateway_capabilities`, tes degradasi, body harness, dan refusal `participants()` terpasang di `chat_history`/`send_to` (menggantikan cek cross-chat lama)
 - **Tanggal:** 2026-11-03
 - **Deciders:** Muqsith (owner), omp (reviewer)
-- **Konteks:** review (`Eidesoul-Review-Arsitektur-2026-11-01.md`) §15 P1-6 — satu Protocol berisi 16 method mencampur transport, direktori, kebijakan, dan data; dua method tidak pernah dipakai engine; setiap gateway wajib menstub semuanya; `send_reaction` sebenarnya mengirim sticker; ADR-0007 butuh `participants(chat_id)` yang tidak ada di kontrak
+- **Konteks:** review (`Eidesoul-Review-Arsitektur-2026-11-01.md`) §15 P1-6 — satu Protocol berisi 16 method mencampur transport, direktori, kebijakan, dan data; dua method tidak pernah dipakai engine; setiap gateway wajib menstub semuanya; `send_reaction` sebenarnya mengirim sticker; ADR-0007 butuh `participants(thread_id)` yang tidak ada di kontrak
 - **Supersedes:** —
 - **Terkait:** ADR-0007 (`rooms_of`, `participants`, fail closed), ADR-0015 (index kapabilitas, `self_handles`, `render`, `prompt_hints`), ADR-0013 (jalur kirim), ADR-0011 (ledger kiriman)
 - **Catatan lokasi:** ADR hidup di `docs/v0.1.0/adr/engine/`; salinan Indonesia di `docs/v0.1.0/adr/engine/id/0018-gateway-contract.md`.
@@ -31,7 +31,7 @@ Tiga akibat:
 1. **Stub wajib.** `cli/gateway.py:88-140` harus menyediakan keenam belas method; separuhnya `pass` atau `return []`. Gateway baru membayar biaya yang sama untuk kemampuan yang tidak ia punya.
 2. **Permukaan mati.** `list_targets` dan `data_paths` tidak dipanggil siapa pun di `eidesoul/` — kontrak yang tidak dipakai tetapi mengikat.
 3. **Nama yang berbohong.** `send_reaction` mengirim **sticker** (`whatsapp/gateway.py:348-356` membaca `reaction_stickers`), bukan reaksi ke pesan.
-4. **Seam yang belum ada.** ADR-0007 §4.5 mewajibkan `participants(chat_id)` sebagai sumber kebenaran keanggotaan; method itu tidak ada di kontrak sehingga implementasinya akan lahir sebagai atribut liar per gateway.
+4. **Seam yang belum ada.** ADR-0007 §4.5 mewajibkan `participants(thread_id)` sebagai sumber kebenaran keanggotaan; method itu tidak ada di kontrak sehingga implementasinya akan lahir sebagai atribut liar per gateway.
 
 ## 2. Decision drivers
 
@@ -54,9 +54,9 @@ Tiga akibat:
 
 | Protocol | Isi | Wajib? |
 |---|---|---|
-| `GatewayCore` | `name`, `tools`, `commands`, `run`, `stop`, `send_text`, `render`, `prompt_hints`, `self_handles`, `chat_name` (default: `chat_id`) | **wajib** |
+| `GatewayCore` | `name`, `tools`, `commands`, `run`, `stop`, `send_text`, `render`, `prompt_hints`, `self_handles`, `chat_name` (default: `thread_id`) | **wajib** |
 | `Rich` | `send_file`, `send_sticker`, `typing`, `prepare_media` | opsional |
-| `Directory` | `resolve_target(query)`, `participants(chat_id) -> set[str] \| None` | opsional |
+| `Directory` | `resolve_target(query)`, `participants(thread_id) -> set[str] \| None` | opsional |
 
 - `list_targets` dan `data_paths` **dihapus** dari kontrak (tidak ada pemanggil).
 - `send_reaction` **diganti nama** menjadi `send_sticker` — satu nama untuk satu perilaku.
@@ -117,7 +117,7 @@ Tidak ada kunci konfigurasi baru dalam ADR ini. Kapabilitas gateway adalah sifat
 
 ## 9. Interaksi dengan ADR lain
 
-- **ADR-0007** — `participants(chat_id)` menjadi method resmi, dan ketiadaannya otomatis fail closed.
+- **ADR-0007** — `participants(thread_id)` menjadi method resmi, dan ketiadaannya otomatis fail closed.
 - **ADR-0015** — `self_handles`, `render`, `prompt_hints` tetap Core karena index kapabilitas dan format balasan bergantung padanya.
 - **ADR-0013** — jalur kirim dan ledger tidak berubah; hanya permukaan kontrak yang dipersempit.
 - **ADR-0017** — gerbang primary berlaku di semua jalur kirim, termasuk `Rich`.

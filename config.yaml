@@ -188,7 +188,7 @@ engine:
 gateways:
   cli:
     enabled: true
-    role: owner
+    role: administrator
     user: local
     thread_id: cli:local
     chat_name: Terminal

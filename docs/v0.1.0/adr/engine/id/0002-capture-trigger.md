@@ -1,4 +1,4 @@
-> Terjemahan turunan — jangan sunting; sumber: engine/0002-capture-trigger.md (sha256: bd152b394606)
+> Terjemahan turunan — jangan sunting; sumber: engine/0002-capture-trigger.md (sha256: eaca7e5d6ab2)
 > Teks ini ditulis manusia; baris yang tidak bisa diterjemahkan mesin disalin apa adanya ke sumber English, jadi sumber bercampur dua bahasa.
 
 # ADR-0002: Pemicu Capture — Gate Deterministik, Cek Kebaruan, Assess Batch
@@ -67,7 +67,7 @@ Dijalankan langsung saat turn, murah dan deterministik:
 
 - bukan command, bukan pesan sistem, bukan hasil tool;
 - panjang minimum (`min_chars`);
-- dedupe hash per `(chat_id, message_id, kind)`;
+- dedupe hash per `(thread_id, message_id, kind)`;
 - rate limit per chat per jam;
 - hard exclusion: kredensial/secret, crisis, instruksi berbahaya, teks yang terdeteksi injection;
 - provenance dicatat (`source`, `trust`) untuk ADR-0008.

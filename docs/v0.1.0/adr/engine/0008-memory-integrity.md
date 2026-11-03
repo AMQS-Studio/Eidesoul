@@ -8,7 +8,7 @@
 - **Supersedes:** —
 - **Related:** ADR-0003 (worker), ADR-0010 (reflection), ADR-0011 (crash safety)
 - **Location note:** ADR lives in `docs/v0.1.0/adr/engine/`; the Indonesian copy is `docs/v0.1.0/adr/engine/id/0008-memory-integrity.md`.
-- **Amendments:** 2026-11-02 — §4.4 A: overflow quota enters state `staged` (labeled, TTL follows `kind`, promotion on recall-miss), not `pending`. 2026-11-03 — audit: the `kind=rule` acceptance criterion was aligned with §4.3 (`via=soul_doc`). 2026-11-03 — ADR-0000 §4.4 rename: `chat_id` metadata/column → `thread_id`, scope `chat` → `thread`.
+- **Amendments:** 2026-11-02 — §4.4 A: overflow quota enters state `staged` (labeled, TTL follows `kind`, promotion on recall-miss), not `pending`. 2026-11-03 — audit: the `kind=rule` acceptance criterion was aligned with §4.3 (`via=soul_doc`). 2026-11-03 — ADR-0000 §4.4 rename: `thread_id` metadata/column → `thread_id`, scope `thread` → `thread`.
 
 ---
 

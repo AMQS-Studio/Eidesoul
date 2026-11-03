@@ -42,7 +42,7 @@ This is not tidiness: without measured tokens, the cost decisions in ADR-0014/00
 ### 4.1 Selectable log format, uniform mandatory fields
 
 - `engine.logging.format: text | json` (default `text`). `json` uses the stdlib formatter (no dependency), one object per line.
-- Mandatory fields on every line: `ts`, `level`, `event` (stable keys, not free sentences), `logger`; optional: `turn_id`, `chat_id`, `job_id`, `run_id`, `gateway`, `duration_ms`.
+- Mandatory fields on every line: `ts`, `level`, `event` (stable keys, not free sentences), `logger`; optional: `turn_id`, `thread_id`, `job_id`, `run_id`, `gateway`, `duration_ms`.
 - **No message content, memory text, archive quotes, or people's names** in the log — only ids and numbers. Enforced by tests (see §7).
 
 ### 4.2 `turn_id` as the red thread
@@ -115,7 +115,7 @@ engine:
 | Risks | Mitigation |
 |---|---|
 | The log leaks the contents of the conversation | rule §4.1 + test `log_content_leak=0`; text may only enter tables/archives |
-| Cardinality explodes (`chat_id` as a label) | `chat_id` is a log field only, never a metric label; counters are aggregate-based |
+| Cardinality explodes (`thread_id` as a label) | `thread_id` is a log field only, never a metric label; counters are aggregate-based |
 | `contextvars` leak between tasks | `turn_id` is reset at the start of every task; background work clears the context |
 | Token not available from the provider | the row is still written with `ok=false`; no false estimate |
 | JSON log overhead | format `text` remains the default; `json` for the operator who needs it |

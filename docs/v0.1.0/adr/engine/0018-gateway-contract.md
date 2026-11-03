@@ -1,10 +1,10 @@
 # ADR-0018: Gateway Contract — Core, Rich, Directory
 
 - **Status:** accepted
-- **Implementation:** partial — present: `GatewayCore`/`Rich`/`Directory`, `send_sticker`, `participants`, boot check + `gateway_capabilities`, degradation tests, harness body; remaining: the `participants()` refusal wired into the `chat_history`/`send_to` tools (ADR-0007, W4)
+- **Implementation:** implemented — evidence: `GatewayCore`/`Rich`/`Directory`, `send_sticker`, `participants`, boot check + `gateway_capabilities`, degradation tests, harness body, and the participants refusal wired into `chat_history`/`send_to` (replacing their old cross-chat check)
 - **Date:** 2026-11-03
 - **Deciders:** Muqsith (owner), omp (reviewer)
-- **Context:** review (`Eidesoul-Review-Arsitektur-2026-11-01.md`) §15 P1-6 — one Protocol holding 16 methods that mix transport, directory, policy, and data; two methods never used by the engine; every gateway is forced to stub all of them; `send_reaction` actually sends stickers; ADR-0007 needs `participants(chat_id)`, which is not in the contract
+- **Context:** review (`Eidesoul-Review-Arsitektur-2026-11-01.md`) §15 P1-6 — one Protocol holding 16 methods that mix transport, directory, policy, and data; two methods never used by the engine; every gateway is forced to stub all of them; `send_reaction` actually sends stickers; ADR-0007 needs `participants(thread_id)`, which is not in the contract
 - **Supersedes:** —
 - **Related:** ADR-0007 (`rooms_of`, `participants`, fail closed), ADR-0015 (capability index, `self_handles`, `render`, `prompt_hints`), ADR-0013 (send path), ADR-0011 (send ledger)
 - **Location note:** ADR lives in `docs/v0.1.0/adr/engine/`; the Indonesian copy is `docs/v0.1.0/adr/engine/id/0018-gateway-contract.md`.
@@ -28,7 +28,7 @@ Three consequences:
 1. **Mandatory stubs.** `cli/gateway.py:88-140` must provide all sixteen methods; half of them are `pass` or `return []`. A new gateway pays the same cost for capabilities it does not have.
 2. **A dead surface.** `list_targets` and `data_paths` are called by no one in `eidesoul/` — a contract that is unused but binding.
 3. **Names that lie.** `send_reaction` sends a **sticker** (`whatsapp/gateway.py:348-356` reads `reaction_stickers`), not a reaction to a message.
-4. **A seam that does not exist yet.** ADR-0007 §4.5 requires `participants(chat_id)` as the source of truth for membership; that method is not in the contract, so its implementation will be born as a wild attribute per gateway.
+4. **A seam that does not exist yet.** ADR-0007 §4.5 requires `participants(thread_id)` as the source of truth for membership; that method is not in the contract, so its implementation will be born as a wild attribute per gateway.
 
 ## 2. Decision drivers
 
@@ -51,9 +51,9 @@ Three consequences:
 
 | Protocol | Contents | Mandatory? |
 |---|---|---|
-| `GatewayCore` | `name`, `tools`, `commands`, `run`, `stop`, `send_text`, `render`, `prompt_hints`, `self_handles`, `chat_name` (default: `chat_id`) | **mandatory** |
+| `GatewayCore` | `name`, `tools`, `commands`, `run`, `stop`, `send_text`, `render`, `prompt_hints`, `self_handles`, `chat_name` (default: `thread_id`) | **mandatory** |
 | `Rich` | `send_file`, `send_sticker`, `typing`, `prepare_media` | optional |
-| `Directory` | `resolve_target(query)`, `participants(chat_id) -> set[str] \| None` | optional |
+| `Directory` | `resolve_target(query)`, `participants(thread_id) -> set[str] \| None` | optional |
 
 - `list_targets` and `data_paths` are **deleted** from the contract (no caller).
 - `send_reaction` is **renamed** to `send_sticker` — one name for one behavior.
@@ -114,7 +114,7 @@ There is no new configuration key in this ADR. Gateway capabilities are properti
 
 ## 9. Interaction with other ADRs
 
-- **ADR-0007** — `participants(chat_id)` becomes an official method, and its absence automatically fails closed.
+- **ADR-0007** — `participants(thread_id)` becomes an official method, and its absence automatically fails closed.
 - **ADR-0015** — `self_handles`, `render`, `prompt_hints` stay in Core because the capability index and the reply format depend on them.
 - **ADR-0013** — the send path and the ledger are unchanged; only the contract surface is narrowed.
 - **ADR-0017** — primary gates apply on every send path, including `Rich`.

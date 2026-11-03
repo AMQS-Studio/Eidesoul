@@ -149,16 +149,16 @@ otherwise there is no reading and no sending. It is never guessed from a name or
 
 | Layer | Source | Qualities |
 |---|---|---|
-| 1 | The gateway capability `participants(chat_id) -> set[person_id] \| None` (`None` = does not know) | **Authoritative**: a transport fact owned by the gateway. If it answers and the requester is not there → **refuse**, whatever layer 2 says |
+| 1 | The gateway capability `participants(thread_id) -> set[person_id] \| None` (`None` = does not know) | **Authoritative**: a transport fact owned by the gateway. If it answers and the requester is not there → **refuse**, whatever layer 2 says |
 | 2 | Recorded presence (`HistoryStore.rooms_of(person_id)`): `messages.sender_id` in that chat ∪ `memories.owner_id/subject_id` in that chat | A neutral fallback: used only when the gateway does not know (e.g. console/CLI). Weaker — someone who has left the group still looks present |
 
 - **Fail closed**: presence not proven by any layer → refuse.
 - **No override**: `memory_admin` cannot read a room they do not enter themself.
-- Core seam: `HistoryStore.recent_chats()` (`stores/history.py:343-352`) gives the `chat_id` list,
+- Core seam: `HistoryStore.recent_chats()` (`stores/history.py:343-352`) gives the `thread_id` list,
 and the person→room derivation pattern already exists in `_chats(db, person_id)` (`memory/rekey.py:91`); the
 new part is only `rooms_of(person_id)` as an explicit intersection for the requester.
-- `chat_id` stays opaque; **names** of rooms only come from `gateway.chat_name()`
-(`tools/chat_history.py:112`). The gateway stays an appendage: it supplies labels and membership facts,
+- `thread_id` stays opaque; **names** of rooms only come from `gateway.chat_name()`
+(`gateways/whatsapp/tools/chat_history.py`). The gateway stays an appendage: it supplies labels and membership facts,
 not permission rules. The rules stay in the core.
 
 Note: scope `person` needs no membership — that memory follows its person. Membership is only
@@ -217,7 +217,7 @@ the block is still added; if the model tries to fake `author` or remove the mark
 (actor, destination, class, reason). The requester **receives no reply** from a room that is not theirs, and
 the soul says so plainly when asked. The payload is subject to the destination room's ceiling and the
 `cross_chat_leak` guard: a fact about others above the ceiling must not travel; a fact about the
-requester themself may. The automation step `send` (ADR-0014) uses the same rules, with `owner`
+requester themself may. The automation step `send` (ADR-0014) uses the same rules, with `administrator`
 as `author`.
 
 **The payload is subject to the destination room's ceiling.** The `cross_chat_leak` guard is extended to the output of `send`,
@@ -258,8 +258,8 @@ or exhausted quota still ends as an error message on the LLM path (`agent.api_er
 tool rejection that needs deterministic text. Deterministic commands that live without the LLM
 (`/help`, `/memori`, `/status`, `/cari`) read nothing across rooms, so there is no chat
 string that needs to be written in the code or in a catalog.
-- **Consistent with the other path:** the same request through `memory` (scope `chat` of another room) is also
-rejected, because scope `chat` is only read in its own room (ADR-0006 §4.4). One behavior, two doors.
+- **Consistent with the other path:** the same request through `memory` (scope `thread` of another room) is also
+rejected, because scope `thread` is only read in its own room (ADR-0006 §4.4). One behavior, two doors.
 
 ### 4.7 Approval: sensitivity determines *whether* there is an approval, the target determines *its class*
 
@@ -284,7 +284,7 @@ The `consent` condition is **evidence**, not good intentions:
 
 - `scope_proof` is computed deterministically at request time — a list of action targets (path, room, column) + a snapshot of the requester's role roots — and is **re-matched at execution**; if the role changed such that the reach widened, the approval rises to `authorization` or is denied, and it is never executed quietly.
 - The approval message contains a summary of the resolved targets ("12 files in `scratch/<chat>`; `public` read-only") and is sent **in the requester's DM**, not in the group; for `authorization`, the message names the requester and their artifacts ("Si wants to add...").
-- `/approve` for `consent` requires `sender == requester` and the same `chat_id`; for `authorization` it needs the approver role. There is no "approve someone else's" path.
+- `/approve` for `consent` requires `sender == requester` and the same `thread_id`; for `authorization` it needs the approver role. There is no "approve someone else's" path.
 - `mode` remains valid: `yolo` (default) does not use approval; `off` disables it; `strict` uses the class above, not "everything goes to the administrator".
 - Tool permissions are still rechecked at execution (the approval class adds no permission whatsoever).
 
@@ -372,7 +372,7 @@ role. The implementation follows in `chat_history`/`send` with one shared helper
 - [ ] `global` still needs `memory_admin` in the tool and the command.
 - [ ] `level >= ask_level` still needs `confirmed=true`; in a group it becomes `pending` (ADR-0006).
 - [ ] Memory export requires `memory_admin` + approval + audit, and rejects L4/credentials.
-- [ ] `HistoryStore.search` applies the `visibility` ceiling when `chat_id != ctx.chat_id`; the own room is not filtered.
+- [ ] `HistoryStore.search` applies the `visibility` ceiling when `thread_id != ctx.thread_id`; the own room is not filtered.
 - [ ] Test: an L4 row of another room does not appear when read from a group, but does appear when read from a DM.
 - [ ] `HistoryStore.rooms_of(person_id)` returns only the rooms where that person is recorded as present (the intersection of `messages.sender_id` and `memories.owner_id/subject_id`).
 - [ ] No automatic room sweep per turn; the archive outside this room only goes through a soul tool call and is bounded by `max_rooms_per_turn`.
@@ -437,13 +437,13 @@ role. The implementation follows in `chat_history`/`send` with one shared helper
 - `eidesoul/engine/guard/policy.py:105-215` — `sensitive_tools`, destructive actions, shell scans.
 - `eidesoul/engine/memory/mem0.py:476-530` — `forget`, `set_privacy`, `veto`.
 - `eidesoul/engine/roles.py:18-28,100-116` — `Role` (no room flag; membership is computed when used).
-- `eidesoul/engine/tools/chat_history.py:66-110` — reading another room + the `cross_reads` buffer for the leak guard.
+- `eidesoul/gateways/whatsapp/tools/chat_history.py` — reading another room + the `cross_reads` buffer for the leak guard.
 - `eidesoul/engine/tools/settings.py:294-413` — approval for internal changes.
 - `eidesoul/engine/stores/documents.py:137` — `export_to_files` (config document mirror).
 - `eidesoul/engine/stores/history.py:318-352` — `search` (where the `visibility` ceiling is installed) and `recent_chats`.
-- `eidesoul/engine/tools/chat_history.py:75-129` — `chat_history` and the separation of this room from other rooms.
+- `eidesoul/gateways/whatsapp/tools/chat_history.py` — `chat_history` and the separation of this room from other rooms.
 - `eidesoul/engine/memory/rekey.py:83-97` — the `_chats(db, person_id)` pattern for `rooms_of(person_id)`.
-- `eidesoul/engine/inbound.py:29-70` — the `Gateway` contract (where the `participants(chat_id)` capability is added, optional).
+- `eidesoul/engine/inbound.py:29-70` — the `Gateway` contract (where the `participants(thread_id)` capability is added, optional).
 - `eidesoul/engine/context.py:72-81,288-300` — `clamp_visibility`, `entry_tag`, `set_visibility`.
 - `eidesoul/engine/config.py:148-152` — `ApprovalConfig` (mode, ttl, settings).
 - `eidesoul/engine/prompts.py:195-355` — `system_prompt` (where the "out of reach → short refusal, do not speculate" rule lives).

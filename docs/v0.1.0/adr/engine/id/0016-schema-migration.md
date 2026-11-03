@@ -1,4 +1,4 @@
-> Terjemahan turunan — jangan sunting; sumber: engine/0016-schema-migration.md (sha256: 5817273c02e8)
+> Terjemahan turunan — jangan sunting; sumber: engine/0016-schema-migration.md (sha256: 361f2c5e14e2)
 > Teks ini ditulis manusia; baris yang tidak bisa diterjemahkan mesin disalin apa adanya ke sumber English, jadi sumber bercampur dua bahasa.
 
 # ADR-0016: Skema Kanonik & Migrasi — Satu DDL, Satu Baseline Alembic

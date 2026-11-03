@@ -1,4 +1,4 @@
-> Terjemahan turunan — jangan sunting; sumber: engine/0019-observability.md (sha256: 66a9614eb18a)
+> Terjemahan turunan — jangan sunting; sumber: engine/0019-observability.md (sha256: 992d9f7a32a7)
 > Teks ini ditulis manusia; baris yang tidak bisa diterjemahkan mesin disalin apa adanya ke sumber English, jadi sumber bercampur dua bahasa.
 
 # ADR-0019: Observability — Log Terstruktur, Token, dan `/status`
@@ -45,7 +45,7 @@ Ini bukan kerapian: tanpa token terukur, keputusan biaya di ADR-0014/0015 (budge
 ### 4.1 Format log dapat dipilih, field wajib seragam
 
 - `engine.logging.format: text | json` (default `text`). `json` memakai formatter stdlib (tanpa dependency), satu objek per baris.
-- Field wajib pada setiap baris: `ts`, `level`, `event` (kunci stabil, bukan kalimat bebas), `logger`; opsional: `turn_id`, `chat_id`, `job_id`, `run_id`, `gateway`, `duration_ms`.
+- Field wajib pada setiap baris: `ts`, `level`, `event` (kunci stabil, bukan kalimat bebas), `logger`; opsional: `turn_id`, `thread_id`, `job_id`, `run_id`, `gateway`, `duration_ms`.
 - **Tidak ada isi pesan, teks memori, kutipan arsip, atau nama orang** di log — hanya id dan angka. Ditegakkan test (lihat §7).
 
 ### 4.2 `turn_id` sebagai benang merah
@@ -118,7 +118,7 @@ engine:
 | Risiko | Mitigasi |
 |---|---|
 | Log membocorkan isi percakapan | aturan §4.1 + test `log_content_leak=0`; teks hanya boleh masuk tabel/arsip |
-| Cardinality meledak (`chat_id` sebagai label) | `chat_id` hanya field log, tidak pernah label metrik; counter berbasis agregat |
+| Cardinality meledak (`thread_id` sebagai label) | `thread_id` hanya field log, tidak pernah label metrik; counter berbasis agregat |
 | `contextvars` bocor antar-task | `turn_id` di-set ulang di awal setiap task; pekerjaan latar membersihkan konteks |
 | Token tidak tersedia dari provider | baris tetap ditulis dengan `ok=false`; tidak ada estimasi palsu |
 | Overhead log JSON | format `text` tetap default; `json` untuk operator yang butuh |

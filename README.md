@@ -26,9 +26,10 @@
 
 ## Status today
 
-The engine, the CLI console, the WhatsApp gateway (an optional extra), memory, affect, and the guard
-run today. The web panel and the on-machine installer are planned, not built. Everything else in this
-file describes the target design; this section is the delta that runs today.
+The engine, the CLI console, the WhatsApp gateway (an optional extra), memory, affect, the guard,
+the on-machine installer, and the plugin model run today. The web panel is planned, not built; it is
+a separate process the engine will never import. Everything else in this file describes the shipped
+design; this section is the delta that runs today.
 
 ## What the slogan means
 
@@ -198,6 +199,17 @@ and never hardcodes an agent loop: no planner to configure, no task graph to lau
 Requirements: Python 3.12, Postgres 14+ with `pgvector`, and a reachable OpenAI-compatible LLM
 endpoint. The container image already pins Python 3.12; running from source on 3.11+ works too.
 
+The shortest path is the installer; it never runs `sudo`, pins `uv`, writes the four host files,
+and hands over to `eidesoul init`:
+
+```bash
+bash install.sh                 # native
+bash install.sh --stack compose # Postgres and the engine in containers
+bash install.sh --dry-run       # print every action, write nothing
+```
+
+From source, the same steps by hand:
+
 ```bash
 # 1. Scaffold config.yaml, roles.yaml, soul.yaml, and .env; the provider is the operator's pick
 eidesoul init --provider openai
@@ -233,20 +245,32 @@ their gateway addresses, and `eidesoul people adopt` moves legacy raw addresses 
 `local`) onto `per_…` ids, folding their affect and style state and rewriting the role documents; it
 is idempotent, so an upgraded deployment runs it once.
 
+Tests run on the real store, Postgres+pgvector. Start a throwaway database (the container is not the
+dev or production one) and export the DSN; without the variable the suite fails with that command
+instead of falling back to SQLite:
+
+```bash
+podman run -d --name eidesoul-test-pg -p 5433:5432 \
+  -e POSTGRES_DB=eidesoul_test -e POSTGRES_USER=eidesoul -e POSTGRES_PASSWORD=eidesoul \
+  docker.io/pgvector/pgvector:pg17
+export EIDESOL_TEST_DATABASE_URL='postgresql+psycopg://eidesoul:eidesoul@127.0.0.1:5433/eidesoul_test'
+pytest -q
+```
+
 `uv sync` installs the capability spine: Postgres+pgvector storage, Mem0 memory, the multilingual
 embedder, the affect prototypes, and the guard. Only transport and integrations are extras:
 
 | Extra | Brings | Needed for |
 |---|---|---|
 | `whatsapp` | Neonize + segno | the WhatsApp gateway |
-| `google` | Google API client, google-auth, httpx | the Google Workspace tool |
 
 ```bash
-uv sync --extra whatsapp --extra google
+uv sync --extra whatsapp
 ```
 
 Every extra is removable: nothing in core imports it eagerly, and without it the affected tool or
-gateway reports why it is inert.
+gateway reports why it is inert. Google is not an extra: it is a **plugin**, fetched and verified
+when enabled (see Optional integrations).
 
 ## soul.yaml
 
@@ -402,7 +426,7 @@ roles:
     commands: [help, ping, link, unlink, whoami, status, tools]
     context: ""
     memory_admin: false
-  owner:
+  administrator:
     priority: 100
     users: ["per_xxxxxxxxxx"]
     tools: ["*"]
@@ -468,22 +492,24 @@ local network even when it is allowed to run.
 ## Optional integrations
 
 ```bash
-uv sync --extra whatsapp --extra google                 # optional gateway and integration
+uv sync --extra whatsapp                  # the optional gateway
+eidesoul components install google        # a plugin: fetch + verify by digest
+eidesoul components enable google         # register its tools into the same catalog
 ```
 
 ```bash
-docker build --build-arg EXTRAS="--extra whatsapp --extra google" .
+podman build --build-arg EXTRAS="--extra whatsapp" .
 ```
 
 Memory, the embedder, and the affect prototypes are part of the core install; there is no extra to
-add for them. On SQLite, Mem0 stays off and `status` reports why.
+add for them. Storage is Postgres+pgvector only, the same store the tests use.
 
 - **Affect vibes** read the shared embedder against `eidesoul/library/affect/*.json`; with no
   embedder the room mood stays neutral instead of guessing.
 - **WhatsApp** (`whatsapp`): the optional gateway. Never enabled by default.
-- **Google Workspace** (`google`): an in-process tool for files shared with a service account, with
-  per-sender identity linking. Without the extra the tool stays discoverable but inert and returns a
-  clear error instead of a traceback.
+- **Google Workspace** (`google`): a plugin, not a core tool and not an extra. While it is absent
+  the capability is reported `unavailable`, never fabricated; enabling fetches the code by digest
+  and a missing network fails explicitly, changing nothing.
 
 Secrets belong in `.env` only. `config.yaml`, `roles.yaml`, `soul.yaml`, and `.env` are never
 committed.
@@ -511,8 +537,8 @@ installs; the last column says what Eidesoul uses it for.
 | Transformers | Apache-2.0 | Hugging Face | https://github.com/huggingface/transformers | model loading |
 | Neonize | not declared upstream | krypton-byte | https://github.com/krypton-byte/neonize | WhatsApp transport |
 | segno | BSD-3-Clause | Lars Heuer | https://github.com/heuer/segno | QR pairing |
-| google-api-python-client | Apache-2.0 | Google | https://github.com/googleapis/google-api-python-client | Workspace tool |
-| google-auth | Apache-2.0 | Google | https://github.com/googleapis/google-auth-library-python | Google auth |
+| google-api-python-client | Apache-2.0 | Google | https://github.com/googleapis/google-api-python-client | Workspace plugin (manifest) |
+| google-auth | Apache-2.0 | Google | https://github.com/googleapis/google-auth-library-python | Workspace plugin (manifest) |
 | httpx | BSD-3-Clause | Encode | https://github.com/encode/httpx | HTTP client |
 | emotion-engine | MIT | PioneerJeff Labs | https://github.com/pioneerjeff-labs/emotion-engine | vendored affect engine |
 | EmoSense-ID classifier | see model card | Aardiiiiy | https://huggingface.co/Aardiiiiy/EmoSense-ID-Indonesian-Emotion-Classifier | calibration reference only |

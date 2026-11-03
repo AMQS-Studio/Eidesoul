@@ -1,4 +1,4 @@
-> Terjemahan turunan — jangan sunting; sumber: engine/0007-capability-authorization.md (sha256: bee8b3bf95ee)
+> Terjemahan turunan — jangan sunting; sumber: engine/0007-capability-authorization.md (sha256: 4c2c36c0a238)
 > Teks ini ditulis manusia; baris yang tidak bisa diterjemahkan mesin disalin apa adanya ke sumber English, jadi sumber bercampur dua bahasa.
 
 # ADR-0007: Capability vs Authorization — Tiga Kelas Izin dan Approval sebagai Kelanjutan Izin Tool
@@ -152,16 +152,16 @@ kalau tidak, tidak ada pembacaan dan tidak ada kiriman. Tidak pernah ditebak dar
 
 | Lapis | Sumber | Sifat |
 |---|---|---|
-| 1 | Kapabilitas gateway `participants(chat_id) -> set[person_id] \| None` (`None` = tidak tahu) | **Otoritatif**: fakta transport, milik gateway. Bila ia menjawab dan penanya tidak ada → **tolak**, apa pun kata lapis 2 |
+| 1 | Kapabilitas gateway `participants(thread_id) -> set[person_id] \| None` (`None` = tidak tahu) | **Otoritatif**: fakta transport, milik gateway. Bila ia menjawab dan penanya tidak ada → **tolak**, apa pun kata lapis 2 |
 | 2 | Presence tercatat (`HistoryStore.rooms_of(person_id)`): `messages.sender_id` di chat itu ∪ `memories.owner_id/subject_id` di chat itu | Fallback netral: hanya dipakai saat gateway tidak tahu (mis. console/CLI). Lebih lemah — orang yang sudah keluar grup masih terlihat ada |
 
 - **Fail closed**: presence tidak terbukti dari lapis mana pun → tolak.
 - **Tanpa override**: `memory_admin` tidak bisa membaca room yang ia sendiri tidak masuki.
-- Seam core: `HistoryStore.recent_chats()` (`stores/history.py:343-352`) memberi daftar `chat_id`,
+- Seam core: `HistoryStore.recent_chats()` (`stores/history.py:343-352`) memberi daftar `thread_id`,
   dan pola turunan person→room sudah ada di `_chats(db, person_id)` (`memory/rekey.py:91`); yang
   baru hanya `rooms_of(person_id)` sebagai irisan eksplisit untuk penanya.
-- `chat_id` tetap opak; **nama** room hanya datang dari `gateway.chat_name()`
-  (`tools/chat_history.py:112`). Gateway tetap appendage: ia memberi label dan fakta keanggotaan,
+- `thread_id` tetap opak; **nama** room hanya datang dari `gateway.chat_name()`
+  (`gateways/whatsapp/tools/chat_history.py`). Gateway tetap appendage: ia memberi label dan fakta keanggotaan,
   bukan aturan izin. Aturannya tetap di core.
 
 Catatan: scope `person` tidak butuh keanggotaan — memori itu ikut orangnya. Keanggotaan hanya
@@ -220,7 +220,7 @@ blok tetap ditambahkan; bila model mencoba memalsukan `author` atau menghapus pe
 (pelaku, tujuan, kelas, alasan). Penanya **tidak menerima balasan** dari room yang bukan ruangnya, dan
 soul mengatakan itu apa adanya bila ditanya. Isi kiriman tunduk pada ceiling room tujuan dan guard
 `cross_chat_leak`: fakta tentang orang lain di atas ceiling tidak boleh ikut; fakta tentang diri
-penanya sendiri boleh. Langkah otomasi `send` (ADR-0014) memakai aturan yang sama, dengan `owner`
+penanya sendiri boleh. Langkah otomasi `send` (ADR-0014) memakai aturan yang sama, dengan `administrator`
 sebagai `author`.
 
 **Isi kiriman tunduk pada ceiling room tujuan.** Guard `cross_chat_leak` diperluas ke keluaran `send`,
@@ -261,8 +261,8 @@ tidak kaku, tanpa mengorbankan invariant.
   penolakan tool yang perlu teks deterministik. Command deterministik yang hidup tanpa LLM
   (`/help`, `/memori`, `/status`, `/cari`) tidak ada yang membaca lintas room, jadi tidak ada string
   chat yang perlu ditulis di kode maupun di katalog.
-- **Konsisten dengan jalur lain:** permintaan yang sama lewat `memory` (scope `chat` room lain) juga
-  ditolak, karena scope `chat` hanya dibaca di room-nya (ADR-0006 §4.4). Satu perilaku, dua pintu.
+- **Konsisten dengan jalur lain:** permintaan yang sama lewat `memory` (scope `thread` room lain) juga
+  ditolak, karena scope `thread` hanya dibaca di room-nya (ADR-0006 §4.4). Satu perilaku, dua pintu.
 
 ### 4.7 Approval: sensitivitas menentukan *adanya* approval, target menentukan *kelasnya*
 
@@ -287,7 +287,7 @@ Syarat `consent` adalah **bukti**, bukan niat baik:
 
 - `scope_proof` dihitung deterministik saat request — daftar target aksi (path, room, kolom) + snapshot roots role penanya — dan **dicocokkan ulang saat eksekusi**; bila role berubah sehingga jangkauan meluas, approval naik ke `authorization` atau ditolak, tidak pernah dieksekusi diam-diam.
 - Pesan approval memuat ringkasan target ter-resolve ("12 berkas di `scratch/<chat>`; `public` read-only") dan dikirim **di DM penanya**, bukan di grup; untuk `authorization`, pesan menyebut penanya dan artefaknya ("Si ingin menambahkan…").
-- `/approve` untuk `consent` mewajibkan `sender == requester` dan `chat_id` sama; untuk `authorization` butuh role approver. Tidak ada jalur "menyetujui milik orang lain".
+- `/approve` untuk `consent` mewajibkan `sender == requester` dan `thread_id` sama; untuk `authorization` butuh role approver. Tidak ada jalur "menyetujui milik orang lain".
 - `mode` tetap berlaku: `yolo` (default) tidak memakai approval; `off` mematikan; `strict` memakai kelas di atas, bukan "semua ke administrator".
 - Izin tool tetap diperiksa ulang saat eksekusi (kelas approval tidak menambah izin apa pun).
 
@@ -375,7 +375,7 @@ peran. Implementasi menyusul di `chat_history`/`send` dengan satu helper bersama
 - [ ] `global` tetap butuh `memory_admin` di tool dan command.
 - [ ] `level >= ask_level` tetap butuh `confirmed=true`; di grup jadi `pending` (ADR-0006).
 - [ ] Export memori butuh `memory_admin` + approval + audit, dan menolak L4/kredensial.
-- [ ] `HistoryStore.search` menerapkan ceiling `visibility` saat `chat_id != ctx.chat_id`; room sendiri tidak difilter.
+- [ ] `HistoryStore.search` menerapkan ceiling `visibility` saat `thread_id != ctx.thread_id`; room sendiri tidak difilter.
 - [ ] Test: baris L4 room lain tidak muncul saat dibaca dari grup, tetapi muncul saat dibaca dari DM.
 - [ ] `HistoryStore.rooms_of(person_id)` hanya mengembalikan room tempat orang itu tercatat muncul (irisan `messages.sender_id` dan `memories.owner_id/subject_id`).
 - [ ] Tidak ada sapuan room otomatis per turn; arsip di luar room ini hanya lewat tool call soul dan dibatasi `max_rooms_per_turn`.
@@ -440,13 +440,13 @@ peran. Implementasi menyusul di `chat_history`/`send` dengan satu helper bersama
 - `eidesoul/engine/guard/policy.py:105-215` — `sensitive_tools`, destructive actions, shell scan.
 - `eidesoul/engine/memory/mem0.py:476-530` — `forget`, `set_privacy`, `veto`.
 - `eidesoul/engine/roles.py:18-28,100-116` — `Role` (tanpa flag room; keanggotaan dihitung saat dipakai).
-- `eidesoul/engine/tools/chat_history.py:66-110` — baca room lain + buffer `cross_reads` untuk guard kebocoran.
+- `eidesoul/gateways/whatsapp/tools/chat_history.py` — baca room lain + buffer `cross_reads` untuk guard kebocoran.
 - `eidesoul/engine/tools/settings.py:294-413` — approval untuk perubahan internal.
 - `eidesoul/engine/stores/documents.py:137` — `export_to_files` (mirror dokumen config).
 - `eidesoul/engine/stores/history.py:318-352` — `search` (tempat ceiling `visibility` dipasang) dan `recent_chats`.
-- `eidesoul/engine/tools/chat_history.py:75-129` — `chat_history` dan pemisahan room ini vs room lain.
+- `eidesoul/gateways/whatsapp/tools/chat_history.py` — `chat_history` dan pemisahan room ini vs room lain.
 - `eidesoul/engine/memory/rekey.py:83-97` — pola `_chats(db, person_id)` untuk `rooms_of(person_id)`.
-- `eidesoul/engine/inbound.py:29-70` — kontrak `Gateway` (tempat kapabilitas `participants(chat_id)` ditambahkan, opsional).
+- `eidesoul/engine/inbound.py:29-70` — kontrak `Gateway` (tempat kapabilitas `participants(thread_id)` ditambahkan, opsional).
 - `eidesoul/engine/context.py:72-81,288-300` — `clamp_visibility`, `entry_tag`, `set_visibility`.
 - `eidesoul/engine/config.py:148-152` — `ApprovalConfig` (mode, ttl, settings).
 - `eidesoul/engine/prompts.py:195-355` — `system_prompt` (tempat aturan “di luar jangkauan → tolak singkat, jangan berspekulasi”).

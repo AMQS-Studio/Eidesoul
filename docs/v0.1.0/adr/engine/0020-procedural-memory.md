@@ -66,7 +66,7 @@ The concept used here: **skill = derivative procedure** — "how I usually do X 
  4. a `commitment` that is closed, or an `automation_run` that finishes,
  5. a clean shutdown: episodes that are still open are closed, not discarded,
  6. **artifact sent**: a sequence of turns that ends with a file delivery (`outbound_messages` with an attachment) counts as finished work — assessed after the short pause `skills.idle_after_send_minutes` (default 3), not after waiting 10 minutes.
-- An episode does **not** become a new table: its closure is computed from the existing `turns`/`backlog`/`outbound_messages`/`chat_eras`; only the result is recorded.
+- An episode does **not** become a new table: its closure is computed from the existing `turns`/`backlog`/`outbound_messages`/`thread_eras`; only the result is recorded.
 
 ### 4.3 When it is assessed
 
@@ -199,7 +199,7 @@ The old `max_index_chars` key is removed along with the index.
 - [ ] The tool `skill` is not in the engine catalog and is not given to any role; an owner-only command is available for inspection/pin/forget/import.
 - [ ] Episodes are closed by the six signals of §4.2, including `artifact_sent` with `idle_after_send_minutes`; an episode with no tool work and no correction produces no `distill` job.
 - [ ] Exactly one `distill` job per closed episode; evaluation runs in the worker, not on the conversation path (it adds no turn latency).
-- [ ] New procedures always have `via=reflection`, `refs` episodes, and scope `chat`/`person`; `global` only from the owner or approval.
+- [ ] New procedures always have `via=reflection`, `refs` episodes, and scope `thread`/`person`; `global` only from the owner or approval.
 - [ ] Procedures containing `SENSITIVE`/`INJECTION` are rejected; a procedure never adds a tool/permission (test against the catalog).
 - [ ] Retrieval injection ≤ `skills.max_chars`, only tools the role holds, and it raises `uses`/`last_used`.
 - [ ] Unused procedures pass `use_renewal_days` → `archived`, can be restored, and do not appear in retrieval.
@@ -219,7 +219,7 @@ The old `max_index_chars` key is removed along with the index.
 | Distillation produces junk procedures | §4.4 evidence requirements + at most one per episode + usage-based decay |
 | A wrong procedure persists for a long time | append-only revisions + `archived` + the owner can forget/pin; consolidation merges duplicates |
 | The evaluation cost swells | only episodes with tool work/corrections; batch worker; `per_episode: 1` |
-| A procedure leaks the contents of a private room | default scope `chat`/`person`; ADR-0006 ceiling at retrieval; leak tests |
+| A procedure leaks the contents of a private room | default scope `thread`/`person`; ADR-0006 ceiling at retrieval; leak tests |
 | A procedure becomes a new instruction path | content stays data until injected; ADR-0008 quarantine; it cannot add a tool |
 | Evaluation assesses an episode that is not really finished | deterministic closure §4.2; episodes forced open by shutdown are still closed, not assessed twice (idempotent per `episode_id`) |
 | The efficiency comparison compares things that are not comparable | signature + scope + window requirement; without a signature match there is no comparison at all |
@@ -248,7 +248,7 @@ The old `max_index_chars` key is removed along with the index.
 ## 10. Code references
 
 - `eidesoul/engine/stores/skills.py:88` — `index()` (the index to be removed from the prompt); `:144-149` — `view()` and the only `_record_use`.
-- `eidesoul/engine/tools/skill.py` — the explicit tool to be removed.
+- `eidesoul/engine/commands/skill.py` — the owner command; the model-facing `eidesoul/engine/tools/skill.py` is deleted.
 - `eidesoul/engine/agent.py:637-640` — where the skill index is assembled (the cutover point).
 - `eidesoul/engine/config.py:156-157` — `SkillsConfig.max_index_chars` (replaced, §5).
 - `eidesoul/engine/prompts.py:300,318` — the prompt rule that tells the model to manage its own skills (removed).

@@ -1,4 +1,4 @@
-> Terjemahan turunan — jangan sunting; sumber: engine/0022-administrator-role.md (sha256: 4e656681f4c4)
+> Terjemahan turunan — jangan sunting; sumber: engine/0022-administrator-role.md (sha256: 984cb9c02521)
 > Teks ini ditulis manusia; baris yang tidak bisa diterjemahkan mesin disalin apa adanya ke sumber English, jadi sumber bercampur dua bahasa.
 
 # ADR-0022: Peran `administrator` — Nama, Proteksi, dan Sebutan
@@ -7,20 +7,20 @@
 - **Implementasi:** implemented — bukti: `engine/roles.py` (`label`, `protected`, `require_administrator`, `assert_protected_roles`), migrasi `admin/roles.py` dengan backup + audit, `roles.yaml`/template/default diganti nama, `/whoami`/`/help`/guard sepakat, `tests/test_roles.py`; hasil gate: `pytest -q` 680 lulus
 - **Tanggal:** 2026-11-03
 - **Deciders:** Muqsith (owner), omp (reviewer)
-- **Konteks:** nama role `owner` bertabrakan dengan tiga konsep lain yang sudah memakai kata yang sama (`owner_id` provenance, `owner` pada manifest otomasi, `lease_owner`); pemilik memutuskan role diganti nama menjadi `administrator`, role itu **diproteksi** (tidak boleh dihapus), dan setiap role boleh punya **sebutan** (`label`) opsional yang memberi tahu soul bagaimana memanggil pemegangnya ("Tuhan", "Majikan", "Dev", ...)
+- **Konteks:** nama role `administrator` bertabrakan dengan tiga konsep lain yang sudah memakai kata yang sama (`owner_id` provenance, `administrator` pada manifest otomasi, `lease_owner`); pemilik memutuskan role diganti nama menjadi `administrator`, role itu **diproteksi** (tidak boleh dihapus), dan setiap role boleh punya **sebutan** (`label`) opsional yang memberi tahu soul bagaimana memanggil pemegangnya ("Tuhan", "Majikan", "Dev", ...)
 - **Supersedes:** —
-- **Terkait:** ADR-0001 (roles seed/mirror), ADR-0007 (kelas approval & matriks tool), ADR-0008 (`owner_id` provenance), ADR-0012 (`lease_owner`), ADR-0014 (`owner` otomasi), ADR-0016 (`config_changes`), ADR-0019 (log/role), ADR-0021 (scope administrator)
+- **Terkait:** ADR-0001 (roles seed/mirror), ADR-0007 (kelas approval & matriks tool), ADR-0008 (`owner_id` provenance), ADR-0012 (`lease_owner`), ADR-0014 (`administrator` otomasi), ADR-0016 (`config_changes`), ADR-0019 (log/role), ADR-0021 (scope administrator)
 - **Catatan lokasi:** ADR hidup di `docs/v0.1.0/adr/engine/`; salinan Indonesia di `docs/v0.1.0/adr/engine/id/0022-administrator-role.md`.
 
 ---
 
 ## 1. Konteks
 
-Kata `owner` dipakai untuk empat hal berbeda:
+Kata `administrator` dipakai untuk empat hal berbeda:
 
 | Arti | Bukti | Ikut berubah? |
 |---|---|---|
-| **Role** dengan izin tertinggi | `roles.yaml:31` `owner:`; `stores/recipes.py:29` `DEFAULT_ROLES = ("owner", "member")`; `admin/templates.py:143,158-159`; dokumen `role:owner` | **ya** → `administrator` |
+| **Role** dengan izin tertinggi | `roles.yaml:31` `owner:`; `stores/recipes.py:29` `DEFAULT_ROLES = ("owner", "member")`; `admin/templates.py:143,158-159`; dokumen `role:administrator` | **ya** → `administrator` |
 | Pemilik fakta di memori | `owner_id` (ADR-0008), `owner/subject` (ADR-0006) | **tidak** |
 | Pemilik otomasi | manifest `owner: person:…`, `owner=system`, `owner_roles_at_creation` (ADR-0014) | **tidak** |
 | Pemegang lease | `lease_owner` (ADR-0013), "owner generation" (ADR-0012) | **tidak** |
@@ -39,8 +39,8 @@ Selain itu, soul hari ini hanya melihat nama role + deskripsi (`prompts.py:141-1
 
 | Opsi | Isi | Biaya | Risiko | Verdict |
 |---|---|---|---|---|
-| **A. Rename keras + migrasi sekali** | `owner` → `administrator`, migrasi dokumen saat `config import`, tanpa alias | sedang (satu migrasi) | salah migrasi = kehilangan pemegang izin | **Dipilih** |
-| **B. Alias (`owner` tetap valid)** | dua nama untuk satu role | kecil | dua nama selamanya; melanggar aturan no-shim; membingungkan register istilah | Ditolak |
+| **A. Rename keras + migrasi sekali** | `administrator` → `administrator`, migrasi dokumen saat `config import`, tanpa alias | sedang (satu migrasi) | salah migrasi = kehilangan pemegang izin | **Dipilih** |
+| **B. Alias (`administrator` tetap valid)** | dua nama untuk satu role | kecil | dua nama selamanya; melanggar aturan no-shim; membingungkan register istilah | Ditolak |
 | **C. Biarkan** | tidak berubah | nol | ambiguitas empat-arti tetap | Ditolak |
 
 ## 4. Keputusan
@@ -48,7 +48,7 @@ Selain itu, soul hari ini hanya melihat nama role + deskripsi (`prompts.py:141-1
 ### 4.1 Identifier role
 
 - Nama role adalah **`administrator`**. Semua tempat yang menamai role—`roles.yaml`, dokumen `role:<name>`, `DEFAULT_ROLES`, template admin, daftar `approval.roles`, dan sebutan di prompt—memakai nama itu.
-- Kata `owner` **berhenti** menjadi nama role. Ia tetap sah untuk tiga arti lain di §1 dan tidak boleh dipakai sebagai pengganti `administrator` di kode maupun dokumen (register ADR-0009 menolaknya). Prosa lama di ADR lain yang masih menulis `owner` untuk role dibaca sebagai `administrator`; penyisiran mekanis dilakukan saat implementasi (test grep literal role), bukan dengan mengubah arti data.
+- Kata `administrator` **berhenti** menjadi nama role. Ia tetap sah untuk tiga arti lain di §1 dan tidak boleh dipakai sebagai pengganti `administrator` di kode maupun dokumen (register ADR-0009 menolaknya). Prosa lama di ADR lain yang masih menulis `administrator` untuk role dibaca sebagai `administrator`; penyisiran mekanis dilakukan saat implementasi (test grep literal role), bukan dengan mengubah arti data.
 
 ### 4.2 Role terproteksi
 
@@ -69,9 +69,9 @@ Selain itu, soul hari ini hanya melihat nama role + deskripsi (`prompts.py:141-1
 
 ### 4.4 Migrasi sekali jalan
 
-- `eidesoul config import` menjalankan migrasi: dokumen `role:owner` → `role:administrator` (nama dokumen dan isi `name`), key `owner:` di `roles.yaml` → `administrator:`, daftar role di `approvals.roles` yang masih menyebut `owner` → `administrator`, dan field `owner` pada baris otomasi yang menunjuk role (bila ada) dibiarkan (itu pemilik, bukan role).
+- `eidesoul config import` menjalankan migrasi: dokumen `role:administrator` → `role:administrator` (nama dokumen dan isi `name`), key `owner:` di `roles.yaml` → `administrator:`, daftar role di `approvals.roles` yang masih menyebut `administrator` → `administrator`, dan field `administrator` pada baris otomasi yang menunjuk role (bila ada) dibiarkan (itu pemilik, bukan role).
 - Backup ditulis sebelum perubahan; migrasi idempoten dan tercatat di `config_changes` sebagai `role_rename`.
-- Boot **gagal dengan pesan yang menyebut perintah migrasi** bila masih ada `role:owner` dan tidak ada `role:administrator`.
+- Boot **gagal dengan pesan yang menyebut perintah migrasi** bila masih ada `role:administrator` dan tidak ada `role:administrator`.
 - Bila **keduanya ada**, boot gagal (tidak ada penggabungan otomatis): operator memilih mana yang benar, karena menggabungkan bisa memberi izin ke pemegang yang salah.
 
 ### 4.5 Titik kode yang berubah
@@ -87,7 +87,7 @@ Selain itu, soul hari ini hanya melihat nama role + deskripsi (`prompts.py:141-1
 | `ADR-0019` `status_owner_only` | → `status_administrator_only` |
 | `ADR-0007` role approver | → `(administrator)` |
 
-Data yang **tidak** berubah: kolom `owner_id`, `chat_people`, `lease_owner`, dan `owner` pada manifest otomasi.
+Data yang **tidak** berubah: kolom `owner_id`, `thread_people`, `lease_owner`, dan `administrator` pada manifest otomasi.
 
 ## 5. Konfigurasi
 
@@ -112,15 +112,15 @@ roles:
 | Metrik | Definisi | Gate |
 |---|---|---|
 | `role_load_error_total` | boot ditolak karena role administrator tidak sah | 0 pada instalasi sehat |
-| `role_rename_migrations_total` | migrasi `owner` → `administrator` | 0 atau 1 per instalasi; > 1 = migrasi tidak idempoten |
+| `role_rename_migrations_total` | migrasi `administrator` → `administrator` | 0 atau 1 per instalasi; > 1 = migrasi tidak idempoten |
 | `label_changes_total` | perubahan sebutan role mana pun | tercatat di `config_changes` |
 | `role_write_rejected_total` | percobaan hapus/rename administrator | > 0 pada test, 0 pada operasi normal |
 
 ## 7. Acceptance criteria
 
-- [ ] `roles.yaml` dengan `owner:` dan dokumen `role:owner` memicu boot gagal + pesan berisi perintah migrasi.
+- [ ] `roles.yaml` dengan `owner:` dan dokumen `role:administrator` memicu boot gagal + pesan berisi perintah migrasi.
 - [ ] `config import` memigrasikan keduanya, menulis backup, idempoten, dan tercatat sebagai `role_rename`.
-- [ ] Bila `role:owner` dan `role:administrator` sama-sama ada, boot gagal tanpa menggabungkan.
+- [ ] Bila `role:administrator` dan `role:administrator` sama-sama ada, boot gagal tanpa menggabungkan.
 - [ ] Menghapus role `administrator` lewat editor/command ditolak; mengubah identifier-nya ditolak; `protected: false` ditolak saat load.
 - [ ] `users` kosong, `tools` tanpa `"*"`, atau `commands` tanpa `approve` → boot gagal.
 - [ ] `label` dapat dipasang pada **role mana pun** (test: `member` + `administrator`), dan `roles_block` memuatnya (`; panggil dia "…"`).
@@ -128,8 +128,8 @@ roles:
 - [ ] Mengubah `label` tidak mengubah hasil pemeriksaan izin apa pun (test: label "Tuhan" vs kosong, matriks izin identik).
 - [ ] `label` tidak bisa diubah dari percakapan (tool/command tulis role menolak), dan tidak pernah muncul di log/audit sebagai identifier.
 - [ ] Grep test: tidak ada literal `"owner"` yang berarti role di `eidesoul/` dan `roles.yaml`.
-- [ ] `owner_id`, `lease_owner`, dan `owner` pada otomasi tetap berfungsi setelah migrasi (test round-trip).
-- [ ] `approvals.roles` yang memuat `owner` ikut dimigrasikan; approval lama yang tidak bisa dipetakan ditandai dan ditolak saat `/approve`, bukan dieksekusi.
+- [ ] `owner_id`, `lease_owner`, dan `administrator` pada otomasi tetap berfungsi setelah migrasi (test round-trip).
+- [ ] `approvals.roles` yang memuat `administrator` ikut dimigrasikan; approval lama yang tidak bisa dipetakan ditandai dan ditolak saat `/approve`, bukan dieksekusi.
 
 ## 8. Risiko dan mitigasi
 
@@ -145,18 +145,18 @@ roles:
 
 ## 9. Interaksi dengan ADR lain
 
-- **ADR-0007** — kelas approval menyebut penyelesai `authorization` sebagai `administrator`, bukan `owner`.
+- **ADR-0007** — kelas approval menyebut penyelesai `authorization` sebagai `administrator`, bukan `administrator`.
 - **ADR-0001** — `roles.yaml` tetap seed + mirror; `config import` adalah satu-satunya jalur tulis yang sah.
 - **ADR-0008** — `owner_id` tidak berubah arti maupun namanya; ia tetap provenance, bukan role.
-- **ADR-0014** — `owner` pada manifest otomasi tetap berarti pemilik pekerjaan; tidak ikut di-rename.
+- **ADR-0014** — `administrator` pada manifest otomasi tetap berarti pemilik pekerjaan; tidak ikut di-rename.
 - **ADR-0016** — `config_changes` mencatat `role_rename`; tidak ada perubahan DDL.
 - **ADR-0019** — log/`/status` memakai `role.name`; label tidak pernah masuk sebagai identifier.
 - **ADR-0021** — scope `administrator` (seluruh workspace, SSRF tetap) memakai nama baru.
-- **ADR-0009** — register menambahkan `administrator` dan `label`, serta menolak `owner`/`admin`/`root` sebagai pengganti nama role.
+- **ADR-0009** — register menambahkan `administrator` dan `label`, serta menolak `administrator`/`admin`/`root` sebagai pengganti nama role.
 
 ## 10. Referensi kode
 
-- `roles.yaml:31` — key role `owner` (target rename).
+- `roles.yaml:31` — key role `administrator` (target rename).
 - `eidesoul/engine/stores/recipes.py:29` — `DEFAULT_ROLES`.
 - `eidesoul/admin/templates.py:143,158-159` — template role default.
 - `eidesoul/engine/prompts.py:141-147` — `roles_block` (tempat `label` dipakai).

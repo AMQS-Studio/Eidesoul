@@ -1,4 +1,4 @@
-> Terjemahan turunan — jangan sunting; sumber: 0028-plugin-model.md (sha256: 4a120714f48f)
+> Terjemahan turunan — jangan sunting; sumber: 0028-plugin-model.md (sha256: 6fd6670d004b)
 > Ditulis tangan (bukan mesin), mengikuti sumber English baris demi baris.
 
 # ADR-0028: Model Plugin — Satu Unit Terinstall untuk Kapabilitas Terunduh
@@ -219,7 +219,7 @@ bukan rusak.
 
 ## 10. Referensi kode
 
-- `eidesoul/engine/tools/google.py` — tool yang menjadi plugin.
+- `plugins/google/` — plugin yang menggantikan `eidesoul/engine/tools/google.py`.
 - `pyproject.toml` `[project.optional-dependencies] google` — extra yang akan dihapus (beserta `uv.lock`).
 - `eidesoul/engine/tools/__init__.py` — registry yang diberi makan loader; `execute` tetap satu-satunya cek izin.
 - `eidesoul/engine/commands/__init__.py` — registry command.

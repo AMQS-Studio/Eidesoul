@@ -1,4 +1,4 @@
-> Terjemahan turunan — jangan sunting; sumber: engine/0006-group-privacy.md (sha256: 6d3225d30e15)
+> Terjemahan turunan — jangan sunting; sumber: engine/0006-group-privacy.md (sha256: 03224bddd6cb)
 > Teks ini ditulis manusia; baris yang tidak bisa diterjemahkan mesin disalin apa adanya ke sumber English, jadi sumber bercampur dua bahasa.
 
 # ADR-0006: Privasi Grup & Pre-Filter — Ceiling Sebelum Prompt, Capture Diri-Sendiri
@@ -11,7 +11,7 @@
 - **Supersedes:** —
 - **Terkait:** ADR-0003 (worker), ADR-0007 (capability vs authorization), ADR-0008 (integritas), ADR-0011 (crash safety)
 - **Catatan lokasi:** ADR hidup di `docs/v0.1.0/adr/engine/`; salinan Indonesia di `docs/v0.1.0/adr/engine/id/0006-group-privacy.md`.
-- **Amandemen:** 2026-11-02 — normalisasi kerangka (ADR-0009 §4.4): Konfigurasi dipromosikan dari subbagian 4.5 ke bagian 5; bagian sesudahnya bergeser. 2026-11-03 — audit: daftar pemanggil `PrivacyPolicy` dilengkapi (jalur review auditor, `engine/privacy.py:160,192`), bukan hanya tool dan command. 2026-11-03 — audit: rentang `capture_turn`/`_assess`/`render` diselaraskan dengan `def` aktual di repo. 2026-11-03 — rename ADR-0000 §4.4: chat_id → thread_id, chats/chat_eras/chat_people → threads/thread_eras/thread_people, scope 'chat' → 'thread'.
+- **Amandemen:** 2026-11-02 — normalisasi kerangka (ADR-0009 §4.4): Konfigurasi dipromosikan dari subbagian 4.5 ke bagian 5; bagian sesudahnya bergeser. 2026-11-03 — audit: daftar pemanggil `PrivacyPolicy` dilengkapi (jalur review auditor, `engine/privacy.py:160,192`), bukan hanya tool dan command. 2026-11-03 — audit: rentang `capture_turn`/`_assess`/`render` diselaraskan dengan `def` aktual di repo. 2026-11-03 — rename ADR-0000 §4.4: thread_id → thread_id, chats/thread_eras/thread_people → threads/thread_eras/thread_people, scope 'chat' → 'thread'.
 
 ---
 

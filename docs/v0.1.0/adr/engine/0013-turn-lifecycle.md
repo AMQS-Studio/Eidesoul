@@ -62,7 +62,7 @@ No other alternative was recorded when the decision was made; the option taken, 
 ```sql
 turns(
  id text primary key, -- incoming message_id (idempotency key)
- chat_id text not null,
+ thread_id text not null,
  person_id text not null,
  status text not null, -- received|running|sending|delivered|interrupted|expired
  step text not null, -- received|decided|drafted|reviewed|sending|delivered
@@ -97,7 +97,7 @@ outbound_messages(
  scope_key text not null, -- turn:<turn_id> | automation:<run_id>
  chunk_index int not null,
  gateway text not null,
- chat_id text not null,
+ thread_id text not null,
  provider_id text not null default '',
  status text not null, -- intent|sent|unknown
  generation bigint not null default 0,
@@ -124,7 +124,7 @@ outbound_messages(
 `/stop` cancels **the task currently running in this room** — not killing the instance, not
 silencing the room.
 
-- **Scope:** `(chat_id, running task/episode)`; a turn in another room is untouched, and there is no cross-room `/stop`.
+- **Scope:** `(thread_id, running task/episode)`; a turn in another room is untouched, and there is no cross-room `/stop`.
 - **Effect:** the `handle()` task is cancelled, typing stops, a turn that is not yet `delivered` is marked
 `interrupted` with reason `user_stop`, and **one** notice from the catalog. A delivery that has already been sent
 is not withdrawn and stays recorded in the ledger.

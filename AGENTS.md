@@ -22,6 +22,9 @@ Hard rules for changes in this repo.
   (cross-cutting), under `engine/`, or under `web/`; each folder keeps its Indonesian copies in its own
   `id/` subfolder. Do not create other tracked `.md` files. The ADR gate is
   `python scripts/adr.py --check`.
+- Allowed root trees are `docs/`, `scripts/`, `tests/`, `migrations/`, `plugins/`, and `panel/`
+  (the operator app). Schema changes live only in `migrations/`; the engine may hold
+  `components.py` (plugin loader) and `self_knowledge.py` (capability index) beside its other modules.
 - Core lives in `eidesoul/engine/` and must not import `eidesoul.gateways` or `neonize`.
   Root `eidesoul/` only holds `__main__.py`, `admin/`, `gateways/`, `library/`, `lang/`, `providers/`,
   `vendor/`.
@@ -99,13 +102,14 @@ Hard rules for changes in this repo.
 - Secrets only in `.env` (env names referenced from YAML); `config.yaml`, `roles.yaml`, `.env`, and
   any pre-v1 runtime data directory are never committed.
 - Storage: SQLAlchemy Core + `psycopg` to Postgres; one `Database` (`eidesoul/engine/db.py`) and one
-  `MetaData` (`eidesoul/engine/schema.py`). No `sqlite3`, `PRAGMA`, FTS5, or state files in stores;
-  SQLite is only a test URL. A library cache under the workspace (currently Mem0's
-  `mem0_history.db`, ADR-0001) is derived: never read by the engine for truth, safe to lose.
+  `MetaData` (`eidesoul/engine/schema.py`). No `sqlite3`, `PRAGMA`, FTS5, or state files in stores.
+  Schema changes go through the Alembic chain in `migrations/` (`db upgrade`, primary-only);
+  `create_all` is for an empty database and tests only. A library cache under the workspace (currently
+  Mem0's `mem0_history.db`, ADR-0001) is derived: never read by the engine for truth, safe to lose.
   A gateway session file (`gateways/whatsapp` `session_db`, default `.eidesoul/whatsapp.db`) is a
   host-local protocol artifact: one per instance, never shared, never read by the engine (contact
-  import is read-only), and losing it costs a re-pair, not data. `SCHEMA_VERSION` starts at 1.
-  Message history is never there: it lives in Postgres (`messages`, `chats`, `chat_people`).
+  import is read-only), and losing it costs a re-pair, not data. `SCHEMA_VERSION` mirrors the Alembic
+  head. Message history is never there: it lives in Postgres (`messages`, `threads`, `thread_people`).
 - Any `pyproject.toml` change ships with a regenerated `uv.lock` in the same commit: the image runs
   `uv sync --locked`, which fails on a stale lock even when only the `dev` extra moved.
 
@@ -152,8 +156,13 @@ Hard rules for changes in this repo.
 
 ## Memory and privacy
 
-- Cross-chat identity: query only `global` + `person:<sender>` + `chat:<this chat>`; another person's
-  private memory is never queried and must not leak into another chat.
+- Postgres is the memory system of record (`memories`, `memory_events`, `memory_uses`,
+  `memory_tombstones`, `memory_index`); Mem0 is the extractor and vector index behind the port, never
+  the store of truth. `MemoryStore` (`eidesoul/engine/memory/store.py`) is the single write port, and
+  reads for prompts go through `memories_readable` only. The state machine is
+  `pending|ok|staged|failed|not_worth|superseded`, with `level NULL` meaning "must not be used".
+- Cross-thread identity: query only `global` + `person:<sender>` + `thread:<this thread>`; another
+  person's private memory is never queried and must not leak into another thread.
 - Memory carries a numeric privacy level 0-4 (public, team, personal, sensitive/aib, secret).
   Level 5/credentials are never stored. `owner_id` is the speaker who stated the fact; `subject_id`
   is who it is about and only that subject may veto it. Level maths, veto precedence, and disclosure
@@ -198,5 +207,7 @@ Hard rules for changes in this repo.
 
 ## Verify
 
-- `pytest -q` and `python -m eidesoul selftest`. For gateway/lease changes also smoke
+- `pytest -q` (with `EIDESOL_TEST_DATABASE_URL` set to the throwaway Postgres+pgvector store),
+  `python -m eidesoul selftest`, `python scripts/adr.py --check`, `python scripts/adr.py
+  --translate-check`, and `python scripts/selfcheck.py --check`. For gateway/lease changes also smoke
   `eidesoul console --takeover`.

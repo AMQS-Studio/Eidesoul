@@ -18,7 +18,7 @@
 `grep -iE 'reflect|rumina'` only finds `ambient.py:1`, which mentions "summarise topics and
 research while idle". What really runs today is `Ambient` — a background loop that, when
 a chat goes idle, builds a topic digest and researches `web_search`, then writes a row
-`scope=chat, kind=note, source=ambient:<chat_id>` (`ambient.py:203-315`), and **never sends
+`scope=chat, kind=note, source=ambient:<thread_id>` (`ambient.py:203-315`), and **never sends
 a message to any chat** (`ambient.py:1-4`). ADR-0003 has already set its place: a job
 `kind=reflect` on the table `cognition_jobs`, cold path, default **hourly**, run by Worker C that
 holds the lease. The slot is empty; its shape has not been decided — until here.
@@ -250,7 +250,7 @@ an `open` dispute is left standing (not force-closed) and the question is not se
 - Visibility: `/status` shows the count of passes, writes, disputes opened/resolved/`stale`,
 and questions sent — numbers, not narratives.
 - Without an LLM (`llm is None`) reflection does not run at all; there is no fallback path that
-guesses. The deterministic layer may still be **run manually** through `scripts/reflect.py --dry-run`
+guesses. The deterministic layer is `eidesoul/engine/memory/reflect.py`; a manual CLI wrapper is not built yet.
 to inspect candidates without writing anything.
 
 ## 5. Configuration
@@ -307,7 +307,7 @@ This key is part of the `engine` document (seed `config.yaml`, mirrored in the D
 - [ ] All writes go through `MemoryStore.apply_reflection` with the idempotency key `reflect:<scope>:<window_start>`; a re-pass produces no new rows.
 - [ ] Budgets per pass and `passes_per_day` are enforced; crossing a limit stops neatly, not silently truncated.
 - [ ] `/status` shows the count of passes/writes/disputes/questions; no narrative.
-- [ ] `scripts/reflect.py --dry-run` shows candidates and the write plan **without writing anything** (read-only, pattern `scripts/ablate.py`).
+- [ ] A manual `reflect --dry-run` CLI shows candidates and the write plan **without writing anything** (read-only, pattern `scripts/ablate.py`).
 
 ## 8. Risks and mitigations
 
@@ -350,7 +350,7 @@ payload; `refs`/row ids still do not enter the user prompt.
 ## 10. Code references
 
 - `eidesoul/engine/ambient.py:1-4`, `:103-200`, `:203-315` — the idle loop that exists; the limit "never
-sends a message" and the write shape `scope=chat, kind=note, source=ambient:<chat_id>`.
+sends a message" and the write shape `scope=chat, kind=note, source=ambient:<thread_id>`.
 - `eidesoul/engine/config.py:236-252` — `AmbientConfig` (precedent for budget keys: `tick_seconds`,
 `idle_minutes`, `research_per_day`).
 - `eidesoul/engine/memory/mem0.py:340-392` — metadata path; `refs`, `derive_depth`, `dispute_state`

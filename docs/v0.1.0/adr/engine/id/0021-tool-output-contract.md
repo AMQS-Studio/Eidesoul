@@ -1,4 +1,4 @@
-> Terjemahan turunan — jangan sunting; sumber: engine/0021-tool-output-contract.md (sha256: 1acb7429e5db)
+> Terjemahan turunan — jangan sunting; sumber: engine/0021-tool-output-contract.md (sha256: 27a0d22ba0d3)
 > Teks ini ditulis manusia; baris yang tidak bisa diterjemahkan mesin disalin apa adanya ke sumber English, jadi sumber bercampur dua bahasa.
 
 # ADR-0021: Kontrak Keluaran Tool, `grep`, dan `fetch`
@@ -68,7 +68,7 @@ Biaya token yang nyata: satu berkas 300 baris ≈ 12 KB (≈3 000 token). Mencar
 ### 4.2 `grep` (family `read`)
 
 - Parameter: `pattern` (regex), `path` opsional, `glob` opsional, `mode` (`matches|count|files`), `limit` (maks 200).
-- **Root mengikuti `read`**: `workspace_roots(config, roles, chat_id)` → `public/` + `scratch/<chat>` untuk role biasa, seluruh workspace untuk role trusted. Di luar root → `PermissionError`, bukan hasil kosong.
+- **Root mengikuti `read`**: `workspace_roots(config, roles, thread_id)` → `public/` + `scratch/<chat>` untuk role biasa, seluruh workspace untuk role trusted. Di luar root → `PermissionError`, bukan hasil kosong.
 - Resolusi memakai `resolve_path` yang sudah ada (`.resolve()` + `is_relative_to`) sehingga symlink tidak bisa keluar root.
 - Menolak berkas yang juga ditolak `read` (konfigurasi host, `.env`) dan melewati berkas biner/berukuran > `max_file_bytes`.
 - Urutan hasil deterministik (path, lalu nomor baris); berhenti saat cap tercapai dan memberi `next`.

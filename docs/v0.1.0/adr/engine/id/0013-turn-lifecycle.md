@@ -1,4 +1,4 @@
-> Terjemahan turunan — jangan sunting; sumber: engine/0013-turn-lifecycle.md (sha256: 435819e8f1ac)
+> Terjemahan turunan — jangan sunting; sumber: engine/0013-turn-lifecycle.md (sha256: 50ceda923e29)
 > Teks ini ditulis manusia; baris yang tidak bisa diterjemahkan mesin disalin apa adanya ke sumber English, jadi sumber bercampur dua bahasa.
 
 # ADR-0013: Turn Lifecycle, Resume, Backlog & Notice
@@ -65,7 +65,7 @@ Tidak ada alternatif lain yang tercatat saat keputusan diambil; pilihan yang dia
 ```sql
 turns(
   id               text primary key,   -- message_id masuk (idempotency key)
-  chat_id          text not null,
+  thread_id          text not null,
   person_id        text not null,
   status           text not null,      -- received|running|sending|delivered|interrupted|expired
   step             text not null,      -- received|decided|drafted|reviewed|sending|delivered
@@ -102,7 +102,7 @@ outbound_messages(
   scope_key   text not null,      -- turn:<turn_id> | automation:<run_id>
   chunk_index int  not null,
   gateway     text not null,
-  chat_id     text not null,
+  thread_id     text not null,
   provider_id text not null default '',
   status      text not null,  -- intent|sent|unknown
   generation  bigint not null default 0,
@@ -130,7 +130,7 @@ outbound_messages(
 `/stop` membatalkan **tugas yang sedang berjalan di room ini** — bukan mematikan instance, bukan
 membisukan room.
 
-- **Scope:** `(chat_id, task/episode berjalan)`; turn di room lain tidak tersentuh, dan tidak ada `/stop`
+- **Scope:** `(thread_id, task/episode berjalan)`; turn di room lain tidak tersentuh, dan tidak ada `/stop`
   lintas room.
 - **Efek:** task `handle()` di-cancel, typing dihentikan, turn yang belum `delivered` ditandai
   `interrupted` dengan alasan `user_stop`, dan **satu** notice dari katalog. Kiriman yang sudah terkirim

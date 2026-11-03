@@ -17,8 +17,8 @@
 |---|---|
 | Message search uses `ILIKE` per term over `text`/`sender_name`, `limit` ≤ 50 | `eidesoul/engine/stores/history.py:318-347` |
 | Command `/cari` calls that store for the active room | `eidesoul/engine/commands/cari.py:25-40` |
-| Tool `chat_history` can search other rooms' archives, with the `cross_reads` buffer | `eidesoul/engine/tools/chat_history.py:60-118` |
-| Message index: `(chat_id, ts, id)` and `(sender_address)` — no text index | `eidesoul/engine/schema.py:66-67` |
+| Tool `chat_history` can search other rooms' archives, with the `cross_reads` buffer | `eidesoul/gateways/whatsapp/tools/chat_history.py` |
+| Message index: `(thread_id, ts, id)` and `(sender_address)` — no text index | `eidesoul/engine/schema.py:66-67` |
 | Memory has its own path (Mem0 + `memories_readable`), not `messages` | `eidesoul/engine/commands/memori.py:69,99`, ADR-0001 |
 | Read scope = room membership + the `visibility` gate | ADR-0007 §4.5 |
 | `pgvector` is already a precedent extension in the baseline | ADR-0001/0016 |
@@ -32,7 +32,7 @@ Two things that **do not** change with this ADR: the read scope (still room memb
 |---|---|
 | Search cost is not linear | Full-text index, not `ILIKE` over the whole table |
 | Recall for Indonesian | FTS without a dictionary + trigram as a second net |
-| Scope must not expand | The `chat_id` filter + membership stay in the same query |
+| Scope must not expand | The `thread_id` filter + membership stay in the same query |
 | Zero LLM decisions | Deterministic ranking; no model rerank |
 | One DDL owner | Derived column and index go through ADR-0016 |
 
@@ -61,7 +61,7 @@ The soul catalog can be multilingual and the engine does not choose a language f
 
 ### 4.4 Scope unchanged
 
-Message search is always restricted by `chat_id` **and** the asker's membership (`rooms_of`, ADR-0007 §4.5) plus the `visibility` gate. There is no cross-room search beyond that, including for `administrator`. Memory still goes through Mem0 + the privacy filter (ADR-0001/0008): this ADR **does not** add a second memory path and does not change `commands/memori.py`.
+Message search is always restricted by `thread_id` **and** the asker's membership (`rooms_of`, ADR-0007 §4.5) plus the `visibility` gate. There is no cross-room search beyond that, including for `administrator`. Memory still goes through Mem0 + the privacy filter (ADR-0001/0008): this ADR **does not** add a second memory path and does not change `commands/memori.py`.
 
 ### 4.5 Output follows ADR-0021
 
@@ -113,7 +113,7 @@ engine:
 |---|---|
 | The derived column adds message write cost (hot path) | Measured before/after; index filling goes through the ADR-0016 migration |
 | `simple` gives low recall for affixed languages | The trigram net closes it; `trgm_fallback_ratio` stays a metric |
-| Trigram matches across lines within the same room | Scope stays `chat_id`; there is no change in reach |
+| Trigram matches across lines within the same room | Scope stays `thread_id`; there is no change in reach |
 | The extension is unavailable on managed Postgres | Explicit boot failure; `search.fts: false` may only be chosen deliberately by the operator |
 | The index is stale after a migration | `db check` reports the schema version + the presence of the index/extension |
 
@@ -129,7 +129,7 @@ engine:
 
 - `eidesoul/engine/stores/history.py:318-347` — `search()` today (`ILIKE`, `limit` ≤ 50); the query replacement point.
 - `eidesoul/engine/commands/cari.py:25-40` — `/cari` (the only command caller of `history.search`).
-- `eidesoul/engine/tools/chat_history.py:60-118` — `_target`/`_remember_cross`/`_search` (other rooms' archives + the `cross_reads` buffer).
+- `eidesoul/gateways/whatsapp/tools/chat_history.py` — `_target`/`_remember_cross`/`_search` (other rooms' archives + the `cross_reads` buffer).
 - `eidesoul/engine/schema.py:44-67` — the `messages` table and the indexes `ix_messages_chat_ts`/`ix_messages_sender`.
 - `eidesoul/engine/commands/memori.py:69,99` — the unchanged memory path (Mem0).
 - `eidesoul/engine/config.py` — new config block `engine.search` following the `SandboxConfig`/`WebSearchConfig` pattern.

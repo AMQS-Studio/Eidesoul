@@ -1,10 +1,10 @@
-> Terjemahan turunan — jangan sunting; sumber: engine/0023-relay-consent.md (sha256: ebff5d3c4197)
+> Terjemahan turunan — jangan sunting; sumber: engine/0023-relay-consent.md (sha256: a8e2ab2c5ced)
 > Teks ini ditulis manusia; baris yang tidak bisa diterjemahkan mesin disalin apa adanya ke sumber English, jadi sumber bercampur dua bahasa.
 
 # ADR-0023: Relay Consent — Meneruskan Jawaban Pribadi ke Pihak Lain
 
 - **Status:** accepted
-- **Implementasi:** partial — ada: `relay_grants` (revisi 6), `RelayStore.ask`/`decide`/`revoke`/`check` dengan expiry + penolakan `none` + audit tanpa konten, `/approve` mencatat mode, `send_to` memeriksa grant, `tests/test_relay.py`; sisa: langkah task ADR-0014 belum memanggil `RelayStore.ask` (W6)
+- **Implementasi:** implemented — bukti: `relay_grants` (revisi 6), `RelayStore.ask`/`decide`/`revoke`/`check` dengan expiry + penolakan `none` + audit tanpa konten, `/approve` mencatat mode, `send_to` memeriksa grant, langkah `relay` ADR-0014 meminta dengan deadline run, `tests/test_relay.py`, `tests/test_automation.py`
 - **Tanggal:** 2026-11-03
 - **Deciders:** Muqsith (owner), omp (reviewer)
 - **Konteks:** manajer (A) meminta soul mengingatkan B, C, D lalu menanyakan kendala/ETA dan menawarkan bantuan; jawaban B di DM-nya adalah ruang pribadi B, sehingga meneruskannya ke A bukan urusan `cross_read` — itu **relay** yang butuh izin pemilik jawaban

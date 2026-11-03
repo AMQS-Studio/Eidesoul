@@ -1,10 +1,10 @@
-> Terjemahan turunan — jangan sunting; sumber: engine/0011-crash-safety.md (sha256: d6ec6e9bdf8d)
+> Terjemahan turunan — jangan sunting; sumber: engine/0011-crash-safety.md (sha256: ed26627f448d)
 > Teks ini ditulis manusia; baris yang tidak bisa diterjemahkan mesin disalin apa adanya ke sumber English, jadi sumber bercampur dua bahasa.
 
 # ADR-0011: Crash Safety & Durability — Antrean Transaksional, Klaim Job, Shutdown Rapi
 
 - **Status:** accepted
-- **Implementasi:** partial — ada: intake transaksional (`HistoryStore.intake`), claim/reaper turn dengan backoff + dead-letter, ledger kirim, shutdown bertahap, recovery, `tests/test_turn_shutdown.py`; sisa: claim/retry `cognition_jobs` (ADR-0003, W3) dan tulisan memori dalam transaksi intake yang sama (W3)
+- **Implementasi:** implemented — bukti: intake transaksional (`HistoryStore.intake` menulis messages+turns+kandidat memori+events+`cognition_jobs`), klaim `FOR UPDATE SKIP LOCKED`, reaper, backoff + dead-letter, ledger `outbound_messages`, shutdown bertahap, recovery, `tests/test_cognition.py`, `tests/test_turn_shutdown.py`; hasil gate: `pytest -q` 798 lulus
 - **Tanggal:** 2026-11-01
 - **Deciders:** Muqsith (owner), omp (reviewer)
 - **Konteks:** lanjutan ADR-0001 (canonical), ADR-0002 (capture), ADR-0003 (worker C/D), ADR-0004 (labeling fallback)
@@ -74,7 +74,7 @@ LIMIT :n
 
 ### 4.3 Ledger pengiriman
 
-`outbound_messages(scope_key, chunk_index, gateway, chat_id, provider_id, status)` — status `intent|sent|unknown`; `scope_key` = `turn:<id>` atau `automation:<run_id>`, sehingga kiriman otomasi memakai jalur idempotensi yang sama (detail di ADR-0013).
+`outbound_messages(scope_key, chunk_index, gateway, thread_id, provider_id, status)` — status `intent|sent|unknown`; `scope_key` = `turn:<id>` atau `automation:<run_id>`, sehingga kiriman otomasi memakai jalur idempotensi yang sama (detail di ADR-0013).
 
 ### 4.4 Shutdown rapi
 

@@ -1,4 +1,4 @@
-> Terjemahan turunan — jangan sunting; sumber: engine/0026-search.md (sha256: 1e4b12f76330)
+> Terjemahan turunan — jangan sunting; sumber: engine/0026-search.md (sha256: 7b397bad3699)
 > Teks ini ditulis manusia; baris yang tidak bisa diterjemahkan mesin disalin apa adanya ke sumber English, jadi sumber bercampur dua bahasa.
 
 # ADR-0026: Pencarian — Full-Text Pesan, Trigram, dan Scope
@@ -20,8 +20,8 @@
 |---|---|
 | Pencarian pesan memakai `ILIKE` per term atas `text`/`sender_name`, `limit` ≤ 50 | `eidesoul/engine/stores/history.py:318-347` |
 | Command `/cari` memanggil store itu untuk room aktif | `eidesoul/engine/commands/cari.py:25-40` |
-| Tool `chat_history` bisa menelusuri arsip room lain, dengan buffer `cross_reads` | `eidesoul/engine/tools/chat_history.py:60-118` |
-| Index pesan: `(chat_id, ts, id)` dan `(sender_address)` — tidak ada index teks | `eidesoul/engine/schema.py:66-67` |
+| Tool `chat_history` bisa menelusuri arsip room lain, dengan buffer `cross_reads` | `eidesoul/gateways/whatsapp/tools/chat_history.py` |
+| Index pesan: `(thread_id, ts, id)` dan `(sender_address)` — tidak ada index teks | `eidesoul/engine/schema.py:66-67` |
 | Memori punya jalur sendiri (Mem0 + `memories_readable`), bukan `messages` | `eidesoul/engine/commands/memori.py:69,99`, ADR-0001 |
 | Scope baca = keanggotaan room + gerbang `visibility` | ADR-0007 §4.5 |
 | `pgvector` sudah jadi preseden extension di baseline | ADR-0001/0016 |
@@ -35,7 +35,7 @@ Dua hal yang **tidak** berubah oleh ADR ini: scope baca (tetap keanggotaan room,
 |---|---|
 | Biaya pencarian tidak linear | Full-text index, bukan `ILIKE` penuh tabel |
 | Recall untuk bahasa Indonesia | FTS tanpa kamus + trigram sebagai jaring kedua |
-| Scope tidak boleh melebar | Filter `chat_id` + keanggotaan tetap di query yang sama |
+| Scope tidak boleh melebar | Filter `thread_id` + keanggotaan tetap di query yang sama |
 | Nol keputusan LLM | Ranking deterministik; tanpa rerank model |
 | Satu pemilik DDL | Kolom turunan dan index lewat ADR-0016 |
 
@@ -64,7 +64,7 @@ Katalog soul bisa multi-bahasa dan engine tidak memilih bahasa untuk operator. K
 
 ### 4.4 Scope tidak berubah
 
-Pencarian pesan selalu dibatasi `chat_id` **dan** keanggotaan penanya (`rooms_of`, ADR-0007 §4.5) beserta gerbang `visibility`. Tidak ada pencarian lintas room di luar itu, termasuk untuk `administrator`. Memori tetap lewat Mem0 + filter privasi (ADR-0001/0008): ADR ini **tidak** menambah jalur memori kedua dan tidak mengubah `commands/memori.py`.
+Pencarian pesan selalu dibatasi `thread_id` **dan** keanggotaan penanya (`rooms_of`, ADR-0007 §4.5) beserta gerbang `visibility`. Tidak ada pencarian lintas room di luar itu, termasuk untuk `administrator`. Memori tetap lewat Mem0 + filter privasi (ADR-0001/0008): ADR ini **tidak** menambah jalur memori kedua dan tidak mengubah `commands/memori.py`.
 
 ### 4.5 Keluaran mengikuti ADR-0021
 
@@ -116,7 +116,7 @@ engine:
 |---|---|
 | Kolom turunan menambah biaya tulis pesan (hot path) | Diukur sebelum/sesudah; pengisian index lewat migrasi ADR-0016 |
 | `simple` memberi recall rendah untuk bahasa berimbuhan | Trigram menutup; `trgm_fallback_ratio` jadi metrik tetap |
-| Trigram mencocokkan lintas baris di dalam room yang sama | Scope tetap `chat_id`; tidak ada perubahan jangkauan |
+| Trigram mencocokkan lintas baris di dalam room yang sama | Scope tetap `thread_id`; tidak ada perubahan jangkauan |
 | Extension tidak tersedia di Postgres terkelola | Boot gagal eksplisit; `search.fts: false` hanya boleh dipilih sadar oleh operator |
 | Index basi setelah migrasi | `db check` melaporkan versi skema + keberadaan index/extension |
 
@@ -132,7 +132,7 @@ engine:
 
 - `eidesoul/engine/stores/history.py:318-347` — `search()` hari ini (`ILIKE`, `limit` ≤ 50); titik ganti query.
 - `eidesoul/engine/commands/cari.py:25-40` — `/cari` (satu-satunya pemakai `history.search` dari command).
-- `eidesoul/engine/tools/chat_history.py:60-118` — `_target`/`_remember_cross`/`_search` (arsip room lain + buffer `cross_reads`).
+- `eidesoul/gateways/whatsapp/tools/chat_history.py` — `_target`/`_remember_cross`/`_search` (arsip room lain + buffer `cross_reads`).
 - `eidesoul/engine/schema.py:44-67` — tabel `messages` dan index `ix_messages_chat_ts`/`ix_messages_sender`.
 - `eidesoul/engine/commands/memori.py:69,99` — jalur memori (Mem0) yang tidak diubah.
 - `eidesoul/engine/config.py` — blok config baru `engine.search` mengikuti pola `SandboxConfig`/`WebSearchConfig`.

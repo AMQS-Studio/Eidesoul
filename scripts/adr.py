@@ -25,9 +25,9 @@ Checks enforced by `--check` (ADR-0009 §4.4):
     with the scope taken from the register's own parenthetical hint
   * trailing footer points at the ADR's own path
 
-`--translate` writes the Indonesian derivative under `adr/id/`. Two backends: `glossary` (default)
-adds no model at all, `opus` translates the body with a local NMT model that is dev tooling, never a
-package dependency. Both record the source hash and their own counters in the derivative header.
+`--translate-check` verifies that every hand-written Indonesian derivative under `adr/id/` still
+carries the hash of its English source. There is no machine translator: the derivative is written by
+a person and the hash is the gate; the derivative header records the source hash.
 """
 
 from __future__ import annotations
@@ -36,7 +36,6 @@ import argparse
 import hashlib
 import re
 import sys
-from collections.abc import Callable
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -119,16 +118,6 @@ LABEL_ID = {
     "Implementation": "Implementasi",
 }
 IMPLEMENTASI_ID = {"partial": "sebagian", "draft": "draft", "implemented": "implemented"}
-
-# Inline spans that must survive machine translation untouched.
-SENTENCE_LIMIT = 400
-OPUS_MODEL = "Helsinki-NLP/opus-mt-en-id"
-INSTALL_HINT = (
-    "backend opus butuh transformers<5 + torch + sentencepiece di interpreter dev "
-    "(bukan dependency paket: `pyproject.toml` tidak berubah) dan unduhan model {model} sekali; "
-    "jalankan skrip ini dengan interpreter itu, atau pakai --translator glossary"
-)
-
 
 def read(path: Path) -> str:
     return path.read_text(encoding="utf-8")
@@ -574,328 +563,6 @@ def cmd_new(root: Path, title: str, sub: str = "root") -> int:
     return 0
 
 
-def split_long(text: str, limit: int = SENTENCE_LIMIT) -> list[str]:
-    """Split a long paragraph into sentence-sized pieces so nothing is truncated by the model.
-
-    Marian models cap both input and output at 512 positions: feeding a 900-character paragraph
-    silently loses its tail on CPU and trips a CUDA assertion on GPU. Splitting happens **before**
-    inline spans are masked, so a hard slice can never cut a placeholder in half.
-    """
-    pieces: list[str] = []
-    current = ""
-    for sentence in re.split(r"(?<=[.;:!?])\s+", text.strip()):
-        sentence = sentence.strip()
-        if not sentence:
-            continue
-        if len(sentence) > limit:
-            if current:
-                pieces.append(current)
-                current = ""
-            while len(sentence) > limit:
-                pieces.append(sentence[:limit])
-                sentence = sentence[limit:]
-            if sentence:
-                current = sentence
-            continue
-        if len(current) + len(sentence) + 1 <= limit:
-            current = f"{current} {sentence}".strip()
-        else:
-            if current:
-                pieces.append(current)
-            current = sentence
-    if current:
-        pieces.append(current)
-    return pieces or [text]
-
-
-def protect_inline(text: str) -> tuple[str, list[str]]:
-    """Protect what must stay verbatim, but keep bold *text* translatable.
-
-    Code spans, links, and URLs are replaced wholesale with `[[n]]` placeholders (digits inside
-    brackets survive subword tokenisation far better than `@`), and for `**bold**` only the markers
-    are masked so the words inside still reach the translator.
-    """
-    tokens: list[str] = []
-
-    def marker(value: str) -> str:
-        tokens.append(value)
-        return f"[[{len(tokens) - 1}]]"
-
-    def bold(match: re.Match) -> str:
-        inner = CODE_RE.sub(lambda m: marker(m.group(0)), match.group(1))
-        return marker("**") + inner + marker("**")
-
-    return BOLD_RE.sub(bold, CODE_RE.sub(lambda m: marker(m.group(0)), text)), tokens
-
-
-def restore_inline(text: str, tokens: list[str]) -> tuple[str, bool]:
-    """Put protected spans back as (text, complete); complete is False when a span was lost."""
-    complete = True
-    seen: set[int] = set()
-
-    def swap(match: re.Match) -> str:
-        nonlocal complete
-        index = int(match.group(1))
-        if 0 <= index < len(tokens):
-            seen.add(index)
-            return tokens[index]
-        complete = False
-        return ""
-
-    restored = PLACEHOLDER_RE.sub(swap, text)
-    if len(seen) != len(tokens):
-        complete = False
-    if "@@" in restored or "[" in restored:
-        complete = False
-        restored = re.sub(r"@+", "", restored)
-    # This NMT model emits U+25AA for em dashes and section signs it cannot render.
-    restored = restored.replace("▪", "—")
-    return re.sub(r"\s{2,}", " ", restored).strip(), complete
-
-
-def opus_translator(model_name: str = OPUS_MODEL):
-    """Lazy, optional NMT backend. Dev tooling only: never a declared dependency (ADR-0009 §4.7).
-
-    Memory is bounded on purpose: the thread pool is capped (torch's CPU arenas scale with threads),
-    generation runs in small chunks instead of one batch padded to the longest paragraph, and the
-    device is auto-detected (`cuda` when a CUDA build is present, otherwise CPU). Environment knobs:
-    `ADR_MT_THREADS`, `ADR_MT_BATCH`, `ADR_MT_DEVICE`. Raises RuntimeError with the install hint
-    when the local stack is missing, so `--translate` fails loudly instead of writing a derivative
-    that pretends to be translated.
-    """
-    try:
-        import os  # noqa: PLC0415
-
-        import torch  # noqa: PLC0415
-        from transformers import AutoModelForSeq2SeqLM, AutoTokenizer  # noqa: PLC0415
-    except ImportError as exc:  # pragma: no cover - depends on the host
-        raise RuntimeError(INSTALL_HINT.format(model=model_name)) from exc
-    threads = int(os.environ.get("ADR_MT_THREADS") or 4)
-    torch.set_num_threads(max(1, threads))
-    chunk = max(1, int(os.environ.get("ADR_MT_BATCH") or 8))
-    wanted = os.environ.get("ADR_MT_DEVICE", "").strip()
-    if not wanted:
-        wanted = "cuda" if torch.cuda.is_available() else "cpu"
-    device = torch.device(wanted if wanted != "cuda" or torch.cuda.is_available() else "cpu")
-    try:
-        tokenizer = AutoTokenizer.from_pretrained(model_name)
-        model = AutoModelForSeq2SeqLM.from_pretrained(model_name).to(device)
-    except Exception as exc:  # noqa: BLE001 - any load failure means "no backend here"
-        raise RuntimeError(
-            f"{INSTALL_HINT.format(model=model_name)} (gagal memuat: {type(exc).__name__}: {exc})"
-        ) from exc
-    model.eval()
-
-    def translate(pieces: list[str]) -> list[str]:
-        if not pieces:
-            return []
-        out: list[str] = []
-        model_max = int(getattr(model.config, "max_length", 512) or 512)
-        for start in range(0, len(pieces), chunk):
-            window = pieces[start : start + chunk]
-            batch = tokenizer(window, return_tensors="pt", padding=True, truncation=True)
-            batch = {key: value.to(device) for key, value in batch.items()}
-            longest = int(batch["input_ids"].shape[-1])
-            cap = min(model_max, max(64, 2 * longest))
-            with torch.no_grad():
-                generated = model.generate(**batch, max_new_tokens=cap)
-            out.extend(tokenizer.batch_decode(generated, skip_special_tokens=True))
-            del batch, generated
-        return out
-
-    return translate, f"{model_name}@{device.type}"
-
-
-def content_segments(line: str) -> tuple[list[str], Callable[[list[str]], str]] | None:
-    """Split a content line into translatable segments plus a rebuild function.
-
-    Markers are preserved (`###`, `>`, `1.`, `-`), table rows are translated cell by cell so the
-    column layout survives, and lines without letters are skipped outright. Returns None when the
-    line carries nothing worth translating.
-    """
-    if not ALPHA_RE.search(line):
-        return None
-    marker = MARKER_RE.match(line)
-    if marker:
-        prefix, body = marker.groups()
-        if not body.strip():
-            return None
-        return [body], lambda parts, prefix=prefix: f"{prefix}{parts[0]}"
-    heading = HEADING_ANY_RE.match(line)
-    if heading:
-        marks, title = heading.groups()
-        numbered = NUMBERED_HEADING_RE.match(title)
-        if numbered:
-            number, rest = numbered.groups()
-            return [rest], lambda parts, marks=marks, number=number: f"{marks} {number}. {parts[0]}"
-        return [title], lambda parts, marks=marks: f"{marks} {parts[0]}"
-    if line.startswith("|") and line.endswith("|") and line.count("|") >= 3:
-        cells = line.split("|")
-        indexes = [
-            i
-            for i, cell in enumerate(cells[1:-1], start=1)
-            if ALPHA_RE.search(cell) and not set(cell.strip()) <= set("-: ")
-        ]
-        if not indexes:
-            return None
-        segments = [cells[i].strip() for i in indexes]
-
-        def rebuild(parts: list[str], indexes=indexes, cells=cells) -> str:
-            for position, index in enumerate(indexes):
-                cells[index] = f" {parts[position]} "
-            return "|".join(cells)
-
-        return segments, rebuild
-    return [line], lambda parts: parts[0]
-
-
-def _glossary_structure(line: str) -> str | None:
-    """Canonical structure the glossary renders without a model, or None."""
-    heading = HEADING_RE.match(line)
-    if heading and heading.group(2).strip() in HEADING_ID:
-        return f"## {heading.group(1)}. {HEADING_ID[heading.group(2).strip()]}"
-    foot = FOOTER_RE.match(line)
-    if foot:
-        return f"*ADR ini disimpan di `{foot.group(1)}`.*"
-    return None
-
-
-def plan_line(
-    line: str,
-) -> tuple[str, bool, tuple[list[str], Callable[[list[str]], str]] | None]:
-    """Decide what a line becomes: (rendered text, structural hit, content split or None).
-
-    Canonical headings and the footer come from the glossary. A header label renders to its
-    Indonesian name while its value stays content. Everything else is content.
-    """
-    structural = _glossary_structure(line)
-    if structural is not None:
-        return structural, True, None
-    label = HEADER_LABEL_RE.match(line)
-    if label:
-        name, value = label.groups()
-        if name in LABEL_ID and name != "Status":
-            prefix = f"- **{LABEL_ID[name]}:** "
-            mapped = ""
-            if name == "Implementation":
-                first, _, rest = value.partition(" ")
-                mapped = IMPLEMENTASI_ID.get(first, first)
-                value = rest.strip()
-                prefix = f"{prefix}{mapped} "
-            split = None
-            if value.strip():
-                split = ([value], lambda parts, prefix=prefix: prefix + parts[0])
-            return prefix + value, True, split
-        return line, False, None
-    return line, False, content_segments(line)
-
-
-def _reassemble(jobs, results, batch) -> dict[int, str]:  # noqa: ANN001 - internal shape
-    """Rebuild each line from translated pieces; an incomplete restore keeps the source piece."""
-    lines: dict[int, str] = {}
-    cursor = 0
-    for index, rebuild, per_segment in jobs:
-        parts: list[str] = []
-        for tokens_per_piece in per_segment:
-            pieces: list[str] = []
-            for source_piece, tokens in tokens_per_piece:
-                restored, complete = restore_inline(str(results[cursor]).strip(), tokens)
-                pieces.append((restored if complete else source_piece).replace("▪", "—"))
-                cursor += 1
-            parts.append(" ".join(piece for piece in pieces if piece).strip())
-        lines[index] = rebuild(parts)
-    return lines
-
-
-def translate_text(text: str, mt=None) -> tuple[str, int, int, int, int]:
-    """Return (text, structural hits/total, content hits/total).
-
-    Structure is canonical headings and the footer, rendered from the glossary without a model.
-    Content is split into pieces *before* masking, sent to `mt` when a backend exists, and put back
-    together afterwards; a piece whose protected spans did not survive keeps its source text rather
-    than emitting placeholder junk. Lines inside fences are never touched.
-    """
-    struct_hits = struct_total = content_hits = content_total = 0
-    out: list[str] = []
-    jobs: list[tuple[int, Callable[[list[str]], str], list[list[list[str]]]]] = []
-    batch: list[str] = []
-    in_fence = False
-    for index, line in enumerate(text.splitlines()):
-        if FENCE_RE.match(line):
-            in_fence = not in_fence
-            out.append(line)
-            continue
-        rendered, structural, split = plan_line(line) if not in_fence else (line, False, None)
-        out.append(rendered)
-        if structural:
-            struct_total += 1
-            struct_hits += 1
-        if split is None:
-            continue
-        segments, rebuild = split
-        content_total += 1
-        if mt is None:
-            continue
-        per_segment: list[list[tuple[str, list[str]]]] = []
-        for segment in segments:
-            tokens_per_piece: list[tuple[str, list[str]]] = []
-            for piece in split_long(segment):
-                masked, tokens = protect_inline(piece)
-                batch.append(masked)
-                tokens_per_piece.append((piece, tokens))
-            per_segment.append(tokens_per_piece)
-        jobs.append((index, rebuild, per_segment))
-    if mt is not None and batch:
-        for index, rendered in _reassemble(jobs, mt(batch), batch).items():
-            out[index] = rendered
-        content_hits += len(jobs)
-    return "\n".join(out) + "\n", struct_hits, struct_total, content_hits, content_total
-
-
-def cmd_translate(root: Path, target: str, backend: str = "glossary", model: str = OPUS_MODEL):
-    index, problems = check_numbers(root)
-    if problems:
-        print("GAGAL: perbaiki masalah struktur dulu")
-        return 1
-    files = adr_files(root)
-    chosen = files if target == "all" else index.get(int(target), [])
-    if not chosen:
-        print(f"GAGAL: tidak ada ADR nomor {target}")
-        return 1
-    out_dir = derivative_dir(root)
-    out_dir.mkdir(exist_ok=True)
-    mt = None
-    backend_label = backend
-    if backend == "opus":
-        try:
-            mt, backend_label = opus_translator(model)
-        except RuntimeError as exc:
-            print(f"GAGAL: {exc}")
-            return 1
-    for path in chosen:
-        rel = rel_name(root, path)
-        text = read(path)
-        digest = hashlib.sha256(text.encode("utf-8")).hexdigest()[:12]
-        translated_text, s_hits, s_total, c_hits, c_total = translate_text(text, mt)
-        if mt is None:
-            claim = "struktur saja; konten dibiarkan Inggris"
-        else:
-            claim = f"konten diterjemahkan {backend_label} (perkakas dev, bukan dependency paket)"
-        note = (
-            f"> Terjemahan turunan — jangan sunting; sumber: {rel} (sha256: {digest})\n"
-            f"> translator={backend_label}; struktur {s_hits}/{s_total}, "
-            f"konten {c_hits}/{c_total}; {claim}.\n\n"
-        )
-        out = derivative_of(root, path)
-        out.parent.mkdir(parents=True, exist_ok=True)
-        out.write_text(note + translated_text, encoding="utf-8")
-        print(
-            f"DITERJEMAHKAN {rel} → {out.relative_to(adr_dir(root)).as_posix()} "
-            f"(struktur {s_hits}/{s_total}, konten {c_hits}/{c_total}, hash {digest})"
-        )
-    return 0
-
-
 def cmd_translate_check(root: Path) -> int:
     problems: list[str] = []
     files = derivative_files(root)
@@ -920,7 +587,7 @@ def cmd_translate_check(root: Path) -> int:
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="ADR home tool (check, new, translate)")
+    parser = argparse.ArgumentParser(description="ADR home tool (check, new, translate-check)")
     parser.add_argument("--root", default=str(ROOT), help="repository root (default: project root)")
     group = parser.add_mutually_exclusive_group(required=True)
     group.add_argument("--check", action="store_true", help="run the structure gate")
@@ -931,23 +598,13 @@ def main(argv: list[str] | None = None) -> int:
         default="root",
         help="folder for --new: root (cross-cutting, default), engine, or web",
     )
-    group.add_argument("--translate", metavar="N|all", help=f"write the {DERIVATIVE_DIR}/ copy")
     group.add_argument("--translate-check", action="store_true", help="verify derivative hashes")
-    parser.add_argument(
-        "--translator",
-        choices=("glossary", "opus"),
-        default="glossary",
-        help="glossary = structure only (default); opus = local NMT for content (dev tooling)",
-    )
-    parser.add_argument("--model", default=OPUS_MODEL, help=f"NMT model id (default: {OPUS_MODEL})")
     args = parser.parse_args(argv)
     root = Path(args.root).resolve()
     if args.check:
         return cmd_check(root)
     if args.new:
         return cmd_new(root, args.new, args.dir)
-    if args.translate:
-        return cmd_translate(root, args.translate, args.translator, args.model)
     return cmd_translate_check(root)
 
 

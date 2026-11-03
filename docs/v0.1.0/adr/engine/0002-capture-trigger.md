@@ -64,7 +64,7 @@ Runs right on the turn, cheap and deterministic:
 
 - not a command, not a system message, not a tool result;
 - minimum length (`min_chars`);
-- dedupe hash per `(chat_id, message_id, kind)`;
+- dedupe hash per `(thread_id, message_id, kind)`;
 - rate limit per chat per hour;
 - hard exclusion: credentials/secret, crisis, dangerous instructions, text detected as injection;
 - provenance is recorded (`source`, `trust`) for ADR-0008.

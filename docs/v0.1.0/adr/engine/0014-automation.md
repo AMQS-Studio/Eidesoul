@@ -337,7 +337,7 @@ automations:
 
 ## 7. Acceptance criteria
 
-- [ ] Automation is stored as a row with `event`, `condition`, `steps`, `owner`, `policy`, `state`.
+- [ ] Automation is stored as a row with `event`, `condition`, `steps`, `administrator`, `policy`, `state`.
 - [ ] Every step is checked against the owner's authority **at creation**; any step that exceeds it is rejected.
 - [ ] Authority is checked **again** when due; `denied` → `paused` + one notice to the owner.
 - [ ] `owner_roles_at_creation` is never used as a permission source.

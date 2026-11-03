@@ -216,7 +216,7 @@ Secrets are `.env` names only; a plugin that needs a value it cannot find is `un
 
 ## 10. Code references
 
-- `eidesoul/engine/tools/google.py` — the tool that becomes a plugin.
+- `plugins/google/` — the plugin that replaced `eidesoul/engine/tools/google.py`.
 - `pyproject.toml` `[project.optional-dependencies] google` — the extra to remove (with `uv.lock`).
 - `eidesoul/engine/tools/__init__.py` — the registry the loader feeds; `execute` stays the only permission check.
 - `eidesoul/engine/commands/__init__.py` — the command registry.

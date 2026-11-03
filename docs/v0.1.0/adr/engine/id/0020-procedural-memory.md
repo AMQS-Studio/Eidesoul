@@ -1,4 +1,4 @@
-> Terjemahan turunan — jangan sunting; sumber: engine/0020-procedural-memory.md (sha256: 953fa5749821)
+> Terjemahan turunan — jangan sunting; sumber: engine/0020-procedural-memory.md (sha256: 6b52ac71b01c)
 > Teks ini ditulis manusia; baris yang tidak bisa diterjemahkan mesin disalin apa adanya ke sumber English, jadi sumber bercampur dua bahasa.
 
 # ADR-0020: Prosedur Turunan — Skill sebagai Pertumbuhan Soul, Bukan Tool
@@ -69,7 +69,7 @@ Konsep yang dipakai di sini: **skill = prosedur turunan** — "cara aku biasanya
   4. `commitment` yang ditutup, atau `automation_run` yang selesai,
   5. shutdown rapi: episode yang masih terbuka ditutup, bukan dibuang,
   6. **artefak terkirim**: rangkaian turn yang berakhir dengan kiriman berkas (`outbound_messages` dengan lampiran) dianggap pekerjaan selesai — dinilai setelah jeda pendek `skills.idle_after_send_minutes` (default 3), bukan menunggu 10 menit.
-- Episode **tidak** menjadi tabel baru: penutupnya dihitung dari `turns`/`backlog`/`outbound_messages`/`chat_eras` yang sudah ada; yang dicatat hanya hasilnya.
+- Episode **tidak** menjadi tabel baru: penutupnya dihitung dari `turns`/`backlog`/`outbound_messages`/`thread_eras` yang sudah ada; yang dicatat hanya hasilnya.
 
 ### 4.3 Kapan dinilai
 
@@ -202,7 +202,7 @@ Kunci lama `max_index_chars` dihapus bersama indeks.
 - [ ] Tool `skill` tidak ada di katalog engine dan tidak diberikan ke role mana pun; command owner-only tersedia untuk inspeksi/pin/lupa/impor.
 - [ ] Episode ditutup oleh keenam sinyal §4.2, termasuk `artifact_sent` dengan `idle_after_send_minutes`; episode tanpa kerja tool dan tanpa koreksi tidak menghasilkan job `distill`.
 - [ ] Tepat satu job `distill` per episode tertutup; evaluasi berjalan di worker, bukan di jalur percakapan (tidak menambah latensi turn).
-- [ ] Prosedur baru selalu punya `via=reflection`, `refs` episode, dan scope `chat`/`person`; `global` hanya dari owner atau approval.
+- [ ] Prosedur baru selalu punya `via=reflection`, `refs` episode, dan scope `thread`/`person`; `global` hanya dari owner atau approval.
 - [ ] Prosedur yang memuat `SENSITIVE`/`INJECTION` ditolak; prosedur tidak pernah menambah tool/izin (test terhadap katalog).
 - [ ] Injeksi retrieval ≤ `skills.max_chars`, hanya tool yang dimiliki role, dan menaikkan `uses`/`last_used`.
 - [ ] Prosedur tak terpakai melewati `use_renewal_days` → `archived`, dapat dipulihkan, dan tidak muncul di retrieval.
@@ -251,7 +251,7 @@ Kunci lama `max_index_chars` dihapus bersama indeks.
 ## 10. Referensi kode
 
 - `eidesoul/engine/stores/skills.py:88` — `index()` (indeks yang akan dihapus dari prompt); `:144-149` — `view()` dan satu-satunya `_record_use`.
-- `eidesoul/engine/tools/skill.py` — tool eksplisit yang akan dihapus.
+- `eidesoul/engine/commands/skill.py` — perintah owner; `eidesoul/engine/tools/skill.py` untuk model sudah dihapus.
 - `eidesoul/engine/agent.py:637-640` — tempat indeks skill disusun (titik cutover).
 - `eidesoul/engine/config.py:156-157` — `SkillsConfig.max_index_chars` (diganti §5).
 - `eidesoul/engine/prompts.py:300,318` — aturan prompt yang menyuruh model mengurus skill sendiri (dihapus).
