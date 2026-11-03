@@ -19,7 +19,7 @@ WHATSAPP = "6285111242960"
 
 
 def store(tmp_path) -> IdentityStore:
-    return IdentityStore(database(tmp_path))
+    return IdentityStore(database())
 
 
 def test_resolve_is_stable_and_per_gateway(tmp_path) -> None:

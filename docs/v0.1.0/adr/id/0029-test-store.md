@@ -1,4 +1,4 @@
-> Terjemahan turunan — jangan sunting; sumber: 0029-test-store.md (sha256: cb44176196bc)
+> Terjemahan turunan — jangan sunting; sumber: 0029-test-store.md (sha256: e4d36eb13c40)
 > Ditulis tangan (bukan mesin), mengikuti sumber English baris demi baris.
 
 # ADR-0029: Store Tes Adalah Store Nyata — Postgres+pgvector, Satu Database Tes, Truncate per Tes
@@ -9,7 +9,7 @@
 - **Konteks:** lanjutan ADR-0016 (skema kanonik & migrasi), ADR-0001 (memori sumber kebenaran), ADR-0011 (crash safety), ADR-0012 (lease safety), ADR-0026 (search), ADR-0027 (distribusi & kapabilitas clean by default)
 - **Supersedes:** —
 - **Terkait:** ADR-0009 (gate yang dijalankan tes ini), ADR-0019 (observability), ADR-0021 / ADR-0024 (kontrak tool)
-- **Implementasi:** draft — suite masih jalan di SQLite. ADR ini rencana induk untuk peralihannya; tidak ada kode tes maupun engine yang berubah bersamanya.
+- **Implementasi:** implemented — bukti: `tests/conftest.py`, `tests/support.py`, `tests/test_pgvector.py`, `eidesoul/engine/db.py`, `eidesoul/engine/schema.py`, `compose.yaml`; hasil gate: `pytest -q` 561 lulus dalam 31 dtk di Postgres+pgvector, kegagalan saat variabel kosong terverifikasi
 - **Catatan lokasi:** ADR ini mengikat semua permukaan (ia menentukan arti "terverifikasi"), jadi ia duduk di akar rumah ADR. Salinan Indonesia di `docs/v0.1.0/adr/id/0029-test-store.md`.
 - **Amandemen:** 2026-11-03 — versi pertama.
 

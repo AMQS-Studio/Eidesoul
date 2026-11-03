@@ -39,7 +39,7 @@ def test_parse_gender_accepts_indonesian_aliases() -> None:
 
 
 def test_gender_store_writes_only_known_people(tmp_path) -> None:
-    db = database(tmp_path)
+    db = database()
     store = AffectStore(db, build_config(tmp_path).affect)
     store.turn_end("chat", "u1", "Raka", "gue anjir goblok", "member", "", None, "m1")
     assert store.gender("u1") == ("", 0.0, "")

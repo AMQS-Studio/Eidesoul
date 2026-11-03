@@ -28,7 +28,7 @@ def message(mid: str, text: str, when: datetime, *, quote: Quote | None = None) 
 
 
 def archive(tmp_path, count: int, *, size: int = 8) -> HistoryStore:
-    store = HistoryStore(database(tmp_path))
+    store = HistoryStore(database())
     for index in range(count):
         text = f"pesan {index}".ljust(size, "x")
         store.add(CHAT, message(f"m{index}", text, START + timedelta(minutes=index)))

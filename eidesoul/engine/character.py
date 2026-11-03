@@ -9,16 +9,12 @@ original draft is used.
 from __future__ import annotations
 
 import re
+from functools import lru_cache
 
+from . import lexicon
 from .config import CharacterConfig, Config
 from .llm import LLM
 
-ASSISTANT_TELL = re.compile(
-    r"(?:^|(?<=[.!?…]))[ \t]*(tentu|berikut(?:nya)?|sebagai ai|sebagai asisten|semoga membantu|"
-    r"apakah ada yang bisa|aku mengerti perasaan|saya paham|aku di sini untukmu|"
-    r"kesimpulan(?:nya)?|secara keseluruhan|siap membantu)",
-    re.IGNORECASE | re.MULTILINE,
-)
 MARKDOWN = re.compile(r"(?m)^\s*(?:#{1,6}\s+|[-*]\s+|\d+[.)]\s+)")
 SENTENCE = re.compile(r"[.!?]+(?:\s|$)")
 BUBBLE_LINE = re.compile(r"(?m)^\s*-{3,}\s*$")
@@ -39,27 +35,46 @@ Rules:
   helps", and never offer further assistance unprompted.
 - Do not explain a joke, repeat a phrase, or add pet names, promises, or romantic lines.
 - Output only the final chat text.
-
-Examples:
-DRAFT: Sure! Here are a few suggestions for your event: 1. Draft the rundown 2. Check catering
-FINAL: rundown dulu, konsumsi belakangan. mau aku bantu susun?
-
-DRAFT: Aww, you must be so tired. I understand how you feel. Hope your day gets better!
-FINAL: capeknya di bagian mana?
-
-DRAFT: I am always here for you, do not forget that I love you
-FINAL: kalau butuh temen ngobrol, aku ada
 """
 
 
-def needs_polish(text: str, *, max_chars: int = 400) -> bool:
+@lru_cache(maxsize=8)
+def _assistant_tell(language: str, folder: str, stamp: int) -> re.Pattern[str] | None:
+    # `folder`/`stamp` are part of the cache key: a reconfigured or reloaded lexicon never serves
+    # a pattern compiled from the previous pack.
+    phrases = lexicon.load(language).assistant_tells
+    if not phrases:
+        return None
+    body = "|".join(re.escape(item) for item in sorted(phrases, key=len, reverse=True))
+    return re.compile(
+        rf"(?:^|(?<=[.!?…]))[ \t]*(?:{body})", re.IGNORECASE | re.MULTILINE
+    )
+
+
+def assistant_tell(language: str = "id") -> re.Pattern[str] | None:
+    """Compiled assistant-tell pattern for one language; None when its pack carries none."""
+    code = str(language or "").strip().lower()
+    if not code:
+        return None
+    return _assistant_tell(code, str(lexicon.directory()), lexicon.generation())
+
+
+def polish_system(name: str, language: str = "id") -> str:
+    """The polish prompt plus the pack's examples; none when the pack omits them."""
+    prompt = POLISH_SYSTEM.format(name=name)
+    examples = lexicon.load(language).example("character_polish_examples")
+    return f"{prompt}\nExamples:\n{examples}\n" if examples else prompt
+
+
+def needs_polish(text: str, *, max_chars: int = 400, language: str = "id") -> bool:
     """Does this draft look like an assistant? One trigger is enough to call the character layer."""
     body = str(text or "").strip()
     if not body:
         return False
     if len(body) > max(80, int(max_chars)):
         return True
-    if ASSISTANT_TELL.search(body) or MARKDOWN.search(body):
+    tell = assistant_tell(language)
+    if (tell is not None and tell.search(body)) or MARKDOWN.search(body):
         return True
     for paragraph in BUBBLE_LINE.split(body):
         if len(SENTENCE.findall(paragraph)) > SENTENCE_PARAGRAPH_MAX:
@@ -99,10 +114,11 @@ def _clean(raw: str) -> str:
     return unwrap_quotes(text).strip()
 
 
-def _rejected(draft: str, text: str) -> bool:
+def _rejected(draft: str, text: str, language: str = "id") -> bool:
     if not text:
         return True
-    if ASSISTANT_TELL.search(text) or MARKDOWN.search(text):
+    tell = assistant_tell(language)
+    if (tell is not None and tell.search(text)) or MARKDOWN.search(text):
         return True
     return len(text) > max(600, int(len(draft) * 1.5))
 
@@ -132,15 +148,16 @@ async def polish(
 ) -> str:
     """Draft -> more human chat text; the original draft is used when in doubt."""
     body = str(draft or "").strip()
+    language = config.soul.language
     if not body or not config.character.enabled:
         return body
-    if not needs_polish(body, max_chars=config.character.max_chars):
+    if not needs_polish(body, max_chars=config.character.max_chars, language=language):
         return body
     if FENCE_START in body:  # code/technical structure is never rewritten
         return body
     try:
         raw = await llm.complete(
-            POLISH_SYSTEM.format(name=config.soul.name),
+            polish_system(config.soul.name, language),
             polish_payload(body, latest=latest, recent=recent, is_dm=is_dm, tone=tone),
             max_tokens=config.character.max_tokens,
             temperature=config.character.temperature,
@@ -152,7 +169,7 @@ async def polish(
         logging.getLogger(__name__).debug("character call failed", exc_info=True)
         return body
     text = _clean(raw)
-    return body if _rejected(body, text) else text
+    return body if _rejected(body, text, language) else text
 
 
 REPEAT_RUN = re.compile(r"(.)\1{2,}")

@@ -33,7 +33,7 @@ BUCKET = {
 
 
 def seed(tmp_path):
-    db = database(tmp_path)
+    db = database()
     config = build_config(tmp_path)
     documents = DocumentStore(db, config.paths)
     with db.connect() as conn:
@@ -106,7 +106,7 @@ def test_adopt_is_idempotent(tmp_path) -> None:
 
 
 def test_people_link_creates_a_missing_person_row(tmp_path) -> None:
-    db = database(tmp_path)
+    db = database()
     person = "per_abcdefghjk"
 
     assert admin_people.link(db, person, "whatsapp", LEGACY) == "ok"
@@ -118,7 +118,7 @@ def test_people_link_creates_a_missing_person_row(tmp_path) -> None:
 
 def test_rekey_moves_person_and_chat_entries(tmp_path, monkeypatch) -> None:
     monkeypatch.setenv("K", "key")
-    db = database(tmp_path)
+    db = database()
     new = "per_abcdefghjk"
     with db.connect() as conn:
         db.upsert(

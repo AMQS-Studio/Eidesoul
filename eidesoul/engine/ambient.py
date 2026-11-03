@@ -26,12 +26,12 @@ AMBIENT_ROLE = ("web_search",)
 DRIFT_FLOOR = 0.2
 
 
-def drift(old: str, new: str) -> bool:
+def drift(old: str, new: str, language: str = "id") -> bool:
     """True when the new summary shares almost none of the old summary's keywords."""
-    fresh = keyword_set(new)
+    fresh = keyword_set(new, language)
     if not fresh:
         return False
-    return len(keyword_set(old) & fresh) / len(fresh) < DRIFT_FLOOR
+    return len(keyword_set(old, language) & fresh) / len(fresh) < DRIFT_FLOOR
 
 
 class Ambient:
@@ -237,12 +237,14 @@ class Ambient:
                 if not isinstance(fact, dict):
                     continue
                 text = str(fact.get("text") or "").strip()
-                if not text or guard.SENSITIVE.search(text) or guard.INJECTION.search(text):
+                if not text or guard.SENSITIVE.search(text) or guard.is_injection(
+                    text, self.config.soul.language
+                ):
                     continue
                 person = str(fact.get("person") or "").strip()
                 person_id = self.affect.person_by_name(chat_id, person) if person else None
                 if person_id:
-                    self.affect.note_person(person_id, text)
+                    self.affect.note_person(person_id, text, self.config.soul.language)
                     continue
                 if self.memory is None:
                     continue
@@ -268,7 +270,7 @@ class Ambient:
         """Archive the old topic as a dated era once the digest moved to another subject."""
         previous = str(topic["summary"]).strip()
         fresh = " ".join(str(summary or "").split())
-        if not previous or not fresh or not drift(previous, fresh):
+        if not previous or not fresh or not drift(previous, fresh, self.config.soul.language):
             return
         self.affect.archive_era(
             chat_id,

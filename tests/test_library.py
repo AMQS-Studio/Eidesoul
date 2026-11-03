@@ -48,7 +48,9 @@ def pack(tmp_path, monkeypatch, files: dict[str, dict]):
 
 def clear() -> None:
     for name in ("load_pack", "load_patterns", "load_lexicon", "_load_vectors"):
-        getattr(pattern_catalog, name).cache_clear()
+        helper = getattr(pattern_catalog, name)
+        if hasattr(helper, "cache_clear"):  # a test may monkeypatch one with a plain lambda
+            helper.cache_clear()
 
 
 @pytest.fixture(autouse=True)

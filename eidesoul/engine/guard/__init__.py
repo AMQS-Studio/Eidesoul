@@ -4,9 +4,9 @@ from __future__ import annotations
 
 from .patterns import (
     CRISIS,
-    INJECTION,
     SENSITIVE,
     cross_chat_leak,
+    injection,
     is_crisis,
     is_injection,
     safe_text,
@@ -26,7 +26,6 @@ __all__ = [
     "BLOCKED",
     "CRISIS",
     "GUARD_SYSTEM",
-    "INJECTION",
     "SAFE_HEADS",
     "SENSITIVE",
     "ActionRequest",
@@ -37,6 +36,7 @@ __all__ = [
     "SandboxGuard",
     "build_safety",
     "cross_chat_leak",
+    "injection",
     "is_crisis",
     "is_injection",
     "safe_text",

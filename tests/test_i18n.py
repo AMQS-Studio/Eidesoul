@@ -26,7 +26,7 @@ def test_every_core_command_has_a_description() -> None:
         body = catalog(code)
         for name in REGISTRY.names():
             assert f"command.{name}.description" in body, (code, name)
-        assert "gateway.backfill.description" in body, code
+        assert "command.backfill.description" in body, code
 
 
 def test_new_catalog_file_is_discovered(tmp_path, monkeypatch) -> None:

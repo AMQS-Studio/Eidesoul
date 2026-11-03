@@ -40,8 +40,6 @@ class Supervisor:
             first = False
             holder = self.lease.acquire(takeover=takeover)
             if holder is not None:
-                if takeover:
-                    self.lease.clear_freeze()
                 await self.activate(holder)
                 await self.serve()
                 await self.deactivate()
@@ -72,7 +70,11 @@ class Supervisor:
                 await self.agent.vibe.start()
             except Exception:
                 log.exception("vibe failed to start; continuing without vibe")
-        log.info("primary: gateway %s", ", ".join(gateway.name for gateway in self.gateways))
+        log.info(
+            "primary: gateway %s (lease generation %d)",
+            ", ".join(gateway.name for gateway in self.gateways),
+            holder.generation,
+        )
 
     async def serve(self) -> None:
         tasks = {

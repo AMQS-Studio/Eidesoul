@@ -7,7 +7,7 @@
 - **Supersedes:** —
 - **Related:** ADR-0001 (memory), ADR-0007 (capability text and approval), ADR-0009 (ADR home and its gate), ADR-0015 (payload), ADR-0016 (schema owner), ADR-0018 (gateway contract), ADR-0020 (episode), ADR-0021 (tool output), ADR-0022 (`administrator` and `label`)
 - **Order:** foundational — implement before any new body gateway, before the dashboard, and before any string or lexicon move that depends on it.
-- **Implementation:** draft — no engine change yet. This ADR is the plan of record for the rename, the seam, and the lexicon move.
+- **Implementation:** partial — present: `library/lexicon/{en,id}.json` + `engine/lexicon.py`, `soul.pronoun.default` resolution, catalog-only `/help`, `tests/test_language.py` scanner; remaining: `Percept`/`Action`, the §4.4 rename, `send`/`chat_history` out of the core, one non-chat body, `tests/test_architecture.py`
 - **Location note:** this is the cross-cutting foundations document, so it sits at the root of the ADR home
   (`docs/v0.1.0/adr/`); the Indonesian copy is `docs/v0.1.0/adr/id/0001-initial-invariants.md`. Engine ADRs
   live under `docs/v0.1.0/adr/engine/`, web/panel ADRs under `docs/v0.1.0/adr/web/`.

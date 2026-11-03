@@ -22,8 +22,8 @@ OWNER = "6285111242960"
 FRIEND = "628222222222"
 
 
-def make_store(tmp_path: Path, name: str = "affect.db", **overrides) -> AffectStore:
-    return AffectStore(database(tmp_path, name), AffectConfig(enabled=True, **overrides))
+def make_store(tmp_path: Path, **overrides) -> AffectStore:
+    return AffectStore(database(), AffectConfig(enabled=True, **overrides))
 
 
 def read_state(store: AffectStore) -> dict:
@@ -385,19 +385,19 @@ def test_relationship_delta_is_capped_per_window(tmp_path) -> None:
 
 
 def test_other_directed_appraisal_is_attenuated(tmp_path) -> None:
-    other = make_store(tmp_path, "other.db")
-    direct = make_store(tmp_path, "direct.db")
+    store = make_store(tmp_path)
     try:
-        turn(other, decision(addressed="other", dP=-0.4), message_id="ATT0", text="bukan buatmu")
-        turn(direct, decision(addressed="me", dP=-0.4), message_id="ATT1", text="buat kamu")
-        muted = other.status(CHAT)["pleasure"]
-        full = direct.status(CHAT)["pleasure"]
+        turn(store, decision(addressed="other", dP=-0.4), message_id="ATT0", text="bukan buatmu")
+        muted = store.status(CHAT)["pleasure"]
+        with store.db.connect() as conn:  # one heart: reset to the baseline between cases
+            conn.execute(state.delete())
+        turn(store, decision(addressed="me", dP=-0.4), message_id="ATT1", text="buat kamu")
+        full = store.status(CHAT)["pleasure"]
         assert muted > -0.2
         assert full < -0.3
         assert muted > full
     finally:
-        other.close()
-        direct.close()
+        store.close()
 
 
 def test_heartbeat_soothes_grudge_over_hours(tmp_path, monkeypatch) -> None:

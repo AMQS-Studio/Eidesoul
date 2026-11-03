@@ -272,7 +272,7 @@ def test_load_config_reads_host_workspace_and_rejects_file(tmp_path: Path, monke
     target.write_text(
         f"""
 database:
-  url: "sqlite+pysqlite://"
+  url: "postgresql+psycopg://eidesoul:eidesoul@127.0.0.1:5433/eidesoul_test"
 workspace: ".eidesoul/workspace"
 engine:
   llm:

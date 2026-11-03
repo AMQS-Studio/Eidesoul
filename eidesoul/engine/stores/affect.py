@@ -162,7 +162,7 @@ class AffectStore:
         self._lock = threading.RLock()
 
     def close(self) -> None:
-        """Tidak memiliki koneksi sendiri; Database dimiliki Agent."""
+        """No connection of its own; `Agent` owns the Database."""
         return None
 
     # ------------------------------------------------------------------ state engine
@@ -903,8 +903,8 @@ class AffectStore:
         with self._lock, self.db.connect() as conn:
             return self._known_people(conn, chat_id, limit)
 
-    def note_person(self, person_id: str, note: str) -> None:
-        text = guard.safe_text(note, NOTES_TEXT)
+    def note_person(self, person_id: str, note: str, language: str = "id") -> None:
+        text = guard.safe_text(note, NOTES_TEXT, language=language)
         if not person_id or not text:
             return
         with self._lock, self.db.connect() as conn:

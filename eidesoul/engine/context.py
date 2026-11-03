@@ -11,6 +11,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from . import lexicon
 from .permissions import normalize
 
 if TYPE_CHECKING:
@@ -164,7 +165,7 @@ class ChatMessage:
 class WorkingMemory:
     """Per-chat message window; the full archive stays in HistoryStore."""
 
-    def __init__(self, limit: int = LIVE_BUFFER, store: "HistoryStore | None" = None):
+    def __init__(self, limit: int = LIVE_BUFFER, store: HistoryStore | None = None):
         self.limit = max(1, limit)
         self.store = store
         self._data: dict[str, list[ChatMessage]] = {}
@@ -312,19 +313,14 @@ def clean(text: str) -> str:
     return (text or "").translate(INVISIBLE).replace("\u00a0", " ")
 
 
-STOPWORDS = frozenset(
-    {
-        "yang", "sama", "untuk", "dari", "kamu", "aku", "ini", "itu", "apa", "gimana",
-        "kalau", "jadi", "sudah", "udah", "belum", "bisa", "aja", "saja", "juga", "kok",
-        "sih", "deh", "loh", "kan", "nya", "dan", "atau", "tapi", "the", "and", "for",
-        "with", "that", "this", "dengan", "karena", "biar", "gak", "nggak", "ngga",
+def keyword_set(text: str, language: str = "id") -> set[str]:
+    """Words of >=4 letters without the pack's stopwords: used by salience and drift."""
+    stopwords = lexicon.load(language).stopwords
+    return {
+        word
+        for word in re.findall(r"[a-z0-9]{4,}", str(text or "").lower())
+        if word not in stopwords
     }
-)
-
-
-def keyword_set(text: str) -> set[str]:
-    """Words of >=4 letters without stopwords: used by salience."""
-    return {w for w in re.findall(r"[a-z0-9]{4,}", str(text or "").lower()) if w not in STOPWORDS}
 
 
 def sanitize(value: str, limit: int = 60) -> str:

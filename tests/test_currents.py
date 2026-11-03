@@ -12,7 +12,7 @@ from eidesoul.engine.stores.currents import TTL_SECONDS, CurrentsStore
 
 
 def store(tmp_path) -> CurrentsStore:
-    return CurrentsStore(database(tmp_path))
+    return CurrentsStore(database())
 
 
 def test_query_names_the_topic_and_year() -> None:

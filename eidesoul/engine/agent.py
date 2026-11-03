@@ -13,6 +13,7 @@ from pathlib import Path
 
 from . import assembly, guard
 from .approvals import ApprovalStore
+from .character import effective_limits, polish, regulate
 from .commands import REGISTRY as CORE_COMMANDS
 from .commands import CommandContext
 from .config import Config
@@ -34,22 +35,21 @@ from .decision import (
     ensure_reply,
     ground_tone,
 )
+from .guard import SafetyPolicy, SandboxGuard, build_safety
 from .i18n import reload_catalogs, t
 from .identity import IdentityStore
 from .inbound import Gateway, GatewayError, Inbound
+from .knowledge import select_facts
 from .llm import LLM
 from .memory import MemoryBackend, MemoryContext, memory_status
-from .character import effective_limits, polish, regulate
-from .knowledge import select_facts
-from .permissions import command_allowed, command_patterns, commands_for, tool_patterns, tools_for
-from .privacy import PrivacyService
 from .patterns import load_lexicon, room_register, select_patterns
+from .permissions import command_allowed, commands_for, tool_patterns, tools_for
+from .privacy import PrivacyService
 from .prompts import CRISIS_SAFETY, away_block, character_block, research_block, system_prompt
 from .registry import Handler, Registry
 from .reply import human_chunks, split_text, typing_delay
 from .roles import Role
 from .runtime import RuntimeFacts
-from .guard import SafetyPolicy, SandboxGuard, build_safety
 from .target import classify, combine, score_style
 from .tools import REGISTRY as CORE_TOOLS
 from .tools import ToolContext
@@ -694,6 +694,7 @@ class Agent:
                         jabs=self.config.character.roast_jabs,
                         patterns=patterns,
                         facts=facts,
+                        language=self.soul.language,
                     )
                     currents_block = ""
                     if self.currents is not None:
@@ -752,7 +753,8 @@ class Agent:
                     bonuses["memory"] = (
                         0.35
                         if memory_block
-                        and keyword_set(message.text) & keyword_set(memory_block)
+                        and keyword_set(message.text, self.soul.language)
+                        & keyword_set(memory_block, self.soul.language)
                         else 0.0
                     )
                     answer = await self.llm.run(
@@ -911,7 +913,7 @@ class Agent:
                     and self.config.memory.auto_capture
                     and len(str(message.text or "").strip())
                     >= int(self.config.memory.capture_min_chars)
-                    and not guard.is_injection(message.text)
+                    and not guard.is_injection(message.text, self.soul.language)
                 )
                 if capture:
                     self.spawn(

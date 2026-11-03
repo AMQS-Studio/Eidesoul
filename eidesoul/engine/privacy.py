@@ -14,7 +14,7 @@ import re
 from collections.abc import Sequence
 from dataclasses import dataclass
 
-from . import guard
+from . import guard, lexicon
 from .config import PrivacyConfig
 from .i18n import t
 from .memory import MemoryHit
@@ -23,8 +23,9 @@ from .memory.privacy import AuditResult, PrivacyPolicy, PrivacyVerdict, clamp_le
 log = logging.getLogger(__name__)
 
 KINDS = ("privacy", "disclosure")
+# Agreement tokens are shared accept-words, not a negation list; the pack schema carries only the
+# negative side (`negations`).
 YES = ("ya", "yes", "y", "ok", "oke", "boleh", "sip", "gas", "lanjut", "silakan")
-NO = ("tidak", "no", "tdk", "gak", "ga", "nggak", "jangan", "engga", "gausah")
 LEVEL_WORDS = (
     ("rahasia", 4),
     ("secret", 4),
@@ -387,15 +388,14 @@ class PrivacyService:
                     return {"kind": parsed, "level": level}
         return self._regex_answer(str(text or ""))
 
-    @staticmethod
-    def _regex_answer(text: str) -> dict:
+    def _regex_answer(self, text: str) -> dict:
         words = set(re.findall(r"[a-z]+", text.lower()))
         for word, level in LEVEL_WORDS:
             if word in words:
                 return {"kind": "level", "level": level}
         if words & set(YES):
             return {"kind": "yes", "level": None}
-        if words & set(NO):
+        if words & lexicon.load(self._lang).negations:
             return {"kind": "no", "level": None}
         digits = [int(ch) for ch in text if ch.isdigit() and int(ch) <= 4]
         if digits:

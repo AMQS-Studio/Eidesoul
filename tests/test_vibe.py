@@ -44,7 +44,7 @@ def test_vad_ambiguous_top_two_is_neutral() -> None:
 
 def test_attack_and_baseline_move_gradually(tmp_path) -> None:
     runner = VibeRunner(
-        database(tmp_path),
+        database(),
         VibeConfig(
             attack=0.5,
             baseline_influence=0.1,
@@ -62,7 +62,7 @@ def test_attack_and_baseline_move_gradually(tmp_path) -> None:
 
 
 def test_describe_uses_words(tmp_path) -> None:
-    runner = VibeRunner(database(tmp_path), VibeConfig())
+    runner = VibeRunner(database(), VibeConfig())
     state = VibeState(current=[0.2, 0.8, 0.7], baseline=[0.2, 0.8, 0.7])
 
     text = runner._describe(state)
@@ -72,7 +72,7 @@ def test_describe_uses_words(tmp_path) -> None:
 
 
 def test_describe_follows_current_not_slow_baseline(tmp_path) -> None:
-    runner = VibeRunner(database(tmp_path), VibeConfig())
+    runner = VibeRunner(database(), VibeConfig())
     state = VibeState(current=[0.1, 0.9, 0.2], baseline=[0.5, 0.4, 0.5])
 
     # the baseline is still neutral, but the latest message must show up in the prompt block.
@@ -102,21 +102,21 @@ def test_vibe_block_in_prompts() -> None:
 
 
 def test_observe_is_silent_when_not_running(tmp_path) -> None:
-    runner = VibeRunner(database(tmp_path), VibeConfig(), classifier=lambda _t: {})
+    runner = VibeRunner(database(), VibeConfig(), classifier=lambda _t: {})
 
     assert asyncio.run(runner.observe("chat", "halo")) == ""
 
 
 def test_start_reports_availability(tmp_path) -> None:
     ready = VibeRunner(
-        database(tmp_path), VibeConfig(), classifier=lambda _t: {"joy": 1.0}
+        database(), VibeConfig(), classifier=lambda _t: {"joy": 1.0}
     )
     assert asyncio.run(ready.start()) is True  # classifier injected: no torch needed
     asyncio.run(ready.close())
 
 
 def test_start_disables_vibe_without_an_embedder(tmp_path) -> None:
-    runner = VibeRunner(database(tmp_path), VibeConfig())
+    runner = VibeRunner(database(), VibeConfig())
     runner._source = PrototypeSource(bank={})
 
     assert asyncio.run(runner.start()) is False
@@ -149,8 +149,8 @@ def test_prototype_source_scores_the_shipped_bank() -> None:
     assert VibeRunner.vad(source.scores("aku capek banget sama kerjaan")) is not None
 
 
-def test_state_persists_to_database(tmp_path) -> None:
-    db = database(tmp_path)
+def test_state_persists_to_database() -> None:
+    db = database()
     runner = VibeRunner(
         db,
         VibeConfig(attack=0.5, baseline_influence=0.1, hold_seconds=0),

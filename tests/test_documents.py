@@ -12,7 +12,7 @@ SOUL = "name: Eidesoul\nlanguage: en\npronouns: aku\n"
 
 def make_docs(tmp_path, *, sync=True):
     config = build_config(tmp_path)
-    return DocumentStore(database(tmp_path), config.paths, sync=sync), config.paths
+    return DocumentStore(database(), config.paths, sync=sync), config.paths
 
 
 def write_config(paths, body: dict) -> None:

@@ -6,14 +6,20 @@ import argparse
 import asyncio
 import contextlib
 import logging
-import shutil
 import sys
 from datetime import datetime
 from pathlib import Path
 
 import yaml
 
-from .engine.config import Config, ConfigError, load_config, load_env, load_host, resolve_database_url
+from .engine.config import (
+    Config,
+    ConfigError,
+    load_config,
+    load_env,
+    load_host,
+    resolve_database_url,
+)
 
 log = logging.getLogger(__name__)
 
@@ -44,23 +50,22 @@ async def build_runtime(config_path: str | None, *, console: bool = False):
     from .engine.agent import Agent
     from .engine.ambient import Ambient
     from .engine.config import load_host, resolve_database_url
-    from .engine.db import Database, MigrationError
+    from .engine.context import WorkingMemory
+    from .engine.db import Database
     from .engine.lease import Lease, lock_data_dir
     from .engine.llm import LLM
     from .engine.mcp import Hub
     from .engine.memory import build_memory
+    from .engine.memory.ledger import ActionLedger
     from .engine.stores.affect import AffectStore
+    from .engine.stores.currents import CurrentsStore
     from .engine.stores.documents import DocumentStore
     from .engine.stores.history import HistoryStore
     from .engine.stores.recipes import RecipeStore
     from .engine.stores.skills import SkillStore
-    from .engine.stores.currents import CurrentsStore
     from .engine.stores.style import StyleStore
     from .engine.stores.vibe import VibeRunner
-    from .engine.context import WorkingMemory
-    from .engine.memory.ledger import ActionLedger
     from .engine.supervisor import Supervisor
-    from .engine.tools import REGISTRY as TOOLS
     from .gateways import build_gateways, ensure_schemas
 
     host, paths = load_host(config_path)
@@ -258,9 +263,7 @@ async def backfill(config_path: str | None) -> int:
 
 
 async def selftest(config: Config) -> int:
-    """Exercise stores, tools, and the LLM against a throwaway database."""
-    import tempfile
-    from datetime import datetime
+    """Exercise stores, tools, and the LLM against the configured Postgres store."""
 
     from .engine.commands import REGISTRY as COMMANDS
     from .engine.context import ChatMessage
@@ -269,23 +272,27 @@ async def selftest(config: Config) -> int:
     from .engine.i18n import t
     from .engine.llm import LLM
     from .engine.mcp import Hub
-    from .engine.permissions import commands_for, tool_patterns, tools_for
-    from .engine.tools import REGISTRY, ToolContext, execute
-    from .engine.tools.sandbox import resolve_runtime
     from .engine.memory import MemoryHit, build_memory, memory_status
     from .engine.memory.ledger import ActionLedger
+    from .engine.permissions import commands_for, tool_patterns, tools_for
     from .engine.stores.affect import AffectStore
     from .engine.stores.documents import DocumentStore
     from .engine.stores.history import HistoryStore
     from .engine.stores.recipes import RecipeStore
     from .engine.stores.skills import SkillStore
     from .engine.stores.style import StyleStore
+    from .engine.tools import REGISTRY, ToolContext, execute
+    from .engine.tools.sandbox import resolve_runtime
     from .gateways import ensure_schemas
 
     hub = Hub(config.mcp)
     await hub.start()
-    root = Path(tempfile.mkdtemp(prefix="eidesoul-selftest-"))
-    db = Database(f"sqlite+pysqlite:///{root / 'selftest.db'}")
+    url = config.database_url()
+    if not url:
+        raise ConfigError(
+            "database URL is empty; `eidesoul selftest` needs the configured database"
+        )
+    db = Database(url)
     db.ensure()
     ensure_schemas(db)
     docs = DocumentStore(db, config.paths, sync=False)
@@ -465,7 +472,6 @@ async def selftest(config: Config) -> int:
         await memory.close()
         await hub.stop()
         db.dispose()
-        shutil.rmtree(root, ignore_errors=True)
 
     if all(results):
         print("SELFTEST OK", flush=True)
@@ -730,7 +736,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     resolve.add_argument("--explain", action="store_true", help="print the evidence per pack")
     resolve.add_argument("--force", action="store_true", help="re-resolve an existing style")
-    db_backup = database_sub.add_parser("backup", help="pg_dump / copy SQLite")
+    db_backup = database_sub.add_parser("backup", help="pg_dump a custom-format archive")
     db_backup.add_argument("--out", required=True, help="target file")
     db_restore = database_sub.add_parser("restore", help="restore from a backup")
     db_restore.add_argument("file", help="backup file")

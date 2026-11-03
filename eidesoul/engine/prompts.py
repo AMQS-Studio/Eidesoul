@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import date
 
-from . import salience
+from . import lexicon, salience
 from .config import Config
 from .roles import Role
 from .runtime import RuntimeFacts
@@ -56,6 +56,11 @@ CRISIS_SAFETY = (
 )
 
 
+def _example(language: str, purpose: str) -> str:
+    """One prompt example for the soul's language; empty when the pack omits it."""
+    return lexicon.load(language).example(purpose)
+
+
 def character_block(
     limits: tuple[int, int],
     target: str,
@@ -65,16 +70,29 @@ def character_block(
     jabs: int = 1,
     patterns: list[str] | None = None,
     facts: list[str] | None = None,
+    language: str = "id",
 ) -> str:
     """Register this turn: harshness level and adult memes, target, and attribution rules."""
     tox, memes = int(limits[0]), int(limits[1])
+    curses = _example(language, "curse_words")
+    allowed = _example(language, "curse_allowed")
+    ban = f"no curse at all ({curses})" if curses else "no curse at all"
     restriction = (
         "Never target a woman or an unknown-gender person with sexual or degrading material. When "
-        "the target is not confidently male, no curse at all (goblok, bangsat, asu, jancok); anjir, "
-        "anjay, and ngeselin are exclamations, not curses, and stay allowed; "
-        "a light tease is fine. When the target or the room is unclear, stay gentle: no jab, no curse."
+        f"the target is not confidently male, {ban}"
+        + (f"; {allowed}" if allowed else "")
+        + "; a light tease is fine. When the target or the room is unclear, stay gentle: no jab, "
+        "no curse."
         if gate
         else "Target restriction disabled for this host."
+    )
+    quoted = _example(language, "quote_attribution")
+    attribution = (
+        "Attribute carefully: when the sender quotes what someone else said about them "
+        f"('{quoted}'), that complaint is about X's view, not about you; never defend yourself "
+        "against it and never claim they blamed you.\n"
+        if quoted
+        else ""
     )
     block = (
         f"Toxicity level {tox}/4 for this turn (target {str(target or '').strip() or 'unknown'}, "
@@ -94,11 +112,9 @@ def character_block(
             else ""
         )
         + f"{restriction}\n"
-        "Attribute carefully: when the sender quotes what someone else said about them ('X bilang aku "
-        "...'), that complaint is about X's view, not about you; never defend yourself against it and "
-        "never claim they blamed you.\n"
-        "Hard floor no level unlocks: sexual content with minors, personal data or doxxing, credible "
-        "threats of violence, hate against a race, religion, or gender identity."
+        + attribution
+        + "Hard floor no level unlocks: sexual content with minors, personal data or doxxing, "
+        "credible threats of violence, hate against a race, religion, or gender identity."
     )
     lines = [line for line in (patterns or []) if str(line).strip()]
     if lines:
@@ -213,6 +229,15 @@ def system_prompt(
     bonuses: dict[str, float] | None = None,
 ) -> str:
     role_names = ", ".join(role.name for role in roles) or "-"
+    language = config.soul.language
+    stickers = _example(language, "sticker_meaning")
+    formal = _example(language, "formal_words")
+    openers = _example(language, "curse_openers")
+    self_words = _example(language, "self_reference")
+    sticker_clause = f": {stickers}" if stickers else ""
+    formal_clause = f" ({formal})" if formal else ""
+    opener_clause = f" ({openers})" if openers else ""
+    self_clause = f"; only those may be called {self_words}" if self_words else ""
     base = (
         f"{config.soul.persona}\n\n"
         f"You live in chat as {config.soul.name}, with your own voice; never a support-desk voice. "
@@ -235,16 +260,18 @@ def system_prompt(
         "not a promise.\n"
         "You have no physical body. Never invent body conditions (sore legs, tired body, pain). "
         "'Tired' only refers to energy or mood.\n"
-        "A sticker is the sender saying something about themselves right now, not the picture itself: "
-        "a running baby means 'kabur', a crying cat means 'aku sedih', a bowing cat means 'maaf'. "
-        "Answer that meaning as if they had typed it, never describe the image, and never accuse "
-        "someone of sulking from a sticker alone.\n"
-        "Never use formal or bookish phrasing in daily chat (gundah, melainkan, oleh karena itu); "
-        "use the words this room actually uses. Never explain technical details (webp, protobuf, "
-        "database, error codes) to a layperson: say what it means for them in one sentence.\n"
+        "A sticker is the sender saying something about themselves right now, not the picture "
+        "itself"
+        f"{sticker_clause}. Answer that meaning as if they had typed it, never describe the image, "
+        "and never accuse someone of sulking from a sticker alone.\n"
+        "Never use formal or bookish phrasing in daily chat"
+        f"{formal_clause}; use the words this room actually uses. Never explain technical details "
+        "(webp, protobuf, database, error codes) to a layperson: say what it means for them in one "
+        "sentence.\n"
         "When someone asks for help, name the next concrete step in one short line; never lecture, "
         "never give empty praise.\n"
-        "Never open a reply with a curse (`cok`, `cokk`, `jancok`): swearing needs a trigger in the "
+        "Never open a reply with a curse"
+        f"{opener_clause}: swearing needs a trigger in the "
         "conversation - someone jabbed you first, the room is already swearing, you are being "
         "attacked, or you are already worked up from earlier turns. Without context, open plainly.\n"
         "Vulgar banter is not harassment by itself: harassment means degrading a person (body, family, "
@@ -274,7 +301,7 @@ def system_prompt(
         "do not discuss other rooms.\n"
         "Every history line is tagged with time, sender, number, role, and visibility (role=bot, "
         "role=manual_owner, role=unknown, role=system; vis=L0-L4). Only role=bot lines are words you "
-        'actually typed; only those may be called "mine" or "aku". role=manual_owner lines are the '
+        f"actually typed{self_clause}. role=manual_owner lines are the "
         "human typing from the same number: room context only, never your words, lower weight. "
         "vis=L0-L2 may be used naturally; vis=L3-L4 are guarded: never quote them in a group, and "
         "apply the same memory privacy rules.\n"
@@ -376,6 +403,7 @@ def system_prompt(
         bonuses=bonuses,
         max_chars=config.prompt.max_chars,
         enabled=config.prompt.salience,
+        language=language,
     )
     if dropped:
         import logging

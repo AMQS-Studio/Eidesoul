@@ -15,7 +15,7 @@ ROLES = {"roles": {"guest": {"name": "guest", "tools": ["read"], "commands": ["h
 
 def write_folder(tmp_path, llm: dict) -> None:
     body = {
-        "database": {"url": "sqlite+pysqlite://", "url_env": ""},
+        "database": {"url": "postgresql+psycopg://eidesoul:eidesoul@127.0.0.1:5433/eidesoul_test", "url_env": ""},
         "workspace": ".eidesoul/workspace",
         "roles_file": "roles.yaml",
         "soul_file": "soul.yaml",

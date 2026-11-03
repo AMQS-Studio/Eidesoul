@@ -226,7 +226,7 @@ def test_mark_deleted_falls_back_to_the_archive(tmp_path) -> None:
     from eidesoul.engine.context import WorkingMemory
     from eidesoul.engine.stores.history import HistoryStore
 
-    store = HistoryStore(database(tmp_path))
+    store = HistoryStore(database())
     store.add("chat", row("a", "lama"))
     store.add("chat", row("b", "baru"))
     windows = WorkingMemory(limit=1, store=store)

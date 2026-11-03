@@ -48,7 +48,7 @@ class FakeClient:
 
 def make_gateway(tmp_path) -> WhatsAppGateway:
     config = build_config(tmp_path)
-    db = database(tmp_path)
+    db = database()
     history = HistoryStore(db)
     windows = WorkingMemory(store=history)
     gateway = WhatsAppGateway(

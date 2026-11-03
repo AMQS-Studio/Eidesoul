@@ -126,24 +126,19 @@ class HistoryStore:
         }
 
     @staticmethod
-    def _content_data(excluded, dialect: str):
+    def _content_data(excluded):
         """The incoming `data` without its fact keys; NULL when the row carries no content."""
-        if dialect == "postgresql":
-            stripped = cast(excluded.data, JSONB)
-            for key in FACT_KEYS:
-                stripped = stripped - cast(literal(key), Text)
-            return func.nullif(cast(stripped, Text), "{}")
-        stripped = excluded.data
+        stripped = cast(excluded.data, JSONB)
         for key in FACT_KEYS:
-            stripped = func.json_remove(stripped, f"$.{key}")
-        return func.nullif(stripped, "{}")
+            stripped = stripped - cast(literal(key), Text)
+        return func.nullif(cast(stripped, Text), "{}")
 
     @staticmethod
-    def _merge(stmt, dialect: str) -> dict:
+    def _merge(stmt) -> dict:
         table = messages
         excluded = stmt.excluded
         data = case(
-            (HistoryStore._content_data(excluded, dialect).is_(None), table.c.data),
+            (HistoryStore._content_data(excluded).is_(None), table.c.data),
             else_=excluded.data,
         )
         new_rank = case(AUTHOR_RANK, value=excluded.author, else_=0)
@@ -195,7 +190,7 @@ class HistoryStore:
                 messages,
                 rows,
                 ["chat_id", "msg_id"],
-                update=lambda stmt: self._merge(stmt, conn.dialect.name),
+                update=self._merge,
             )
         return len(rows)
 

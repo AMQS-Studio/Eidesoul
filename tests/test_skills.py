@@ -55,13 +55,13 @@ def test_parse_frontmatter_and_empty_store(tmp_path: Path) -> None:
     assert body.startswith("# Deploy aman")
     assert parse_frontmatter("# tanpa frontmatter")[0] == {}
 
-    store = SkillStore(database(tmp_path))
+    store = SkillStore(database())
     assert store.names() == []
     assert store.index() == ""
 
 
 def test_index_view_read_and_usage(tmp_path: Path) -> None:
-    db = database(tmp_path)
+    db = database()
     store = SkillStore(db)
     store.save("deploy-aman", "Deploy service dengan cek test dan rollback.", SKILL_BODY)
     add_file(db, "deploy-aman", "references/checklist.md", "cek dulu")
@@ -81,7 +81,7 @@ def test_index_view_read_and_usage(tmp_path: Path) -> None:
 
 
 def test_index_clips_at_budget(tmp_path: Path) -> None:
-    store = SkillStore(database(tmp_path), max_index_chars=200)
+    store = SkillStore(database(), max_index_chars=200)
     for index in range(12):
         store.save(f"skill-{index}", f"Prosedur nomor {index}.", f"# {index}\n")
     text = store.index()
@@ -90,7 +90,7 @@ def test_index_clips_at_budget(tmp_path: Path) -> None:
 
 
 def test_save_duplicate_and_overwrite(tmp_path: Path) -> None:
-    store = SkillStore(database(tmp_path))
+    store = SkillStore(database())
     assert store.save("deploy", "Deploy aman.", "# Deploy\n") == "deploy"
     assert "deploy" in store.names()
     with pytest.raises(FileExistsError):
@@ -102,7 +102,7 @@ def test_save_duplicate_and_overwrite(tmp_path: Path) -> None:
 
 
 def test_skill_tool_autonomous_lifecycle(tmp_path: Path) -> None:
-    store = SkillStore(database(tmp_path))
+    store = SkillStore(database())
     store.save("deploy", "Deploy aman.", "# Deploy\n")
     ctx = ToolContext(
         make_config(tmp_path), role("member"), ("skill",), chat_id="chat", skills=store
@@ -133,7 +133,7 @@ def test_skill_tool_autonomous_lifecycle(tmp_path: Path) -> None:
 
 
 def test_skill_command_list_view_and_read(tmp_path: Path) -> None:
-    db = database(tmp_path)
+    db = database()
     store = SkillStore(db)
     store.save("deploy", "Deploy aman.", "# Deploy\n")
     add_file(db, "deploy", "refs/x.md", "detail")

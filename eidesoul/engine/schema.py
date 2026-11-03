@@ -1,11 +1,11 @@
-"""One MetaData for all soul state; types portable across Postgres/SQLite."""
+"""One MetaData for all soul state; Postgres types only (ADR-0029)."""
 
 from __future__ import annotations
 
 from sqlalchemy import (
-    JSON,
     BigInteger,
     Boolean,
+    CheckConstraint,
     Column,
     Float,
     Index,
@@ -20,9 +20,6 @@ from sqlalchemy import (
     text,
 )
 from sqlalchemy.dialects.postgresql import JSONB
-
-BigIntPK = BigInteger().with_variant(Integer, "sqlite")
-Json = JSON().with_variant(JSONB, "postgresql")
 
 metadata = MetaData()
 
@@ -44,7 +41,7 @@ schema_meta = Table(
 messages = Table(
     "messages",
     metadata,
-    Column("id", BigIntPK, primary_key=True, autoincrement=True),
+    Column("id", BigInteger, primary_key=True, autoincrement=True),
     Column("chat_id", String(120), nullable=False),
     Column("msg_id", String(160), nullable=False),
     Column("ts", Float, nullable=False),
@@ -58,7 +55,7 @@ messages = Table(
     Column("deleted", Boolean, nullable=False, default=False, server_default=text("false")),
     Column("deleted_by", String(160), nullable=False, default="", server_default=""),
     Column("deleted_admin", Boolean, nullable=False, default=False, server_default=text("false")),
-    Column("data", Json, nullable=False, default=dict),
+    Column("data", JSONB, nullable=False, default=dict),
     Column("media_ref", LargeBinary, nullable=True),
     Column("quote_media_ref", LargeBinary, nullable=True),
     UniqueConstraint("chat_id", "msg_id", name="uq_messages_chat_msg"),
@@ -86,7 +83,7 @@ state = Table(
 actions = Table(
     "actions",
     metadata,
-    Column("id", BigIntPK, primary_key=True, autoincrement=True),
+    Column("id", BigInteger, primary_key=True, autoincrement=True),
     Column("ts", Float, nullable=False),
     Column("source", String(120), nullable=False),
     Column("source_name", String(160), nullable=False, default=""),
@@ -100,7 +97,7 @@ actions = Table(
 approvals = Table(
     "approvals",
     metadata,
-    Column("id", BigIntPK, primary_key=True, autoincrement=True),
+    Column("id", BigInteger, primary_key=True, autoincrement=True),
     Column("created_at", Float, nullable=False),
     Column("expires_at", Float, nullable=False),
     Column("chat_id", String(120), nullable=False),
@@ -108,8 +105,8 @@ approvals = Table(
     Column("gateway", String(40), nullable=False, default=""),
     Column("kind", String(40), nullable=False),
     Column("tool", String(80), nullable=False, default=""),
-    Column("args", Json, nullable=False, default=dict),
-    Column("payload", Json, nullable=False, default=dict),
+    Column("args", JSONB, nullable=False, default=dict),
+    Column("payload", JSONB, nullable=False, default=dict),
     Column("summary", Text, nullable=False, default=""),
     Column("diff", Text, nullable=False, default=""),
     Column("status", String(20), nullable=False, default="pending"),
@@ -124,7 +121,7 @@ people = Table(
     metadata,
     Column("person_id", String(80), primary_key=True),
     Column("name", String(160), nullable=False, default=""),
-    Column("aliases", Json, nullable=False, default=list),
+    Column("aliases", JSONB, nullable=False, default=list),
     Column("role", String(40), nullable=False, default=""),
     Column("stage", String(40), nullable=False, default=""),
     Column("trust", Float, nullable=False, default=0.0),
@@ -140,7 +137,7 @@ people = Table(
     Column("window_affection", Float, nullable=False, default=0.0),
     Column("window_respect", Float, nullable=False, default=0.0),
     Column("window_annoyance", Float, nullable=False, default=0.0),
-    Column("notes", Json, nullable=False, default=list),
+    Column("notes", JSONB, nullable=False, default=list),
     Column("gender", String(12), nullable=False, default=""),
     Column("gender_confidence", Float, nullable=False, default=0.0),
     Column("gender_source", String(16), nullable=False, default=""),
@@ -151,8 +148,8 @@ topics = Table(
     metadata,
     Column("chat_id", String(120), primary_key=True),
     Column("summary", Text, nullable=False, default=""),
-    Column("keywords", Json, nullable=False, default=list),
-    Column("unresolved", Json, nullable=False, default=list),
+    Column("keywords", JSONB, nullable=False, default=list),
+    Column("unresolved", JSONB, nullable=False, default=list),
     Column("pending", Integer, nullable=False, default=0),
     Column("last_message", Float, nullable=False, default=0.0),
     Column("last_digest", Float, nullable=False, default=0.0),
@@ -164,13 +161,13 @@ topics = Table(
 chat_eras = Table(
     "chat_eras",
     metadata,
-    Column("id", BigIntPK, primary_key=True, autoincrement=True),
+    Column("id", BigInteger, primary_key=True, autoincrement=True),
     Column("chat_id", String(120), nullable=False),
     Column("started_at", Float, nullable=False),
     Column("ended_at", Float, nullable=False),
     Column("summary", Text, nullable=False, default=""),
-    Column("keywords", Json, nullable=False, default=list),
-    Column("unresolved", Json, nullable=False, default=list),
+    Column("keywords", JSONB, nullable=False, default=list),
+    Column("unresolved", JSONB, nullable=False, default=list),
 )
 Index("ix_chat_eras_chat", chat_eras.c.chat_id, chat_eras.c.ended_at)
 
@@ -258,7 +255,7 @@ recipes = Table(
 config_changes = Table(
     "config_changes",
     metadata,
-    Column("id", BigIntPK, primary_key=True, autoincrement=True),
+    Column("id", BigInteger, primary_key=True, autoincrement=True),
     Column("ts", Float, nullable=False),
     Column("actor", String(160), nullable=False, default=""),
     Column("file", String(80), nullable=False),
@@ -274,9 +271,11 @@ engine_lease = Table(
     Column("instance_id", String(80), nullable=False, default=""),
     Column("host", String(200), nullable=False, default=""),
     Column("pid", Integer, nullable=False, default=0),
-    Column("mode", String(20), nullable=False, default="primary"),
+    Column("mode", String(20), nullable=False, default="standby"),
+    Column("generation", BigInteger, nullable=False, default=0, server_default="0"),
     Column("started_at", Float, nullable=False, default=0.0),
     Column("heartbeat_at", Float, nullable=False, default=0.0),
+    CheckConstraint("id = 1", name="ck_engine_lease_single"),
 )
 
 engine_control = Table(

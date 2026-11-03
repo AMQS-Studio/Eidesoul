@@ -2,6 +2,10 @@
 
 from __future__ import annotations
 
+import hashlib
+import math
+import os
+import re
 from dataclasses import replace
 from pathlib import Path
 
@@ -21,6 +25,38 @@ from eidesoul.engine.db import Database
 from eidesoul.engine.memory import MemoryContext, MemoryHit
 from eidesoul.engine.roles import Role, RoleRegistry
 from eidesoul.engine.soul import Soul, SoulStyle
+
+EMBED_DIM = 384
+TOKEN = re.compile(r"[0-9a-z]+")
+
+
+def test_dsn() -> str:
+    """The one test database; unset is a loud failure from conftest, never a fallback."""
+    return os.environ["EIDESOL_TEST_DATABASE_URL"]
+
+
+def stub_vector(text: str) -> list[float]:
+    """Deterministic 384-dim bag-of-token-hashes vector: no model, no network (ADR-0029 §4.3)."""
+    vector = [0.0] * EMBED_DIM
+    for token in TOKEN.findall(str(text or "").lower()):
+        digest = hashlib.blake2b(token.encode(), digest_size=8).digest()
+        index = int.from_bytes(digest[:4], "big") % EMBED_DIM
+        vector[index] += 1.0 if digest[4] % 2 else -1.0
+    norm = math.sqrt(sum(value * value for value in vector))
+    return [value / norm for value in vector] if norm else vector
+
+
+class StubEncoder:
+    """The embedder every test sees: the engine's `.encode` and Mem0's `.embed` contracts."""
+
+    def encode(self, texts, *, convert_to_numpy=True, show_progress_bar=False, **kwargs):
+        return [stub_vector(text) for text in texts]
+
+    def embed(self, text, memory_action=None):
+        return stub_vector(text)
+
+    def embed_batch(self, texts, memory_action=None):
+        return [stub_vector(text) for text in texts]
 
 
 def role(name: str, **kwargs) -> Role:
@@ -68,7 +104,7 @@ def build_config(
             soul_yaml=base / "soul.yaml",
             workspace=workspace_path,
         ),
-        database=database_config or DatabaseConfig(url="sqlite+pysqlite://", url_env=""),
+        database=database_config or DatabaseConfig(url=test_dsn(), url_env=""),
         documents=None,
         llm=LLMConfig(base_url="http://x", model="m", api_key_env="K"),
         workspace=workspace_path,
@@ -84,13 +120,9 @@ def build_config(
     )
 
 
-def database(tmp_path: str | Path, name: str = "test.db") -> Database:
-    db = Database(f"sqlite+pysqlite:///{Path(tmp_path) / name}")
-    db.ensure()
-    from eidesoul.gateways import ensure_schemas
-
-    ensure_schemas(db)
-    return db
+def database() -> Database:
+    """The session-migrated Postgres store; conftest truncates it before every test."""
+    return Database(test_dsn())
 
 
 class FakeMem0:
@@ -372,7 +404,7 @@ def make_agent(
     soul=None,
     currents=None,
 ):
-    """Build a full Agent with a temp SQLite DB and FakeGateway."""
+    """Build a full Agent on the test store with FakeGateway."""
     from types import SimpleNamespace
 
     from eidesoul.engine.agent import Agent
@@ -385,7 +417,7 @@ def make_agent(
     from eidesoul.engine.stores.skills import SkillStore
     from eidesoul.engine.stores.style import StyleStore
 
-    db = database(tmp_path)
+    db = database()
     config = build_config(
         tmp_path,
         roles=roles
@@ -503,7 +535,6 @@ def make_runtime(
     from eidesoul.engine.approvals import ApprovalStore
     from eidesoul.engine.config import load_config, load_host
     from eidesoul.engine.context import WorkingMemory
-    from eidesoul.engine.db import Database
     from eidesoul.engine.memory.ledger import ActionLedger
     from eidesoul.engine.stores.documents import DocumentStore
     from eidesoul.engine.stores.history import HistoryStore
@@ -512,7 +543,7 @@ def make_runtime(
 
     base = Path(tmp_path)
     monkeypatch.setenv("K", "x")
-    monkeypatch.setenv("EIDESOUL_DATABASE_URL", f"sqlite+pysqlite:///{base / 'eidesoul.db'}")
+    monkeypatch.setenv("EIDESOUL_DATABASE_URL", test_dsn())
     (base / "config.yaml").write_text(
         "database:\n  url_env: EIDESOUL_DATABASE_URL\nworkspace: .eidesoul/workspace\n"
         "roles_file: roles.yaml\nsoul_file: soul.yaml\n"
@@ -536,8 +567,7 @@ def make_runtime(
     )
 
     host, paths = load_host(base / "config.yaml")
-    db = Database(f"sqlite+pysqlite:///{base / 'eidesoul.db'}")
-    db.ensure()
+    db = database()
     documents = DocumentStore(db, paths)
     documents.seed()
     config = load_config(paths.config, documents=documents, require_key=False)

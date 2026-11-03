@@ -10,13 +10,14 @@ from pathlib import Path
 
 import yaml
 
-from .i18n import normalize_language
+from .i18n import catalog, normalize_language, t
 
 log = logging.getLogger(__name__)
 
 IDENTIFIER = re.compile(r"^[a-z0-9][a-z0-9-]{0,63}$")
 MAX_PER_TURN = 6
 GENDERS = ("male", "female", "nonbinary", "unspecified")
+PRONOUN_KEY = "soul.pronoun.default"
 
 # Seed for `eidesoul init` and the tracked root `soul.yaml`.
 DEFAULT_SOUL_YAML = """\
@@ -24,7 +25,7 @@ DEFAULT_SOUL_YAML = """\
 name: Eidesoul
 description: A persistent soul engine that can inhabit any body or role.
 language: id
-pronouns: aku
+pronouns: ""
 gender: unspecified
 role: assistant
 locale: id-ID
@@ -54,7 +55,7 @@ class Soul:
     name: str = "Eidesoul"
     description: str = ""
     language: str = "id"
-    pronouns: str = "aku"
+    pronouns: str = ""
     gender: str = "unspecified"
     role: str = "assistant"
     roles: tuple[str, ...] = ("assistant",)
@@ -64,6 +65,19 @@ class Soul:
     style: SoulStyle = field(default_factory=SoulStyle)
     examples: tuple[dict[str, str], ...] = ()
     source: Path | None = None
+
+    def __post_init__(self) -> None:
+        """Resolve an empty pronoun from the catalog; a missing key fails the boot."""
+        if not self.pronouns:
+            object.__setattr__(self, "pronouns", default_pronoun(self.language))
+
+
+def default_pronoun(language: str) -> str:
+    """`soul.pronoun.default` for one catalog; the key is required, so a boot without it fails."""
+    code = normalize_language(language, "id")
+    if PRONOUN_KEY not in catalog(code):
+        raise ValueError(f"language catalog '{code}' is missing the required key '{PRONOUN_KEY}'")
+    return t(PRONOUN_KEY, code)
 
 
 def _flow(values: tuple[str, ...]) -> str:
@@ -218,7 +232,7 @@ def load_soul(
         name=name,
         description=_text(raw.get("description")),
         language=normalize_language(raw.get("language"), "id"),
-        pronouns=_text(raw.get("pronouns")) or "aku",
+        pronouns=_text(raw.get("pronouns")),
         gender=gender,
         role=role,
         roles=roles,

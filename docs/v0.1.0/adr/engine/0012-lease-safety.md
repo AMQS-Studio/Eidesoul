@@ -1,7 +1,7 @@
 # ADR-0012: Lease Safety: CAS, Fencing Token, and Database Clock
 
 - **Status:** accepted
-- **Implementation:** partial — exists: `lease.py` (heartbeat, takeover, table `engine_lease`); rest: CAS, `generation`, DB clock
+- **Implementation:** partial — present: CAS acquire, `generation`, DB clock, takeover audit, generation-keyed renew/release, `LeaseGuard.require()`, revision 2; remaining: generation checks wired into delivery and memory writes (W2/W3 acceptance rows)
 - **Date:** 2026-11-01
 - **Deciders:** Muqsith (owner), omp (reviewer)
 - **Context:** follow-up to ADR-0011 (crash safety & recovery) and architectural review findings: lease without compare-and-swap, using local clocks

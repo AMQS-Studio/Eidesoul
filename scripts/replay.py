@@ -29,8 +29,8 @@ sys.path.insert(0, str(ROOT / "scripts"))
 from _paths import safe_path  # noqa: E402
 
 from eidesoul.engine.character import (  # noqa: E402
-    ASSISTANT_TELL,
     MARKDOWN,
+    assistant_tell,
     effective_limits,
     regulate,
 )
@@ -100,12 +100,15 @@ def bubbles_of(answer: str) -> list[str]:
     return [part for part in found if part]
 
 
-def hard_fails(answer: str, bubbles: list[str], seen: set) -> list[str]:
+def hard_fails(
+    answer: str, bubbles: list[str], seen: set, language: str = "id"
+) -> list[str]:
     """Deterministic rubric metrics: no LLM needed, cannot be talked around."""
     if not str(answer or "").strip():
         return ["empty_reply"]
     fails: list[str] = []
-    if ASSISTANT_TELL.search(answer):
+    tell = assistant_tell(language)
+    if tell is not None and tell.search(answer):
         fails.append("assistant_tell")
     if MARKDOWN.search(answer):
         fails.append("markdown_list_or_heading")
@@ -211,6 +214,7 @@ async def reply_once(
         gate=config.character.gender_gate,
         jabs=config.character.roast_jabs,
         patterns=patterns,
+        language=config.soul.language,
     )
     system = system_prompt(
         config,
@@ -283,7 +287,11 @@ async def run_scenario(
             )
         parts = bubbles_of(answer)
         visible = "\n".join(parts) or answer
-        fails = hard_fails(answer, parts, seen) if answer else ["empty_reply"]
+        fails = (
+            hard_fails(answer, parts, seen, config.soul.language)
+            if answer
+            else ["empty_reply"]
+        )
         seen |= shingles(answer)
         for part in parts:
             index += 1

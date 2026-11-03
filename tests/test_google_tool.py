@@ -42,7 +42,7 @@ class FakeDrive:
 
 
 def service(tmp_path) -> GoogleWorkspace:
-    return GoogleWorkspace(database(tmp_path), env={})
+    return GoogleWorkspace(database(), env={})
 
 
 def test_login_requires_a_direct_message(tmp_path) -> None:
@@ -53,7 +53,7 @@ def test_login_requires_a_direct_message(tmp_path) -> None:
 
 def test_device_login_polls_until_verified(tmp_path, monkeypatch) -> None:
     svc = GoogleWorkspace(
-        database(tmp_path),
+        database(),
         env={"GOOGLE_OAUTH_CLIENT_ID": "cid", "GOOGLE_OAUTH_CLIENT_SECRET": "sec"},
     )
 
@@ -362,7 +362,7 @@ def test_tool_routes_actions_with_a_linked_identity(tmp_path, monkeypatch) -> No
 
 
 def test_identity_row_is_read_by_person(tmp_path) -> None:
-    db = database(tmp_path)
+    db = database()
     with db.connect() as conn:
         db.upsert(
             conn,

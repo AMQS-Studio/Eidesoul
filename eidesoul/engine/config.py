@@ -16,6 +16,7 @@ from typing import Protocol
 import yaml
 
 from ..providers import resolve
+from . import lexicon
 from .roles import RoleError, RoleRegistry, load_roles
 from .soul import Soul, load_soul
 
@@ -242,6 +243,12 @@ class GuardConfig:
     max_command_chars: int = 4000
 
 
+@dataclass(frozen=True)
+class LanguageConfig:
+    """Language pack location; empty means the package `library/lexicon/<code>.json`."""
+
+    lexicon_dir: Path | None = None  # test-only `engine.language.lexicon_dir` override
+
 
 @dataclass(frozen=True)
 class AmbientConfig:
@@ -321,6 +328,7 @@ class Config:
     affect: AffectConfig = field(default_factory=AffectConfig)
     ambient: AmbientConfig = field(default_factory=AmbientConfig)
     guard: GuardConfig = field(default_factory=GuardConfig)
+    language: LanguageConfig = field(default_factory=LanguageConfig)
 
     def api_key(self) -> str:
         """The key for this provider; a local endpoint accepts any non-empty string."""
@@ -747,6 +755,12 @@ def load_config(
     ambient_raw = _section(engine, "ambient")
     guard_raw = _section(engine, "guard")
     vibe_raw = _section(affect_raw, "vibe")
+    language_dir = str(_section(engine, "language").get("lexicon_dir") or "").strip()
+    language = LanguageConfig(
+        lexicon_dir=_expand(language_dir, paths.config.parent) if language_dir else None
+    )
+    if language.lexicon_dir is not None:
+        lexicon.configure(language.lexicon_dir)
 
     approval_mode = str(approval_raw.get("mode") or "yolo").strip().lower()
     if approval_mode not in {"yolo", "off", "strict"}:
@@ -873,4 +887,5 @@ def load_config(
             timeout_seconds=_num_clamped(guard_raw.get("timeout_seconds"), 6.0, 0.5, 60.0),
             max_command_chars=_clamped(guard_raw.get("max_command_chars"), 4000, 200, 100_000),
         ),
+        language=language,
     )

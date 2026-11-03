@@ -12,7 +12,8 @@ def _aliases(handler: Handler) -> str:
 
 
 def _description(handler: Handler, lang: str) -> str:
-    return t(f"command.{handler.name}.description", lang, default=handler.description)
+    """Chat-facing description from the catalog; `Handler.description` stays model-facing."""
+    return t(f"command.{handler.name}.description", lang)
 
 
 def _detail(handler: Handler, lang: str) -> str:

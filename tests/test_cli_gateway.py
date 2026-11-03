@@ -26,7 +26,7 @@ def make_cli(tmp_path):
     from eidesoul.gateways.cli.gateway import CliGateway
 
     config = build_config(tmp_path)
-    db = database(tmp_path)
+    db = database()
     gateway = CliGateway(
         config,
         db,

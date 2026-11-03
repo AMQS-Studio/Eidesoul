@@ -1,10 +1,10 @@
-> Terjemahan turunan — jangan sunting; sumber: engine/0012-lease-safety.md (sha256: 4005a802523e)
+> Terjemahan turunan — jangan sunting; sumber: engine/0012-lease-safety.md (sha256: 46be1890a8d2)
 > Teks ini ditulis manusia; baris yang tidak bisa diterjemahkan mesin disalin apa adanya ke sumber English, jadi sumber bercampur dua bahasa.
 
 # ADR-0012: Lease Safety — CAS, Fencing Token, dan Jam Database
 
 - **Status:** accepted
-- **Implementasi:** sebagian — ada: `lease.py` (heartbeat, takeover, tabel `engine_lease`); sisa: CAS, `generation`, jam DB
+- **Implementasi:** sebagian — ada: CAS acquire, `generation`, jam DB, audit takeover, renew/release berkunci generasi, `LeaseGuard.require()`, revisi 2; sisa: cek generasi terpasang di jalur kirim dan tulis memori (baris acceptance W2/W3)
 - **Tanggal:** 2026-11-01
 - **Deciders:** Muqsith (owner), omp (reviewer)
 - **Konteks:** lanjutan ADR-0011 (crash safety & recovery) dan temuan review arsitektur: lease tanpa compare-and-swap, memakai jam lokal

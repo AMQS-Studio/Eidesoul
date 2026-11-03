@@ -8,7 +8,7 @@ from eidesoul.engine.memory.ledger import ActionLedger
 
 
 def test_log_and_recent_order(tmp_path) -> None:
-    ledger = ActionLedger(database(tmp_path))
+    ledger = ActionLedger(database())
     first = ledger.log_action("whatsapp", "chat-b", "send", "kirim laporan")
     second = ledger.log_action(
         "whatsapp",
@@ -28,7 +28,7 @@ def test_log_and_recent_order(tmp_path) -> None:
 
 
 def test_actions_context_is_internal_and_hides_the_requester(tmp_path) -> None:
-    ledger = ActionLedger(database(tmp_path))
+    ledger = ActionLedger(database())
     assert ledger.actions_context() == ""
     ledger.log_action(
         "whatsapp",
@@ -50,7 +50,7 @@ def test_actions_context_is_internal_and_hides_the_requester(tmp_path) -> None:
 
 
 def test_actions_context_caps_lines_and_keeps_failures(tmp_path) -> None:
-    ledger = ActionLedger(database(tmp_path))
+    ledger = ActionLedger(database())
     for index in range(15):
         ledger.log_action("whatsapp", f"chat-{index}", "teks", f"aksi {index}")
     ledger.log_action("whatsapp", "chat-x", "file", "gagal — error: gateway tidak tersedia")
@@ -64,7 +64,7 @@ def test_actions_context_caps_lines_and_keeps_failures(tmp_path) -> None:
 
 
 def test_sensitive_payload_never_stored(tmp_path) -> None:
-    db = database(tmp_path)
+    db = database()
     ledger = ActionLedger(db)
     ledger.log_action(
         "whatsapp",

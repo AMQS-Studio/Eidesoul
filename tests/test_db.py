@@ -10,13 +10,13 @@ from sqlalchemy import select
 from sqlalchemy.dialects import postgresql
 from support import database
 
-from eidesoul.engine.db import Database, redact_dsn
+from eidesoul.engine.db import SCHEMA_VERSION, redact_dsn
 from eidesoul.engine.schema import documents, messages, schema_meta, state
 from eidesoul.engine.stores.history import HistoryStore
 
 
-def test_create_all_idempotent_and_seeds_control(tmp_path) -> None:
-    db = database(tmp_path)
+def test_ensure_is_idempotent_on_the_migrated_schema(tmp_path) -> None:
+    db = database()
     db.ensure()
     db.ensure()
     found = db.fetch_all(select(state))
@@ -26,7 +26,7 @@ def test_create_all_idempotent_and_seeds_control(tmp_path) -> None:
 
 
 def test_upsert_insert_then_update(tmp_path) -> None:
-    db = database(tmp_path)
+    db = database()
     with db.connect() as conn:
         db.upsert(
             conn, documents, [{"name": "engine", "content": "a", "updated_at": 1.0}], ["name"]
@@ -41,7 +41,7 @@ def test_upsert_insert_then_update(tmp_path) -> None:
 
 
 def test_upsert_partial_update_keeps_other_columns(tmp_path) -> None:
-    db = database(tmp_path)
+    db = database()
     with db.connect() as conn:
         db.upsert(conn, documents, [{"name": "soul", "content": "x", "updated_at": 1.0}], ["name"])
     with db.connect() as conn:
@@ -57,7 +57,7 @@ def test_upsert_partial_update_keeps_other_columns(tmp_path) -> None:
 
 
 def test_upsert_chunks_postgres_parameter_limit() -> None:
-    db = Database("sqlite+pysqlite://")
+    db = database()
     rows = [
         {
             "id": i,
@@ -99,7 +99,7 @@ def test_upsert_chunks_postgres_parameter_limit() -> None:
 
 
 def test_state_roundtrip(tmp_path) -> None:
-    db = database(tmp_path)
+    db = database()
     with db.connect() as conn:
         db.upsert(
             conn,
@@ -112,7 +112,7 @@ def test_state_roundtrip(tmp_path) -> None:
 
 
 def test_search_is_ilike_per_term(tmp_path) -> None:
-    db = database(tmp_path)
+    db = database()
     store = HistoryStore(db)
     from eidesoul.engine.context import ChatMessage
 
@@ -130,7 +130,7 @@ def test_search_is_ilike_per_term(tmp_path) -> None:
 
 
 def test_search_time_window_and_other_chat_isolation(tmp_path) -> None:
-    db = database(tmp_path)
+    db = database()
     store = HistoryStore(db)
     from eidesoul.engine.context import ChatMessage
 
@@ -159,17 +159,20 @@ def test_redact_dsn_hides_password() -> None:
     assert "db:5432/eidesoul" in label
 
 
-def test_label_of_sqlite_database(tmp_path) -> None:
-    db = Database(f"sqlite+pysqlite:///{tmp_path / 'x.db'}")
-    assert db.dialect == "sqlite"
-    assert str(tmp_path / "x.db") in db.label
-    db.dispose()
+def test_label_of_the_store_hides_the_password() -> None:
+    db = database()
+    try:
+        assert db.label.startswith("postgresql://")
+        assert "eidesoul_test" in db.label
+        assert "eidesoul:eidesoul" not in db.label
+    finally:
+        db.dispose()
 
 
 def test_schema_version_is_recorded(tmp_path) -> None:
-    db = database(tmp_path)
+    db = database()
     db.ensure()
     db.ensure()
     version = db.fetch_one(select(schema_meta).where(schema_meta.c.key == "version"))
-    assert version is not None and version["value"] == "1"
+    assert version is not None and version["value"] == str(SCHEMA_VERSION)
 

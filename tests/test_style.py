@@ -22,7 +22,7 @@ def humanize_reply(text: str, *, max_parts: int) -> list[str]:
 
 
 def make_store(tmp_path: Path) -> StyleStore:
-    return StyleStore(database(tmp_path), StyleConfig(enabled=True))
+    return StyleStore(database(), StyleConfig(enabled=True))
 
 
 def test_seed_profile_mentions_short_style(tmp_path) -> None:
@@ -51,7 +51,7 @@ def test_learn_ignores_commands_and_media(tmp_path) -> None:
 
 
 def test_learn_persists_aggregates_only(tmp_path) -> None:
-    db = database(tmp_path)
+    db = database()
     store = StyleStore(db, StyleConfig(enabled=True))
     store.learn("wkwk aja sih", chat_id="c@g.us")
     store.close()
@@ -59,7 +59,7 @@ def test_learn_persists_aggregates_only(tmp_path) -> None:
     stored = db.scalar(select(state.c.value).where(state.c.key == "style"))
     assert stored is not None
     assert "wkwk aja sih" not in stored
-    reloaded = StyleStore(database(tmp_path), StyleConfig(enabled=True))
+    reloaded = StyleStore(database(), StyleConfig(enabled=True))
     assert reloaded.stats()["global"] == 1
     assert reloaded.stats()["chats"] == {"c@g.us": 1}
     reloaded.close()

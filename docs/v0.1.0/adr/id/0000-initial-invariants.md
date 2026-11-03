@@ -1,4 +1,4 @@
-> Terjemahan turunan — jangan sunting; sumber: 0000-initial-invariants.md (sha256: bbcaf47b84a6)
+> Terjemahan turunan — jangan sunting; sumber: 0000-initial-invariants.md (sha256: afa3756f7b1b)
 > Ditulis tangan (bukan mesin), mengikuti sumber English baris demi baris.
 
 # ADR-0000: Invarian Awal — Bentuk Permukaan, Data Bahasa, Seam Netral Embodiment
@@ -10,7 +10,7 @@
 - **Supersedes:** —
 - **Terkait:** ADR-0001 (memori), ADR-0007 (teks kapabilitas & approval), ADR-0009 (rumah ADR & penjaganya), ADR-0015 (payload), ADR-0016 (pemilik skema), ADR-0018 (kontrak gateway), ADR-0020 (episode), ADR-0021 (keluaran tool), ADR-0022 (`administrator` dan `label`)
 - **Order:** foundational — dijalankan sebelum body gateway baru mana pun, sebelum dashboard, dan sebelum pemindahan string/lexicon yang bergantung padanya.
-- **Implementasi:** draft — belum ada perubahan engine. ADR ini adalah rencana induk untuk rename, seam, dan pemindahan lexicon.
+- **Implementasi:** partial — ada: `library/lexicon/{en,id}.json` + `engine/lexicon.py`, resolusi `soul.pronoun.default`, `/help` hanya dari katalog, scanner `tests/test_language.py`; sisa: `Percept`/`Action`, rename §4.4, `send`/`chat_history` keluar dari core, satu body non-chat, `tests/test_architecture.py`
 - **Catatan lokasi:** ini dokumen fondasi lintas-potong, jadi ia duduk di akar rumah ADR (`docs/v0.1.0/adr/`);
   salinan Indonesia di `docs/v0.1.0/adr/id/0001-initial-invariants.md`. ADR engine hidup di
   `docs/v0.1.0/adr/engine/`, ADR web/panel di `docs/v0.1.0/adr/web/`.

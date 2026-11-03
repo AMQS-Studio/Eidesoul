@@ -58,7 +58,7 @@ async def status(ctx: CommandContext) -> str:
         t("command.status.uptime", lang, value=runtime.uptime),
         t("command.status.surface", lang, value=runtime.surface()),
         t("command.status.model", lang, value=config.llm.model),
-        t("command.status.database", lang, value=f"{agent.db.label} ({agent.db.dialect})"),
+        t("command.status.database", lang, value=agent.db.label),
         t("command.status.chat", lang, value=_chat_label(ctx, lang)),
     ]
     if store is not None:

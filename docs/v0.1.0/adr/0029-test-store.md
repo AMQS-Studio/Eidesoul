@@ -6,7 +6,7 @@
 - **Context:** follows ADR-0016 (canonical schema and migration), ADR-0001 (memory source of truth), ADR-0011 (crash safety), ADR-0012 (lease safety), ADR-0026 (search), ADR-0027 (distribution and default-off capability)
 - **Supersedes:** —
 - **Related:** ADR-0009 (the gate these tests run beside), ADR-0019 (observability), ADR-0021 / ADR-0024 (tool contracts)
-- **Implementation:** draft — the suite still runs on SQLite. This ADR is the plan of record for the switch; no test or engine code changed with it.
+- **Implementation:** implemented — evidence: `tests/conftest.py`, `tests/support.py`, `tests/test_pgvector.py`, `eidesoul/engine/db.py`, `eidesoul/engine/schema.py`, `compose.yaml`; gate result: `pytest -q` 561 passed in 31 s on Postgres+pgvector, unset variable failure verified
 - **Location note:** this ADR binds every surface (it decides what "verified" means), so it sits at the root of the ADR home. The Indonesian copy is `docs/v0.1.0/adr/id/0029-test-store.md`.
 - **Amendments:** 2026-11-03 — first version.
 

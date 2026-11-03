@@ -47,7 +47,7 @@ def message(
 
 
 def test_recent_order_and_find(tmp_path) -> None:
-    store = HistoryStore(database(tmp_path))
+    store = HistoryStore(database())
     store.add("chat", message("a", "satu", when=datetime(2026, 1, 1, 10)))
     store.add("chat", message("b", "dua", when=datetime(2026, 1, 1, 11)))
 
@@ -57,7 +57,7 @@ def test_recent_order_and_find(tmp_path) -> None:
 
 
 def test_upsert_keeps_richer_fields(tmp_path) -> None:
-    store = HistoryStore(database(tmp_path))
+    store = HistoryStore(database())
     media = Media(
         kind="image", mimetype="image/png", filename="a.png", size=3, proto=None, ref=b"abc"
     )
@@ -77,7 +77,7 @@ def test_upsert_keeps_richer_fields(tmp_path) -> None:
 
 
 def test_chat_name_and_recent_chats(tmp_path) -> None:
-    store = HistoryStore(database(tmp_path))
+    store = HistoryStore(database())
     store.add("a@g.us", message("a", "x", when=datetime(2026, 1, 1, 10)))
     store.add("b@s.whatsapp.net", message("b", "y", when=datetime(2026, 1, 1, 11)))
     store.set_chat_name("a@g.us", "  Grup   Logistik ")
@@ -89,7 +89,7 @@ def test_chat_name_and_recent_chats(tmp_path) -> None:
 
 
 def test_people_and_style_seed_skip_outgoing(tmp_path) -> None:
-    store = HistoryStore(database(tmp_path))
+    store = HistoryStore(database())
     store.add("chat", message("a", "halo", when=datetime.now(), sender_name="Ani"))
     store.add("chat", message("b", "diam", when=datetime.now(), outgoing=True))
 
@@ -100,7 +100,7 @@ def test_people_and_style_seed_skip_outgoing(tmp_path) -> None:
 
 
 def test_sender_address_and_kind_roundtrip(tmp_path) -> None:
-    store = HistoryStore(database(tmp_path))
+    store = HistoryStore(database())
     store.add("chat", message("a", "halo", sender_kind=""))
     store.add("chat", message("b", "halo"))
 
@@ -113,7 +113,7 @@ def test_sender_address_and_kind_roundtrip(tmp_path) -> None:
 
 
 def test_author_and_visibility_roundtrip(tmp_path) -> None:
-    store = HistoryStore(database(tmp_path))
+    store = HistoryStore(database())
     store.add("chat", message("a", "halo", author="manual_owner", visibility=3))
 
     item = store.find("chat", "a")
@@ -124,7 +124,7 @@ def test_author_and_visibility_roundtrip(tmp_path) -> None:
 
 
 def test_merge_never_downgrades_author_or_visibility(tmp_path) -> None:
-    store = HistoryStore(database(tmp_path))
+    store = HistoryStore(database())
     store.add("chat", message("a", "halo", sender_name="Owner", sender_id="628567770837"))
     store.add(
         "chat",
@@ -148,7 +148,7 @@ def test_merge_never_downgrades_author_or_visibility(tmp_path) -> None:
 
 
 def test_visibility_only_rises_with_set_visibility(tmp_path) -> None:
-    store = HistoryStore(database(tmp_path))
+    store = HistoryStore(database())
     store.add("chat", message("a", "satu"))
     store.add("chat", message("b", "dua"))
 
@@ -160,7 +160,7 @@ def test_visibility_only_rises_with_set_visibility(tmp_path) -> None:
 
 
 def test_unknown_author_values_fall_back_to_unknown(tmp_path) -> None:
-    store = HistoryStore(database(tmp_path))
+    store = HistoryStore(database())
     store.add("chat", message("a", "x"))
     with store.db.connect() as conn:
         conn.execute(messages.update().values(author="weird", visibility=9))
@@ -173,7 +173,7 @@ def test_unknown_author_values_fall_back_to_unknown(tmp_path) -> None:
 
 
 def test_mark_deleted_keeps_the_archived_text(tmp_path) -> None:
-    store = HistoryStore(database(tmp_path))
+    store = HistoryStore(database())
     store.add("chat", message("a", "isi lama"))
 
     assert store.mark_deleted("chat", "a", "628999@s.whatsapp.net", "Ani") is True
@@ -188,7 +188,7 @@ def test_mark_deleted_keeps_the_archived_text(tmp_path) -> None:
 
 
 def test_author_deletion_is_not_admin_and_later_upsert_keeps_the_flag(tmp_path) -> None:
-    store = HistoryStore(database(tmp_path))
+    store = HistoryStore(database())
     store.add("chat", message("a", "isi"))
     store.mark_deleted("chat", "a", "628222@s.whatsapp.net")
     store.add("chat", message("a", ""))
@@ -202,7 +202,7 @@ def test_author_deletion_is_not_admin_and_later_upsert_keeps_the_flag(tmp_path) 
 
 
 def test_view_once_and_unreadable_flags_roundtrip(tmp_path) -> None:
-    store = HistoryStore(database(tmp_path))
+    store = HistoryStore(database())
     store.add("chat", message("a", "sekali", view_once=True))
     store.add("chat", message("b", "", unreadable=True))
 
@@ -214,7 +214,7 @@ def test_view_once_and_unreadable_flags_roundtrip(tmp_path) -> None:
 
 
 def test_real_message_merge_replaces_the_unreadable_placeholder(tmp_path) -> None:
-    store = HistoryStore(database(tmp_path))
+    store = HistoryStore(database())
     store.add("chat", message("a", "", unreadable=True))
     assert store.find("chat", "a").unreadable is True
 

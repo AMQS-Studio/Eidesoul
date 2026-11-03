@@ -26,7 +26,7 @@ class DigestLLM(FakeLLM):
 
 
 def build(tmp_path, digest: dict):
-    db = database(tmp_path)
+    db = database()
     config = build_config(tmp_path, affect=AffectConfig(enabled=True))
     affect = AffectStore(db, config.affect, soul=config.soul.persona)
     history = HistoryStore(db, config.workspace)

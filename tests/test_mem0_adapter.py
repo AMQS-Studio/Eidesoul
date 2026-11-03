@@ -17,6 +17,7 @@ from eidesoul.engine.memory import context as memory_context
 from eidesoul.engine.memory.mem0 import Mem0Backend
 
 PG = "postgresql+psycopg://eidesoul:secret@db:5432/eidesoul"
+RESOLVE_TABLE = "eidesoul_resolve_test"
 
 
 def make_backend(tmp_path, monkeypatch) -> tuple[Mem0Backend, FakeMem0]:
@@ -280,11 +281,17 @@ def make_resolving(
     tmp_path, monkeypatch, *, table_ids=(), items=()
 ) -> tuple[Mem0Backend, IdStrictMem0]:
     backend, _fake = make_backend(tmp_path, monkeypatch)
-    db = database(tmp_path)
+    backend.config = replace(
+        backend.config,
+        memory=replace(backend.config.memory, collection=RESOLVE_TABLE),
+    )
+    db = database()
     with db.engine.begin() as conn:
-        conn.execute(sql_text("CREATE TABLE eidesoul_memories (id TEXT PRIMARY KEY)"))
+        conn.execute(
+            sql_text(f"CREATE TABLE IF NOT EXISTS {RESOLVE_TABLE} (id TEXT PRIMARY KEY)")
+        )
         for value in table_ids:
-            conn.execute(sql_text("INSERT INTO eidesoul_memories (id) VALUES (:id)"), {"id": value})
+            conn.execute(sql_text(f"INSERT INTO {RESOLVE_TABLE} (id) VALUES (:id)"), {"id": value})
     backend.db = db
     fake = IdStrictMem0()
     for item in items:

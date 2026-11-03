@@ -8,10 +8,7 @@ from __future__ import annotations
 
 import logging
 import os
-import shutil
-import sqlite3
 import subprocess
-import time
 from pathlib import Path
 
 from sqlalchemy import func, select, text
@@ -91,13 +88,17 @@ def _lease_row(db: Database) -> dict | None:
     return db.fetch_one(select(engine_lease).where(engine_lease.c.id == 1))
 
 
-def lease_active(db: Database, *, now: float | None = None, ttl: float = LEASE_TTL) -> dict | None:
-    """The lease row while it is alive (fresh heartbeat); `None` when empty or stale."""
-    row = _lease_row(db)
+def lease_active(db: Database, *, ttl: float = LEASE_TTL) -> dict | None:
+    """The lease row while it is alive; freshness comes from the database clock (ADR-0012 §4.4)."""
+    row = db.fetch_one(
+        text(
+            "SELECT instance_id, host, pid, generation, heartbeat_at, "
+            "EXTRACT(EPOCH FROM clock_timestamp()) AS now FROM engine_lease WHERE id = 1"
+        )
+    )
     if row is None:
         return None
-    moment = time.time() if now is None else float(now)
-    if float(row.get("heartbeat_at") or 0.0) < moment - float(ttl):
+    if float(row.get("heartbeat_at") or 0.0) < float(row["now"]) - float(ttl):
         return None
     return row
 
@@ -108,20 +109,11 @@ def _pg_dsn(url: str) -> str:
     return parsed.set(drivername="postgresql").render_as_string(hide_password=False)
 
 
-def _sqlite_path(url: str) -> Path:
-    database = make_url(str(url)).database or ""
-    if not database or database == ":memory:":
-        raise ConfigError("SQLite backup/restore needs a database file, not :memory:")
-    return Path(database).expanduser()
-
-
 # ------------------------------------------------------------------ upgrade
 
 
 def reset_sequences(db: Database) -> list[str]:
     """Align Postgres sequences with ids inserted explicitly."""
-    if db.dialect != "postgresql":
-        return []
     done: list[str] = []
     for table in (messages, actions, approvals, config_changes):
         with db.connect() as conn:
@@ -159,7 +151,7 @@ def upgrade(config_path=None) -> dict:
         )
         return {
             "database": db.label,
-            "dialect": db.dialect,
+            "dialect": make_url(db.url).get_backend_name(),
             "schema_version": str(found["value"]) if found is not None else None,
             "documents": docs.names(),
             "seeded": seeded,
@@ -200,7 +192,7 @@ def check(config_path=None) -> dict:
             ) from exc
         return {
             "database": db.label,
-            "dialect": db.dialect,
+            "dialect": make_url(db.url).get_backend_name(),
             "schema_version": str(found["value"]) if found is not None else None,
             "counts": counts,
             "approvals_pending": pending_approvals,
@@ -258,25 +250,17 @@ def format_check(data: dict) -> str:
 
 
 def backup(config_path, out: Path) -> Path:
-    """Postgres `pg_dump --format=custom`; SQLite through the backup API. Mode 600."""
+    """Postgres `pg_dump --format=custom`; mode 600."""
     host, _paths = _host(config_path)
     url = resolve_database_url(host.database)
     if not url:
         raise ConfigError("database URL is empty; nothing to back up")
     target = Path(out).expanduser()
     target.parent.mkdir(parents=True, exist_ok=True)
-    dialect = make_url(url).get_backend_name()
-    if dialect == "sqlite":
-        source = _sqlite_path(url)
-        if not source.is_file():
-            raise ConfigError(f"SQLite database not found: {source}")
-        with sqlite3.connect(source) as src, sqlite3.connect(target) as dst:
-            src.backup(dst)
-    else:
-        subprocess.run(
-            ["pg_dump", "--format=custom", "--file", str(target), _pg_dsn(url)],
-            check=True,
-        )
+    subprocess.run(
+        ["pg_dump", "--format=custom", "--file", str(target), _pg_dsn(url)],
+        check=True,
+    )
     try:
         os.chmod(target, 0o600)
     except OSError:
@@ -299,27 +283,21 @@ def restore(config_path, source: Path, *, yes: bool = False, force: bool = False
                 f"{active.get('host')} pid {active.get('pid')}; stop it first or use --force"
             )
         url = db.url
-        dialect = db.dialect
         path = Path(source).expanduser()
         if not path.is_file():
             raise ConfigError(f"backup file not found: {path}")
-        if dialect == "sqlite":
-            target = _sqlite_path(url)
-            db.dispose()
-            shutil.copyfile(path, target)
-        else:
-            subprocess.run(
-                [
-                    "pg_restore",
-                    "--clean",
-                    "--if-exists",
-                    "--no-owner",
-                    "--dbname",
-                    _pg_dsn(url),
-                    str(path),
-                ],
-                check=True,
-            )
+        subprocess.run(
+            [
+                "pg_restore",
+                "--clean",
+                "--if-exists",
+                "--no-owner",
+                "--dbname",
+                _pg_dsn(url),
+                str(path),
+            ],
+            check=True,
+        )
         log.info("database restore %s <- %s", db.label, path)
     finally:
         db.dispose()

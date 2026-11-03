@@ -32,7 +32,7 @@ def echo_specs() -> dict:
 
 
 def test_store_round_trip_and_persistence(tmp_path: Path) -> None:
-    db = database(tmp_path)
+    db = database()
     store = RecipeStore(db)
     assert (
         store.save(
@@ -61,7 +61,7 @@ def test_store_round_trip_and_persistence(tmp_path: Path) -> None:
 
 
 def test_store_validation_rejects_bad_definitions(tmp_path: Path) -> None:
-    store = RecipeStore(database(tmp_path))
+    store = RecipeStore(database())
     good = [{"tool": "echo", "args": {}}]
     with pytest.raises(ValueError):
         store.save("Bad Name!", "recipe", "d", steps=good)
@@ -80,7 +80,7 @@ def test_store_validation_rejects_bad_definitions(tmp_path: Path) -> None:
 
 
 def test_store_duplicate_and_overwrite(tmp_path: Path) -> None:
-    store = RecipeStore(database(tmp_path))
+    store = RecipeStore(database())
     store.save("prompt", "prompt", "Versi satu.", prompt="lakukan")
     with pytest.raises(FileExistsError):
         store.save("prompt", "prompt", "Versi dua.", prompt="lakukan lagi")
@@ -91,7 +91,7 @@ def test_store_duplicate_and_overwrite(tmp_path: Path) -> None:
 
 
 def test_store_skips_corrupt_rows(tmp_path: Path) -> None:
-    db = database(tmp_path)
+    db = database()
     with db.connect() as conn:
         db.upsert(
             conn,
@@ -113,7 +113,7 @@ def test_store_skips_corrupt_rows(tmp_path: Path) -> None:
 
 
 def test_run_recipe_chain_substitution_and_failure(tmp_path: Path) -> None:
-    store = RecipeStore(database(tmp_path))
+    store = RecipeStore(database())
     config = make_config(tmp_path)
     ctx = ToolContext(config, config.roles.default_role(), ("*",))
     specs = echo_specs()

@@ -18,7 +18,7 @@ from eidesoul.engine.config import (
 from eidesoul.engine.stores.documents import DocumentStore
 
 BASE = {
-    "database": {"url": "sqlite+pysqlite://", "url_env": ""},
+    "database": {"url": "postgresql+psycopg://eidesoul:eidesoul@127.0.0.1:5433/eidesoul_test", "url_env": ""},
     "workspace": ".eidesoul/workspace",
     "roles_file": "roles.yaml",
     "engine": {
@@ -93,7 +93,7 @@ def test_load_config_reads_all_sections(tmp_path, monkeypatch) -> None:
 def test_documents_override_config_sections(tmp_path, monkeypatch) -> None:
     monkeypatch.setenv("EIDESOUL_TEST_KEY", "x")
     write_folder(tmp_path)
-    docs = DocumentStore(database(tmp_path), load_host(tmp_path / "config.yaml")[1])
+    docs = DocumentStore(database(), load_host(tmp_path / "config.yaml")[1])
     docs.put(
         "engine",
         "llm:\n  provider: custom\n  base_url: http://doc\n"

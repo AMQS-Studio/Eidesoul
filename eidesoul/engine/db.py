@@ -1,4 +1,4 @@
-"""Single database (Postgres at runtime, SQLite in tests) through SQLAlchemy Core."""
+"""Single database: Postgres+pgvector through SQLAlchemy Core (ADR-0029)."""
 
 from __future__ import annotations
 
@@ -10,12 +10,11 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
-from sqlalchemy import Connection, Engine, Table, create_engine, select, text
+from sqlalchemy import Connection, Engine, Table, create_engine, text
 from sqlalchemy.dialects.postgresql import insert as pg_insert
-from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.engine import make_url
 
-from .schema import engine_control, engine_lease, metadata, schema_meta
+from .schema import engine_control, metadata, schema_meta
 
 log = logging.getLogger(__name__)
 
@@ -33,6 +32,11 @@ def head_version() -> int:
         if head.isdigit():
             numbers.append(int(head))
     return max(numbers, default=1)
+
+
+def head_revision() -> str:
+    """The Alembic revision id at the head of the chain (`0002`)."""
+    return f"{head_version():04d}"
 
 
 SCHEMA_VERSION = head_version()
@@ -64,20 +68,39 @@ class Database:
         self.url = str(url)
         if not self.url:
             raise ValueError("database URL is empty")
-        self.dialect = make_url(self.url).get_backend_name()
+        backend = make_url(self.url).get_backend_name()
+        if backend != "postgresql":
+            raise ValueError(
+                f"database must be Postgres+pgvector (ADR-0029), not '{backend}'"
+            )
         self.label = redact_dsn(self.url)
-        options: dict[str, Any] = {"pool_pre_ping": True, "future": True}
-        if self.dialect != "sqlite":
-            options.update(pool_size=int(pool_size), pool_timeout=float(pool_timeout))
-        else:
-            options["connect_args"] = {"check_same_thread": False}
-        self.engine: Engine = create_engine(self.url, **options)
+        self.engine: Engine = create_engine(
+            self.url,
+            pool_pre_ping=True,
+            pool_size=int(pool_size),
+            pool_timeout=float(pool_timeout),
+            future=True,
+        )
 
     # ------------------------------------------------------------- schema
 
     def create_all(self) -> None:
         metadata.create_all(self.engine)
         with self.connect() as conn:
+            # A create_all database must stay upgradable: stamp the chain head, exactly as
+            # `alembic stamp head` would, so a later `upgrade` is a no-op instead of a conflict.
+            conn.execute(
+                text(
+                    "CREATE TABLE IF NOT EXISTS alembic_version "
+                    "(version_num VARCHAR(32) NOT NULL PRIMARY KEY)"
+                )
+            )
+            stamped = conn.execute(text("SELECT version_num FROM alembic_version")).scalar()
+            if stamped is None:
+                conn.execute(
+                    text("INSERT INTO alembic_version (version_num) VALUES (:revision)"),
+                    {"revision": head_revision()},
+                )
             self.upsert(
                 conn,
                 schema_meta,
@@ -95,9 +118,7 @@ class Database:
             )
 
     def ensure_vector(self) -> bool:
-        """Enable pgvector best-effort; SQLite does not need it."""
-        if self.dialect != "postgresql":
-            return False
+        """Enable pgvector best-effort; the store needs it, a failed grant is reported."""
         try:
             with self.engine.connect().execution_options(isolation_level="AUTOCOMMIT") as conn:
                 conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
@@ -117,20 +138,25 @@ class Database:
             self.create_all()
         self.ensure_vector()
 
-    def assert_migration_allowed(self, *, now: float | None = None) -> None:
+    def assert_migration_allowed(self) -> None:
         """Refuse when another instance is a live primary; a standby never migrates."""
         from sqlalchemy.exc import SQLAlchemyError
 
         from .lease import TTL
 
         try:
-            row = self.fetch_one(select(engine_lease).where(engine_lease.c.id == 1))
+            row = self.fetch_one(
+                text(
+                    "SELECT instance_id, host, pid, heartbeat_at, "
+                    "EXTRACT(EPOCH FROM clock_timestamp()) AS now "
+                    "FROM engine_lease WHERE id = 1"
+                )
+            )
         except SQLAlchemyError:  # empty database: nothing can hold the lease yet
             return
         if row is None:
             return
-        moment = time.time() if now is None else float(now)
-        if float(row.get("heartbeat_at") or 0.0) >= moment - float(TTL):
+        if float(row.get("heartbeat_at") or 0.0) >= float(row["now"]) - float(TTL):
             raise MigrationError(
                 "migration refused: a primary is alive "
                 f"({row.get('host')} pid {row.get('pid')}); run the upgrade on the primary "
@@ -149,25 +175,24 @@ class Database:
         cfg.set_main_option("script_location", str(MIGRATIONS))
         cfg.set_main_option("sqlalchemy.url", self.url)
         with self.engine.connect() as conn:
+            deadline = time.time() + float(timeout)
             locked = False
-            if self.dialect == "postgresql":
-                deadline = time.time() + float(timeout)
-                while True:
-                    locked = bool(
-                        conn.execute(
-                            text("SELECT pg_try_advisory_lock(:key)"),
-                            {"key": ADVISORY_LOCK_KEY},
-                        ).scalar()
-                    )
-                    if locked or time.time() >= deadline:
-                        break
-                    time.sleep(0.25)
-                conn.commit()
-                if not locked:
-                    raise MigrationError(
-                        f"migration lock not acquired within {timeout:g}s; "
-                        "another upgrade is still running"
-                    )
+            while True:
+                locked = bool(
+                    conn.execute(
+                        text("SELECT pg_try_advisory_lock(:key)"),
+                        {"key": ADVISORY_LOCK_KEY},
+                    ).scalar()
+                )
+                if locked or time.time() >= deadline:
+                    break
+                time.sleep(0.25)
+            conn.commit()
+            if not locked:
+                raise MigrationError(
+                    f"migration lock not acquired within {timeout:g}s; "
+                    "another upgrade is still running"
+                )
             try:
                 cfg.attributes["connection"] = conn
                 command.upgrade(cfg, revision)
@@ -180,11 +205,10 @@ class Database:
                 )
                 conn.commit()
             finally:
-                if locked:
-                    conn.execute(
-                        text("SELECT pg_advisory_unlock(:key)"), {"key": ADVISORY_LOCK_KEY}
-                    )
-                    conn.commit()
+                conn.execute(
+                    text("SELECT pg_advisory_unlock(:key)"), {"key": ADVISORY_LOCK_KEY}
+                )
+                conn.commit()
         return SCHEMA_VERSION
 
     # -------------------------------------------------------- connection
@@ -218,12 +242,10 @@ class Database:
         if not rows:
             return 0
         items = list(rows)
-        dialect = conn.dialect.name
-        insert_fn = pg_insert if dialect == "postgresql" else sqlite_insert
         total = 0
         for start in range(0, len(items), UPSERT_BATCH_ROWS):
             chunk = items[start : start + UPSERT_BATCH_ROWS]
-            statement = insert_fn(table).values(chunk)
+            statement = pg_insert(table).values(chunk)
             if update is None:
                 conflict = {
                     column.name: statement.excluded[column.name]
