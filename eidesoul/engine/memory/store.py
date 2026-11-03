@@ -1557,8 +1557,8 @@ class MemoryStore:
             days = retention_days_from(self.config)
             return int(
                 conn.execute(
-                    text("DELETE FROM llm_calls WHERE ts < to_timestamp(:cutoff)"),
-                    {"cutoff": now - days * DAY},
+                    text("DELETE FROM llm_calls WHERE ts < :cutoff"),
+                    {"cutoff": float(now) - days * DAY},
                 ).rowcount
                 or 0
             )

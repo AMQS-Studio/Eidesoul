@@ -1,10 +1,10 @@
-> Terjemahan turunan — jangan sunting; sumber: engine/0019-observability.md (sha256: 4a0d57c71034)
+> Terjemahan turunan — jangan sunting; sumber: engine/0019-observability.md (sha256: 66a9614eb18a)
 > Teks ini ditulis manusia; baris yang tidak bisa diterjemahkan mesin disalin apa adanya ke sumber English, jadi sumber bercampur dua bahasa.
 
 # ADR-0019: Observability — Log Terstruktur, Token, dan `/status`
 
 - **Status:** accepted
-- **Implementasi:** sebagian — ada: logging + command `/status`; sisa: `turn_id`, log `text|json`, tabel `llm_calls`
+- **Implementasi:** implemented — bukti: `engine/observability.py` (contextvars, formatter JSON/text, redaksi), `turn_id` diikat lewat `agent.handle` ke setiap baris `llm_calls`, kartu `/status` §4.4 dari baris nyata, retensi `llm_calls`, `tests/test_observability.py`; hasil gate: `pytest -q` 785 lulus
 - **Tanggal:** 2026-11-03
 - **Deciders:** Muqsith (owner), omp (reviewer)
 - **Konteks:** review (`Eidesoul-Review-Arsitektur-2026-11-01.md`) §15 P2-11 — hanya ada `logging.basicConfig` teks bebas tanpa korelasi; `llm.run` tidak membaca `response.usage` sehingga token/biaya tidak pernah terukur; tidak ada counter, antrean, atau latensi yang bisa dilihat operator tanpa menebak dari log

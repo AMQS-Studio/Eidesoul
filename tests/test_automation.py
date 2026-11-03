@@ -1,0 +1,446 @@
+"""Automation: one declarative row, one run per occurrence, one scheduler (ADR-0014)."""
+
+from __future__ import annotations
+
+import asyncio
+import time
+from dataclasses import replace
+from datetime import UTC, datetime
+
+import pytest
+from sqlalchemy import select
+from support import make_agent
+
+from eidesoul.engine.automation import (
+    AutomationStore,
+    AutomationWorker,
+    ManifestError,
+    describe,
+    next_after,
+    occurrence_key,
+)
+from eidesoul.engine.relay import RelayStore
+from eidesoul.engine.roles import Role
+from eidesoul.engine.schema import automation_runs, automations, outbound_messages
+
+OWNER = "628111"
+TZ = UTC
+
+
+def at(hour: int, minute: int = 0, *, day: int = 1) -> float:
+    return datetime(2026, 1, day, hour, minute, tzinfo=TZ).timestamp()
+
+
+def manifest(**overrides) -> dict:
+    body = {
+        "owner": OWNER,
+        "name": "rekap",
+        "event": {"kind": "schedule", "at": ["10:00"], "tz": "UTC"},
+        "steps": [{"kind": "compose"}, {"kind": "send", "to": "owner_dm"}],
+        "policy": {
+            "budget_per_day": 4,
+            "quiet_hours": "22:00-07:00",
+            "quiet": "skip",
+            "on_error": "notify_owner",
+        },
+    }
+    body.update(overrides)
+    return body
+
+
+def build(tmp_path, *, tools=("*",), automations=None):
+    env = make_agent(
+        tmp_path,
+        roles={
+            "member": Role(
+                "member", users=(OWNER,), tools=tools, commands=("*",)
+            )
+        },
+        default_role="member",
+    )
+    if automations is not None:
+        env.agent.config = replace(env.agent.config, automations=automations)
+    env.agent.mode = "primary"
+    env.store = AutomationStore(env.db, env.agent.config.automations)
+    return env
+
+
+def approved(env):
+    approval = asyncio.run(
+        env.agent.approvals.create(
+            kind="automation",
+            thread_id=OWNER,
+            sender=OWNER,
+            tool="",
+            args={"manifest": {}},
+            payload={"manifest": {}},
+            summary="s",
+        )
+    )
+    env.agent.approvals.mark(approval.id, "approved", OWNER)
+    return env.agent.approvals.get(approval.id)
+
+
+def create(env, body: dict, *, now: float) -> int:
+    return env.store.create(body, approval=approved(env), agent=env.agent, now=now)
+
+
+def runs(env) -> list[dict]:
+    return env.db.fetch_all(select(automation_runs).order_by(automation_runs.c.id))
+
+
+def test_occurrence_key_is_deterministic() -> None:
+    assert occurrence_key(1, 1000.9) == occurrence_key(1, 1000.1)
+    assert occurrence_key(1, 1000) != occurrence_key(1, 1001)
+    assert occurrence_key(1, 1000) != occurrence_key(2, 1000)
+
+
+def test_manifest_requires_owner_and_a_schedule(tmp_path) -> None:
+    env = build(tmp_path)
+    with pytest.raises(ManifestError):
+        create(env, manifest(owner=""), now=at(9, 50))
+    with pytest.raises(ManifestError):
+        create(
+            env,
+            manifest(event={"kind": "schedule", "tz": "UTC"}),
+            now=at(9, 50),
+        )
+
+
+def test_a_row_is_never_stored_without_approval(tmp_path) -> None:
+    env = build(tmp_path)
+    with pytest.raises(ManifestError, match="approved approval"):
+        env.store.create(manifest(), approval=None, agent=env.agent, now=at(9, 50))
+    pending = asyncio.run(
+        env.agent.approvals.create(
+            kind="automation", thread_id=OWNER, sender=OWNER, summary="s"
+        )
+    )
+    with pytest.raises(ManifestError, match="approved approval"):
+        env.store.create(manifest(), approval=pending, agent=env.agent, now=at(9, 50))
+
+
+def test_authority_is_checked_at_creation(tmp_path) -> None:
+    env = build(tmp_path, tools=("read",))
+    with pytest.raises(ManifestError, match="'send' tool"):
+        create(env, manifest(), now=at(9, 50))
+
+
+def test_sandbox_program_must_stay_in_the_workspace(tmp_path) -> None:
+    env = build(tmp_path)
+    body = manifest(steps=[{"kind": "sandbox", "program": "../escape.py"}])
+    with pytest.raises(ManifestError, match="inside the workspace"):
+        create(env, body, now=at(9, 50))
+
+
+def test_budget_below_the_occurrence_count_is_rejected_while_authoring(tmp_path) -> None:
+    env = build(tmp_path)
+    body = manifest(event={"kind": "schedule", "at": ["10:00", "11:00"], "tz": "UTC"})
+    body["policy"]["budget_per_day"] = 1
+    with pytest.raises(ManifestError, match="exceed budget_per_day"):
+        create(env, body, now=at(9, 50))
+
+
+def test_one_occurrence_is_one_run_and_a_duplicate_tick_never_doubles(tmp_path) -> None:
+    env = build(tmp_path)
+    create(env, manifest(), now=at(9, 50))
+    worker = AutomationWorker(env.agent, store=env.store)
+
+    first = asyncio.run(worker.run_once(now=at(10, 1)))
+    second = asyncio.run(worker.run_once(now=at(10, 1)))
+
+    found = runs(env)
+    assert len(found) == 1
+    assert found[0]["status"] == "succeeded"
+    assert first.get("succeeded") == 1 and second.get("materialized", 0) == 0
+    assert [item[0] for item in env.gateway.sent] == [OWNER]
+    assert occurrence_key(1, at(10)) == occurrence_key(1, at(10))
+    delivered = env.db.fetch_all(select(outbound_messages))
+    assert len(delivered) == 1
+    assert delivered[0]["scope_key"] == f"automation:{found[0]['id']}"
+    assert delivered[0]["status"] == "sent"
+
+
+def test_a_second_store_instance_does_not_double_the_occurrence(tmp_path) -> None:
+    env = build(tmp_path)
+    create(env, manifest(), now=at(9, 50))
+    other = AutomationStore(env.db, env.agent.config.automations)
+    assert env.store.materialize(at(10, 1))["materialized"] == 1
+    assert other.materialize(at(10, 1))["materialized"] == 0
+    assert len(runs(env)) == 1
+
+
+def test_quiet_hours_skip_records_skipped_and_sends_nothing(tmp_path) -> None:
+    env = build(tmp_path)
+    create(
+        env,
+        manifest(event={"kind": "schedule", "at": ["23:00"], "tz": "UTC"}),
+        now=at(22, 55),
+    )
+    worker = AutomationWorker(env.agent, store=env.store)
+    asyncio.run(worker.run_once(now=at(23, 1)))
+
+    found = runs(env)
+    assert found[0]["status"] == "skipped" and "quiet" in found[0]["detail"]
+    assert env.gateway.sent == []
+
+
+def test_quiet_hours_defer_runs_once_at_the_window_end(tmp_path) -> None:
+    env = build(tmp_path)
+    body = manifest(event={"kind": "schedule", "at": ["23:00"], "tz": "UTC"})
+    body["policy"]["quiet"] = "defer"
+    create(env, body, now=at(22, 55))
+    worker = AutomationWorker(env.agent, store=env.store)
+
+    asyncio.run(worker.run_once(now=at(23, 1)))
+    deferred = runs(env)[0]
+    assert deferred["status"] == "queued" and deferred["deferred"] is True
+    assert deferred["scheduled_at"] == at(7, 0, day=2)
+    assert env.gateway.sent == []
+
+    asyncio.run(worker.run_once(now=at(7, 1, day=2)))
+    assert runs(env)[0]["status"] == "succeeded"
+    assert len(env.gateway.sent) == 1
+
+
+def test_daily_budget_counts_runs_and_skips_the_extra(tmp_path) -> None:
+    env = build(tmp_path)
+    body = manifest()
+    body["policy"]["budget_per_day"] = 1
+    automation_id = create(env, body, now=at(9, 50))
+    row = env.store.get(automation_id)
+    env.store._insert_run(row, at(10, 1), "queued", "", at(9, 55))
+    worker = AutomationWorker(env.agent, store=env.store)
+
+    asyncio.run(worker.run_once(now=at(10, 5)))
+
+    found = sorted(runs(env), key=lambda item: item["scheduled_at"])
+    assert found[0]["status"] == "succeeded"
+    assert found[1]["status"] == "skipped"
+    assert "budget" in found[1]["detail"]
+
+
+def test_global_kill_switch_stops_the_worker(tmp_path) -> None:
+    env = build(tmp_path)
+    create(env, manifest(), now=at(9, 50))
+    config = replace(env.agent.config.automations, kill_switch=True)
+    env.agent.config = replace(env.agent.config, automations=config)
+    worker = AutomationWorker(env.agent, store=env.store)
+
+    report = asyncio.run(worker.run_once(now=at(10, 1)))
+
+    assert report == {"reaped": 0, "materialized": 0, "missed": 0, "queued": 0, "skipped": 0}
+    assert runs(env) == [] and env.gateway.sent == []
+
+
+def test_stopped_automation_cancels_a_queued_run(tmp_path) -> None:
+    env = build(tmp_path)
+    automation_id = create(env, manifest(), now=at(9, 50))
+    row = env.store.get(automation_id)
+    env.store._insert_run(row, at(10), "queued", "", at(9, 55))
+    env.store.set_state(automation_id, "stopped", reason="user", actor=OWNER, now=at(9, 56))
+    worker = AutomationWorker(env.agent, store=env.store)
+
+    asyncio.run(worker.run_once(now=at(10, 1)))
+
+    assert runs(env)[0]["status"] == "cancelled"
+    assert env.gateway.sent == []
+
+
+class BrokenLLM:
+    async def complete(self, *args, **kwargs):
+        return ""
+
+
+def test_a_failing_step_retries_then_dead_letters(tmp_path) -> None:
+    env = build(tmp_path)
+    retry = replace(
+        env.agent.config.automations.retry,
+        max_attempts=2,
+        backoff_seconds=0.0,
+        jitter=False,
+    )
+    env.agent.config = replace(
+        env.agent.config,
+        automations=replace(env.agent.config.automations, retry=retry),
+    )
+    env.store = AutomationStore(env.db, env.agent.config.automations)
+    create(
+        env,
+        manifest(steps=[{"kind": "compose"}]),
+        now=at(9, 50),
+    )
+    env.agent.llm = BrokenLLM()
+    worker = AutomationWorker(env.agent, store=env.store)
+
+    asyncio.run(worker.run_once(now=at(10, 1)))
+    assert runs(env)[0]["status"] == "queued" and runs(env)[0]["attempts"] == 1
+
+    asyncio.run(worker.run_once(now=at(10, 1)))
+    found = runs(env)[0]
+    assert found["status"] == "failed" and found["attempts"] == 2
+    assert "attempts exhausted" in found["detail"]
+
+
+def test_relay_asks_and_refuses_without_a_grant(tmp_path) -> None:
+    env = build(tmp_path)
+    create(
+        env,
+        manifest(steps=[{"kind": "relay", "task_id": "task-1", "to_person": "629999"}]),
+        now=at(9, 50),
+    )
+    worker = AutomationWorker(env.agent, store=env.store)
+
+    asyncio.run(worker.run_once(now=at(10, 1)))
+
+    found = runs(env)[0]
+    assert found["status"] == "skipped" and "consent asked" in found["detail"]
+    grant, reason = RelayStore(env.db).check(
+        task_id="task-1", from_person=OWNER, to_person="629999"
+    )
+    # The refused row is a real decision (`mode='none'`), so its reason is the honest one.
+    assert grant is None and reason
+    assert env.agent.approvals.count_pending() == 1
+    assert [item[0] for item in env.gateway.sent] == [OWNER]
+
+
+def test_relay_sends_when_a_grant_exists(tmp_path) -> None:
+    env = build(tmp_path)
+    automation_id = create(
+        env,
+        manifest(
+            steps=[
+                {
+                    "kind": "relay",
+                    "task_id": "task-1",
+                    "to_person": "629999",
+                    "text": "laporan proyek",
+                }
+            ]
+        ),
+        now=at(9, 50),
+    )
+    worker = AutomationWorker(env.agent, store=env.store)
+    asyncio.run(worker.run_once(now=at(10, 1)))
+    approval = env.agent.approvals.latest(OWNER, OWNER)
+    RelayStore(env.db).decide(approval=approval, mode="full", by=OWNER)
+
+    row = env.store.get(automation_id)
+    env.store._insert_run(row, at(11), "queued", "", at(10, 5))
+    asyncio.run(worker.run_once(now=at(11, 1)))
+
+    targets = [item[0] for item in env.gateway.sent]
+    assert "629999" in targets
+    delivered = next(item for item in env.gateway.sent if item[0] == "629999")
+    assert "automatic" in delivered[1].lower() or "(pesan otomatis)" in delivered[1]
+
+
+def test_catch_up_window_missed_is_recorded_not_sent(tmp_path) -> None:
+    env = build(tmp_path)
+    create(env, manifest(), now=at(8, 0))
+    worker = AutomationWorker(env.agent, store=env.store)
+
+    asyncio.run(worker.run_once(now=at(10, 30)))
+
+    found = runs(env)
+    assert len(found) == 1 and found[0]["status"] == "missed"
+    assert "catch-up" in found[0]["detail"]
+    assert found[0]["apology_sent_at"] is not None
+    # The only outbound message is the owner apology, never the stale task itself.
+    assert [item[0] for item in env.gateway.sent] == [OWNER]
+
+
+def test_count_exhausts_into_expired(tmp_path) -> None:
+    env = build(tmp_path)
+    create(
+        env,
+        manifest(event={"kind": "schedule", "at": ["10:00"], "tz": "UTC", "count": 1}),
+        now=at(9, 50),
+    )
+    worker = AutomationWorker(env.agent, store=env.store)
+
+    asyncio.run(worker.run_once(now=at(10, 1)))
+
+    assert env.store.get(runs(env)[0]["automation_id"])["state"] == "expired"
+
+
+def test_state_transitions_are_logged_and_terminal_states_stay_closed(tmp_path) -> None:
+    env = build(tmp_path)
+    automation_id = create(env, manifest(), now=at(9, 50))
+    env.store.set_state(automation_id, "paused", reason="user", actor=OWNER, now=at(9, 51))
+    env.store.set_state(automation_id, "active", reason="resume", actor=OWNER, now=at(9, 52))
+    env.store.set_state(automation_id, "stopped", reason="user", actor=OWNER, now=at(9, 53))
+
+    log = env.store.transitions(automation_id)
+    assert [(row["from_state"], row["to_state"]) for row in log] == [
+        ("draft", "active"),
+        ("active", "paused"),
+        ("paused", "active"),
+        ("active", "stopped"),
+    ]
+    with pytest.raises(ManifestError, match="terminal"):
+        env.store.set_state(automation_id, "active", now=at(9, 54))
+
+
+def test_clean_shutdown_marks_interrupted_and_boot_resumes_it(tmp_path) -> None:
+    env = build(tmp_path)
+    automation_id = create(env, manifest(), now=at(9, 50))
+    row = env.store.get(automation_id)
+    env.store._insert_run(row, at(10), "queued", "", at(9, 55))
+    claimed = env.store.claim(at(10, 1), worker="w", limit=1)
+    assert claimed and runs(env)[0]["status"] == "claimed"
+
+    assert env.store.interrupt(now=at(10, 2)) == 1
+    assert runs(env)[0]["status"] == "interrupted"
+    assert env.store.resume_interrupted(now=at(10, 3)) == 1
+    assert runs(env)[0]["status"] == "queued"
+
+
+def test_describe_names_event_steps_and_policy(tmp_path) -> None:
+    env = build(tmp_path)
+    from eidesoul.engine.automation import validate_manifest
+
+    described = describe(validate_manifest(manifest(), env.agent.config.automations))
+    assert "at 10:00" in described and "compose -> send" in described
+    assert "budget 4/day" in described and "owner 628111" in described
+
+
+def test_next_after_handles_time_lists_and_day_filters() -> None:
+    listed = {"kind": "schedule", "tz": "UTC", "at": ["10:00", "12:00"]}
+    later = next_after(listed, at(10, 30), anchor=at(9))
+    assert datetime.fromtimestamp(later, TZ).hour == 12
+
+    weekly = {"kind": "schedule", "tz": "UTC", "at": ["10:00"], "days": "mon,wed"}
+    found = next_after(weekly, at(10, 30), anchor=at(9))
+    # 2026-01-01 is a Thursday, so the next allowed day is Monday.
+    assert datetime.fromtimestamp(found, TZ).weekday() == 0
+    assert datetime.fromtimestamp(found, TZ).day == 5
+
+
+def test_stats_counts_real_rows(tmp_path) -> None:
+    env = build(tmp_path)
+    create(env, manifest(), now=at(9, 50))
+    worker = AutomationWorker(env.agent, store=env.store)
+    asyncio.run(worker.run_once(now=at(10, 1)))
+
+    stats = env.store.stats(at(10, 2))
+    assert stats["active"] == 1 and stats["runs_total"] == 1
+    assert stats["runs.succeeded"] == 1 and stats["missed"] == 0
+
+
+def test_a_row_survives_a_new_store_instance(tmp_path) -> None:
+    env = build(tmp_path)
+    automation_id = create(env, manifest(), now=at(9, 50))
+    reloaded = AutomationStore(env.db, env.agent.config.automations).get(automation_id)
+    assert reloaded is not None and reloaded["state"] == "active"
+    assert reloaded["event"]["at"] == ["10:00"]
+    assert float(reloaded["next_occurrence"]) == at(10)
+
+
+def test_automation_tables_follow_the_migration(tmp_path) -> None:
+    env = build(tmp_path)
+    create(env, manifest(), now=at(9, 50))
+    rows = env.db.fetch_all(select(automations))
+    assert len(rows) == 1 and rows[0]["owner"] == OWNER
+    assert rows[0]["owner_roles_at_creation"] == ["member"]
+    assert time.time() > 0

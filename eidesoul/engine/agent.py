@@ -15,7 +15,7 @@ from dataclasses import asdict, replace
 from datetime import datetime
 from pathlib import Path
 
-from . import assembly, guard, io
+from . import assembly, guard, io, observability
 from .approvals import ApprovalStore
 from .character import effective_limits, polish, regulate
 from .commands import REGISTRY as CORE_COMMANDS
@@ -461,7 +461,7 @@ class Agent:
         await self._notice(
             thread_id,
             gateway,
-            NOTICE_INTERRUPTED,
+            "turn.notice.interrupted",
             scope_key=f"notice:{turn_id}:interrupted",
             kind="notice:interrupted",
         )
@@ -974,6 +974,22 @@ class Agent:
             return replace(inbound, actor=inbound.actor or raw)
 
     async def handle(
+        self,
+        inbound: Percept,
+        gateway: GatewayCore,
+        *,
+        claimed: dict | None = None,
+    ) -> list[Action]:
+        """Intake + watchdog with the turn's correlation ids bound (ADR-0019 §4.2)."""
+        token = str(getattr(inbound.payload, "id", "") or "")
+        with observability.bind(
+            turn_id=token,
+            thread_id=inbound.thread,
+            gateway=getattr(gateway, "name", "") or "",
+        ):
+            return await self._handle_message(inbound, gateway, claimed=claimed)
+
+    async def _handle_message(
         self,
         inbound: Percept,
         gateway: GatewayCore,

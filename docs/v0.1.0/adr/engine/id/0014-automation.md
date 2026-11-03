@@ -1,10 +1,10 @@
-> Terjemahan turunan — jangan sunting; sumber: engine/0014-automation.md (sha256: b2079e1e0dd3)
+> Terjemahan turunan — jangan sunting; sumber: engine/0014-automation.md (sha256: 4f870d79ef84)
 > Teks ini ditulis manusia; baris yang tidak bisa diterjemahkan mesin disalin apa adanya ke sumber English, jadi sumber bercampur dua bahasa.
 
 # ADR-0014: Automation — Event → Aksi, Wewenang Pemilik, dan Sandbox sebagai Langkah
 
 - **Status:** accepted
-- **Implementasi:** draft — ada: `recipes`/ambient sebagai aproksimasi lama; sisa: `automations`/`automation_runs`/`occurrence`
+- **Implementasi:** partial — ada: `automations`/`automation_runs`/`automation_state_log` (revisi 10), manifest deklaratif + cek otoritas, idempotensi occurrence, quiet hours/budget harian/kill switch, runner langkah (recipe/send/relay/sandbox/…), retry + dead-letter, `tests/test_automation.py`; sisa: sumber event `message`, counter kapabilitas gateway, routing target di gateway bukan pertama
 - **Tanggal:** 2026-11-02
 - **Deciders:** Muqsith (owner), omp (reviewer)
 - **Konteks:** lanjutan ADR-0003 (worker/outbox), ADR-0006 (privasi grup), ADR-0007 (capability vs authorization), ADR-0008 (integritas memori), ADR-0011 (crash safety), ADR-0012 (lease), ADR-0013 (turn lifecycle)

@@ -14,6 +14,7 @@ import signal
 
 from sqlalchemy import text
 
+from .automation import AutomationWorker
 from .cognition import CognitionWorker
 from .lease import Lease
 
@@ -53,6 +54,9 @@ class Supervisor:
             ask=getattr(agent, "ask_memory", None),
         )
         self.agent.cognition = self.cognition
+        self.automations = (
+            AutomationWorker(agent) if getattr(agent, "db", None) is not None else None
+        )
 
     # ------------------------------------------------------------ lifecycle
 
@@ -126,6 +130,8 @@ class Supervisor:
         except Exception:
             log.exception("recovery pass failed; serving anyway")
         self.cognition.start()
+        if self.automations is not None:
+            self.automations.start()
         runtime.cognition = self.cognition.status()
 
     async def serve(self) -> None:
@@ -164,6 +170,8 @@ class Supervisor:
             if tasks:
                 await asyncio.gather(*tasks, return_exceptions=True)
             await self.cognition.stop()
+            if self.automations is not None:
+                await self.automations.stop()
             await self.agent.stop_reaper()
 
     async def shutdown(self) -> None:
@@ -188,6 +196,9 @@ class Supervisor:
         except Exception:
             log.exception("shutdown phases failed; stopping anyway")
         finally:
+            if self.automations is not None:
+                self.automations.interrupt()
+                await self.automations.stop()
             await self.cognition.stop(close_episodes=True)
             await self._stop_everything()
             self.agent.runtime.phase = "stopped"

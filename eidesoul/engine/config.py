@@ -270,10 +270,113 @@ class SearchConfig:
 
 
 @dataclass(frozen=True)
+class LoggingConfig:
+    """ADR-0019 §4.1/§5: `text` stays the default, `json` is one object per line."""
+
+    format: str = "text"
+    level: str = "INFO"
+
+
+@dataclass(frozen=True)
 class MetricsConfig:
     """ADR-0016 §4.6: `llm_calls` retention, removed by the ADR-0005 job."""
 
     retention_days: int = 90
+    enabled: bool = True
+    window_seconds: int = 300
+
+
+@dataclass(frozen=True)
+class AutomationSandboxConfig:
+    """ADR-0014 §5: a sandbox step only runs a program below this root."""
+
+    programs_root: str = "workspace"
+
+
+@dataclass(frozen=True)
+class AutomationConditionConfig:
+    """ADR-0014 §4.3: natural-language criteria are opt-in per automation."""
+
+    nl_criteria: bool = True
+    nl_budget_tokens_per_day: int = 20000
+
+
+@dataclass(frozen=True)
+class AutomationRetryConfig:
+    """ADR-0014 §4.13: transient failures only; `permanent` is never retried."""
+
+    max_attempts: int = 3
+    backoff_seconds: float = 30.0
+    max_backoff_seconds: float = 900.0
+    jitter: bool = True
+    respect_retry_after: bool = True
+
+
+@dataclass(frozen=True)
+class AutomationResilienceConfig:
+    """ADR-0014 §4.10: a missed occurrence is recorded, apologized once, never fired stale."""
+
+    catchup_minutes: int = 15
+    max_stale_days: int = 7
+    stale_claim_seconds: int = 300
+    missed_apology: bool = True
+    apology_digest: bool = True
+    apology_respect_quiet_hours: bool = True
+
+
+@dataclass(frozen=True)
+class AutomationConfig:
+    """ADR-0014 §5, one block: schedule, budget, quiet hours, kill switch, retries."""
+
+    enabled: bool = True
+    kill_switch: bool = False
+    default_budget_per_day: int = 4
+    run_timeout_seconds: int = 120
+    max_steps: int = 10
+    min_interval_seconds: int = 60
+    max_occurrences_per_day: int = 24
+    default_quiet_hours: str = "22:00-07:00"
+    default_quiet_policy: str = "skip"
+    max_active_per_person: int = 10
+    sandbox: AutomationSandboxConfig = field(default_factory=AutomationSandboxConfig)
+    condition: AutomationConditionConfig = field(
+        default_factory=AutomationConditionConfig
+    )
+    retry: AutomationRetryConfig = field(default_factory=AutomationRetryConfig)
+    resilience: AutomationResilienceConfig = field(
+        default_factory=AutomationResilienceConfig
+    )
+
+
+JOB_RUN_TIMEOUT_HARD_LIMIT = 300
+MIN_INTERVAL_HARD_LIMIT = 60
+MAX_OCCURRENCES_HARD_LIMIT = 24
+QUIET_POLICIES = ("skip", "defer")
+
+
+def parse_quiet_hours(value: object) -> tuple[int, int] | None:
+    """`"22:00-07:00"` → `(1320, 420)` minutes; `None`/empty disables quiet hours."""
+    text = str(value or "").strip()
+    if not text:
+        return None
+    parts = text.split("-")
+    if len(parts) != 2:
+        raise ConfigError("quiet_hours must be 'HH:MM-HH:MM'")
+    minutes: list[int] = []
+    for part in parts:
+        clock = part.strip()
+        if len(clock) != 5 or clock[2] != ":":
+            raise ConfigError("quiet_hours must be 'HH:MM-HH:MM'")
+        try:
+            hour, minute = int(clock[:2]), int(clock[3:])
+        except ValueError as exc:
+            raise ConfigError("quiet_hours must be 'HH:MM-HH:MM'") from exc
+        if not 0 <= hour <= 23 or not 0 <= minute <= 59:
+            raise ConfigError("quiet_hours must be a valid clock time")
+        minutes.append(hour * 60 + minute)
+    if minutes[0] == minutes[1]:
+        raise ConfigError("quiet_hours start and end must differ")
+    return minutes[0], minutes[1]
 
 
 @dataclass(frozen=True)
@@ -577,7 +680,9 @@ class Config:
     shell: ShellConfig = field(default_factory=ShellConfig)
     read: ReadConfig = field(default_factory=ReadConfig)
     search: SearchConfig = field(default_factory=SearchConfig)
+    logging: LoggingConfig = field(default_factory=LoggingConfig)
     metrics: MetricsConfig = field(default_factory=MetricsConfig)
+    automations: AutomationConfig = field(default_factory=AutomationConfig)
     self_knowledge: SelfKnowledgeConfig = field(default_factory=SelfKnowledgeConfig)
 
     def api_key(self) -> str:
@@ -1212,6 +1317,100 @@ def _group_capture(raw: Mapping) -> GroupCaptureConfig:
     )
 
 
+def _logging_config(raw: Mapping) -> LoggingConfig:
+    fmt = str(raw.get("format") or "text").strip().lower()
+    if fmt not in ("text", "json"):
+        raise ConfigError("engine.logging.format must be 'text' or 'json'")
+    level = str(raw.get("level") or "INFO").strip().upper()
+    if level not in ("DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"):
+        raise ConfigError("engine.logging.level must be a standard logging level")
+    return LoggingConfig(format=fmt, level=level)
+
+
+def _automation_config(raw: Mapping) -> AutomationConfig:
+    """ADR-0014 §5; a hard limit is a boot failure, never a silent truncation."""
+    sandbox_raw = _section(raw, "sandbox")
+    condition_raw = _section(raw, "condition")
+    retry_raw = _section(raw, "retry")
+    resilience_raw = _section(raw, "resilience")
+    timeout = _clamped(raw.get("run_timeout_seconds"), 120, 1, JOB_RUN_TIMEOUT_HARD_LIMIT)
+    provided_timeout = raw.get("run_timeout_seconds")
+    if (
+        provided_timeout is not None
+        and _num(provided_timeout, timeout) > JOB_RUN_TIMEOUT_HARD_LIMIT
+    ):
+        raise ConfigError(
+            f"engine.automations.run_timeout_seconds must be <= {JOB_RUN_TIMEOUT_HARD_LIMIT}"
+        )
+    interval = _clamped(raw.get("min_interval_seconds"), 60, 1, 86400)
+    provided_interval = raw.get("min_interval_seconds")
+    if (
+        provided_interval is not None
+        and _num(provided_interval, interval) < MIN_INTERVAL_HARD_LIMIT
+    ):
+        raise ConfigError(
+            f"engine.automations.min_interval_seconds must be >= {MIN_INTERVAL_HARD_LIMIT}"
+        )
+    occurrences = _clamped(
+        raw.get("max_occurrences_per_day"), 24, 1, MAX_OCCURRENCES_HARD_LIMIT
+    )
+    provided_occurrences = raw.get("max_occurrences_per_day")
+    if (
+        provided_occurrences is not None
+        and _num(provided_occurrences, occurrences) > MAX_OCCURRENCES_HARD_LIMIT
+    ):
+        raise ConfigError(
+            "engine.automations.max_occurrences_per_day must be <= "
+            f"{MAX_OCCURRENCES_HARD_LIMIT}"
+        )
+    quiet = str(raw.get("default_quiet_hours") or "22:00-07:00").strip()
+    parse_quiet_hours(quiet)
+    policy = str(raw.get("default_quiet_policy") or "skip").strip().lower()
+    if policy not in QUIET_POLICIES:
+        raise ConfigError("engine.automations.default_quiet_policy must be 'skip' or 'defer'")
+    programs_root = str(sandbox_raw.get("programs_root") or "workspace").strip() or "workspace"
+    return AutomationConfig(
+        enabled=_bool(raw.get("enabled"), True),
+        kill_switch=_bool(raw.get("kill_switch"), False),
+        default_budget_per_day=_clamped(raw.get("default_budget_per_day"), 4, 1, 24),
+        run_timeout_seconds=timeout,
+        max_steps=_clamped(raw.get("max_steps"), 10, 1, 50),
+        min_interval_seconds=interval,
+        max_occurrences_per_day=occurrences,
+        default_quiet_hours=quiet,
+        default_quiet_policy=policy,
+        max_active_per_person=_clamped(raw.get("max_active_per_person"), 10, 0, 1000),
+        sandbox=AutomationSandboxConfig(programs_root=programs_root),
+        condition=AutomationConditionConfig(
+            nl_criteria=_bool(condition_raw.get("nl_criteria"), True),
+            nl_budget_tokens_per_day=_clamped(
+                condition_raw.get("nl_budget_tokens_per_day"), 20000, 0, 1_000_000
+            ),
+        ),
+        retry=AutomationRetryConfig(
+            max_attempts=_clamped(retry_raw.get("max_attempts"), 3, 1, 20),
+            backoff_seconds=_num_clamped(retry_raw.get("backoff_seconds"), 30.0, 0.0, 86400.0),
+            max_backoff_seconds=_num_clamped(
+                retry_raw.get("max_backoff_seconds"), 900.0, 0.0, 86400.0
+            ),
+            jitter=_bool(retry_raw.get("jitter"), True),
+            respect_retry_after=_bool(retry_raw.get("respect_retry_after"), True),
+        ),
+        resilience=AutomationResilienceConfig(
+            catchup_minutes=_clamped(resilience_raw.get("catchup_minutes"), 15, 0, 1440),
+            max_stale_days=_clamped(resilience_raw.get("max_stale_days"), 7, 0, 3650),
+            stale_claim_seconds=_clamped(
+                resilience_raw.get("stale_claim_seconds"), 300, 10, 86400
+            ),
+            missed_apology=_bool(resilience_raw.get("missed_apology"), True),
+            apology_digest=_bool(resilience_raw.get("apology_digest"), True),
+            apology_respect_quiet_hours=_bool(
+                resilience_raw.get("apology_respect_quiet_hours"), True
+            ),
+        ),
+    )
+
+
 def load_config(
     path: str | Path | None = None,
     *,
@@ -1450,7 +1649,13 @@ def load_config(
         metrics=MetricsConfig(
             retention_days=_clamped(
                 _section(engine, "metrics").get("retention_days"), 90, 1, 3650
-            )
+            ),
+            enabled=_bool(_section(engine, "metrics").get("enabled"), True),
+            window_seconds=_clamped(
+                _section(engine, "metrics").get("window_seconds"), 300, 5, 86400
+            ),
         ),
+        logging=_logging_config(_section(engine, "logging")),
+        automations=_automation_config(_section(engine, "automations")),
         self_knowledge=self_knowledge,
     )

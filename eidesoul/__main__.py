@@ -26,7 +26,10 @@ log = logging.getLogger(__name__)
 
 
 def setup_logging() -> None:
-    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
+    """Boot default: text format; `build_runtime` applies `engine.logging` once loaded."""
+    from .engine import observability
+
+    observability.install("text", "INFO")
 
 
 def _report(label: str, outcome: str, detail: str = "") -> bool:
@@ -80,6 +83,9 @@ async def build_runtime(config_path: str | None, *, console: bool = False):
     documents = DocumentStore(db, paths, sync=host.sync_documents)
     documents.seed()
     config = load_config(paths.config, documents=documents, require_gateway=True)
+    from .engine import observability
+
+    observability.configure(config.logging)
     try:
         config.roles.require_administrator()
     except RoleError as exc:

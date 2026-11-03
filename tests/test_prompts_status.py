@@ -74,7 +74,16 @@ def test_self_block_reports_runtime_facts(tmp_path) -> None:
 def test_status_and_whoami(tmp_path, monkeypatch) -> None:
     env = make_runtime(tmp_path, monkeypatch, settings_approval=False)
     agent = env.agent
-    roles = (env.config.roles.default_role(),)
+    roles = (
+        Role(
+            "administrator",
+            protected=True,
+            tools=("*",),
+            commands=("*",),
+            memory_admin=True,
+        ),
+    )
+    member = (env.config.roles.default_role(),)
 
     status = asyncio.run(
         agent._command(
@@ -93,7 +102,7 @@ def test_status_and_whoami(tmp_path, monkeypatch) -> None:
 
     who = asyncio.run(
         agent._command(
-            "whoami", "", "cli:local", "local", roles, env.gateway, inbound_message("/whoami")
+            "whoami", "", "cli:local", "local", member, env.gateway, inbound_message("/whoami")
         )
     )
     assert "Peran: Member" in who
@@ -103,9 +112,18 @@ def test_status_and_whoami(tmp_path, monkeypatch) -> None:
 def test_chat_kind_label_follows_the_inbound_flag(tmp_path, monkeypatch) -> None:
     env = make_runtime(tmp_path, monkeypatch, settings_approval=False)
     agent = env.agent
-    roles = (env.config.roles.default_role(),)
+    member = (env.config.roles.default_role(),)
+    admin = (
+        Role(
+            "administrator",
+            protected=True,
+            tools=("*",),
+            commands=("*",),
+            memory_admin=True,
+        ),
+    )
 
-    def run(name: str, inbound) -> str:
+    def run(name: str, inbound, roles=member) -> str:
         return asyncio.run(
             agent._command(name, "", "chat", "local", roles, env.gateway, inbound)
         )
@@ -113,8 +131,22 @@ def test_chat_kind_label_follows_the_inbound_flag(tmp_path, monkeypatch) -> None
     assert 'Chat: group "' in run("whoami", inbound_message("/whoami", dm=False))
     assert 'Chat: dm "' in run("whoami", inbound_message("/whoami", dm=True))
     assert 'Chat: dm "' in run("whoami", inbound_message("/whoami"))
-    assert "Chat: group" in run("status", inbound_message("/status", dm=False))
-    assert "Chat: dm" in run("status", inbound_message("/status", dm=True))
+    assert "Chat: group" in run("status", inbound_message("/status", dm=False), admin)
+    assert "Chat: dm" in run("status", inbound_message("/status", dm=True), admin)
+
+
+def test_status_gives_a_non_administrator_only_rough_buckets(tmp_path, monkeypatch) -> None:
+    env = make_runtime(tmp_path, monkeypatch, settings_approval=False)
+    roles = (env.config.roles.default_role(),)
+
+    text = asyncio.run(
+        env.agent._command(
+            "status", "", "cli:local", "local", roles, env.gateway, inbound_message("/status")
+        )
+    )
+
+    assert "• Mode:" in text and "• Uptime:" in text
+    assert "Database:" not in text and "Cost:" not in text and "Turn latency" not in text
 
 
 def test_a_context_without_an_inbound_defaults_to_dm(tmp_path, monkeypatch) -> None:

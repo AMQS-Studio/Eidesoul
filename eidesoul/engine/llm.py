@@ -9,7 +9,7 @@ import time
 
 from openai import APIError, APITimeoutError, AsyncOpenAI
 
-from . import guard, io
+from . import guard, io, observability
 from .config import Config
 from .i18n import t
 from .registry import Handler, allows
@@ -211,10 +211,13 @@ class LLM:
             )
         timeout = min(float(self.config.llm.timeout_seconds), max(0.05, remaining))
         attempts = max(1, int(self.config.llm.retry.turn_attempts))
-        return (
-            self.client.with_options(timeout=timeout, max_retries=attempts - 1),
-            timeout,
+        configured = getattr(self.client, "with_options", None)
+        client = (
+            configured(timeout=timeout, max_retries=attempts - 1)
+            if callable(configured)
+            else self.client
         )
+        return client, timeout
 
     def _deadline_request_failed(self, deadline: float | None, min_call_seconds: float) -> bool:
         if deadline is None:
@@ -329,6 +332,12 @@ class LLM:
     ) -> None:
         if self.db is None:
             return
+        # Correlation ids default to the current context (ADR-0019 §4.2); an explicit argument
+        # wins, and a background task never inherits a finished turn's id.
+        turn_id = turn_id or observability.TURN_ID.get()
+        if job_id is None:
+            job_id = observability.JOB_ID.get()
+        run_id = run_id or observability.RUN_ID.get()
         row = {
             "ts": time.time(),
             "turn_id": turn_id or None,

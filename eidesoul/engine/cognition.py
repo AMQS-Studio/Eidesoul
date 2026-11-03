@@ -21,7 +21,7 @@ from dataclasses import dataclass
 from sqlalchemy import func, select, text
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
-from . import io
+from . import io, observability
 from .config import Config
 from .db import Database
 from .memory import assess as memory_assess
@@ -425,6 +425,8 @@ class CognitionWorker:
     async def _run_batch(self, label: str, jobs: list[Job]) -> None:
         if not jobs:
             return
+        # Background work carries its own run id and never a turn id (ADR-0019 §4.2).
+        tokens = observability.enter(run_id=f"job:{label}")
         try:
             if jobs[0].kind == "capture":
                 results = await self._capture(jobs)
@@ -442,6 +444,8 @@ class CognitionWorker:
                 await io.run(self.queue.fail, job.id, f"{type(exc).__name__}: {exc}")
             self.counters["jobs_failed"] += len(jobs)
             return
+        finally:
+            observability.leave(tokens)
         for job in jobs:
             await io.run(self.queue.complete, job.id, results.get(job.id, ""))
         self.counters["jobs_done"] += len(jobs)

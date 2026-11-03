@@ -1,7 +1,7 @@
 # ADR-0019: Observability — Structured Log, Token Accounting, and `/status`
 
 - **Status:** accepted
-- **Implementation:** partial — exists: logging + the `/status` command; rest: `turn_id`, `text|json` log, table `llm_calls`
+- **Implementation:** implemented — evidence: `engine/observability.py` (contextvars, JSON/text formatter, redaction), `turn_id` bound through `agent.handle` into every `llm_calls` row, `/status` §4.4 card from real rows, `llm_calls` retention, `tests/test_observability.py`; gate result: `pytest -q` 785 passed
 - **Date:** 2026-11-03
 - **Deciders:** Muqsith (owner), omp (reviewer)
 - **Context:** review (`Eidesoul-Review-Arsitektur-2026-11-01.md`) §15 P2-11 — the only logging is free-text `logging.basicConfig` with no correlation; `llm.run` never reads `response.usage`, so tokens/cost are never measured; there is no counter, queue, or latency an operator can see without guessing from the log

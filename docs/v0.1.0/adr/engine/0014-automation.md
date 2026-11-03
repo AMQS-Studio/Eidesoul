@@ -1,7 +1,7 @@
 # ADR-0014: Automation → Event → Action, Owner Authority, and Sandbox as Steps
 
 - **Status:** accepted
-- **Implementation:** draft — existing: `recipes`/ambient as an older proxy; the rest: `automations`/`automation_runs`/`occurrence`
+- **Implementation:** partial — present: `automations`/`automation_runs`/`automation_state_log` (revision 10), declarative manifest + authority check, occurrence idempotency, quiet hours/daily budget/kill switch, step runner (recipe/send/relay/sandbox/…), retries + dead-letter, `tests/test_automation.py`; remaining: `message` event source, gateway capability counters, routing a target on a non-first gateway
 - **Date:** 2026-11-02
 - **Deciders:** Muqsith (owner), omp (reviewer)
 - **Context:** follows ADR-0003 (worker/outbox), ADR-0006 (group privacy), ADR-0007 (capability vs authority), ADR-0008 (memory integrity), ADR-0011 (crash safety), ADR-0012 (lease), ADR-0013 (turn lifecycle)

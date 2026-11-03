@@ -32,6 +32,29 @@ def _relay_decision(ctx: CommandContext, approval, extra: str) -> str:
     return t("command.approve.relay_done", lang, id=approval.id, mode=grant.mode)
 
 
+async def _automation_decision(ctx: CommandContext, approval) -> str:
+    """ADR-0014 §4.8: the row is stored only here, by the approval that authorises it."""
+    from ..automation import AutomationStore, ManifestError
+
+    agent = ctx.agent
+    lang = ctx.lang
+    payload = approval.payload if isinstance(approval.payload, dict) else {}
+    manifest = payload.get("manifest")
+    if not isinstance(manifest, dict):
+        manifest = approval.args.get("manifest") if isinstance(approval.args, dict) else None
+    store = AutomationStore(agent.db, agent.config.automations)
+    try:
+        automation_id = store.create(
+            manifest, approval=approval, agent=agent, approved_now=True
+        )
+    except ManifestError as exc:
+        agent.approvals.mark(approval.id, "denied", ctx.sender, str(exc))
+        return f"error: {exc}"
+    agent.approvals.mark(approval.id, "approved", ctx.sender, f"automation {automation_id}")
+    name = str((manifest or {}).get("name") or automation_id)
+    return t("automation.approved", lang, name=name, id=automation_id)
+
+
 async def _settings_decision(ctx: CommandContext, approval) -> str:
     agent = ctx.agent
     lang = ctx.lang
@@ -129,8 +152,12 @@ async def _approve(ctx: CommandContext) -> str:
     if proof["class"] == "authorization" and not command_allowed(current, "approve"):
         agent.approvals.mark(approval.id, "denied", ctx.sender, "approver role required")
         return t("command.approve.class_denied", lang, id=approval.id)
-    if approval.kind == "settings":
-        return await _settings_decision(ctx, approval)
+    special = {
+        "settings": _settings_decision,
+        "automation": _automation_decision,
+    }.get(approval.kind)
+    if special is not None:
+        return await special(ctx, approval)
 
     specs = {handler.name: handler for handler in agent.tools.by_name.values()}
     if agent.hub is not None:
