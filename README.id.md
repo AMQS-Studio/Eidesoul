@@ -17,7 +17,8 @@
 </p>
 
 <p align="center">
-  <a href="#architecture">Arsitektur</a> · <a href="#quickstart">Mulai cepat</a> ·
+  <a href="#architecture">Arsitektur</a> · <a href="#tools-are-capabilities">Tool</a> ·
+  <a href="#quickstart">Mulai cepat</a> ·
   <a href="#soulyaml">soul.yaml</a> · <a href="#character-library">Pustaka karakter</a> ·
   <a href="#supported-gateways">Gateway</a> · <a href="#roles-and-permissions">Peran dan izin</a> ·
   <a href="#safety">Keamanan</a> · <a href="#credits">Kredit</a>
@@ -86,59 +87,49 @@ berbasis role adalah sifat store itu, bukan sifat prompt.
 
 Dua belas dinding. Tiap baris menyebut bangunan biasanya, lalu apa yang dilakukan engine ini.
 
-**Asisten yang lupa.** Biasanya setiap sesi mulai dari prompt kosong, dan riwayat adalah transkrip yang
-Anda tempel kembali. Di sini fakta masuk Postgres dengan tingkat privasi, pemilik, dan subjek, dan
-giliran berikutnya mengambilnya lewat pgvector dan Mem0 per orang, thread, atau jiwa — jadi keputusan
-bulan lalu bergantung pada apa yang tersimpan, bukan pada apa yang masih muat.
-
-**Percakapan yang melampaui window.** Biasanya pemadatan meringkas giliran tertua lalu membuangnya
-selamanya. Di sini arsip adalah rekamannya dan window adalah tampilan: tiap giliran menyusun working set
-dari arsip di bawah budget karakter, lalu membuangnya lagi, jadi satu thread bisa berjalan berbulan-bulan
-tanpa model memegang semuanya.
-
-**Karakter yang bergeser.** Biasanya tiap klien membawa prompt dan riwayatnya sendiri. Di sini satu dokumen
-soul dan satu memori dibaca setiap tubuh — terminal, aplikasi chat, perangkat, robot — jadi orang yang
-sama menjawab di mana pun, dan tubuh hanya menambah transport, tidak pernah menambah kepribadian.
-
-**Memori yang bocor.** Biasanya satu index vektor melayani semua ruangan. Di sini pengambilan hanya
-menyentuh global, orang ini, dan thread ini; grup membatasi levelnya; subjek bisa memveto; dan keputusan
-pengungkapan bersifat deterministik, dibuat sebelum model mana pun melihat teksnya.
-
-**Agent yang bertindak tanpa otoritas.** Biasanya loop menyetujui semuanya atau bertanya terus. Di sini
-role memberi izin berdasarkan nama, guard deterministik jalan lebih dulu, dan target menentukan consent
-atau otorisasi — lingkup sendiri meminta peminta, lingkup bersama atau luar meminta role approver —
-dihitung ulang saat eksekusi, jadi role yang melebar membuka ulang pertanyaannya.
-
-**Role yang sebenarnya spreadsheet.** Biasanya flag admin, role default yang lebar, dan pemeriksaan saat
-login. Di sini entri yang tidak ada berarti menolak, kapabilitas, consent, dan otorisasi dijaga terpisah,
-approval hanya melanjutkan izin yang sudah ada, administrasi memori adalah kapabilitas tersendiri, dan
-role tertinggi tidak bisa dihapus atau diganti nama.
-
-**Dua instance, satu jiwa.** Biasanya dua replika menjawab dan penulis terakhir menang. Di sini satu baris
-lease di Postgres menentukan satu primary; instance lain standby dan beku, dan takeover adalah peristiwa
-database dengan jejak audit.
-
-**Giliran yang mati di tengah.** Biasanya restart mengulang efek samping. Di sini pesan dan gilirannya
-masuk antrean dalam satu transaksi, giliran adalah baris dengan checkpoint langkah, dan pengiriman dicatat
-per potongan: resume mengirim ulang hanya yang belum terkirim, dan aksi non-idempoten yang sudah jalan
-ditandai interrupted alih-alih diulang.
-
-**Tebakan yang menjadi aturan.** Biasanya catatan agent kembali sebagai instruksi. Di sini tulisan turunan
-wajib berujuk sumber, penurunan satu tingkat, aturan hanya dari dokumen soul, dan memori baru tetap dalam
-karantina sampai terkorroborasi.
-
-**Balasan yang mengarang apa yang tidak diketahuinya.** Biasanya model mengisi celah dengan percaya diri.
-Di sini lapisan pengetahuan memilih fakta terkurasi tiap giliran, dengan fallback kata kunci saat vektor
-tidak ada, dan pass karakter boleh mengubah nada tapi tidak fakta, angka, atau hasil tool.
-
-**Balasan yang terdengar seperti mesin.** Biasanya prompt "jadilah ramah". Di sini emosi adalah engine
-sendiri — state PAD dengan baseline yang meluruh, drive, dan relasi per orang — engine konteks memilih
-gerakan karakter bergerbang register dan tingkat kasar, dan pass humanize mengatur pacing; semuanya
-sakelar.
-
-**Automation yang sebenarnya cron job.** Biasanya baris crontab tanpa pemilik, izin, atau dedupe. Di sini
-event, condition, dan daftar steps tertutup; satu run per occurrence di-key dari jadwal; otoritas
-diperiksa dua kali; jam tenang, budget harian, dan kill switch.
+- **Asisten yang lupa.** Biasanya setiap sesi mulai dari prompt kosong, dan riwayat adalah transkrip
+  yang Anda tempel kembali. Di sini fakta masuk Postgres dengan tingkat privasi, pemilik, dan subjek, dan
+  giliran berikutnya mengambilnya lewat pgvector dan Mem0 per orang, thread, atau jiwa — jadi keputusan
+  bulan lalu bergantung pada apa yang tersimpan, bukan pada apa yang masih muat.
+- **Percakapan yang melampaui window.** Biasanya pemadatan meringkas giliran tertua lalu membuangnya
+  selamanya. Di sini arsip adalah rekamannya dan window adalah tampilan: tiap giliran menyusun working
+  set dari arsip di bawah budget karakter, lalu membuangnya lagi, jadi satu thread bisa berjalan
+  berbulan-bulan tanpa model memegang semuanya.
+- **Karakter yang bergeser.** Biasanya tiap klien membawa prompt dan riwayatnya sendiri. Di sini satu
+  dokumen soul dan satu memori dibaca setiap tubuh — terminal, aplikasi chat, perangkat, robot — jadi
+  orang yang sama menjawab di mana pun, dan tubuh hanya menambah transport, tidak pernah menambah
+  kepribadian.
+- **Memori yang bocor.** Biasanya satu index vektor melayani semua ruangan. Di sini pengambilan hanya
+  menyentuh global, orang ini, dan thread ini; grup membatasi levelnya; subjek bisa memveto; dan
+  keputusan pengungkapan bersifat deterministik, dibuat sebelum model mana pun melihat teksnya.
+- **Agent yang bertindak tanpa otoritas.** Biasanya loop menyetujui semuanya atau bertanya terus. Di sini
+  role memberi izin berdasarkan nama, guard deterministik jalan lebih dulu, dan target menentukan consent
+  atau otorisasi — lingkup sendiri meminta peminta, lingkup bersama atau luar meminta role approver —
+  dihitung ulang saat eksekusi, jadi role yang melebar membuka ulang pertanyaannya.
+- **Role yang sebenarnya spreadsheet.** Biasanya flag admin, role default yang lebar, dan pemeriksaan saat
+  login. Di sini entri yang tidak ada berarti menolak, kapabilitas, consent, dan otorisasi dijaga
+  terpisah, approval hanya melanjutkan izin yang sudah ada, administrasi memori adalah kapabilitas
+  tersendiri, dan role tertinggi tidak bisa dihapus atau diganti nama.
+- **Dua instance, satu jiwa.** Biasanya dua replika menjawab dan penulis terakhir menang. Di sini satu
+  baris lease di Postgres menentukan satu primary; instance lain standby dan beku, dan takeover adalah
+  peristiwa database dengan jejak audit.
+- **Giliran yang mati di tengah.** Biasanya restart mengulang efek samping. Di sini pesan dan gilirannya
+  masuk antrean dalam satu transaksi, giliran adalah baris dengan checkpoint langkah, dan pengiriman
+  dicatat per potongan: resume mengirim ulang hanya yang belum terkirim, dan aksi non-idempoten yang sudah
+  jalan ditandai interrupted alih-alih diulang.
+- **Tebakan yang menjadi aturan.** Biasanya catatan agent kembali sebagai instruksi. Di sini tulisan
+  turunan wajib berujuk sumber, penurunan satu tingkat, aturan hanya dari dokumen soul, dan memori baru
+  tetap dalam karantina sampai terkorroborasi.
+- **Balasan yang mengarang apa yang tidak diketahuinya.** Biasanya model mengisi celah dengan percaya
+  diri. Di sini lapisan pengetahuan memilih fakta terkurasi tiap giliran, dengan fallback kata kunci saat
+  vektor tidak ada, dan pass karakter boleh mengubah nada tapi tidak fakta, angka, atau hasil tool.
+- **Balasan yang terdengar seperti mesin.** Biasanya prompt "jadilah ramah". Di sini emosi adalah engine
+  sendiri — state PAD dengan baseline yang meluruh, drive, dan relasi per orang — engine konteks memilih
+  gerakan karakter bergerbang register dan tingkat kasar, dan pass humanize mengatur pacing; semuanya
+  sakelar.
+- **Automation yang sebenarnya cron job.** Biasanya baris crontab tanpa pemilik, izin, atau dedupe. Di
+  sini event, condition, dan daftar steps tertutup; satu run per occurrence di-key dari jadwal; otoritas
+  diperiksa dua kali; jam tenang, budget harian, dan kill switch.
 
 Tidak satu pun dari ini trik prompt. Masing-masing adalah tempat state hidup, dan aturan siapa yang boleh
 mengubahnya.
@@ -193,21 +184,26 @@ sama, bukan memulai yang baru.
 <a id="tools-are-capabilities"></a>
 ## Tool adalah kemampuan
 
-Tool adalah kemampuan yang bisa diberikan kepada jiwa, bukan tubuh yang tetap. Tubuh menentukan
-kemampuan mana yang ada; peran menentukan mana yang boleh dipakai jiwa di tubuh itu.
+Tool adalah kemampuan yang dipanggil engine. Ia bukan tubuh, dan bukan bundel: tiga hal dijaga terpisah.
 
-Enam keluarga inti hanyalah contoh, bukan taksonomi yang harus dipenuhi: `shell`, `read`, `write`,
-`web_search`, `sandbox`, dan `mcp`. Itu mencakup kasus umum — menjalankan perintah, membaca berkas,
-mencari di web, memanggil server MCP — dan tidak lebih.
+- **Gateway** — jalur komunikasi: tubuh yang membawa pesan masuk dan keluar (terminal, aplikasi chat,
+  perangkat, robot) dan memiliki aksi yang hanya bermakna di sana. Kamera, motor, printer, atau bus
+  otomasi rumah adalah milik perwujudan, bukan milik engine; gateway mengekspos aksi itu sebagai modul
+  tool miliknya. Peran memberikan tool tersebut secara eksplisit, jadi peran pendamping di ponsel tidak
+  pernah mewarisi kendali sebuah robot.
+- **Tool** — kemampuan yang dipanggil engine. Enam keluarga inti hanyalah contoh, bukan taksonomi yang
+  harus dipenuhi: `shell`, `read`, `write`, `web_search`, `sandbox`, dan `mcp`. Tubuh menentukan
+  kemampuan mana yang ada; peran menentukan mana yang boleh dipakai jiwa di tubuh itu, dan entri yang
+  tidak ada berarti menolak.
+- **Plugin** — unit pengemasan dan siklus hidup, bukan jenis keempat: ia memasang kode dan mendaftarkan
+  apa yang ia sediakan (tool, command, dan mungkin gateway) ke registry yang sama dengan modul inti.
+  Kodenya diambil saat diaktifkan dan dipin dengan digest; ia tidak pernah menjadi tool inti, dan gateway
+  yang ia bawa tetap gateway.
 
-Robot, perangkat, atau gateway khusus mengekspos aksi khas tubuhnya sebagai modul tool milik
-gateway, berdampingan dengan gateway yang memberi makna pada aksi itu. Kamera, motor, printer, atau
-bus otomasi rumah adalah milik perwujudan, bukan milik engine. Peran memberikan tool tersebut secara
-eksplisit, jadi peran pendamping di ponsel tidak pernah mewarisi kendali sebuah robot.
-
-Engine tidak pernah meng-hardcode tubuh dan tidak pernah meng-hardcode loop agent. Tidak ada planner
-yang perlu dikonfigurasi, tidak ada task graph yang diluncurkan, tidak ada kawanan di latar
-belakang: satu jiwa, satu giliran, dan kemampuan yang dipegang saat itu.
+Ketiganya mati sampai diaktifkan, dan spine satu-satunya pengecualian. Engine tidak pernah
+meng-hardcode tubuh dan tidak pernah meng-hardcode loop agent: tidak ada planner yang perlu
+dikonfigurasi, tidak ada task graph yang diluncurkan, tidak ada kawanan di latar belakang — satu jiwa,
+satu giliran, dan kemampuan yang dipegang saat itu.
 
 <a id="quickstart"></a>
 ## Mulai cepat

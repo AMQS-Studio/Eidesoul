@@ -17,7 +17,8 @@
 </p>
 
 <p align="center">
-  <a href="#architecture">Architecture</a> · <a href="#quickstart">Quickstart</a> ·
+  <a href="#architecture">Architecture</a> · <a href="#tools-are-capabilities">Tools</a> ·
+  <a href="#quickstart">Quickstart</a> ·
   <a href="#soulyaml">soul.yaml</a> · <a href="#character-library">Character library</a> ·
   <a href="#supported-gateways">Gateways</a> · <a href="#roles-and-permissions">Roles and permissions</a> ·
   <a href="#safety">Safety</a> · <a href="#credits">Credits</a>
@@ -78,61 +79,50 @@ properties of that store, not of a prompt.
 
 ## What it tries to solve
 
-Twelve walls. Each paragraph names the usual build, then what this engine does instead.
+Twelve walls. Each line names the usual build, then what this engine does instead.
 
-**An assistant that forgets.** Usually every session starts from an empty prompt, and history is a
-transcript you paste back. Here facts go into Postgres with a privacy level, an owner, and a subject, and
-the next turn retrieves them through pgvector and Mem0 by person, thread, or soul — so a decision from
-last month depends on what was stored, not on what still fits.
-
-**A conversation that outgrows the window.** Usually compaction summarizes the oldest turns and drops
-them for good. Here the archive is the record and the window is a view: each turn assembles a working set
-from the archive under a character budget, then throws it away, so a thread can run for months without
-the model holding all of it.
-
-**A character that drifts.** Usually each client ships its own prompt and its own history. Here one soul
-document and one memory are read by every body — terminal, chat app, device, robot — so the same person
-answers everywhere, and a body adds a transport, never a personality.
-
-**A memory that leaks.** Usually one vector index serves every room. Here retrieval touches only global,
-this person, and this thread; a group caps the level; the subject can veto; and the disclosure decision
-is deterministic, made before any model sees the text.
-
-**An agent that acts without authority.** Usually the loop auto-approves everything or asks constantly.
-Here roles grant by name, a deterministic guard runs first, and the target decides consent versus
-authorization — own scope asks the requester, shared or outside asks an approver role — recomputed at
-execution, so a widened role reopens the question.
-
-**Roles that are a spreadsheet.** Usually an admin flag, a default role broad enough to work, and a check
-at login. Here a missing entry denies, capability, consent, and authorization stay apart, approval only
-continues an existing grant, memory administration is its own capability, and the top role cannot be
-deleted or renamed.
-
-**Two instances, one soul.** Usually two replicas answer and the last write wins. Here a lease row in
-Postgres makes one primary; every other instance stays standby and frozen, and a takeover is a database
-event with an audit trail.
-
-**A turn that dies halfway.** Usually a restart repeats the side effect. Here the message and its turn are
-enqueued in one transaction, the turn is a row with a step checkpoint, and delivery is recorded per chunk:
-resume resends only what was not sent, and a non-idempotent action that already ran is marked interrupted
-instead of repeated.
-
-**A guess that becomes a rule.** Usually the agent's own notes come back as instructions. Here derived
-writes carry references, derivation is one level deep, rules come only from the soul document, and new
-memory stays quarantined until corroborated.
-
-**A reply that invents what it does not know.** Usually the model fills gaps confidently. Here a knowledge
-layer selects vetted facts per turn, with a keyword fallback when vectors are absent, and the character
-pass may change tone but never facts, numbers, or tool results.
-
-**A reply that sounds like a machine.** Usually a prompt says "be friendly". Here emotion is its own
-engine — a PAD state with a decaying baseline, drives, and a relationship per person — the context engine
-picks character moves gated by register and harshness, and a humanize pass paces the reply; all of it is a
-switch.
-
-**An automation that is really a cron job.** Usually a crontab line with no owner, no permission, and no
-dedupe. Here event, condition, and a closed list of steps; one run per occurrence keyed by the schedule;
-authority checked twice; quiet hours, a daily budget, and a kill switch.
+- **An assistant that forgets.** Usually every session starts from an empty prompt, and history is a
+  transcript you paste back. Here facts go into Postgres with a privacy level, an owner, and a subject,
+  and the next turn retrieves them through pgvector and Mem0 by person, thread, or soul — so a decision
+  from last month depends on what was stored, not on what still fits.
+- **A conversation that outgrows the window.** Usually compaction summarizes the oldest turns and drops
+  them for good. Here the archive is the record and the window is a view: each turn assembles a working
+  set from the archive under a character budget, then throws it away, so a thread can run for months
+  without the model holding all of it.
+- **A character that drifts.** Usually each client ships its own prompt and its own history. Here one
+  soul document and one memory are read by every body — terminal, chat app, device, robot — so the same
+  person answers everywhere, and a body adds a transport, never a personality.
+- **A memory that leaks.** Usually one vector index serves every room. Here retrieval touches only
+  global, this person, and this thread; a group caps the level; the subject can veto; and the disclosure
+  decision is deterministic, made before any model sees the text.
+- **An agent that acts without authority.** Usually the loop auto-approves everything or asks constantly.
+  Here roles grant by name, a deterministic guard runs first, and the target decides consent versus
+  authorization — own scope asks the requester, shared or outside asks an approver role — recomputed at
+  execution, so a widened role reopens the question.
+- **Roles that are a spreadsheet.** Usually an admin flag, a default role broad enough to work, and a
+  check at login. Here a missing entry denies, capability, consent, and authorization stay apart,
+  approval only continues an existing grant, memory administration is its own capability, and the top
+  role cannot be deleted or renamed.
+- **Two instances, one soul.** Usually two replicas answer and the last write wins. Here a lease row in
+  Postgres makes one primary; every other instance stays standby and frozen, and a takeover is a
+  database event with an audit trail.
+- **A turn that dies halfway.** Usually a restart repeats the side effect. Here the message and its turn
+  are enqueued in one transaction, the turn is a row with a step checkpoint, and delivery is recorded per
+  chunk: resume resends only what was not sent, and a non-idempotent action that already ran is marked
+  interrupted instead of repeated.
+- **A guess that becomes a rule.** Usually the agent's own notes come back as instructions. Here derived
+  writes carry references, derivation is one level deep, rules come only from the soul document, and new
+  memory stays quarantined until corroborated.
+- **A reply that invents what it does not know.** Usually the model fills gaps confidently. Here a
+  knowledge layer selects vetted facts per turn, with a keyword fallback when vectors are absent, and the
+  character pass may change tone but never facts, numbers, or tool results.
+- **A reply that sounds like a machine.** Usually a prompt says "be friendly". Here emotion is its own
+  engine — a PAD state with a decaying baseline, drives, and a relationship per person — the context
+  engine picks character moves gated by register and harshness, and a humanize pass paces the reply; all
+  of it is a switch.
+- **An automation that is really a cron job.** Usually a crontab line with no owner, no permission, and
+  no dedupe. Here event, condition, and a closed list of steps; one run per occurrence keyed by the
+  schedule; authority checked twice; quiet hours, a daily budget, and a kill switch.
 
 None of this is a prompt trick. Each one is a place where state lives, and a rule about who may change
 it.
@@ -183,21 +173,25 @@ moved deployment, or a different body resumes the same soul rather than a fresh 
 
 ## Tools are capabilities
 
-Tools are capabilities the soul can be granted, not a fixed body. A body decides which capabilities
-exist; a role decides which of them the soul may use in that body.
+A tool is a capability the engine calls. It is not a body, and it is not a bundle: three things stay
+distinct.
 
-The six core families are examples, not a taxonomy to fill: `shell`, `read`, `write`, `web_search`,
-`sandbox`, and `mcp`. They cover the common cases — run a command, read a file, search the web, call
-an MCP server — and nothing more.
+- **Gateway** — the communication path: the body that carries messages in and out (a terminal, a chat
+  app, a device, a robot) and owns the actions that only make sense there. A camera, a motor, a printer,
+  or a home automation bus belongs to the embodiment, not to the engine; the gateway exposes those
+  actions as its own tool modules. Roles grant them explicitly, so a companion role on a phone never
+  inherits the controls of a robot.
+- **Tool** — a capability the engine calls. The six core families are examples, not a taxonomy to fill:
+  `shell`, `read`, `write`, `web_search`, `sandbox`, and `mcp`. A body decides which capabilities exist;
+  a role decides which of them the soul may use in that body, and a missing entry denies.
+- **Plugin** — a packaging and lifecycle unit, not a fourth kind of thing: it installs code and
+  registers what it provides (tools, commands, and possibly a gateway) into the same registries a core
+  module uses. Its code is fetched when it is enabled and pinned by digest; it never becomes a core tool,
+  and a gateway it ships is still a gateway.
 
-A robot, a device, or a custom gateway exposes its own body-specific actions as gateway-owned tool
-modules, next to the gateway that gives them meaning. A camera, a motor, a printer, or a home
-automation bus belongs to the embodiment, not to the engine. Roles grant those tools explicitly, so
-a companion role on a phone never inherits the controls of a robot.
-
-The engine never hardcodes a body and never hardcodes an agent loop. There is no planner to
-configure, no task graph to launch, no background swarm: one soul, one turn, and the capabilities
-this instant has been handed.
+All three stay off until enabled, and the spine is the only exception. The engine never hardcodes a body
+and never hardcodes an agent loop: no planner to configure, no task graph to launch, no background swarm
+— one soul, one turn, and the capabilities this instant has been handed.
 
 ## Quickstart
 
