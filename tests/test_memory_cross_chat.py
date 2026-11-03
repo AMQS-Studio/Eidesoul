@@ -28,25 +28,25 @@ def backend(tmp_path):
 
 def seed(memory: Mem0Backend) -> None:
     asyncio.run(
-        memory.add("owner suka kopi tanpa gula", scope="person", person_id="628111", chat_id=DM)
+        memory.add("owner suka kopi tanpa gula", scope="person", person_id="628111", thread_id=DM)
     )
-    asyncio.run(memory.add("panitia punya grup logistik", scope="global", chat_id=DM))
-    asyncio.run(memory.add("rahasia grup A: tiket konser", scope="chat", chat_id=GROUP_A))
+    asyncio.run(memory.add("panitia punya grup logistik", scope="global", thread_id=DM))
+    asyncio.run(memory.add("rahasia grup A: tiket konser", scope="thread", thread_id=GROUP_A))
     asyncio.run(
         memory.add(
             "orang lain suka teh",
             scope="person",
             person_id="628999",
-            chat_id="628999@s.whatsapp.net",
+            thread_id="628999@s.whatsapp.net",
         )
     )
 
 
-def test_person_memory_follows_owner_across_chats(tmp_path) -> None:
+def test_person_memory_follows_owner_across_threads(tmp_path) -> None:
     memory = backend(tmp_path)
     seed(memory)
 
-    hits = asyncio.run(memory.search("kopi", person_id="628111", chat_id=GROUP_B))
+    hits = asyncio.run(memory.search("kopi", person_id="628111", thread_id=GROUP_B))
     texts = {hit.text for hit in hits}
     assert "owner suka kopi tanpa gula" in texts
     assert "panitia punya grup logistik" in texts
@@ -58,9 +58,9 @@ def test_chat_memory_stays_in_its_chat(tmp_path) -> None:
     memory = backend(tmp_path)
     seed(memory)
 
-    inside = asyncio.run(memory.search("tiket", person_id="628111", chat_id=GROUP_A))
+    inside = asyncio.run(memory.search("tiket", person_id="628111", thread_id=GROUP_A))
     assert "rahasia grup A: tiket konser" in {hit.text for hit in inside}
-    outside = asyncio.run(memory.search("tiket", person_id="628111", chat_id=GROUP_B))
+    outside = asyncio.run(memory.search("tiket", person_id="628111", thread_id=GROUP_B))
     assert "rahasia grup A: tiket konser" not in {hit.text for hit in outside}
 
 
@@ -68,7 +68,7 @@ def test_stranger_only_gets_global(tmp_path) -> None:
     memory = backend(tmp_path)
     seed(memory)
 
-    hits = asyncio.run(memory.search("kopi", person_id="777", chat_id=GROUP_B))
+    hits = asyncio.run(memory.search("kopi", person_id="777", thread_id=GROUP_B))
     assert {hit.scope for hit in hits} <= {"global"}
 
 
@@ -78,7 +78,7 @@ def test_context_renders_scopes_and_dates(tmp_path) -> None:
 
     block = asyncio.run(
         memory.context(
-            person_id="628111", chat_id=GROUP_B, query="kopi", max_items=10, max_chars=2000
+            person_id="628111", thread_id=GROUP_B, query="kopi", max_items=10, max_chars=2000
         )
     )
 
@@ -92,10 +92,10 @@ def test_context_renders_scopes_and_dates(tmp_path) -> None:
 
 def test_context_respects_char_budget(tmp_path) -> None:
     memory = backend(tmp_path)
-    asyncio.run(memory.add("x" * 200, scope="global", chat_id=DM))
+    asyncio.run(memory.add("x" * 200, scope="global", thread_id=DM))
 
     block = asyncio.run(
-        memory.context(person_id="628111", chat_id=GROUP_B, query="x", max_items=10, max_chars=60)
+        memory.context(person_id="628111", thread_id=GROUP_B, query="x", max_items=10, max_chars=60)
     )
     assert block.text == ""
 
@@ -110,14 +110,14 @@ def test_group_captured_person_memory_stays_in_that_group(tmp_path) -> None:
                 "kind": "fact",
                 "audience": "group",
                 "person_id": "628111",
-                "chat_id": GROUP_A,
+                "thread_id": GROUP_A,
             },
             user_id="person:628111",
         )
     )
 
-    inside = asyncio.run(memory.search("kode", person_id="628111", chat_id=GROUP_A))
-    outside = asyncio.run(memory.search("kode", person_id="628111", chat_id=GROUP_B))
+    inside = asyncio.run(memory.search("kode", person_id="628111", thread_id=GROUP_A))
+    outside = asyncio.run(memory.search("kode", person_id="628111", thread_id=GROUP_B))
 
     assert any("kode pos" in hit.text for hit in inside)
     assert not any("kode pos" in hit.text for hit in outside)

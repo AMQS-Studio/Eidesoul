@@ -49,7 +49,7 @@ def config_with(tmp_path, **character):
 
 def run_polish(config, llm, draft: str) -> str:
     return asyncio.run(
-        polish(llm, config, draft, latest="halo", is_dm=True, tone="warm", session="s")
+        polish(llm, config, draft, latest="halo", direct=True, tone="warm", session="s")
     )
 
 

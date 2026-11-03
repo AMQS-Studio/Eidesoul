@@ -20,9 +20,9 @@ async def stop(ctx: CommandContext) -> str:
     if minutes > MAX_MINUTES:
         return t("command.stop.max", lang, max=MAX_MINUTES)
     if minutes <= 0:
-        ctx.agent.quiet.pop(ctx.chat_id, None)
+        ctx.agent.quiet.pop(ctx.thread_id, None)
         return t("command.stop.active", lang)
-    ctx.agent.quiet[ctx.chat_id] = time.time() + minutes * 60
+    ctx.agent.quiet[ctx.thread_id] = time.time() + minutes * 60
     return t("command.stop.quiet", lang, minutes=minutes)
 
 

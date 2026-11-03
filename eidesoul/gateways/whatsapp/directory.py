@@ -10,9 +10,9 @@ from pathlib import Path
 
 from sqlalchemy import and_, func, select, update
 
-from ...engine.context import ChatMessage
+from ...engine.context import Message
 from ...engine.db import Database
-from ...engine.schema import chats, messages
+from ...engine.schema import messages, person_links, threads
 from .schema import wa_contacts, wa_lid_map
 
 log = logging.getLogger(__name__)
@@ -150,29 +150,29 @@ def import_contacts(db: Database, session_db: Path | str) -> int:
     return len(contacts)
 
 
-def chat_name(db: Database, chat_id: str) -> str:
-    if not chat_id:
+def chat_name(db: Database, thread_id: str) -> str:
+    if not thread_id:
         return ""
-    found = db.fetch_one(select(chats.c.name).where(chats.c.chat_id == chat_id))
+    found = db.fetch_one(select(threads.c.name).where(threads.c.thread_id == thread_id))
     name = str(found["name"]) if found else ""
-    if name or not chat_id.endswith(("@s.whatsapp.net", "@lid")):
+    if name or not thread_id.endswith(("@s.whatsapp.net", "@lid")):
         return name
-    fallback = contact_name(db, chat_id)
+    fallback = contact_name(db, thread_id)
     if fallback:
-        set_chat_name(db, chat_id, fallback)
+        set_chat_name(db, thread_id, fallback)
     return fallback
 
 
-def set_chat_name(db: Database, chat_id: str, name: str) -> None:
+def set_chat_name(db: Database, thread_id: str, name: str) -> None:
     value = " ".join(str(name or "").split())[:200]
-    if not chat_id or not value:
+    if not thread_id or not value:
         return
     with db.connect() as conn:
         db.upsert(
             conn,
-            chats,
-            [{"chat_id": chat_id, "name": value, "reset_ts": 0.0, "kind": "group" if chat_id.endswith("@g.us") else "dm"}],
-            ["chat_id"],
+            threads,
+            [{"thread_id": thread_id, "name": value, "reset_ts": 0.0, "kind": "group" if thread_id.endswith("@g.us") else "dm"}],
+            ["thread_id"],
             update={"name": value},
         )
 
@@ -180,29 +180,29 @@ def set_chat_name(db: Database, chat_id: str, name: str) -> None:
 def groups(db: Database, query: str = "", limit: int = LIST_LIMIT) -> list[tuple[str, str]]:
     limit = max(1, min(int(limit or LIST_LIMIT), 50))
     term = str(query or "").strip().casefold()
-    rows = db.fetch_all(select(chats).where(chats.c.chat_id.like("%@g.us")))
+    rows = db.fetch_all(select(threads).where(threads.c.thread_id.like("%@g.us")))
     last = {
-        row["chat_id"]: row["last"]
+        row["thread_id"]: row["last"]
         for row in db.fetch_all(
-            select(messages.c.chat_id, func.max(messages.c.ts).label("last"))
-            .where(messages.c.chat_id.like("%@g.us"))
-            .group_by(messages.c.chat_id)
+            select(messages.c.thread_id, func.max(messages.c.ts).label("last"))
+            .where(messages.c.thread_id.like("%@g.us"))
+            .group_by(messages.c.thread_id)
         )
     }
     found: dict[str, tuple[str, float]] = {}
     for row in rows:
-        chat_id = str(row["chat_id"])
+        thread_id = str(row["thread_id"])
         name = str(row["name"] or "")
-        found[chat_id] = (name, float(last.get(chat_id, 0.0)))
-    for chat_id, stamp in last.items():
-        found.setdefault(str(chat_id), ("", float(stamp)))
+        found[thread_id] = (name, float(last.get(thread_id, 0.0)))
+    for thread_id, stamp in last.items():
+        found.setdefault(str(thread_id), ("", float(stamp)))
     items = [
-        (chat_id, name, stamp)
-        for chat_id, (name, stamp) in found.items()
-        if not term or term in name.casefold() or term in chat_id.casefold()
+        (thread_id, name, stamp)
+        for thread_id, (name, stamp) in found.items()
+        if not term or term in name.casefold() or term in thread_id.casefold()
     ]
     items.sort(key=lambda item: (-item[2], item[0]))
-    return [(chat_id, name) for chat_id, name, _stamp in items[:limit]]
+    return [(thread_id, name) for thread_id, name, _stamp in items[:limit]]
 
 
 def contacts(db: Database, query: str = "", limit: int = LIST_LIMIT) -> list[tuple[str, str]]:
@@ -231,8 +231,27 @@ def contacts(db: Database, query: str = "", limit: int = LIST_LIMIT) -> list[tup
     return found
 
 
-def list_targets(db: Database, query: str = "", limit: int = LIST_LIMIT) -> list[tuple[str, str]]:
+def targets(db: Database, query: str = "", limit: int = LIST_LIMIT) -> list[tuple[str, str]]:
     return [*groups(db, query, limit), *contacts(db, query, limit)]
+
+
+def participants(db: Database, thread_id: str) -> set[str] | None:
+    """Person ids the transport can prove are in the thread; `None` when it cannot.
+
+    A group's membership lives on the transport, not in the archive, so the gateway answers
+    `None` and the core fails closed. A direct conversation has exactly the two accounts; the
+    person linked to the thread's address is the one the transport can prove.
+    """
+    if not thread_id or thread_id.endswith("@g.us"):
+        return None
+    digits = thread_id.partition("@")[0]
+    rows = db.fetch_all(select(person_links).where(person_links.c.gateway == "whatsapp"))
+    found = {
+        str(row["person_id"])
+        for row in rows
+        if str(row["address"] or "").partition("@")[0] == digits
+    }
+    return found if found else None
 
 
 def resolve_target(
@@ -280,9 +299,9 @@ async def sync_group_names(client, db: Database, timeout: float = GROUP_LIST_TIM
     return saved
 
 
-def label(chat_id: str, name: str) -> str:
-    return f"{name} ({chat_id})" if name else chat_id
+def label(thread_id: str, name: str) -> str:
+    return f"{name} ({thread_id})" if name else thread_id
 
 
-def message_jid(message: ChatMessage) -> str:
+def message_jid(message: Message) -> str:
     return message.sender_address

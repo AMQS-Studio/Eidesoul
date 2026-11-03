@@ -1,4 +1,4 @@
-> Terjemahan turunan — jangan sunting; sumber: engine/0006-group-privacy.md (sha256: 754a309375cf)
+> Terjemahan turunan — jangan sunting; sumber: engine/0006-group-privacy.md (sha256: 919662affe75)
 > Teks ini ditulis manusia; baris yang tidak bisa diterjemahkan mesin disalin apa adanya ke sumber English, jadi sumber bercampur dua bahasa.
 
 # ADR-0006: Privasi Grup & Pre-Filter — Ceiling Sebelum Prompt, Capture Diri-Sendiri
@@ -11,7 +11,7 @@
 - **Supersedes:** —
 - **Terkait:** ADR-0003 (worker), ADR-0007 (capability vs authorization), ADR-0008 (integritas), ADR-0011 (crash safety)
 - **Catatan lokasi:** ADR hidup di `docs/v0.1.0/adr/engine/`; salinan Indonesia di `docs/v0.1.0/adr/engine/id/0006-group-privacy.md`.
-- **Amandemen:** 2026-11-02 — normalisasi kerangka (ADR-0009 §4.4): Konfigurasi dipromosikan dari subbagian 4.5 ke bagian 5; bagian sesudahnya bergeser. 2026-11-03 — audit: daftar pemanggil `PrivacyPolicy` dilengkapi (jalur review auditor, `engine/privacy.py:160,192`), bukan hanya tool dan command. 2026-11-03 — audit: rentang `capture_turn`/`_assess`/`render` diselaraskan dengan `def` aktual di repo.
+- **Amandemen:** 2026-11-02 — normalisasi kerangka (ADR-0009 §4.4): Konfigurasi dipromosikan dari subbagian 4.5 ke bagian 5; bagian sesudahnya bergeser. 2026-11-03 — audit: daftar pemanggil `PrivacyPolicy` dilengkapi (jalur review auditor, `engine/privacy.py:160,192`), bukan hanya tool dan command. 2026-11-03 — audit: rentang `capture_turn`/`_assess`/`render` diselaraskan dengan `def` aktual di repo. 2026-11-03 — rename ADR-0000 §4.4: chat_id → thread_id, chats/chat_eras/chat_people → threads/thread_eras/thread_people, scope 'chat' → 'thread'.
 
 ---
 
@@ -41,7 +41,7 @@ disclosure) memuat baris yang seharusnya tidak pernah terlihat di grup.
 di grup hanya fakta yang **pembicara nyatakan tentang dirinya** yang boleh disimpan.
 
 **Pertanyaan konfirmasi bocor di grup.** Jalur `verdict.ask` mengirim pertanyaan ke
-`inbound.chat_id` (`eidesoul/engine/privacy.py:267-277`), dan jalur disclosure melakukan hal yang
+`inbound.thread` (`eidesoul/engine/privacy.py:267-277`), dan jalur disclosure melakukan hal yang
 sama (`:150-172`). Di grup, pertanyaan itu mengungkap adanya fakta yang sedang dilindungi.
 
 **Yang sudah baik dan dipertahankan:**
@@ -98,7 +98,7 @@ Di non-DM:
 | Fakta yang pembicara nyatakan tentang dirinya (`subject` kosong atau == owner) | Disimpan: `scope=person(owner)`, `audience="group"`, `level <= group_max_level` |
 | Fakta pihak ketiga (pembicara menyatakan tentang orang lain) | **Drop total** — tidak ada baris canonical; butuh consent subjek (ADR-0007) |
 | Balasan soul sendiri | **Tidak disimpan** sebagai person memory (bisa memuat konteks dari DM) |
-| Fakta bersama grup (nama grup, rencana, agenda) | Boleh `scope=chat(chat_id)`, `level <= group_max_level`, `source='soul'` |
+| Fakta bersama grup (nama grup, rencana, agenda) | Boleh `scope=thread(thread_id)`, `level <= group_max_level`, `source='soul'` |
 | Kredensial/krisis/instruksi berbahaya | Hard exclusion, sebelum `memory_events` (ADR-0002/0004) |
 
 `audience="group"` dan pengecualian lintas-chat di `_search_scope` dipertahankan. Drop dicatat

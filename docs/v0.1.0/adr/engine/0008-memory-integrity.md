@@ -8,7 +8,7 @@
 - **Supersedes:** —
 - **Related:** ADR-0003 (worker), ADR-0010 (reflection), ADR-0011 (crash safety)
 - **Location note:** ADR lives in `docs/v0.1.0/adr/engine/`; the Indonesian copy is `docs/v0.1.0/adr/engine/id/0008-memory-integrity.md`.
-- **Amendments:** 2026-11-02 — §4.4 A: overflow quota enters state `staged` (labeled, TTL follows `kind`, promotion on recall-miss), not `pending`. 2026-11-03 — audit: the `kind=rule` acceptance criterion was aligned with §4.3 (`via=soul_doc`).
+- **Amendments:** 2026-11-02 — §4.4 A: overflow quota enters state `staged` (labeled, TTL follows `kind`, promotion on recall-miss), not `pending`. 2026-11-03 — audit: the `kind=rule` acceptance criterion was aligned with §4.3 (`via=soul_doc`). 2026-11-03 — ADR-0000 §4.4 rename: `chat_id` metadata/column → `thread_id`, scope `chat` → `thread`.
 
 ---
 
@@ -27,8 +27,8 @@ kept as a rule.
 | Capture rejects injection | `agent.py:914` |
 | Hard exclusion of credentials & crisis | `SENSITIVE` (`patterns.py:11-14`), `safe_text` (`:29-35`), the crisis prompt rule (`prompts.py:54-55`) |
 | Prompt: other people's words = data | `prompts.py:266` |
-| Provenance is partially stored | metadata `scope, kind, person_id, chat_id, audience, source, level, owner_id, subject_id, confirmed` (`mem0.py:340-392`) |
-| `source` values already in use | `turn` (`privacy.py:260`), `tool` (`tools/memory.py:94`), `command` (`commands/memori.py:131`), `ambient:<chat_id>` (`ambient.py:255,314`) |
+| Provenance is partially stored | metadata `scope, kind, person_id, thread_id, audience, source, level, owner_id, subject_id, confirmed` (`mem0.py:340-392`) |
+| `source` values already in use | `turn` (`privacy.py:260`), `tool` (`tools/memory.py:94`), `command` (`commands/memori.py:131`), `ambient:<thread_id>` (`ambient.py:255,314`) |
 | Veto is only by subject | `mem0.py:527-530` |
 | Manual supersede + scope/owner validation | `mem0.py:323-338` |
 
@@ -87,7 +87,7 @@ Every row stores, on top of the existing fields:
 | `via` | `turn` / `tool` / `command` / `reflection` / `ambient` / `automation` / `soul_doc` | derived from `source` (old values mapped, not a second column) |
 | `stated_by` | the speaker who states it | `owner_id` |
 | `about` | the person being talked about | `subject_id` |
-| `chat_id` | the room of origin | `chat_id` |
+| `thread_id` | the room of origin | `thread_id` |
 | `asserted_at` | the time of the statement | row time |
 | `refs` | a message/event reference, if any | metadata |
 
@@ -252,7 +252,7 @@ memory:
 
 ## 7. Acceptance criteria
 
-- [ ] Every new row has `via`, `stated_by`, `about`, `chat_id`, `asserted_at`.
+- [ ] Every new row has `via`, `stated_by`, `about`, `thread_id`, `asserted_at`.
 - [ ] Trust is computed deterministically from provenance; there is no model call on this path.
 - [ ] Rules/persona/style/tool decisions never come from T1/T2/T3.
 - [ ] Imperative text from a user is never stored as `kind=rule`.

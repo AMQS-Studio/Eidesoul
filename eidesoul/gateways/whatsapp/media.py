@@ -217,12 +217,12 @@ def _relative(config: Config, path: Path) -> str:
         return path.as_posix()
 
 
-def attachment_path(config: Config, chat_id: str, message_id: str, filename: str) -> Path:
-    folder = config.workspace / "attachments" / sanitize(chat_id, 40)
+def attachment_path(config: Config, thread_id: str, message_id: str, filename: str) -> Path:
+    folder = config.workspace / "attachments" / sanitize(thread_id, 40)
     return folder / f"{sanitize(message_id, 60)}-{sanitize(filename, 80)}"
 
 
-async def download_media(client, config: Config, chat_id: str, message_id: str, media: Media) -> None:
+async def download_media(client, config: Config, thread_id: str, message_id: str, media: Media) -> None:
     """Download an attachment once; failures land in `media.error` and are never raised."""
     if media.error:
         return
@@ -239,7 +239,7 @@ async def download_media(client, config: Config, chat_id: str, message_id: str, 
         except Exception:
             media.error = "unreadable proto"
             return
-    target = attachment_path(config, chat_id, message_id, media.filename)
+    target = attachment_path(config, thread_id, message_id, media.filename)
     try:
         target.parent.mkdir(parents=True, exist_ok=True)
         if target.is_file() and target.stat().st_size:

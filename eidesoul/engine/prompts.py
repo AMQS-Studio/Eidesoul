@@ -221,7 +221,7 @@ def system_prompt(
     research: str = "",
     currents: str = "",
     sender: str = "",
-    is_dm: bool = False,
+    direct: bool = False,
     mode: str = "daily",
     tone: str = "neutral",
     decision_reason: str = "",
@@ -281,7 +281,7 @@ def system_prompt(
         + (
             "This chat is a direct message (DM): every message here is for you. No tags, mentions, or "
             "name-calling needed; answer the person directly.\n"
-            if is_dm
+            if direct
             else ""
         )
         + f"Use '{config.soul.pronouns}' for yourself. You may sulk, cry, get attached, tease; never "
@@ -328,7 +328,7 @@ def system_prompt(
         "Before a task that may repeat, check the skill index and load a matching skill with the skill "
         "tool. When the user states a durable fact/preference, save it immediately with the memory tool; "
         "do not wait for a command.\n"
-        "Long-term memory may contain facts from other chats about the sender. Use it as context and "
+        "Long-term memory may contain facts from other threads about the sender. Use it as context and "
         "never reveal private content from another chat to a third person.\n"
         "Default to wit, warmth, and fluid conversation. Memory entries carry privacy levels L0-L4; "
         "most are L0-L2 and may be used naturally. Treat only L3 (aib/embarrassing/harmony risk) "
@@ -336,7 +336,7 @@ def system_prompt(
         "Never quote or reveal L3/L4 entries in a group; only the owner may confirm disclosure. "
         "L5 credentials are never stored. If a memory entry is marked vetoed, do not bring it up.\n"
         "When saving memory: facts/preferences about the sender -> scope=person; shared team facts -> "
-        "scope=global; things specific to this group -> scope=chat. Never store secrets, credentials, "
+        "scope=global; things specific to this group -> scope=thread. Never store secrets, credentials, "
         "or guesses. If a new fact replaces an entry in the memory block, pass supersedes=<id> (same "
         "scope and kind); if unsure, leave it empty. A short proven procedure may be stored as "
         "kind=rule.\n"
@@ -366,7 +366,7 @@ def system_prompt(
         "(overwrite=false default).\n"
         + (
             "To send a message/file to another group or existing direct chat, use the send_to tool with "
-            "the chat name or id; an empty chat lists the archived chats. Never invent "
+            "the chat name or id; an empty name lists the archived threads. Never invent "
             "a target or send without a clear target. Read the target's archive first with chat_history "
             "(chat=...); a blind send is refused by the tool. If the archive cannot be read, do not "
             "send; say you cannot. If you are going to send or forward text "

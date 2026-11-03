@@ -10,7 +10,7 @@ from . import MemoryContext
 
 log = logging.getLogger(__name__)
 
-SCOPES = ("global", "person", "chat")
+SCOPES = ("global", "person", "thread")
 HEADER = "Long-term memory (cross-chat):"
 CHAT_BOOST = 0.15
 RECENCY_BOOST = 0.1
@@ -34,9 +34,9 @@ def _dedupe(hits: list) -> list:
     return list(found.values())
 
 
-def _boost(hit, chat_id: str, now: float | None = None) -> float:
+def _boost(hit, thread_id: str, now: float | None = None) -> float:
     score = float(getattr(hit, "score", 0.0) or 0.0)
-    if chat_id and getattr(hit, "chat_id", "") == chat_id:
+    if thread_id and getattr(hit, "thread_id", "") == thread_id:
         score += CHAT_BOOST
     created = getattr(hit, "created_at", None)
     if created:
@@ -50,7 +50,7 @@ async def gather(
     *,
     query: str,
     person_id: str,
-    chat_id: str,
+    thread_id: str,
     limit: int,
     scopes: tuple[str, ...] = SCOPES,
 ) -> list:
@@ -59,9 +59,9 @@ async def gather(
     for scope in scopes:
         if scope == "person" and not person_id:
             continue
-        if scope == "chat" and not chat_id:
+        if scope == "thread" and not thread_id:
             continue
-        calls.append(backend._search_scope(scope, query, person_id, chat_id, limit))
+        calls.append(backend._search_scope(scope, query, person_id, thread_id, limit))
     if not calls:
         return []
     results = await asyncio.gather(*calls, return_exceptions=True)
@@ -72,7 +72,7 @@ async def gather(
             continue
         hits.extend(result)
     hits = _dedupe(hits)
-    hits.sort(key=lambda hit: _boost(hit, chat_id), reverse=True)
+    hits.sort(key=lambda hit: _boost(hit, thread_id), reverse=True)
     return hits
 
 
@@ -111,7 +111,7 @@ async def build(
     backend,
     *,
     person_id: str,
-    chat_id: str,
+    thread_id: str,
     query: str,
     max_items: int = 12,
     max_chars: int = 3000,
@@ -123,7 +123,7 @@ async def build(
             backend,
             query=query,
             person_id=person_id,
-            chat_id=chat_id,
+            thread_id=thread_id,
             limit=max(1, int(max_items)),
             scopes=scopes,
         )

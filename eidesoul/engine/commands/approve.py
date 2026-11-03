@@ -21,12 +21,12 @@ async def _approve(ctx: CommandContext) -> str:
         approval = agent.approvals.get(raw)
         if approval is None:
             return t("command.approve.not_found", lang, id=raw)
-        if approval.chat_id != ctx.chat_id or approval.sender != ctx.sender:
+        if approval.thread_id != ctx.thread_id or approval.sender != ctx.sender:
             return t("command.approve.foreign", lang)
         if approval.status != "pending":
             return t("command.approve.already", lang, id=approval.id, status=approval.status)
     else:
-        approval = agent.approvals.latest(ctx.chat_id, ctx.sender)
+        approval = agent.approvals.latest(ctx.thread_id, ctx.sender)
         if approval is None:
             return t("command.approve.none", lang)
     if approval.expires_at < time.time():
@@ -52,7 +52,7 @@ async def _approve(ctx: CommandContext) -> str:
     if agent.hub is not None:
         specs.update({handler.name: handler for handler in agent.hub.specs(roles)})
     tool_ctx = agent.tool_context(
-        ctx.chat_id,
+        ctx.thread_id,
         ctx.sender,
         roles,
         ctx.gateway,
@@ -63,12 +63,12 @@ async def _approve(ctx: CommandContext) -> str:
     agent.approvals.mark(approval.id, "approved", ctx.sender, result[:2000])
     try:
         agent.ledger.log_action(
-            ctx.chat_id,
-            ctx.chat_id,
+            ctx.thread_id,
+            ctx.thread_id,
             "approved",
             f"{approval.tool} approved #{approval.id}",
-            source_name=ctx.gateway.chat_name(ctx.chat_id) if ctx.gateway else "",
-            target_name=ctx.gateway.chat_name(ctx.chat_id) if ctx.gateway else "",
+            source_name=ctx.gateway.chat_name(ctx.thread_id) if ctx.gateway else "",
+            target_name=ctx.gateway.chat_name(ctx.thread_id) if ctx.gateway else "",
             request=approval.summary,
         )
     except Exception:

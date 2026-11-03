@@ -16,7 +16,7 @@ class MemoryHit:
     score: float = 0.0
     scope: str = "person"
     person_id: str = ""
-    chat_id: str = ""
+    thread_id: str = ""
     created_at: float | None = None
     metadata: dict = field(default_factory=dict)
     level: int = 2
@@ -45,7 +45,7 @@ class MemoryBackend(Protocol):
         scope: str = "person",
         kind: str = "fact",
         person_id: str = "",
-        chat_id: str = "",
+        thread_id: str = "",
         audience: str = "",
         source: str = "",
         metadata: dict | None = None,
@@ -62,7 +62,7 @@ class MemoryBackend(Protocol):
         messages: list[dict],
         *,
         person_id: str,
-        chat_id: str,
+        thread_id: str,
         audience: str,
         source: str = "turn",
         level: int = 2,
@@ -76,9 +76,9 @@ class MemoryBackend(Protocol):
         query: str,
         *,
         person_id: str = "",
-        chat_id: str = "",
+        thread_id: str = "",
         limit: int = 12,
-        scopes: tuple[str, ...] = ("global", "person", "chat"),
+        scopes: tuple[str, ...] = ("global", "person", "thread"),
     ) -> list[MemoryHit]: ...
 
     async def list(
@@ -86,7 +86,7 @@ class MemoryBackend(Protocol):
         *,
         scope: str,
         person_id: str = "",
-        chat_id: str = "",
+        thread_id: str = "",
         limit: int = 20,
     ) -> list[MemoryHit]: ...
 
@@ -97,7 +97,7 @@ class MemoryBackend(Protocol):
         memory_id: str,
         *,
         requester_id: str = "",
-        chat_id: str = "",
+        thread_id: str = "",
         allow_global: bool = False,
     ) -> bool: ...
 
@@ -118,7 +118,7 @@ class MemoryBackend(Protocol):
         self,
         *,
         person_id: str,
-        chat_id: str,
+        thread_id: str,
         query: str,
         mood=None,
         max_items: int | None = None,

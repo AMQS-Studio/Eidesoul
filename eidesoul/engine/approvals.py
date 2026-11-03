@@ -18,7 +18,7 @@ class Approval:
     id: int
     created_at: float
     expires_at: float
-    chat_id: str
+    thread_id: str
     sender: str
     gateway: str
     kind: str
@@ -51,7 +51,7 @@ class ApprovalStore:
             id=int(row["id"]),
             created_at=float(row["created_at"]),
             expires_at=float(row["expires_at"]),
-            chat_id=str(row["chat_id"]),
+            thread_id=str(row["thread_id"]),
             sender=str(row["sender"]),
             gateway=str(row["gateway"]),
             kind=str(row["kind"]),
@@ -79,7 +79,7 @@ class ApprovalStore:
         self,
         *,
         kind: str,
-        chat_id: str,
+        thread_id: str,
         sender: str,
         gateway: str = "",
         tool: str = "",
@@ -95,14 +95,14 @@ class ApprovalStore:
         if roles:
             payload["roles"] = list(roles)
         wanted = self._fingerprint(kind, tool, args, payload)
-        for existing in self.pending(chat_id, sender):
+        for existing in self.pending(thread_id, sender):
             if self._fingerprint(existing.kind, existing.tool, existing.args, existing.payload) == wanted:
                 return existing
         now = time.time()
         row = {
             "created_at": now,
             "expires_at": now + float(self.config.ttl_seconds),
-            "chat_id": chat_id,
+            "thread_id": thread_id,
             "sender": sender,
             "gateway": gateway,
             "kind": kind,
@@ -132,12 +132,12 @@ class ApprovalStore:
         found = self.db.fetch_one(select(approvals).where(approvals.c.id == key))
         return self._approval(found) if found else None
 
-    def pending(self, chat_id: str, sender: str) -> list[Approval]:
+    def pending(self, thread_id: str, sender: str) -> list[Approval]:
         now = time.time()
         statement = (
             select(approvals)
             .where(
-                approvals.c.chat_id == chat_id,
+                approvals.c.thread_id == thread_id,
                 approvals.c.sender == sender,
                 approvals.c.status == "pending",
                 approvals.c.expires_at >= now,
@@ -146,8 +146,8 @@ class ApprovalStore:
         )
         return [self._approval(row) for row in self.db.fetch_all(statement)]
 
-    def latest(self, chat_id: str, sender: str) -> Approval | None:
-        found = self.pending(chat_id, sender)
+    def latest(self, thread_id: str, sender: str) -> Approval | None:
+        found = self.pending(thread_id, sender)
         return found[-1] if found else None
 
     def count_pending(self) -> int:

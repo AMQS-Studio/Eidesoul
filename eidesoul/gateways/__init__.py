@@ -7,12 +7,14 @@ import logging
 from importlib.metadata import entry_points
 
 from ..engine.config import ConfigError
+from ..engine.inbound import capability_report, ensure_core
 
 log = logging.getLogger(__name__)
 
 BUILTIN = {
     "whatsapp": "eidesoul.gateways.whatsapp.gateway:WhatsAppGateway",
     "cli": "eidesoul.gateways.cli.gateway:CliGateway",
+    "harness": "eidesoul.gateways.harness.gateway:HarnessGateway",
 }
 
 
@@ -80,4 +82,7 @@ def build_gateways(
         found.append(cls(config, db, history, windows, settings=settings))
     if not found:
         raise ConfigError("no gateway is enabled; fill in the `gateways` section of config.yaml")
+    for gateway in found:
+        ensure_core(gateway)
+    log.info("gateway_capabilities %s", capability_report(found))
     return found

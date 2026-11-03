@@ -10,7 +10,7 @@ import dataclasses
 from dataclasses import dataclass
 
 from . import salience
-from .context import AUTHOR_BOT, AUTHOR_MANUAL, ChatMessage, prompt_entry
+from .context import AUTHOR_BOT, AUTHOR_MANUAL, Message, prompt_entry
 from .config import Config
 from .decision import decide
 from .prompts import system_prompt
@@ -23,12 +23,12 @@ ABLATABLE = ("emotion", "vibe", "away")
 
 @dataclass(frozen=True)
 class Row:
-    message: ChatMessage
+    message: Message
     called: bool
     replied: bool
 
 
-def classify(messages: list[ChatMessage], *, bot_name: str) -> list[Row]:
+def classify(messages: list[Message], *, bot_name: str) -> list[Row]:
     """Replay the reply gate from the archive; one row per incoming message, chronological.
 
     The archive does not store the real mention, so `called` only comes from quotes of the bot:
@@ -71,7 +71,7 @@ def _mean(values: list[int]) -> float:
 
 def prompt_budget(
     config: Config,
-    messages: list[ChatMessage],
+    messages: list[Message],
     *,
     sample: int,
     blocks_for,
@@ -127,7 +127,7 @@ def prompt_budget(
     }
 
 
-def emotion_brief(affect, chat_id: str) -> str | dict:
+def emotion_brief(affect, thread_id: str) -> str | dict:
     """Read-only summary of the emotion state; `""` when the state is missing or unreadable.
 
     `status()` may write a default state when no file exists yet, so the harness only reads it
@@ -136,7 +136,7 @@ def emotion_brief(affect, chat_id: str) -> str | dict:
     if affect is None:
         return ""
     try:
-        status = affect.status(chat_id)
+        status = affect.status(thread_id)
     except (OSError, ValueError, KeyError):
         return ""
     return {
@@ -144,7 +144,7 @@ def emotion_brief(affect, chat_id: str) -> str | dict:
     }
 
 
-def _transcript(history: list[ChatMessage], target: ChatMessage, bot_name: str) -> str:
+def _transcript(history: list[Message], target: Message, bot_name: str) -> str:
     index = next((i for i, item in enumerate(history) if item is target), len(history))
     window = history[max(0, index - TRANSCRIPT_LINES) : index]
     return "\n".join(prompt_entry(item, bot_name, 500) for item in window)
@@ -157,10 +157,10 @@ async def decision_shift(
     *,
     sample: int,
     ablate: tuple[str, ...],
-    chat_id: str = "",
-    history: list[ChatMessage] | None = None,
+    thread_id: str = "",
+    history: list[Message] | None = None,
     affect=None,
-    is_dm: bool = True,
+    direct: bool = True,
 ) -> dict:
     """Compare the gate decision with and without the ablated blocks (a real LLM)."""
     if sample <= 0:
@@ -182,20 +182,20 @@ async def decision_shift(
         current = prompt_entry(message, bot_name, 500)
         transcript = _transcript(messages, message, bot_name)
         common = {
-            "chat_id": chat_id,
+            "thread_id": thread_id,
             "chat_name": "",
             "current": current,
             "transcript": transcript,
             "relationship": "",
-            "is_dm": is_dm,
-            "is_mention": False,
-            "is_reply": message.quote is not None and message.quote.sender_name == bot_name,
+            "direct": direct,
+            "mentioned": False,
+            "replied": message.quote is not None and message.quote.sender_name == bot_name,
             "away": "" if "away" in ablate else "catatan",
             "vibe": "" if "vibe" in ablate else "suasana hangat",
             "soul": config.soul.persona,
             "language": config.soul.language,
         }
-        emotion = emotion_brief(affect, chat_id)
+        emotion = emotion_brief(affect, thread_id)
         before = await decide(llm, emotion=emotion, **common)
         after = await decide(llm, emotion="" if "emotion" in ablate else emotion, **common)
         if before is None or after is None:

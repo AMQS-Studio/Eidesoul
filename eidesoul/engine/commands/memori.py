@@ -1,4 +1,4 @@
-"""Command /memori: add/search/list/delete person, chat, or global memory (no LLM)."""
+"""Command /memori: add/search/list/delete person, thread, or global memory (no LLM)."""
 
 from __future__ import annotations
 
@@ -8,10 +8,10 @@ from ..memory.privacy import PrivacyPolicy, clamp_level
 from ..registry import Handler
 from . import CommandContext
 
-SCOPES = ("person", "chat", "global")
+SCOPES = ("person", "thread", "global")
 
 
-SCOPE_KEYS = {"person": "scope_person", "chat": "scope_chat", "global": "scope_global"}
+SCOPE_KEYS = {"person": "scope_person", "thread": "scope_chat", "global": "scope_global"}
 
 
 def _line(hit: MemoryHit, lang: str) -> str:
@@ -38,24 +38,24 @@ async def _memori(ctx: CommandContext) -> str:
     config = ctx.agent.config.memory.privacy
     scope, raw = _scope(ctx.args.strip())
     inbound = ctx.inbound
-    requester = (inbound.person_id if inbound is not None else "") or ctx.sender
-    is_dm = bool(inbound is not None and inbound.is_dm)
+    requester = (inbound.actor if inbound is not None else "") or ctx.sender
+    direct = bool(inbound is not None and inbound.hints.get("dm"))
     memory_admin = any(role.memory_admin for role in ctx.roles)
     if scope == "person" and not requester:
         return t("command.memori.no_sender", lang)
-    if scope == "chat" and not ctx.chat_id:
+    if scope == "thread" and not ctx.thread_id:
         return t("command.memori.no_chat", lang)
     action, _, rest = raw.partition(" ")
     action = action.lower()
-    chat_id = ctx.chat_id if scope == "chat" else ""
+    thread_id = ctx.thread_id if scope == "thread" else ""
     person_id = requester if scope == "person" else ""
     policy = PrivacyPolicy(config)
 
     if not raw or action in {"daftar", "list"}:
         rows = await memory.list(
-            scope=scope, person_id=person_id, chat_id=chat_id, limit=50
+            scope=scope, person_id=person_id, thread_id=thread_id, limit=50
         )
-        shown = [row for row in rows if policy.show(row, is_dm=is_dm)]
+        shown = [row for row in rows if policy.show(row, direct=direct)]
         label = t(f"command.memori.{SCOPE_KEYS[scope]}", lang)
         return (
             "\n".join(
@@ -69,11 +69,11 @@ async def _memori(ctx: CommandContext) -> str:
         rows = await memory.search(
             rest.strip(),
             person_id=person_id,
-            chat_id=chat_id,
+            thread_id=thread_id,
             scopes=(scope,),
             limit=50,
         )
-        shown = [row for row in rows if policy.show(row, is_dm=is_dm)]
+        shown = [row for row in rows if policy.show(row, direct=direct)]
         return (
             "\n".join([t("command.memori.results", lang), *(_line(row, lang) for row in shown)])
             if shown
@@ -88,7 +88,7 @@ async def _memori(ctx: CommandContext) -> str:
             removed = await memory.forget(
                 target,
                 requester_id=requester,
-                chat_id=ctx.chat_id,
+                thread_id=ctx.thread_id,
                 allow_global=memory_admin,
             )
             return (
@@ -97,16 +97,16 @@ async def _memori(ctx: CommandContext) -> str:
                 else t("command.memori.no_delete_own", lang)
             )
         rows = await memory.search(
-            target, person_id=person_id, chat_id=chat_id, scopes=(scope,), limit=50
+            target, person_id=person_id, thread_id=thread_id, scopes=(scope,), limit=50
         )
         removed = 0
         for row in rows:
-            if not policy.show(row, is_dm=is_dm):
+            if not policy.show(row, direct=direct):
                 continue
             if await memory.forget(
                 row.id,
                 requester_id=requester,
-                chat_id=ctx.chat_id,
+                thread_id=ctx.thread_id,
                 allow_global=memory_admin,
             ):
                 removed += 1
@@ -127,7 +127,7 @@ async def _memori(ctx: CommandContext) -> str:
             scope=scope,
             kind="note",
             person_id=person_id,
-            chat_id=chat_id,
+            thread_id=thread_id,
             source="command",
             level=clamp_level(config.default_level, 2),
             owner_id=requester,

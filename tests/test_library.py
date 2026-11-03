@@ -143,7 +143,7 @@ def test_soul_style_drives_agent_selection(tmp_path, monkeypatch) -> None:
 
     quiet = make_agent(tmp_path, soul=Soul(name="Eidesoul", style=SoulStyle()))
     quiet.agent.config = replace(quiet.agent.config, character=CharacterConfig(enabled=True))
-    asyncio.run(quiet.agent.handle(inbound_message("aku capek banget", chat_id=DM), quiet.gateway))
+    asyncio.run(quiet.agent.handle(inbound_message("aku capek banget", thread=DM), quiet.gateway))
     assert "## Room patterns" not in quiet.llm.system
     assert "## Known facts" not in quiet.llm.system
 
@@ -154,5 +154,5 @@ def test_soul_style_drives_agent_selection(tmp_path, monkeypatch) -> None:
         soul=default_soul(style=SoulStyle(patterns=("jawatimur",), max_patterns=2)),
     )
     loud.agent.config = replace(loud.agent.config, character=CharacterConfig(enabled=True))
-    asyncio.run(loud.agent.handle(inbound_message("aku capek banget", chat_id=DM), loud.gateway))
+    asyncio.run(loud.agent.handle(inbound_message("aku capek banget", thread=DM), loud.gateway))
     assert "## Room patterns" in loud.llm.system

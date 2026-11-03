@@ -15,12 +15,12 @@ class CommandContext:
     agent: Any
     gateway: Any
     roles: tuple[Role, ...]
-    chat_id: str
+    thread_id: str
     args: str
     commands: tuple[Handler, ...]
     tools: tuple[Handler, ...]
     sender: str = ""
-    is_dm: bool = True
+    direct: bool = True
     inbound: Any = None
 
     @property

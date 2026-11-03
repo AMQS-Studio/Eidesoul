@@ -5,11 +5,11 @@ from __future__ import annotations
 import hashlib
 import logging
 
-from neonize.proto.waE2E.WAWebProtobufsE2E_pb2 import Message
+from neonize.proto.waE2E.WAWebProtobufsE2E_pb2 import Message as ProtoMessage
 from neonize.proto.waHistorySync.WAWebProtobufsHistorySync_pb2 import HistorySync
 from neonize.proto.waCompanionReg.WAWebProtobufsCompanionReg_pb2 import DeviceProps
 
-from ...engine.context import AUTHOR_UNKNOWN, DEFAULT_VISIBILITY, ChatMessage
+from ...engine.context import AUTHOR_UNKNOWN, DEFAULT_VISIBILITY, Message
 from .identity import normalize_jid
 from . import directory
 from .media import describe_media, event_time, message_text, quote_from_proto
@@ -106,7 +106,7 @@ def _decode_ref(value) -> object | None:
     if not value:
         return None
     try:
-        return Message.FromString(bytes(value))
+        return ProtoMessage.FromString(bytes(value))
     except Exception:
         return None
 
@@ -125,8 +125,8 @@ def _ingest_sync_contacts(db, sync: HistorySync) -> None:
 
 def _sync_item(db, web, fallback_chat: str, fallback_ts: int = 0, self_jid: str = ""):
     key = web.key
-    chat_id = key.remoteJID or fallback_chat
-    if not chat_id or not web.message.ListFields():
+    thread_id = key.remoteJID or fallback_chat
+    if not thread_id or not web.message.ListFields():
         return None
     msg_id = key.ID or (
         "hist-"
@@ -142,17 +142,17 @@ def _sync_item(db, web, fallback_chat: str, fallback_ts: int = 0, self_jid: str 
     from_me = bool(key.fromMe)
     if from_me:
         sender_address = self_jid
-    elif chat_id.endswith("@g.us"):
+    elif thread_id.endswith("@g.us"):
         sender_address = key.participant or web.participant or ""
     else:
-        sender_address = chat_id
+        sender_address = thread_id
     sender_id = normalize_jid(sender_address) if sender_address else ""
     sender = (
         directory.contact_name(db, sender_address) if sender_address else ""
     ) or (web.pushName or "").strip() or sender_id
     return (
-        chat_id,
-        ChatMessage(
+        thread_id,
+        Message(
             id=msg_id,
             sender_name=sender,
             sender_id=sender_id,
@@ -170,13 +170,13 @@ def _sync_item(db, web, fallback_chat: str, fallback_ts: int = 0, self_jid: str 
 
 
 def ingest_sync(db, history, sync: HistorySync, self_jid: str = "") -> tuple[int, set[str], bool]:
-    """Store one HistorySync event; return (count, chats, done)."""
+    """Store one HistorySync event; return (count, threads, done)."""
     if sync is None:
         return 0, set(), False
     _ingest_sync_contacts(db, sync)
-    chat_ids: set[str] = set()
+    thread_ids: set[str] = set()
     total = 0
-    batch: list[tuple[str, ChatMessage]] = []
+    batch: list[tuple[str, Message]] = []
     for conversation in sync.conversations:
         fallback_chat = conversation.ID or ""
         fallback_ts = int(conversation.conversationTimestamp or 0)
@@ -187,9 +187,9 @@ def ingest_sync(db, history, sync: HistorySync, self_jid: str = "") -> tuple[int
             parsed = _sync_item(db, item.message, fallback_chat, fallback_ts, self_jid)
             if parsed is None:
                 continue
-            chat_id, message = parsed
-            batch.append((chat_id, message))
-            chat_ids.add(chat_id)
+            thread_id, message = parsed
+            batch.append((thread_id, message))
+            thread_ids.add(thread_id)
             if len(batch) >= 500:
                 total += history.add_many(batch)
                 batch.clear()
@@ -200,7 +200,7 @@ def ingest_sync(db, history, sync: HistorySync, self_jid: str = "") -> tuple[int
     )
     if done:
         mark_full_sync(db)
-    return total, chat_ids, done
+    return total, thread_ids, done
 
 
 def needs_full_sync(db) -> bool:

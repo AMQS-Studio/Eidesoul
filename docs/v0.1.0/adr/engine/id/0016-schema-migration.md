@@ -1,4 +1,4 @@
-> Terjemahan turunan — jangan sunting; sumber: engine/0016-schema-migration.md (sha256: 9e3d89b6a56d)
+> Terjemahan turunan — jangan sunting; sumber: engine/0016-schema-migration.md (sha256: 5817273c02e8)
 > Teks ini ditulis manusia; baris yang tidak bisa diterjemahkan mesin disalin apa adanya ke sumber English, jadi sumber bercampur dua bahasa.
 
 # ADR-0016: Skema Kanonik & Migrasi — Satu DDL, Satu Baseline Alembic
@@ -31,10 +31,10 @@
   (ADR-0008), metadata dispute (ADR-0010), `generation` (ADR-0012), `turns`/`outbound_messages`
   (ADR-0013), `automations`/`automation_runs` (ADR-0014). ADR-0012 bahkan menunjuk "ADR-0005
   (migrasi skema)" — ADR-0005 adalah retensi, bukan migrasi.
-- **P0-3 review 2026-11-01 belum punya pemilik:** FK untuk `chat_people`/`person_links`/`skill_files`/
-  `google_identity`/`chat_eras`, CHECK `engine_lease.id=1` dan `visibility`/`privacy` 0-4, index
-  `messages(ts)`, `approvals(chat_id,sender,status,expires_at)`, `approvals(status,expires_at)`,
-  `chat_people(person_id)`, serta pemisahan blob media ke `message_media`.
+- **P0-3 review 2026-11-01 belum punya pemilik:** FK untuk `thread_people`/`person_links`/`skill_files`/
+  `google_identity`/`thread_eras`, CHECK `engine_lease.id=1` dan `visibility`/`privacy` 0-4, index
+  `messages(ts)`, `approvals(thread_id,sender,status,expires_at)`, `approvals(status,expires_at)`,
+  `thread_people(person_id)`, serta pemisahan blob media ke `message_media`.
 
 ## 2. Decision drivers
 
@@ -83,7 +83,7 @@ memories(
   id               uuid primary key,
   scope            text not null,               -- global | person | chat            (ADR-0001)
   person_id        text not null default '',
-  chat_id          text not null default '',
+  thread_id          text not null default '',
   kind             text not null default 'fact',-- fact|preference|event|note|commitment|rule (ADR-0008)
   text             text not null,
   state            text not null default 'pending',  -- lihat 4.3                      (ADR-0004)
@@ -133,12 +133,12 @@ CHECK ( state IN ('pending','ok','staged','failed','not_worth','superseded') )
 CHECK ( (state IN ('ok','staged','superseded')) = (level IS NOT NULL) )
 CHECK ( level IS NULL OR level BETWEEN 0 AND 4 )
 CHECK ( state <> 'ok' OR confirmed IS NOT NULL )
-CHECK ( scope IN ('global','person','chat') )
+CHECK ( scope IN ('global','person','thread') )
 CHECK ( via IN ('turn','tool','command','reflection','ambient','automation','soul_doc') )
 CHECK ( dispute_state IN ('none','open','resolved','stale') )
 
 CREATE INDEX memories_live      ON memories (scope, person_id, state);
-CREATE INDEX memories_chat      ON memories (chat_id, state);
+CREATE INDEX memories_thread    ON memories (thread_id, state);
 CREATE INDEX memories_expiry    ON memories (expires_at) WHERE expires_at IS NOT NULL;
 CREATE INDEX memories_refs_gin  ON memories USING gin (refs);
 CREATE UNIQUE INDEX memories_supersede_pair ON memories (id, supersedes) WHERE superseded_by IS NOT NULL;
@@ -181,12 +181,12 @@ terbaca, jadi `state='ok'` untuk baris dengan `level` 0-4 (default lama 2), `con
 
 ### 4.5 FK, CHECK, dan index dari review P0-3
 
-- FK: `chat_people.person_id`, `person_links.*`, `skill_files.skill_id`, `google_identity.*`,
-  `chat_eras.chat_id` ke tabel induknya (`ON DELETE CASCADE` untuk anak milik, `SET NULL` untuk rujukan).
+- FK: `thread_people.person_id`, `person_links.*`, `skill_files.skill_id`, `google_identity.*`,
+  `thread_eras.thread_id` ke tabel induknya (`ON DELETE CASCADE` untuk anak milik, `SET NULL` untuk rujukan).
 - CHECK: `engine_lease.id = 1`; `visibility BETWEEN 0 AND 4` (messages/memori terkait);
   `level BETWEEN 0 AND 4` (sudah di 4.3).
-- Index: `messages(ts)`, `approvals(chat_id, sender, status, expires_at)`,
-  `approvals(status, expires_at)`, `chat_people(person_id)`.
+- Index: `messages(ts)`, `approvals(thread_id, sender, status, expires_at)`,
+  `approvals(status, expires_at)`, `thread_people(person_id)`.
 - Blob media dipisah ke `message_media(message_id, kind, mime, bytes_ref)`; `messages` menyimpan pointer.
 
 ### 4.6 Tabel `llm_calls` (metrik biaya, ADR-0019)
@@ -219,7 +219,7 @@ CREATE INDEX ix_llm_calls_turn ON llm_calls (turn_id);
 
 ```sql
 ALTER TABLE skills
-  ADD COLUMN scope          text NOT NULL DEFAULT 'chat',   -- chat | person | global
+  ADD COLUMN scope          text NOT NULL DEFAULT 'thread',   -- thread | person | global
   ADD COLUMN via            text NOT NULL DEFAULT 'reflection',
   ADD COLUMN stated_by      text,
   ADD COLUMN source_episode text,
@@ -229,7 +229,7 @@ ALTER TABLE skills
   ADD COLUMN trust          text NOT NULL DEFAULT 'T2';     -- T0-T3 (ADR-0008)
 
 ALTER TABLE skills
-  ADD CONSTRAINT ck_skills_scope CHECK (scope IN ('chat','person','global')),
+  ADD CONSTRAINT ck_skills_scope CHECK (scope IN ('thread','person','global')),
   ADD CONSTRAINT ck_skills_trust CHECK (trust IN ('T0','T1','T2','T3'));
 
 CREATE TABLE skill_revisions (
@@ -266,7 +266,7 @@ ALTER TABLE approvals
 - `scope_proof` adalah hasil hitung deterministik saat request: daftar **target** aksi (path, room,
   kolom) + snapshot roots role penanya + kelas yang diturunkan. Eksekusi membandingkannya dengan
   scope saat itu; perbedaan jangkauan membatalkan approval atau menaikkan kelasnya.
-- Tidak ada index baru: query tetap `(chat_id, sender, status)` dan `(status, expires_at)`.
+- Tidak ada index baru: query tetap `(thread_id, sender, status)` dan `(status, expires_at)`.
 
 ### 4.9 `relay_grants` dan `automation_state_log` (ADR-0023, ADR-0014 §4.13)
 

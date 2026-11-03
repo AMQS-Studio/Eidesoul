@@ -81,8 +81,8 @@ class GoogleWorkspace:
 
     # ---------------------------------------------------------- device flow
 
-    async def login(self, person_id: str, *, is_dm: bool) -> str:
-        if not is_dm:
+    async def login(self, person_id: str, *, direct: bool) -> str:
+        if not direct:
             return "error: Google login is only allowed in a direct message."
         known = self.identity(person_id)
         if known is not None:
@@ -119,7 +119,7 @@ class GoogleWorkspace:
             "The code expires in 30 minutes."
         )
 
-    async def status(self, person_id: str, *, is_dm: bool) -> str:
+    async def status(self, person_id: str, *, direct: bool) -> str:
         known = self.identity(person_id)
         if known is not None:
             return f"connected as {known['email']}"
@@ -130,7 +130,7 @@ class GoogleWorkspace:
             and float(row["expires_at"]) > time.time()
         ):
             self._start_poll(person_id)
-            if is_dm:
+            if direct:
                 return (
                     f"pending; code {row['user_code']} at {row['verification_url']}"
                 )

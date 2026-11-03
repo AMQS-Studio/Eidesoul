@@ -56,7 +56,7 @@ def blocks_for(chat: str, stores: dict):
                 blocks["memory"] = asyncio.run(
                     memory.context(
                         person_id=message.sender_id or "",
-                        chat_id=chat,
+                        thread_id=chat,
                         query=message.text,
                     )
                 )
@@ -144,7 +144,7 @@ def main() -> int:
     documents = DocumentStore(db, paths, sync=host.sync_documents)
     documents.seed()
     history = HistoryStore(db, config.workspace)
-    chat = args.chat or next(iter(history.recent_chats(1)), "")
+    chat = args.chat or next(iter(history.recent_threads(1)), "")
     if not chat:
         db.dispose()
         raise SystemExit("empty archive: there is no chat to ablate")
@@ -177,10 +177,10 @@ def main() -> int:
                         rows,
                         sample=args.llm_sample,
                         ablate=names,
-                        chat_id=chat,
+                        thread_id=chat,
                         history=messages,
                         affect=stores.get("affect"),
-                        is_dm=not chat.endswith("@g.us"),
+                        direct=not chat.endswith("@g.us"),
                     )
                 )
         print(report(chat, ablate.replay_metrics(rows), budget, shift))

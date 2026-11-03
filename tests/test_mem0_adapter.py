@@ -93,7 +93,7 @@ def test_add_maps_identity_scope_and_infer_false(tmp_path, monkeypatch) -> None:
             scope="person",
             kind="preference",
             person_id="628111",
-            chat_id="628111@s.whatsapp.net",
+            thread_id="628111@s.whatsapp.net",
             source="tool",
         )
     )
@@ -121,7 +121,7 @@ def test_capture_infers_and_uses_person_identity(tmp_path, monkeypatch) -> None:
                 {"role": "assistant", "content": "noted"},
             ],
             person_id="628111",
-            chat_id="g@g.us",
+            thread_id="g@g.us",
             audience="group",
         )
     )
@@ -147,7 +147,7 @@ def test_sensitive_text_rejected(tmp_path, monkeypatch) -> None:
 def test_supersedes_deletes_old_before_add(tmp_path, monkeypatch) -> None:
     backend, fake = make_backend(tmp_path, monkeypatch)
     old = asyncio.run(
-        backend.add("suka kopi", scope="person", person_id="1", chat_id="c")
+        backend.add("suka kopi", scope="person", person_id="1", thread_id="c")
     )[0]
 
     asyncio.run(
@@ -155,7 +155,7 @@ def test_supersedes_deletes_old_before_add(tmp_path, monkeypatch) -> None:
             "suka teh",
             scope="person",
             person_id="1",
-            chat_id="c",
+            thread_id="c",
             supersedes=old,
         )
     )
@@ -167,7 +167,7 @@ def test_supersedes_deletes_old_before_add(tmp_path, monkeypatch) -> None:
 def test_supersedes_rejects_other_person(tmp_path, monkeypatch) -> None:
     backend, _fake = make_backend(tmp_path, monkeypatch)
     old = asyncio.run(
-        backend.add("punya budi", scope="person", person_id="1", chat_id="c")
+        backend.add("punya budi", scope="person", person_id="1", thread_id="c")
     )[0]
 
     with pytest.raises(ValueError, match="another person"):
@@ -176,7 +176,7 @@ def test_supersedes_rejects_other_person(tmp_path, monkeypatch) -> None:
                 "punya ani",
                 scope="person",
                 person_id="2",
-                chat_id="c",
+                thread_id="c",
                 supersedes=old,
             )
         )
@@ -185,9 +185,9 @@ def test_supersedes_rejects_other_person(tmp_path, monkeypatch) -> None:
 def test_forget_checks_scope_owner(tmp_path, monkeypatch) -> None:
     backend, _fake = make_backend(tmp_path, monkeypatch)
     memory_id = asyncio.run(
-        backend.add("fakta pribadi", scope="person", person_id="1", chat_id="c")
+        backend.add("fakta pribadi", scope="person", person_id="1", thread_id="c")
     )[0]
-    global_id = asyncio.run(backend.add("fakta global", scope="global", chat_id="c"))[0]
+    global_id = asyncio.run(backend.add("fakta global", scope="global", thread_id="c"))[0]
 
     assert asyncio.run(backend.forget(memory_id, requester_id="2")) is False
     assert asyncio.run(backend.forget("tidak-ada", requester_id="1")) is False
@@ -198,15 +198,15 @@ def test_forget_checks_scope_owner(tmp_path, monkeypatch) -> None:
 
 def test_search_queries_only_requested_scopes(tmp_path, monkeypatch) -> None:
     backend, fake = make_backend(tmp_path, monkeypatch)
-    asyncio.run(backend.add("global fact", scope="global", chat_id="chat"))
-    asyncio.run(backend.add("person fact", scope="person", person_id="1", chat_id="chat"))
-    asyncio.run(backend.add("chat fact", scope="chat", chat_id="chat"))
+    asyncio.run(backend.add("global fact", scope="global", thread_id="chat"))
+    asyncio.run(backend.add("person fact", scope="person", person_id="1", thread_id="chat"))
+    asyncio.run(backend.add("thread fact", scope="thread", thread_id="chat"))
 
-    hits = asyncio.run(backend.search("fact", person_id="1", chat_id="chat"))
-    assert {hit.scope for hit in hits} == {"global", "person", "chat"}
+    hits = asyncio.run(backend.search("fact", person_id="1", thread_id="chat"))
+    assert {hit.scope for hit in hits} == {"global", "person", "thread"}
 
     only_global = asyncio.run(
-        backend.search("fact", person_id="1", chat_id="chat", scopes=("global",))
+        backend.search("fact", person_id="1", thread_id="chat", scopes=("global",))
     )
     assert [hit.scope for hit in only_global] == ["global"]
     filters = [call[1]["filters"] for call in fake.calls if call[0] in {"search", "get_all"}]
@@ -224,7 +224,7 @@ def test_context_timeout_returns_empty(tmp_path, monkeypatch) -> None:
 
     backend._memory = Slow()
     assert asyncio.run(
-        backend.context(person_id="1", chat_id="c", query="apa")
+        backend.context(person_id="1", thread_id="c", query="apa")
     ).text == ""
 
 

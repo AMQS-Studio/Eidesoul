@@ -60,7 +60,7 @@ def _heading(line: str) -> str:
 
 
 def clean_prose(chunk: str) -> str:
-    """Markdown -> chat dialect (used by the WhatsApp gateway; the CLI uses plain identity)."""
+    """Markdown -> body dialect (a rich body renders it; a plain body keeps identity)."""
     chunk = "\n".join(_heading(line) for line in chunk.split("\n"))
     chunk = BOLD.sub(r"*\1*", chunk)
     chunk = BULLET.sub("• ", chunk)

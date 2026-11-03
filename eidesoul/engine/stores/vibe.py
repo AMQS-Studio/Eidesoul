@@ -224,7 +224,7 @@ class VibeRunner:
             return None
         return [_clamp(value / total) for value in acc]
 
-    async def observe(self, chat_id: str, text: str) -> str:
+    async def observe(self, thread_id: str, text: str) -> str:
         """One message affects this chat's vibe; returns a ready-to-use prompt block."""
         if not str(text or "").strip() or not self._running or self._failed:
             return ""
@@ -235,9 +235,9 @@ class VibeRunner:
                 probs = await asyncio.to_thread(self._source.scores, text)
             target = self.vad(probs)
             if target is None:
-                return await self.describe(chat_id)
+                return await self.describe(thread_id)
             async with self._lock:
-                state = self._state(chat_id)
+                state = self._state(thread_id)
                 now = time.time()
                 advance(state, now, self.config)
                 for index in range(3):
@@ -253,14 +253,14 @@ class VibeRunner:
                 state.hold_until = now + float(self.config.hold_seconds)
                 return self._describe(state)
         except Exception:
-            log.warning("vibe: failed to process chat=%s", chat_id)
+            log.warning("vibe: failed to process chat=%s", thread_id)
             log.debug("vibe: failure detail", exc_info=True)
             self._failed = True
             return ""
 
-    async def describe(self, chat_id: str) -> str:
+    async def describe(self, thread_id: str) -> str:
         async with self._lock:
-            return self._describe(self._state(chat_id))
+            return self._describe(self._state(thread_id))
 
     def _describe(self, state: VibeState) -> str:
         # The band comes from `current` (fast mood), not `baseline`, which needs hours to move.
@@ -275,11 +275,11 @@ class VibeRunner:
 
     # ------------------------------------------------------------------ persistence
 
-    def _state(self, chat_id: str) -> VibeState:
-        state = self._states.get(chat_id)
+    def _state(self, thread_id: str) -> VibeState:
+        state = self._states.get(thread_id)
         if state is None:
             state = VibeState()
-            self._states[chat_id] = state
+            self._states[thread_id] = state
         return state
 
     def _load(self) -> dict[str, VibeState]:
@@ -294,14 +294,14 @@ class VibeRunner:
         if not isinstance(raw, dict):
             return {}
         states: dict[str, VibeState] = {}
-        for chat_id, body in raw.items():
+        for thread_id, body in raw.items():
             if not isinstance(body, dict):
                 continue
             current = self._triple(body.get("current"))
             baseline = self._triple(body.get("baseline"))
             if current is None or baseline is None:
                 continue
-            states[str(chat_id)] = VibeState(current=current, baseline=baseline)
+            states[str(thread_id)] = VibeState(current=current, baseline=baseline)
         return states
 
     @staticmethod
@@ -315,8 +315,8 @@ class VibeRunner:
 
     def _save(self) -> None:
         body = {
-            chat_id: {"current": state.current, "baseline": state.baseline}
-            for chat_id, state in self._states.items()
+            thread_id: {"current": state.current, "baseline": state.baseline}
+            for thread_id, state in self._states.items()
         }
         try:
             with self._db.connect() as conn:

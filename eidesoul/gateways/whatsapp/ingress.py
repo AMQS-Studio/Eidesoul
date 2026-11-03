@@ -1,4 +1,4 @@
-"""WhatsApp protobuf event -> Inbound; the only place transport facts are read."""
+"""WhatsApp protobuf event -> Percept; the only place transport facts are read."""
 
 from __future__ import annotations
 
@@ -12,10 +12,10 @@ from ...engine.context import (
     AUTHOR_MANUAL,
     AUTHOR_UNKNOWN,
     DEFAULT_VISIBILITY,
-    ChatMessage,
+    Message,
     Quote,
 )
-from ...engine.inbound import Inbound
+from ...engine.inbound import Percept
 from . import directory
 from .identity import normalize_jid
 from .media import contexts, describe_media, event_time, message_text, views_once
@@ -23,8 +23,8 @@ from .media import contexts, describe_media, event_time, message_text, views_onc
 log = logging.getLogger(__name__)
 
 
-def is_group(chat_id: str) -> bool:
-    return chat_id.endswith("@g.us")
+def is_group(thread_id: str) -> bool:
+    return thread_id.endswith("@g.us")
 
 
 def self_handles(me) -> set[str]:
@@ -66,12 +66,12 @@ def replies_to_bot(ev, bots: set[str]) -> bool:
     )
 
 
-def quote(ev, windows, chat_id: str) -> Quote | None:
+def quote(ev, windows, thread_id: str) -> Quote | None:
     for context in contexts(ev.Message):
         quoted = context.quotedMessage
         if not quoted.ListFields():
             continue
-        known = windows.find(chat_id, context.stanzaID)
+        known = windows.find(thread_id, context.stanzaID)
         if known is not None:
             return Quote(
                 id=known.id,
@@ -109,12 +109,12 @@ def revoke_target(ev, gateway) -> tuple[str, str] | None:
     return protocol.key.ID, mapped or address
 
 
-def unreadable_message(ev, gateway) -> tuple[str, ChatMessage] | None:
+def unreadable_message(ev, gateway) -> tuple[str, Message] | None:
     """Placeholder row for a stanza without <enc> (e.g. view-once from another device)."""
     source = ev.Info.MessageSource
     if not ev.Info.ID or source.Chat.Server == "broadcast":
         return None
-    chat_id = f"{source.Chat.User}@{source.Chat.Server}"
+    thread_id = f"{source.Chat.User}@{source.Chat.Server}"
     sender = f"{source.Sender.User}@{source.Sender.Server}"
     mapped = ""
     if sender.endswith("@lid"):
@@ -126,7 +126,7 @@ def unreadable_message(ev, gateway) -> tuple[str, ChatMessage] | None:
         or (ev.Info.Pushname or "").strip()
         or digits
     )
-    message = ChatMessage(
+    message = Message(
         id=ev.Info.ID,
         sender_name=name,
         sender_id=digits,
@@ -137,13 +137,13 @@ def unreadable_message(ev, gateway) -> tuple[str, ChatMessage] | None:
         sender_address=sender_address,
         sender_kind="person" if sender_address.endswith("@s.whatsapp.net") else "",
     )
-    return chat_id, message
+    return thread_id, message
 
 
-def event_to_inbound(ev, gateway) -> Inbound | None:
+def event_to_inbound(ev, gateway) -> Percept | None:
     source = ev.Info.MessageSource
-    chat_id = f"{source.Chat.User}@{source.Chat.Server}"
-    if chat_id.endswith("@broadcast"):
+    thread_id = f"{source.Chat.User}@{source.Chat.Server}"
+    if thread_id.endswith("@broadcast"):
         return None
     sender = f"{source.Sender.User}@{source.Sender.Server}"
     mapped = ""
@@ -167,14 +167,14 @@ def event_to_inbound(ev, gateway) -> Inbound | None:
     if author == AUTHOR_BOT:
         known = gateway.config.soul.name
         name = gateway.config.soul.name
-    message = ChatMessage(
+    message = Message(
         id=message_id,
         sender_name=known or name,
         sender_id=sender_digits,
         when=event_time(ev.Info.Timestamp),
         text=text,
         media=media,
-        quote=quote(ev, gateway.windows, chat_id),
+        quote=quote(ev, gateway.windows, thread_id),
         outgoing=outgoing,
         sender_address=sender_address,
         sender_kind="person" if sender_address.endswith("@s.whatsapp.net") else "",
@@ -184,13 +184,18 @@ def event_to_inbound(ev, gateway) -> Inbound | None:
         unreadable=False,
     )
     bots = gateway.self_handles()
-    return Inbound(
-        chat_id=chat_id,
-        message=message,
-        is_dm=not is_group(chat_id),
-        person_address=sender_digits,
-        is_mention=mentioned(ev, bots),
-        is_reply=replies_to_bot(ev, bots),
-        is_self=bool(sender_digits and sender_digits in bots and not outgoing),
+    return Percept(
+        source="whatsapp",
+        thread=thread_id,
+        actor=sender_digits,
+        kind="message",
+        payload=message,
+        hints={
+            "dm": not is_group(thread_id),
+            "group": is_group(thread_id),
+            "mention": mentioned(ev, bots),
+            "reply": replies_to_bot(ev, bots),
+            "self": bool(sender_digits and sender_digits in bots and not outgoing),
+        },
         raw=ev,
     )

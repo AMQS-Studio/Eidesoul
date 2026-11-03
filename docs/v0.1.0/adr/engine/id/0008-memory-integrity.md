@@ -1,4 +1,4 @@
-> Terjemahan turunan — jangan sunting; sumber: engine/0008-memory-integrity.md (sha256: 618e0bf9851b)
+> Terjemahan turunan — jangan sunting; sumber: engine/0008-memory-integrity.md (sha256: 9c7ed4cf0f80)
 > Teks ini ditulis manusia; baris yang tidak bisa diterjemahkan mesin disalin apa adanya ke sumber English, jadi sumber bercampur dua bahasa.
 
 # ADR-0008: Integritas Memori — Provenance, Trust, Karantina Instruksi, Anti-Poisoning
@@ -30,8 +30,8 @@ disimpan sebagai aturan.
 | Capture menolak injeksi | `agent.py:914` |
 | Hard exclusion kredensial & krisis | `SENSITIVE` (`patterns.py:11-14`), `safe_text` (`:29-35`), aturan prompt krisis (`prompts.py:54-55`) |
 | Prompt: ucapan orang lain = data | `prompts.py:266` |
-| Provenance tersimpan sebagian | metadata `scope, kind, person_id, chat_id, audience, source, level, owner_id, subject_id, confirmed` (`mem0.py:340-392`) |
-| Nilai `source` yang sudah dipakai | `turn` (`privacy.py:260`), `tool` (`tools/memory.py:94`), `command` (`commands/memori.py:131`), `ambient:<chat_id>` (`ambient.py:255,314`) |
+| Provenance tersimpan sebagian | metadata `scope, kind, person_id, thread_id, audience, source, level, owner_id, subject_id, confirmed` (`mem0.py:340-392`) |
+| Nilai `source` yang sudah dipakai | `turn` (`privacy.py:260`), `tool` (`tools/memory.py:94`), `command` (`commands/memori.py:131`), `ambient:<thread_id>` (`ambient.py:255,314`) |
 | Veto hanya oleh subjek | `mem0.py:527-530` |
 | Supersede manual + validasi scope/pemilik | `mem0.py:323-338` |
 
@@ -90,7 +90,7 @@ Setiap baris menyimpan, di atas field yang sudah ada:
 | `via` | `turn` / `tool` / `command` / `reflection` / `ambient` / `automation` / `soul_doc` | turunan `source` (nilai lama dipetakan, bukan kolom kedua) |
 | `stated_by` | pembicara yang menyatakan | `owner_id` |
 | `about` | orang yang dibicarakan | `subject_id` |
-| `chat_id` | ruangan asal | `chat_id` |
+| `thread_id` | ruangan asal | `thread_id` |
 | `asserted_at` | waktu pernyataan | waktu baris |
 | `refs` | rujukan pesan/event bila ada | metadata |
 
@@ -255,7 +255,7 @@ memory:
 
 ## 7. Acceptance criteria
 
-- [ ] Setiap baris baru punya `via`, `stated_by`, `about`, `chat_id`, `asserted_at`.
+- [ ] Setiap baris baru punya `via`, `stated_by`, `about`, `thread_id`, `asserted_at`.
 - [ ] Trust dihitung deterministik dari provenance; tidak ada panggilan model pada jalur ini.
 - [ ] Aturan/persona/gaya/keputusan tool tidak pernah bersumber dari T1/T2/T3.
 - [ ] Teks imperatif dari pengguna tidak pernah tersimpan sebagai `kind=rule`.

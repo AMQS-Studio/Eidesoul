@@ -1,4 +1,4 @@
-"""Autographic action ledger: who sent what, so the self stays consistent across chats."""
+"""Autographic action ledger: who sent what, so the self stays consistent across threads."""
 
 from __future__ import annotations
 

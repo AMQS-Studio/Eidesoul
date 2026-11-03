@@ -1,10 +1,10 @@
-> Terjemahan turunan — jangan sunting; sumber: engine/0018-gateway-contract.md (sha256: 8a56d34303ab)
+> Terjemahan turunan — jangan sunting; sumber: engine/0018-gateway-contract.md (sha256: d1c630f11f10)
 > Teks ini ditulis manusia; baris yang tidak bisa diterjemahkan mesin disalin apa adanya ke sumber English, jadi sumber bercampur dua bahasa.
 
 # ADR-0018: Kontrak Gateway — Core, Rich, Directory
 
 - **Status:** accepted
-- **Implementasi:** sebagian — ada: `inbound.py` (`Gateway`/`GatewayError`); sisa: `GatewayCore`/`Rich`/`Directory`, `send_sticker`, boot check
+- **Implementasi:** sebagian — ada: `GatewayCore`/`Rich`/`Directory`, `send_sticker`, `participants`, boot check + `gateway_capabilities`, tes degradasi, body harness; sisa: refusal `participants()` terpasang di tool `chat_history`/`send_to` (ADR-0007, W4)
 - **Tanggal:** 2026-11-03
 - **Deciders:** Muqsith (owner), omp (reviewer)
 - **Konteks:** review (`Eidesoul-Review-Arsitektur-2026-11-01.md`) §15 P1-6 — satu Protocol berisi 16 method mencampur transport, direktori, kebijakan, dan data; dua method tidak pernah dipakai engine; setiap gateway wajib menstub semuanya; `send_reaction` sebenarnya mengirim sticker; ADR-0007 butuh `participants(chat_id)` yang tidak ada di kontrak

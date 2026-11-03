@@ -1,7 +1,7 @@
 # ADR-0018: Gateway Contract — Core, Rich, Directory
 
 - **Status:** accepted
-- **Implementation:** partial — exists: `inbound.py` (`Gateway`/`GatewayError`); rest: `GatewayCore`/`Rich`/`Directory`, `send_sticker`, boot check
+- **Implementation:** partial — present: `GatewayCore`/`Rich`/`Directory`, `send_sticker`, `participants`, boot check + `gateway_capabilities`, degradation tests, harness body; remaining: the `participants()` refusal wired into the `chat_history`/`send_to` tools (ADR-0007, W4)
 - **Date:** 2026-11-03
 - **Deciders:** Muqsith (owner), omp (reviewer)
 - **Context:** review (`Eidesoul-Review-Arsitektur-2026-11-01.md`) §15 P1-6 — one Protocol holding 16 methods that mix transport, directory, policy, and data; two methods never used by the engine; every gateway is forced to stub all of them; `send_reaction` actually sends stickers; ADR-0007 needs `participants(chat_id)`, which is not in the contract

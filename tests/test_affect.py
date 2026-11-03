@@ -145,7 +145,7 @@ def test_turn_end_moves_pad_and_relationship(tmp_path) -> None:
     assert after["pleasure"] < before["pleasure"]
     assert after["arousal"] > before["arousal"]
     assert "guarded" in after["summary"]
-    # Read via chat_id, not identity.relationship_id: /mood must be able to name the person.
+    # Read via thread_id, not identity.relationship_id: /mood must be able to name the person.
     assert after["person_name"] == "Fahri"
     assert after["relation"] == "new"
     assert after["annoyance"] == pytest.approx(0.15)
@@ -236,7 +236,7 @@ def test_calm_moves_pad_toward_baseline(tmp_path) -> None:
     store.close()
 
 
-def test_chat_people_membership(tmp_path) -> None:
+def test_thread_people_membership(tmp_path) -> None:
     store = make_store(tmp_path)
     turn(store, decision(), person=FRIEND, name="Fahri", message_id="MSG-A")
     turn(store, decision(), person=OWNER, name="Muqsith", chat=OTHER, message_id="MSG-B")
@@ -324,7 +324,7 @@ def test_stats_counts_relational_tables(tmp_path) -> None:
     assert stats["people"] == 1
     assert stats["topics"] == 1
     assert stats["drives"] == 1
-    assert stats["chat_people"] == 1
+    assert stats["thread_people"] == 1
     assert stats["states"] == 1
     store.close()
 
@@ -556,21 +556,21 @@ def test_seed_from_history_builds_people_once(tmp_path) -> None:
             "sender_address": f"{FRIEND}@s.whatsapp.net",
             "sender_name": "Fahri",
             "ts": 100.0,
-            "chat_id": CHAT,
+            "thread_id": CHAT,
         },
         {
             "sender_id": FRIEND,
             "sender_address": f"{FRIEND}@s.whatsapp.net",
             "sender_name": "Fahri",
             "ts": 200.0,
-            "chat_id": CHAT,
+            "thread_id": CHAT,
         },
         {
             "sender_id": OWNER,
             "sender_address": f"{OWNER}@s.whatsapp.net",
             "sender_name": "Muqsith",
             "ts": 150.0,
-            "chat_id": OTHER,
+            "thread_id": OTHER,
         },
     ]
     try:
@@ -585,7 +585,7 @@ def test_seed_from_history_builds_people_once(tmp_path) -> None:
         store.close()
 
 
-def test_seed_chat_people_adds_membership_once(tmp_path) -> None:
+def test_seed_thread_people_adds_membership_once(tmp_path) -> None:
     store = make_store(tmp_path)
     turn(store, decision(), message_id="SEED1", person=FRIEND, name="Fahri", chat=CHAT)
     rows = [
@@ -594,12 +594,12 @@ def test_seed_chat_people_adds_membership_once(tmp_path) -> None:
             "sender_address": f"{FRIEND}@s.whatsapp.net",
             "sender_name": "Fahri",
             "ts": 300.0,
-            "chat_id": OTHER,
+            "thread_id": OTHER,
         }
     ]
     try:
-        assert store.seed_chat_people(FakeHistory(rows)) == 1
+        assert store.seed_thread_people(FakeHistory(rows)) == 1
         assert [item["person_id"] for item in store.known_people(OTHER, 5)] == [FRIEND]
-        assert store.seed_chat_people(FakeHistory(rows)) == 0  # idempotent
+        assert store.seed_thread_people(FakeHistory(rows)) == 0  # idempotent
     finally:
         store.close()

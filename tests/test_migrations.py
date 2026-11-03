@@ -37,7 +37,7 @@ def test_upgrade_creates_every_table_and_stamps_the_head(fresh_database) -> None
         assert db.is_empty()
         assert db.upgrade() == SCHEMA_VERSION
         names = inspect(db.engine).get_table_names()
-        for expected in ("messages", "chats", "engine_lease", "schema_meta", "alembic_version"):
+        for expected in ("messages", "threads", "engine_lease", "schema_meta", "alembic_version"):
             assert expected in names
         with db.connect() as conn:
             version = conn.execute(

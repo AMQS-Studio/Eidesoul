@@ -15,13 +15,13 @@ from sqlalchemy.dialects.postgresql import JSONB
 from ..context import (
     AUTHOR_RANK,
     AUTHOR_UNKNOWN,
-    ChatMessage,
     Media,
+    Message,
     Quote,
     clamp_visibility,
 )
 from ..db import Database
-from ..schema import chats, messages
+from ..schema import messages, threads
 
 log = logging.getLogger(__name__)
 
@@ -52,7 +52,7 @@ def _media_from(value, ref) -> Media | None:
     )
 
 
-def _data(message: ChatMessage) -> dict:
+def _data(message: Message) -> dict:
     data: dict = {}
     if message.media is not None:
         data["media"] = _media_json(message.media)
@@ -103,11 +103,11 @@ class HistoryStore:
 
     # ------------------------------------------------------------ write
 
-    def _row(self, chat_id: str, message: ChatMessage) -> dict:
+    def _row(self, thread_id: str, message: Message) -> dict:
         media = message.media
         quote = message.quote
         return {
-            "chat_id": chat_id,
+            "thread_id": thread_id,
             "msg_id": message.id or f"tmp-{time.time_ns()}",
             "ts": message.when.timestamp(),
             "sender_id": message.sender_id or "",
@@ -177,11 +177,11 @@ class HistoryStore:
             ),
         }
 
-    def add(self, chat_id: str, message: ChatMessage) -> None:
-        self.add_many([(chat_id, message)])
+    def add(self, thread_id: str, message: Message) -> None:
+        self.add_many([(thread_id, message)])
 
-    def add_many(self, items: list[tuple[str, ChatMessage]]) -> int:
-        rows = [self._row(chat_id, message) for chat_id, message in items]
+    def add_many(self, items: list[tuple[str, Message]]) -> int:
+        rows = [self._row(thread_id, message) for thread_id, message in items]
         if not rows:
             return 0
         with self.db.connect() as conn:
@@ -189,52 +189,52 @@ class HistoryStore:
                 conn,
                 messages,
                 rows,
-                ["chat_id", "msg_id"],
+                ["thread_id", "msg_id"],
                 update=self._merge,
             )
         return len(rows)
 
-    def set_visibility(self, chat_id: str, message_ids: Sequence[str], level: int) -> int:
+    def set_visibility(self, thread_id: str, message_ids: Sequence[str], level: int) -> int:
         """Raise the privacy mark of archive rows; visibility may only go up, never down."""
         value = clamp_visibility(level)
         changed = 0
         for message_id in dict.fromkeys(str(item) for item in message_ids if item):
-            entry = self.find(chat_id, message_id)
+            entry = self.find(thread_id, message_id)
             if entry is None or entry.visibility >= value:
                 continue
             entry.visibility = value
-            self.add(chat_id, entry)
+            self.add(thread_id, entry)
             changed += 1
         return changed
 
     def mark_deleted(
-        self, chat_id: str, message_id: str, by_address: str, by_name: str = ""
+        self, thread_id: str, message_id: str, by_address: str, by_name: str = ""
     ) -> bool:
-        entry = self.find(chat_id, message_id)
+        entry = self.find(thread_id, message_id)
         if entry is None or not entry.mark_deleted(by_address, by_name):
             return False
-        self.add(chat_id, entry)
+        self.add(thread_id, entry)
         return True
 
-    def set_chat_name(self, chat_id: str, name: str) -> None:
-        if not chat_id:
+    def set_chat_name(self, thread_id: str, name: str) -> None:
+        if not thread_id:
             return
         value = " ".join(str(name or "").split())[:200]
         if not value:
             return
         row = {
-            "chat_id": chat_id,
+            "thread_id": thread_id,
             "name": value,
             "reset_ts": 0.0,
         }
         with self.db.connect() as conn:
             self.db.upsert(
-                conn, chats, [row], ["chat_id"], update={"name": value}
+                conn, threads, [row], ["thread_id"], update={"name": value}
             )
 
     # ------------------------------------------------------------ read
 
-    def _decode(self, row: dict) -> ChatMessage:
+    def _decode(self, row: dict) -> Message:
         try:
             data = row.get("data") or {}
         except AttributeError:
@@ -261,7 +261,7 @@ class HistoryStore:
         author = str(row.get("author") or AUTHOR_UNKNOWN)
         if author not in AUTHOR_RANK:
             author = AUTHOR_UNKNOWN
-        return ChatMessage(
+        return Message(
             id=str(row["msg_id"]),
             sender_name=str(row["sender_name"]),
             sender_id=str(row["sender_id"]),
@@ -281,29 +281,29 @@ class HistoryStore:
             deleted_admin=bool(row.get("deleted_admin")),
         )
 
-    def chat_name(self, chat_id: str) -> str:
-        if not chat_id:
+    def chat_name(self, thread_id: str) -> str:
+        if not thread_id:
             return ""
         found = self.db.fetch_one(
-            select(chats.c.name).where(chats.c.chat_id == chat_id)
+            select(threads.c.name).where(threads.c.thread_id == thread_id)
         )
         return str(found["name"]) if found else ""
 
-    def recent(self, chat_id: str, limit: int) -> list[ChatMessage]:
+    def recent(self, thread_id: str, limit: int) -> list[Message]:
         statement = (
             select(messages)
-            .where(messages.c.chat_id == chat_id)
+            .where(messages.c.thread_id == thread_id)
             .order_by(messages.c.ts.desc(), messages.c.id.desc())
             .limit(max(1, int(limit)))
         )
         return [self._decode(row) for row in reversed(self.db.fetch_all(statement))]
 
-    def find(self, chat_id: str, msg_id: str) -> ChatMessage | None:
+    def find(self, thread_id: str, msg_id: str) -> Message | None:
         if not msg_id:
             return None
         statement = (
             select(messages)
-            .where(and_(messages.c.chat_id == chat_id, messages.c.msg_id == msg_id))
+            .where(and_(messages.c.thread_id == thread_id, messages.c.msg_id == msg_id))
             .order_by(messages.c.id.desc())
             .limit(1)
         )
@@ -312,15 +312,15 @@ class HistoryStore:
 
     def search(
         self,
-        chat_id: str,
+        thread_id: str,
         query: str = "",
         *,
         before: float | None = None,
         after: float | None = None,
         limit: int = 20,
-    ) -> list[ChatMessage]:
+    ) -> list[Message]:
         limit = max(1, min(int(limit or 20), 50))
-        clauses = [messages.c.chat_id == chat_id]
+        clauses = [messages.c.thread_id == thread_id]
         if after is not None:
             clauses.append(messages.c.ts >= float(after))
         if before is not None:
@@ -342,21 +342,21 @@ class HistoryStore:
     def message_count(self) -> int:
         return int(self.db.scalar(select(func.count()).select_from(messages)) or 0)
 
-    def recent_chats(self, limit: int = 50) -> list[str]:
+    def recent_threads(self, limit: int = 50) -> list[str]:
         statement = (
-            select(messages.c.chat_id, func.max(messages.c.ts).label("last"))
-            .group_by(messages.c.chat_id)
+            select(messages.c.thread_id, func.max(messages.c.ts).label("last"))
+            .group_by(messages.c.thread_id)
             .order_by(func.max(messages.c.ts).desc())
             .limit(max(1, int(limit)))
         )
-        return [str(row["chat_id"]) for row in self.db.fetch_all(statement) if row["chat_id"]]
+        return [str(row["thread_id"]) for row in self.db.fetch_all(statement) if row["thread_id"]]
 
     def _human_rows(self, limit: int, days: int) -> list[dict]:
         size = max(1, min(int(limit or 2000), 20_000))
         cutoff = time.time() - max(1, int(days)) * 86400
         statement = (
             select(
-                messages.c.chat_id,
+                messages.c.thread_id,
                 messages.c.sender_id,
                 messages.c.sender_name,
                 messages.c.sender_address.label("sender_address"),

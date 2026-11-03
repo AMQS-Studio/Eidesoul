@@ -57,7 +57,7 @@ class Ambient:
         self.history = history
         self.windows = windows
         self.currents = currents
-        self.known_chats: set[str] = set()
+        self.known_threads: set[str] = set()
         self.busy: set[str] = set()
         self.tasks: set[asyncio.Task] = set()
         self._task: asyncio.Task | None = None
@@ -70,15 +70,15 @@ class Ambient:
             self._task = asyncio.create_task(self._loop())
 
     def prime(self) -> None:
-        """Old chats keep ticking after a restart, not only the chats seen since then."""
+        """Old threads keep ticking after a restart, not only the threads seen since then."""
         if self.history is None:
             return
         try:
-            chats = self.history.recent_chats(50)
+            threads = self.history.recent_threads(50)
         except Exception:
-            log.debug("ambient: failed to read the recent chats", exc_info=True)
+            log.debug("ambient: failed to read the recent threads", exc_info=True)
             return
-        self.known_chats.update(str(chat_id) for chat_id in chats if str(chat_id))
+        self.known_threads.update(str(thread_id) for thread_id in threads if str(thread_id))
 
     async def stop(self) -> None:
         pending = [task for task in (self._task, *self.tasks) if task is not None]
@@ -94,11 +94,11 @@ class Ambient:
         self.tasks.add(task)
         task.add_done_callback(self.tasks.discard)
 
-    def note(self, chat_id: str, message) -> None:
+    def note(self, thread_id: str, message) -> None:
         """A message passed by: just record the active chat. Appraisal lives in AffectStore."""
-        if not chat_id:
+        if not thread_id:
             return
-        self.known_chats.add(chat_id)
+        self.known_threads.add(thread_id)
 
     async def _loop(self) -> None:
         while True:
@@ -118,36 +118,36 @@ class Ambient:
         if self.affect is None or self.history is None or self.llm is None:
             return
         settings = self.settings
-        chats = sorted(self.known_chats)
-        for chat_id in chats:
+        threads = sorted(self.known_threads)
+        for thread_id in threads:
             try:  # heartbeat: mood decays and drives grow even without messages
-                self.affect.pulse(chat_id)
+                self.affect.pulse(thread_id)
             except Exception:
-                log.debug("heartbeat pulse failed chat=%s", chat_id, exc_info=True)
-        for chat_id in chats:
-            if chat_id in self.busy:
+                log.debug("heartbeat pulse failed chat=%s", thread_id, exc_info=True)
+        for thread_id in threads:
+            if thread_id in self.busy:
                 continue
             try:
-                topic = self.affect.topic(chat_id)
-                pending = self.affect.pending(chat_id)
+                topic = self.affect.topic(thread_id)
+                pending = self.affect.pending(thread_id)
             except Exception:
-                log.debug("ambient: topic failed chat=%s", chat_id, exc_info=True)
+                log.debug("ambient: topic failed chat=%s", thread_id, exc_info=True)
                 continue
             if pending >= int(settings.digest_every) and (
                 moment - float(topic["last_digest"]) >= float(settings.digest_cooldown)
             ):
-                self.busy.add(chat_id)
-                self._spawn(self._digest(chat_id))
-                log.info("ambient digest started chat=%s pending=%d", chat_id, pending)
-        for chat_id in chats:
-            if await self._research_candidate(chat_id, moment):
-                await self._research(chat_id)
+                self.busy.add(thread_id)
+                self._spawn(self._digest(thread_id))
+                log.info("ambient digest started chat=%s pending=%d", thread_id, pending)
+        for thread_id in threads:
+            if await self._research_candidate(thread_id, moment):
+                await self._research(thread_id)
                 break
 
-    async def _research_candidate(self, chat_id: str, moment: float) -> bool:
+    async def _research_candidate(self, thread_id: str, moment: float) -> bool:
         settings = self.settings
         try:
-            topic = self.affect.topic(chat_id)
+            topic = self.affect.topic(thread_id)
         except Exception:
             return False
         if moment - float(topic["last_message"]) < int(settings.idle_minutes) * 60:
@@ -200,27 +200,27 @@ class Ambient:
 
     # ------------------------------------------------------------------ actions
 
-    async def _digest(self, chat_id: str) -> None:
+    async def _digest(self, thread_id: str) -> None:
         try:
             if self.affect is None or self.history is None or self.llm is None:
                 return
-            topic = self.affect.topic(chat_id)
+            topic = self.affect.topic(thread_id)
             rows = [
                 row
-                for row in self._recent(chat_id, int(self.settings.history_window))
+                for row in self._recent(thread_id, int(self.settings.history_window))
                 if not getattr(row, "outgoing", False)
             ]
             if not rows:
-                self.affect.mark_digest(chat_id)
+                self.affect.mark_digest(thread_id)
                 return
             transcript = "\n".join(self._line(row) for row in rows)
             people = ", ".join(
-                str(item["name"]) for item in self.affect.known_people(chat_id, 8) if item["name"]
+                str(item["name"]) for item in self.affect.known_people(thread_id, 8) if item["name"]
             )
             name = ""
             if self.windows is not None:
                 try:
-                    name = self.windows.chat_name(chat_id)
+                    name = self.windows.chat_name(thread_id)
                 except Exception:
                     name = ""
             data = await self.llm.digest(name, transcript, str(topic["summary"]), people)
@@ -229,10 +229,10 @@ class Ambient:
             summary = str(data.get("topic") or "")
             keywords = [str(item) for item in data.get("keywords") or []]
             unresolved = [str(item) for item in data.get("unresolved") or []]
-            self._close_era(chat_id, topic, summary)
+            self._close_era(thread_id, topic, summary)
             if summary or keywords or unresolved:
-                self.affect.set_topic(chat_id, summary, keywords, unresolved)
-            self.affect.mark_digest(chat_id)
+                self.affect.set_topic(thread_id, summary, keywords, unresolved)
+            self.affect.mark_digest(thread_id)
             for fact in data.get("facts") or []:
                 if not isinstance(fact, dict):
                     continue
@@ -242,7 +242,7 @@ class Ambient:
                 ):
                     continue
                 person = str(fact.get("person") or "").strip()
-                person_id = self.affect.person_by_name(chat_id, person) if person else None
+                person_id = self.affect.person_by_name(thread_id, person) if person else None
                 if person_id:
                     self.affect.note_person(person_id, text, self.config.soul.language)
                     continue
@@ -251,29 +251,29 @@ class Ambient:
                 try:
                     await self.memory.add(
                         text,
-                        scope="chat",
+                        scope="thread",
                         kind=str(fact.get("kind") or "note"),
-                        chat_id=chat_id,
-                        source=f"ambient:{chat_id}",
+                        thread_id=thread_id,
+                        source=f"ambient:{thread_id}",
                     )
                 except ValueError:
                     continue
-            log.info("ambient digest finished chat=%s", chat_id)
+            log.info("ambient digest finished chat=%s", thread_id)
         except asyncio.CancelledError:
             raise
         except Exception:  # a failed digest must not stop the loop
-            log.exception("ambient digest failed chat=%s", chat_id)
+            log.exception("ambient digest failed chat=%s", thread_id)
         finally:
-            self.busy.discard(chat_id)
+            self.busy.discard(thread_id)
 
-    def _close_era(self, chat_id: str, topic: dict, summary: str) -> None:
+    def _close_era(self, thread_id: str, topic: dict, summary: str) -> None:
         """Archive the old topic as a dated era once the digest moved to another subject."""
         previous = str(topic["summary"]).strip()
         fresh = " ".join(str(summary or "").split())
         if not previous or not fresh or not drift(previous, fresh, self.config.soul.language):
             return
         self.affect.archive_era(
-            chat_id,
+            thread_id,
             previous,
             list(topic["keywords"]),
             list(topic["unresolved"]),
@@ -281,10 +281,10 @@ class Ambient:
             ended_at=time.time(),
         )
 
-    async def _research(self, chat_id: str) -> None:
+    async def _research(self, thread_id: str) -> None:
         if self.affect is None or self.llm is None:
             return
-        topic = self.affect.topic(chat_id)
+        topic = self.affect.topic(thread_id)
         pending = [str(item).strip() for item in topic["unresolved"] if str(item).strip()]
         summary = str(topic["summary"]).strip()
         query = pending[0] if pending else (f"topic: {summary}" if summary else "")
@@ -295,13 +295,13 @@ class Ambient:
                 {"web_search": WEB_SEARCH},
                 "web_search",
                 {"query": query, "max_results": int(self.settings.research_results)},
-                self._tool_ctx(chat_id),
+                self._tool_ctx(thread_id),
             )
         except Exception:  # no tool may kill autonomy
-            log.exception("ambient research failed chat=%s", chat_id)
+            log.exception("ambient research failed chat=%s", thread_id)
             return
         if not results or results.startswith("error:"):
-            log.info("ambient research empty chat=%s: %s", chat_id, results[:120])
+            log.info("ambient research empty chat=%s: %s", thread_id, results[:120])
             return
         text = await self.llm.research_summary(query, results)
         if not text:
@@ -310,25 +310,25 @@ class Ambient:
             try:
                 await self.memory.add(
                     f"[research {date.today().isoformat()}] {text}",
-                    scope="chat",
+                    scope="thread",
                     kind="note",
-                    chat_id=chat_id,
-                    source=f"ambient:{chat_id}",
+                    thread_id=thread_id,
+                    source=f"ambient:{thread_id}",
                 )
             except ValueError:
                 return
-        self.affect.mark_research(chat_id)
-        log.info("ambient research finished chat=%s query=%s", chat_id, query[:80])
+        self.affect.mark_research(thread_id)
+        log.info("ambient research finished chat=%s query=%s", thread_id, query[:80])
 
     # ------------------------------------------------------------------ util
 
-    def _recent(self, chat_id: str, limit: int) -> list:
+    def _recent(self, thread_id: str, limit: int) -> list:
         if self.history is None:
             return []
         try:
-            rows = self.history.recent(chat_id, limit)
+            rows = self.history.recent(thread_id, limit)
         except Exception:
-            log.debug("ambient: archive failed chat=%s", chat_id, exc_info=True)
+            log.debug("ambient: archive failed chat=%s", thread_id, exc_info=True)
             return []
         return [row for row in rows if str(getattr(row, "text", "") or "").strip()]
 
@@ -342,6 +342,6 @@ class Ambient:
         who = getattr(row, "sender_name", "") or getattr(row, "sender_id", "") or "-"
         return f"[{stamp or '-'}] {who}: {body[:TRANSCRIPT_CHARS]}"
 
-    def _tool_ctx(self, chat_id: str) -> ToolContext:
+    def _tool_ctx(self, thread_id: str) -> ToolContext:
         role = Role(name="ambient", tools=AMBIENT_ROLE)
-        return ToolContext(self.config, (role,), AMBIENT_ROLE, chat_id=chat_id)
+        return ToolContext(self.config, (role,), AMBIENT_ROLE, thread_id=thread_id)

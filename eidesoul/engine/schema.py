@@ -42,7 +42,7 @@ messages = Table(
     "messages",
     metadata,
     Column("id", BigInteger, primary_key=True, autoincrement=True),
-    Column("chat_id", String(120), nullable=False),
+    Column("thread_id", String(120), nullable=False),
     Column("msg_id", String(160), nullable=False),
     Column("ts", Float, nullable=False),
     Column("sender_id", String(80), nullable=False, default=""),
@@ -58,15 +58,15 @@ messages = Table(
     Column("data", JSONB, nullable=False, default=dict),
     Column("media_ref", LargeBinary, nullable=True),
     Column("quote_media_ref", LargeBinary, nullable=True),
-    UniqueConstraint("chat_id", "msg_id", name="uq_messages_chat_msg"),
+    UniqueConstraint("thread_id", "msg_id", name="uq_messages_thread_msg"),
 )
-Index("ix_messages_chat_ts", messages.c.chat_id, messages.c.ts, messages.c.id)
+Index("ix_messages_thread_ts", messages.c.thread_id, messages.c.ts, messages.c.id)
 Index("ix_messages_sender", messages.c.sender_address)
 
-chats = Table(
-    "chats",
+threads = Table(
+    "threads",
     metadata,
-    Column("chat_id", String(120), primary_key=True),
+    Column("thread_id", String(120), primary_key=True),
     Column("name", String(200), nullable=False, default=""),
     Column("reset_ts", Float, nullable=False, default=0.0),
     Column("kind", String(20), nullable=False, default="dm"),
@@ -100,7 +100,7 @@ approvals = Table(
     Column("id", BigInteger, primary_key=True, autoincrement=True),
     Column("created_at", Float, nullable=False),
     Column("expires_at", Float, nullable=False),
-    Column("chat_id", String(120), nullable=False),
+    Column("thread_id", String(120), nullable=False),
     Column("sender", String(160), nullable=False),
     Column("gateway", String(40), nullable=False, default=""),
     Column("kind", String(40), nullable=False),
@@ -146,7 +146,7 @@ people = Table(
 topics = Table(
     "topics",
     metadata,
-    Column("chat_id", String(120), primary_key=True),
+    Column("thread_id", String(120), primary_key=True),
     Column("summary", Text, nullable=False, default=""),
     Column("keywords", JSONB, nullable=False, default=list),
     Column("unresolved", JSONB, nullable=False, default=list),
@@ -158,37 +158,37 @@ topics = Table(
     Column("research_count", Integer, nullable=False, default=0),
 )
 
-chat_eras = Table(
-    "chat_eras",
+thread_eras = Table(
+    "thread_eras",
     metadata,
     Column("id", BigInteger, primary_key=True, autoincrement=True),
-    Column("chat_id", String(120), nullable=False),
+    Column("thread_id", String(120), nullable=False),
     Column("started_at", Float, nullable=False),
     Column("ended_at", Float, nullable=False),
     Column("summary", Text, nullable=False, default=""),
     Column("keywords", JSONB, nullable=False, default=list),
     Column("unresolved", JSONB, nullable=False, default=list),
 )
-Index("ix_chat_eras_chat", chat_eras.c.chat_id, chat_eras.c.ended_at)
+Index("ix_thread_eras_thread", thread_eras.c.thread_id, thread_eras.c.ended_at)
 
 drives = Table(
     "drives",
     metadata,
-    Column("chat_id", String(120), primary_key=True),
+    Column("thread_id", String(120), primary_key=True),
     Column("energy", Float, nullable=False, default=0.8),
     Column("boredom", Float, nullable=False, default=0.2),
     Column("loneliness", Float, nullable=False, default=0.2),
     Column("last_pulse", Float, nullable=False, default=0.0),
 )
 
-chat_people = Table(
-    "chat_people",
+thread_people = Table(
+    "thread_people",
     metadata,
-    Column("chat_id", String(120), nullable=False),
+    Column("thread_id", String(120), nullable=False),
     Column("person_id", String(80), nullable=False),
     Column("last_seen", Float, nullable=False, default=0.0),
     Column("interactions", Integer, nullable=False, default=0),
-    PrimaryKeyConstraint("chat_id", "person_id", name="pk_chat_people"),
+    PrimaryKeyConstraint("thread_id", "person_id", name="pk_thread_people"),
 )
 
 person_links = Table(

@@ -8,15 +8,15 @@ from datetime import datetime, timedelta
 from support import build_config, database
 
 from eidesoul.engine.assembly import TAIL_MAX_MESSAGES, thread
-from eidesoul.engine.context import ChatMessage, Quote, build_user_content
+from eidesoul.engine.context import Message, Quote, build_user_content
 from eidesoul.engine.stores.history import HistoryStore
 
 CHAT = "chat"
 START = datetime(2026, 1, 1, 10)
 
 
-def message(mid: str, text: str, when: datetime, *, quote: Quote | None = None) -> ChatMessage:
-    return ChatMessage(
+def message(mid: str, text: str, when: datetime, *, quote: Quote | None = None) -> Message:
+    return Message(
         id=mid,
         sender_name="Budi",
         sender_id="628111",

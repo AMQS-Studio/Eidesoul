@@ -7,7 +7,7 @@
 - **Context:** the 2026-11-03 audit found the `memories` DDL in ADR-0001 stale (no `state` column, `level not null default 2`, `confirmed default true`), the ADR-0004 constraint clashing with `state='superseded'` from ADR-0008, and no migration owner for the columns born in ADR-0005/0008/0010/0012/0013/0014.
 - **Supersedes:** —
 - **Related:** ADR-0001 (canonical), ADR-0004 (state/level), ADR-0005 (retention), ADR-0008 (provenance/trust), ADR-0010 (dispute), ADR-0011 (reaper/ledger), ADR-0012 (`generation`), ADR-0013 (`turns`), ADR-0014 (automation), ADR-0009 (ADR home)
-- **Amendments:** 2026-11-03 — owner's decision: ADR-0019 (observability) joins the set; the `llm_calls` column shape is added in §4.6 as the single DDL owner, with retention `engine.metrics.retention_days` (ADR-0005).
+- **Amendments:** 2026-11-03 — owner's decision: ADR-0019 (observability) joins the set; the `llm_calls` column shape is added in §4.6 as the single DDL owner, with retention `engine.metrics.retention_days` (ADR-0005). 2026-11-03 — ADR-0000 §4.4 rename: `chat_id` → `thread_id`, `chats`/`chat_eras`/`chat_people` → `threads`/`thread_eras`/`thread_people`, scope `chat` → `thread`; the baseline revision carries the new names.
 - **Location note:** ADR lives in `docs/v0.1.0/adr/engine/`; the Indonesian copy is `docs/v0.1.0/adr/engine/id/0016-schema-migration.md`.
 
 ---
@@ -18,7 +18,7 @@
 - **The `memories` DDL in ADR-0001 §4 no longer matches the decisions derived from it.** It carries no `state` column at all, it forces `level smallint not null default 2` and `confirmed boolean not null default true` — whereas ADR-0004 makes `level` nullable and lets `confirmed` mean something only when `state='ok'`.
 - **The ADR-0004 constraint clashes with a decision in ADR-0008.** `state='superseded'` is born from an `ok` row that has a level; the CHECK `(state IN ('ok','staged')) = (level IS NOT NULL)` forces it to `level NULL`, so a superseded row loses its level and its inventory.
 - **New columns are scattered with no migration home:** retention (ADR-0005), provenance/trust/quota (ADR-0008), dispute metadata (ADR-0010), `generation` (ADR-0012), `turns`/`outbound_messages` (ADR-0013), `automations`/`automation_runs` (ADR-0014). ADR-0012 even points to "ADR-0005 (migration scheme)", but ADR-0005 is retention, not migration.
-- **The P0-3 review items of 2026-11-01 still have no owner:** FK for `chat_people`/`person_links`/`skill_files`/`google_identity`/`chat_eras`, CHECK `engine_lease.id=1` and `visibility`/`privacy` 0-4, indexes `messages(ts)`, `approvals(chat_id,sender,status,expires_at)`, `approvals(status,expires_at)`, `chat_people(person_id)`, as well as separating media blobs into `message_media`.
+- **The P0-3 review items of 2026-11-01 still have no owner:** FK for `thread_people`/`person_links`/`skill_files`/`google_identity`/`thread_eras`, CHECK `engine_lease.id=1` and `visibility`/`privacy` 0-4, indexes `messages(ts)`, `approvals(thread_id,sender,status,expires_at)`, `approvals(status,expires_at)`, `thread_people(person_id)`, as well as separating media blobs into `message_media`.
 
 ## 2. Decision drivers
 
@@ -63,9 +63,9 @@ Rule: **ADR owners define the meaning of a column; this ADR sets the final form,
 ```sql
 memories(
  id uuid primary key,
- scope text not null, -- global | person | chat (ADR-0001)
+ scope text not null, -- global | person | thread (ADR-0001)
  person_id text not null default '',
- chat_id text not null default '',
+ thread_id text not null default '',
  kind text not null default 'fact',-- fact|preference|event|note|commitment|rule (ADR-0008)
  text text not null,
  state text not null default 'pending', -- see 4.3 (ADR-0004)
@@ -113,12 +113,12 @@ CHECK ( state IN ('pending','ok','staged','failed','not_worth','superseded'))
 CHECK ( (state IN ('ok','staged','superseded')) = (level IS NOT NULL))
 CHECK ( level IS NULL OR level BETWEEN 0 AND 4)
 CHECK ( state <> 'ok' OR confirmed IS NOT NULL)
-CHECK ( scope IN ('global','person','chat'))
+CHECK ( scope IN ('global','person','thread'))
 CHECK ( via IN ('turn','tool','command','reflection','ambient','automation','soul_doc'))
 CHECK ( dispute_state IN ('none','open','resolved','stale'))
 
 CREATE INDEX memories_live ON memories (scope, person_id, state);
-CREATE INDEX memories_chat ON memories (chat_id, state);
+CREATE INDEX memories_thread ON memories (thread_id, state);
 CREATE INDEX memories_expiry ON memories (expires_at) WHERE expires_at IS NOT NULL;
 CREATE INDEX memories_refs_gin ON memories USING gin (refs);
 CREATE UNIQUE INDEX memories_supersede_pair ON memories (id, supersedes) WHERE superseded_by IS NOT NULL;
@@ -157,9 +157,9 @@ Rules per revision:
 
 ### 4.5 FK, CHECK, and index of review P0-3
 
-- FK: `chat_people.person_id`, `person_links.*`, `skill_files.skill_id`, `google_identity.*`, `chat_eras.chat_id` to their parent tables (`ON DELETE CASCADE` for owned children, `SET NULL` for references).
+- FK: `thread_people.person_id`, `person_links.*`, `skill_files.skill_id`, `google_identity.*`, `thread_eras.thread_id` to their parent tables (`ON DELETE CASCADE` for owned children, `SET NULL` for references).
 - CHECK: `engine_lease.id = 1`; `visibility BETWEEN 0 AND 4` (messages/memory associated); `level BETWEEN 0 AND 4` (already at 4.3).
-- Index: `messages(ts)`, `approvals(chat_id, sender, status, expires_at)`, `approvals(status, expires_at)`, `chat_people(person_id)`.
+- Index: `messages(ts)`, `approvals(thread_id, sender, status, expires_at)`, `approvals(status, expires_at)`, `thread_people(person_id)`.
 - Media blobs are separated into `message_media(message_id, kind, mime, bytes_ref)`; `messages` keeps pointers.
 
 ### 4.6 Table `llm_calls` (metrics charge, ADR-0019)
@@ -190,7 +190,7 @@ CREATE INDEX ix_llm_calls_turn ON llm_calls (turn_id);
 
 ```sql
 ALTER TABLE skills
- ADD COLUMN scope text NOT NULL DEFAULT 'chat', -- chat | person | global
+ ADD COLUMN scope text NOT NULL DEFAULT 'thread', -- thread | person | global
  ADD COLUMN via text NOT NULL DEFAULT 'reflection',
  ADD COLUMN stated_by text,
  ADD COLUMN source_episode text,
@@ -200,7 +200,7 @@ ALTER TABLE skills
  ADD COLUMN trust text NOT NULL DEFAULT 'T2'; -- T0-T3 (ADR-0008)
 
 ALTER TABLE skills
- ADD CONSTRAINT ck_skills_scope CHECK (scope IN ('chat','person','global')),
+ ADD CONSTRAINT ck_skills_scope CHECK (scope IN ('thread','person','global')),
  ADD CONSTRAINT ck_skills_trust CHECK (trust IN ('T0','T1','T2','T3'));
 
 CREATE TABLE skill_revisions (
@@ -232,7 +232,7 @@ ALTER TABLE approvals
 ```
 
 - `scope_proof` is the deterministic result computed when the approval is requested: the list of action **targets** (path, room, column) + a snapshot of the requester's role roots + the lowered class. Execution compares it with the scope at that time; a scope difference cancels the approval or raises the class.
-- No new index: the fixed queries `(chat_id, sender, status)` and `(status, expires_at)` suffice.
+- No new index: the fixed queries `(thread_id, sender, status)` and `(status, expires_at)` suffice.
 
 ### 4.9 `relay_grants` and `automation_state_log` (ADR-0023, ADR-0014 §4.13)
 

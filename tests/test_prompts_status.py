@@ -110,11 +110,11 @@ def test_chat_kind_label_follows_the_inbound_flag(tmp_path, monkeypatch) -> None
             agent._command(name, "", "chat", "local", roles, env.gateway, inbound)
         )
 
-    assert 'Chat: group "' in run("whoami", inbound_message("/whoami", is_dm=False))
-    assert 'Chat: dm "' in run("whoami", inbound_message("/whoami", is_dm=True))
+    assert 'Chat: group "' in run("whoami", inbound_message("/whoami", dm=False))
+    assert 'Chat: dm "' in run("whoami", inbound_message("/whoami", dm=True))
     assert 'Chat: dm "' in run("whoami", inbound_message("/whoami"))
-    assert "Chat: group" in run("status", inbound_message("/status", is_dm=False))
-    assert "Chat: dm" in run("status", inbound_message("/status", is_dm=True))
+    assert "Chat: group" in run("status", inbound_message("/status", dm=False))
+    assert "Chat: dm" in run("status", inbound_message("/status", dm=True))
 
 
 def test_a_context_without_an_inbound_defaults_to_dm(tmp_path, monkeypatch) -> None:
@@ -123,14 +123,14 @@ def test_a_context_without_an_inbound_defaults_to_dm(tmp_path, monkeypatch) -> N
 
     ctx = env.agent.command_context("chat", "local", roles, env.gateway)
 
-    assert ctx.is_dm is True
+    assert ctx.direct is True
 
 
 def test_commands_requesting_llm_do_not_decide(tmp_path) -> None:
     env = make_agent(tmp_path)
     asyncio.run(
         env.agent.handle(
-            inbound_message("/status", chat_id="628111@s.whatsapp.net"), env.gateway
+            inbound_message("/status", thread="628111@s.whatsapp.net"), env.gateway
         )
     )
     assert env.llm.decisions == 0

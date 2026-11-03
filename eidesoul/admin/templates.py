@@ -142,7 +142,7 @@ GATEWAY: dict = {
             "enabled": True,
             "role": "owner",
             "user": "local",
-            "chat_id": "cli:local",
+            "thread_id": "cli:local",
             "chat_name": "Terminal",
         },
     }

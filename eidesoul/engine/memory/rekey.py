@@ -6,7 +6,7 @@ import logging
 
 from sqlalchemy import select
 
-from ..schema import chat_people
+from ..schema import thread_people
 
 log = logging.getLogger(__name__)
 
@@ -17,7 +17,7 @@ RESERVED = frozenset(
         "scope",
         "kind",
         "person_id",
-        "chat_id",
+        "thread_id",
         "audience",
         "source",
         "level",
@@ -46,7 +46,7 @@ async def _move(hits, memory, old_id: str, new_id: str, *, scope: str) -> int:
                 scope=scope,
                 kind=str(hit.metadata.get("kind") or "fact"),
                 person_id=new_id if scope == "person" else "",
-                chat_id=hit.chat_id,
+                thread_id=hit.thread_id,
                 level=hit.level,
                 owner_id=new_id if hit.owner_id == old_id else hit.owner_id,
                 subject_id=new_id if hit.subject_id == old_id else hit.subject_id,
@@ -56,22 +56,22 @@ async def _move(hits, memory, old_id: str, new_id: str, *, scope: str) -> int:
         except ValueError:  # a secret or an empty entry is skipped, never fatal
             log.warning("rekey: memory entry skipped id=%s", hit.id)
             continue
-        await memory.forget(hit.id, requester_id=old_id, chat_id=hit.chat_id)
+        await memory.forget(hit.id, requester_id=old_id, thread_id=hit.thread_id)
         moved += 1
     return moved
 
 
-def _chats(db, person_id: str) -> list[str]:
+def _threads(db, person_id: str) -> list[str]:
     if db is None:
         return []
     try:
         rows = db.fetch_all(
-            select(chat_people.c.chat_id).where(chat_people.c.person_id == person_id)
+            select(thread_people.c.thread_id).where(thread_people.c.person_id == person_id)
         )
     except Exception:
         log.warning("rekey: chat list failed person=%s", person_id, exc_info=True)
         return []
-    return sorted({str(row["chat_id"]) for row in rows})
+    return sorted({str(row["thread_id"]) for row in rows})
 
 
 async def rekey_memory(memory, old_id: str, new_id: str, *, db=None) -> int:
@@ -87,11 +87,11 @@ async def rekey_memory(memory, old_id: str, new_id: str, *, db=None) -> int:
         new_id,
         scope="person",
     )
-    for chat_id in _chats(db, new_id):
+    for thread_id in _threads(db, new_id):
         hits = [
             hit
-            for hit in await memory.list(scope="chat", chat_id=chat_id, limit=LIMIT)
+            for hit in await memory.list(scope="thread", thread_id=thread_id, limit=LIMIT)
             if old_id in {hit.owner_id, hit.subject_id}
         ]
-        moved += await _move(hits, memory, old_id, new_id, scope="chat")
+        moved += await _move(hits, memory, old_id, new_id, scope="thread")
     return moved

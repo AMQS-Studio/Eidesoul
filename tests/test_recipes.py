@@ -149,7 +149,7 @@ def test_agent_dispatches_recipe_command(tmp_path: Path) -> None:
         steps=[{"tool": "read", "args": {"path": "public/catatan.txt"}}],
     )
 
-    asyncio.run(env.agent.handle(inbound_message("/baca", chat_id="chat"), env.gateway))
+    asyncio.run(env.agent.handle(inbound_message("/baca", thread="chat"), env.gateway))
 
     assert env.gateway.sent
     assert "halo dari resep" in env.gateway.sent[0][1]

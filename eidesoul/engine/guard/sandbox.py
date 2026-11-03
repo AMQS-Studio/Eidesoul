@@ -136,7 +136,9 @@ class SandboxGuard:
         self.sensitive = tuple(sensitive)
         self.llm = llm
 
-    async def check(self, command: str, *, can_approve: bool, chat_id: str = "") -> SafetyDecision:
+    async def check(
+        self, command: str, *, can_approve: bool, thread_id: str = ""
+    ) -> SafetyDecision:
         """Return allow, pending, or deny for one sandbox command."""
         if not self.config.enabled:
             return _verdict("allow")
@@ -144,17 +146,17 @@ class SandboxGuard:
         if decision is not None and decision.verdict == "allow":
             return decision
         if decision is not None and decision.verdict == "deny":
-            self._log(chat_id, decision)
+            self._log(thread_id, decision)
             return decision
         if not can_approve:
             denied = _verdict("deny", "sandbox command needs an approver role")
-            self._log(chat_id, denied)
+            self._log(thread_id, denied)
             return denied
         if decision is not None:
-            self._log(chat_id, decision)
+            self._log(thread_id, decision)
             return decision
         classified = await self._classify(str(command or ""))
-        self._log(chat_id, classified)
+        self._log(thread_id, classified)
         return classified
 
     def _layer_one(self, command: str) -> SafetyDecision | None:
@@ -191,10 +193,10 @@ class SandboxGuard:
             return _verdict("pending", detail)
         return _verdict("pending", "sandbox guard unavailable")
 
-    def _log(self, chat_id: str, decision: SafetyDecision) -> None:
+    def _log(self, thread_id: str, decision: SafetyDecision) -> None:
         log.info(
             "tool=sandbox chat=%s verdict=%s reason=%s",
-            chat_id or "-",
+            thread_id or "-",
             decision.verdict,
             decision.reason or "-",
         )

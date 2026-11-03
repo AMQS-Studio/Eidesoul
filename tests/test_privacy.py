@@ -35,21 +35,21 @@ def hit(level: int, **kwargs) -> MemoryHit:
 def test_level_matrix_group_and_dm() -> None:
     rules = policy()
 
-    assert rules.show(hit(2), is_dm=False) is True
-    assert rules.disclose(hit(2), requester="999", is_dm=False) == "allow"
-    assert rules.show(hit(3), is_dm=False) is False
-    assert rules.disclose(hit(3), requester="628111", is_dm=False) == "ask"
-    assert rules.disclose(hit(3), requester="999", is_dm=False) == "deny"
-    assert rules.disclose(hit(3, confirmed=False), requester="628111", is_dm=False) == "deny"
+    assert rules.show(hit(2), direct=False) is True
+    assert rules.disclose(hit(2), requester="999", direct=False) == "allow"
+    assert rules.show(hit(3), direct=False) is False
+    assert rules.disclose(hit(3), requester="628111", direct=False) == "ask"
+    assert rules.disclose(hit(3), requester="999", direct=False) == "deny"
+    assert rules.disclose(hit(3, confirmed=False), requester="628111", direct=False) == "deny"
 
-    assert rules.disclose(hit(3), requester="628111", is_dm=True) == "allow"
-    assert rules.disclose(hit(4, confirmed=False), requester="628111", is_dm=True) == "ask"
-    assert rules.disclose(hit(4), requester="628111", is_dm=True) == "allow"
-    assert rules.disclose(hit(4), requester="999", is_dm=True) == "deny"
+    assert rules.disclose(hit(3), requester="628111", direct=True) == "allow"
+    assert rules.disclose(hit(4, confirmed=False), requester="628111", direct=True) == "ask"
+    assert rules.disclose(hit(4), requester="628111", direct=True) == "allow"
+    assert rules.disclose(hit(4), requester="999", direct=True) == "deny"
 
     vetoed = hit(1, vetoed=True)
-    assert rules.show(vetoed, is_dm=True) is False
-    assert rules.disclose(vetoed, requester="628111", is_dm=True) == "deny"
+    assert rules.show(vetoed, direct=True) is False
+    assert rules.disclose(vetoed, requester="628111", direct=True) == "deny"
 
 
 class ScriptLLM(FakeLLM):
@@ -94,7 +94,7 @@ def review(env, inbound, reply, hits):
 def test_fluidity_level_0_2_never_calls_the_auditor(tmp_path) -> None:
     env = make_agent(tmp_path)
     env.agent.llm = ScriptLLM()
-    inbound = inbound_message("halo", chat_id="111@g.us", is_dm=False)
+    inbound = inbound_message("halo", thread="111@g.us", dm=False)
 
     result = review(env, inbound, "kopi ya", [hit(0), hit(2)])
 
@@ -105,7 +105,7 @@ def test_fluidity_level_0_2_never_calls_the_auditor(tmp_path) -> None:
 def test_group_level_3_without_audit_asks(tmp_path) -> None:
     env = make_agent(tmp_path)
     env.agent.llm = ScriptLLM()
-    inbound = inbound_message("halo", chat_id="111@g.us", is_dm=False)
+    inbound = inbound_message("halo", thread="111@g.us", dm=False)
 
     result = review(env, inbound, "si budi pernah bilang begitu", [hit(3)])
 
@@ -120,7 +120,7 @@ def test_group_level_3_without_audit_asks(tmp_path) -> None:
 def test_dm_owner_level_3_stays_fluid(tmp_path) -> None:
     env = make_agent(tmp_path)
     env.agent.llm = ScriptLLM()
-    inbound = inbound_message("halo", chat_id="628111@s.whatsapp.net", is_dm=True)
+    inbound = inbound_message("halo", thread="628111@s.whatsapp.net", dm=True)
 
     result = review(env, inbound, "ingat kopi kita", [hit(3)])
 
@@ -133,7 +133,7 @@ def test_vetoed_hit_is_denied_and_audit_rewrite_wins(tmp_path) -> None:
     env.agent.llm = ScriptLLM(
         audit={"mentions": [], "verdict": "allow", "reply": "aman kok", "question": ""}
     )
-    inbound = inbound_message("halo", chat_id="111@g.us", is_dm=False)
+    inbound = inbound_message("halo", thread="111@g.us", dm=False)
 
     result = review(env, inbound, "dia pernah begitu", [hit(1, vetoed=True)])
 
@@ -144,12 +144,12 @@ def test_vetoed_hit_is_denied_and_audit_rewrite_wins(tmp_path) -> None:
 def test_disclosure_confirmation_sends_the_stored_draft(tmp_path) -> None:
     env = make_agent(tmp_path)
     env.agent.llm = ScriptLLM(answer={"kind": "yes", "level": 0})
-    inbound = inbound_message("halo", chat_id="111@g.us", is_dm=False)
+    inbound = inbound_message("halo", thread="111@g.us", dm=False)
     review(env, inbound, "draft rahasia", [hit(3)])
 
     handled = asyncio.run(
         env.agent.privacy.handle_pending(
-            inbound_message("ya", chat_id="111@g.us", is_dm=False),
+            inbound_message("ya", thread="111@g.us", dm=False),
             env.gateway,
             "628111",
         )
@@ -164,13 +164,13 @@ def test_disclosure_confirmation_sends_the_stored_draft(tmp_path) -> None:
 def test_other_sender_cannot_confirm(tmp_path) -> None:
     env = make_agent(tmp_path)
     env.agent.llm = ScriptLLM(answer={"kind": "yes", "level": 0})
-    inbound = inbound_message("halo", chat_id="111@g.us", is_dm=False)
+    inbound = inbound_message("halo", thread="111@g.us", dm=False)
     review(env, inbound, "draft rahasia", [hit(3)])
 
     handled = asyncio.run(
         env.agent.privacy.handle_pending(
             inbound_message(
-                "ya", chat_id="111@g.us", is_dm=False, sender="628999", person_id="628999"
+                "ya", thread="111@g.us", dm=False, sender="628999", person_id="628999"
             ),
             env.gateway,
             "628999",
@@ -187,7 +187,7 @@ def test_capture_level_4_asks_and_stores_unconfirmed(tmp_path) -> None:
     env.agent.llm = ScriptLLM(
         assess={"level": 4, "subject": "", "ask": True, "question": "seberapa rahasia?"}
     )
-    inbound = inbound_message("aku pernah melakukan hal memalukan", chat_id="628111@s.whatsapp.net")
+    inbound = inbound_message("aku pernah melakukan hal memalukan", thread="628111@s.whatsapp.net")
 
     asyncio.run(env.agent.privacy.capture_turn(inbound, "oke", env.gateway))
 
@@ -202,7 +202,7 @@ def test_capture_level_4_asks_and_stores_unconfirmed(tmp_path) -> None:
 def test_capture_level_3_is_stored_without_a_question(tmp_path) -> None:
     env = make_agent(tmp_path)
     env.agent.llm = ScriptLLM(assess={"level": 3, "subject": "", "ask": False})
-    inbound = inbound_message("aku lagi banyak pikiran", chat_id="628111@s.whatsapp.net")
+    inbound = inbound_message("aku lagi banyak pikiran", thread="628111@s.whatsapp.net")
 
     asyncio.run(env.agent.privacy.capture_turn(inbound, "oke", env.gateway))
 
@@ -214,13 +214,13 @@ def test_capture_level_3_is_stored_without_a_question(tmp_path) -> None:
 def test_capture_skips_credentials_and_resolves_subject(tmp_path) -> None:
     env = make_agent(tmp_path)
     env.agent.llm = ScriptLLM()
-    insecure = inbound_message("api_key=abc123", chat_id="628111@s.whatsapp.net")
+    insecure = inbound_message("api_key=abc123", thread="628111@s.whatsapp.net")
     asyncio.run(env.agent.privacy.capture_turn(insecure, "ok", env.gateway))
     assert env.memory.captures == []
 
     env.agent.llm = ScriptLLM(assess={"level": 3, "subject": "Budi", "ask": False})
-    env.agent.affect = SimpleNamespace(person_by_name=lambda chat_id, name: "628999")
-    named = inbound_message("budi baru pindah kerja", chat_id="628111@s.whatsapp.net")
+    env.agent.affect = SimpleNamespace(person_by_name=lambda thread_id, name: "628999")
+    named = inbound_message("budi baru pindah kerja", thread="628111@s.whatsapp.net")
     asyncio.run(env.agent.privacy.capture_turn(named, "oh", env.gateway))
     assert env.memory.captures[0]["subject_id"] == "628999"
 
@@ -236,7 +236,7 @@ def test_capture_retries_assess_with_a_bigger_budget(tmp_path) -> None:
     env.agent.llm = SequencedLLM(
         ["", json.dumps({"level": 3, "subject": "", "ask": False})]
     )
-    inbound = inbound_message("aku lagi banyak pikiran", chat_id="628111@s.whatsapp.net")
+    inbound = inbound_message("aku lagi banyak pikiran", thread="628111@s.whatsapp.net")
 
     asyncio.run(env.agent.privacy.capture_turn(inbound, "oke", env.gateway))
 
@@ -253,7 +253,7 @@ def test_capture_retries_assess_with_a_bigger_budget(tmp_path) -> None:
 def test_capture_is_skipped_when_assess_returns_nothing(tmp_path) -> None:
     env = make_agent(tmp_path)
     env.agent.llm = SequencedLLM(["", ""])
-    inbound = inbound_message("halo apa kabar semuanya", chat_id="628111@s.whatsapp.net")
+    inbound = inbound_message("halo apa kabar semuanya", thread="628111@s.whatsapp.net")
 
     asyncio.run(env.agent.privacy.capture_turn(inbound, "baik", env.gateway))
 
@@ -268,7 +268,7 @@ def test_privacy_confirmation_sets_level_and_confirmation(tmp_path) -> None:
         assess={"level": 4, "subject": "", "ask": True, "question": "seberapa rahasia?"},
         answer={"kind": "level", "level": 4},
     )
-    inbound = inbound_message("aku pernah melakukan hal memalukan", chat_id="628111@s.whatsapp.net")
+    inbound = inbound_message("aku pernah melakukan hal memalukan", thread="628111@s.whatsapp.net")
     asyncio.run(env.agent.privacy.capture_turn(inbound, "oke", env.gateway))
     memory_id = env.agent.approvals.latest("628111@s.whatsapp.net", "628111").args["memory_ids"][0]
     env.memory.hits[memory_id] = MemoryHit(
@@ -277,7 +277,7 @@ def test_privacy_confirmation_sets_level_and_confirmation(tmp_path) -> None:
 
     handled = asyncio.run(
         env.agent.privacy.handle_pending(
-            inbound_message("rahasia", chat_id="628111@s.whatsapp.net"),
+            inbound_message("rahasia", thread="628111@s.whatsapp.net"),
             env.gateway,
             "628111",
         )
@@ -292,12 +292,12 @@ def test_privacy_confirmation_sets_level_and_confirmation(tmp_path) -> None:
 def test_unclear_answer_keeps_pending(tmp_path) -> None:
     env = make_agent(tmp_path)
     env.agent.llm = ScriptLLM(answer={"kind": "unclear", "level": 0})
-    inbound = inbound_message("halo", chat_id="111@g.us", is_dm=False)
+    inbound = inbound_message("halo", thread="111@g.us", dm=False)
     review(env, inbound, "draft", [hit(3)])
 
     handled = asyncio.run(
         env.agent.privacy.handle_pending(
-            inbound_message("hmm gimana ya", chat_id="111@g.us", is_dm=False),
+            inbound_message("hmm gimana ya", thread="111@g.us", dm=False),
             env.gateway,
             "628111",
         )
@@ -314,14 +314,14 @@ def test_memory_tool_requires_admin_for_global_and_subject_for_veto(tmp_path) ->
     env = make_agent(tmp_path)
     member = env.config.roles.default_role()
     ctx = env.agent.tool_context(
-        "chat", "628111", (member,), env.gateway, person_id="628111", is_dm=True
+        "chat", "628111", (member,), env.gateway, person_id="628111", direct=True
     )
     denied = asyncio.run(_memory({"action": "add", "scope": "global", "text": "fakta"}, ctx))
     assert "memory_admin" in denied
 
     owner = Role("owner", tools=("*",), memory_admin=True)
     owner_ctx = env.agent.tool_context(
-        "chat", "628111", (owner,), env.gateway, person_id="628111", is_dm=True
+        "chat", "628111", (owner,), env.gateway, person_id="628111", direct=True
     )
     saved = asyncio.run(
         _memory({"action": "add", "scope": "global", "text": "fakta", "level": 1}, owner_ctx)
@@ -336,7 +336,7 @@ def test_memory_tool_requires_admin_for_global_and_subject_for_veto(tmp_path) ->
     assert "error:" in wrong
 
     subject_ctx = env.agent.tool_context(
-        "chat", "628999", (member,), env.gateway, person_id="628999", is_dm=True
+        "chat", "628999", (member,), env.gateway, person_id="628999", direct=True
     )
     right = asyncio.run(_memory({"action": "veto", "id": memory_id}, subject_ctx))
     assert right.startswith("ok:")
@@ -359,7 +359,7 @@ def test_agent_turn_asks_then_sends_after_confirmation(tmp_path) -> None:
         confirmed=True,
     )
     group = inbound_message(
-        "halo eidesoul", chat_id="111@g.us", is_dm=False, is_mention=True
+        "halo eidesoul", thread="111@g.us", dm=False, mention=True
     )
 
     asyncio.run(env.agent.handle(group, env.gateway))
@@ -371,7 +371,7 @@ def test_agent_turn_asks_then_sends_after_confirmation(tmp_path) -> None:
     assert approval.kind == "disclosure"
 
     asyncio.run(
-        env.agent.handle(inbound_message("ya", chat_id="111@g.us", is_dm=False), env.gateway)
+        env.agent.handle(inbound_message("ya", thread="111@g.us", dm=False), env.gateway)
     )
 
     assert env.gateway.sent[-1][1] == "halo juga"
@@ -386,12 +386,12 @@ def test_vetoed_memory_is_excluded_from_context(tmp_path) -> None:
     memory = Mem0Backend(config=config, db=None)
     memory._memory = FakeMem0()
     memory_id = asyncio.run(
-        memory.add("rahasia kecil", scope="person", person_id="1", chat_id="c", level=1)
+        memory.add("rahasia kecil", scope="person", person_id="1", thread_id="c", level=1)
     )[0]
 
     assert asyncio.run(memory.veto(memory_id, subject_id="2")) is False
     assert asyncio.run(memory.veto(memory_id, subject_id="1")) is True
-    context = asyncio.run(memory.context(person_id="1", chat_id="c", query="rahasia"))
+    context = asyncio.run(memory.context(person_id="1", thread_id="c", query="rahasia"))
     assert context.text == ""
     assert context.hits == ()
 
@@ -399,17 +399,17 @@ def test_vetoed_memory_is_excluded_from_context(tmp_path) -> None:
 def test_capture_raises_visibility_of_the_turn_and_delivered_reply(tmp_path) -> None:
     from datetime import datetime
 
-    from eidesoul.engine.context import ChatMessage
+    from eidesoul.engine.context import Message
 
     env = make_agent(tmp_path)
     env.agent.llm = ScriptLLM(assess={"level": 3, "subject": "", "ask": False})
     inbound = inbound_message(
-        "aku lagi banyak pikiran", chat_id="628111@s.whatsapp.net", message_id="m-capture"
+        "aku lagi banyak pikiran", thread="628111@s.whatsapp.net", message_id="m-capture"
     )
-    env.history.add(inbound.chat_id, inbound.message)
+    env.history.add(inbound.thread, inbound.payload)
     env.history.add(
-        inbound.chat_id,
-        ChatMessage(
+        inbound.thread,
+        Message(
             id="r1",
             sender_name="eidesoul",
             sender_id="628567770837",
@@ -421,6 +421,6 @@ def test_capture_raises_visibility_of_the_turn_and_delivered_reply(tmp_path) -> 
 
     asyncio.run(env.agent.privacy.capture_turn(inbound, "oke", env.gateway, ("r1",)))
 
-    assert env.history.find(inbound.chat_id, "m-capture").visibility == 3
-    assert env.history.find(inbound.chat_id, "r1").visibility == 3
+    assert env.history.find(inbound.thread, "m-capture").visibility == 3
+    assert env.history.find(inbound.thread, "r1").visibility == 3
     assert env.memory.captures[0]["level"] == 3

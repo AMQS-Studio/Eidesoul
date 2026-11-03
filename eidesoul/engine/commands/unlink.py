@@ -16,7 +16,7 @@ async def unlink(ctx: CommandContext) -> str:
     if len(parts) == 1:
         return t("command.unlink.ask", lang, gateway=gateway)
     if len(parts) == 2 and parts[1] == "confirm":
-        person = ctx.inbound.person_id if ctx.inbound is not None else ""
+        person = ctx.inbound.actor if ctx.inbound is not None else ""
         removed = ctx.agent.identity.unlink(person, gateway)
         key = "command.unlink.done" if removed else "command.unlink.missing"
         return t(key, lang, gateway=gateway)

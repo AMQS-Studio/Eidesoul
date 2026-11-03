@@ -49,20 +49,20 @@ class PrivacyPolicy:
     def __init__(self, config: PrivacyConfig) -> None:
         self.config = config
 
-    def show(self, hit: MemoryHit, *, is_dm: bool) -> bool:
+    def show(self, hit: MemoryHit, *, direct: bool) -> bool:
         """Whether raw tool output may show this hit to the current chat."""
         if hit.vetoed:
             return False
-        ceiling = self.config.dm_max_level if is_dm else self.config.group_max_level
+        ceiling = self.config.dm_max_level if direct else self.config.group_max_level
         return hit.level <= ceiling
 
-    def disclose(self, hit: MemoryHit, *, requester: str, is_dm: bool) -> str:
+    def disclose(self, hit: MemoryHit, *, requester: str, direct: bool) -> str:
         """allow|ask|deny for this hit when a draft mentions it."""
         if hit.vetoed:
             return "deny"
         if hit.level <= self.config.group_max_level:
             return "allow"
-        if not is_dm:
+        if not direct:
             return "ask" if requester == hit.owner_id and hit.confirmed else "deny"
         if requester != hit.owner_id:
             return "deny"

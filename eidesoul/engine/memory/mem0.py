@@ -24,7 +24,7 @@ from .privacy import MAX_LEVEL, clamp_level
 
 log = logging.getLogger(__name__)
 
-SCOPES = ("global", "person", "chat")
+SCOPES = ("global", "person", "thread")
 VETO_FIELDS = ("vetoed", "vetoed_by", "vetoed_at")
 MEM0_SESSION = "eidesoul-mem0"
 MEMORY_ID = re.compile(
@@ -69,12 +69,12 @@ def _person_from(item: dict, metadata: dict) -> str:
     return user.split(":", 1)[1] if user.startswith("person:") else ""
 
 
-def _chat_from(item: dict, metadata: dict) -> str:
-    chat = _text(metadata.get("chat_id"))
-    if chat:
-        return chat
+def _thread_from(item: dict, metadata: dict) -> str:
+    thread = _text(metadata.get("thread_id"))
+    if thread:
+        return thread
     run = _text(item.get("run_id"))
-    return run.split(":", 1)[1] if run.startswith("chat:") else ""
+    return run.split(":", 1)[1] if run.startswith("thread:") else ""
 
 
 def _created(item: dict) -> float | None:
@@ -124,7 +124,7 @@ def _hit(item: dict, fallback_scope: str = "person") -> MemoryHit | None:
         score=float(item.get("score") or 0.0),
         scope=_scope_from(item, metadata, fallback_scope),
         person_id=person,
-        chat_id=_chat_from(item, metadata),
+        thread_id=_thread_from(item, metadata),
         created_at=_created(item),
         metadata=metadata,
         level=clamp_level(metadata.get("level"), 2),
@@ -232,17 +232,17 @@ class Mem0Backend:
             return ""
         return str(rows[0]["id"]) if len(rows) == 1 else ""
 
-    def _identity(self, scope: str, person_id: str, chat_id: str) -> dict:
+    def _identity(self, scope: str, person_id: str, thread_id: str) -> dict:
         if scope == "global":
             return {"agent_id": "eidesoul"}
         if scope == "person":
             if not person_id:
                 raise ValueError("person_id is empty for scope person")
             return {"user_id": f"person:{person_id}"}
-        if scope == "chat":
-            if not chat_id:
-                raise ValueError("chat_id is empty for scope chat")
-            return {"run_id": f"chat:{chat_id}"}
+        if scope == "thread":
+            if not thread_id:
+                raise ValueError("thread_id is empty for scope thread")
+            return {"run_id": f"thread:{thread_id}"}
         raise ValueError(f"unknown scope: {scope}")
 
     def _metadata(
@@ -251,7 +251,7 @@ class Mem0Backend:
         scope: str,
         kind: str,
         person_id: str,
-        chat_id: str,
+        thread_id: str,
         audience: str,
         source: str,
         level: int = 2,
@@ -260,13 +260,13 @@ class Mem0Backend:
         confirmed: bool = True,
         extra: dict | None = None,
     ) -> dict:
-        default_audience = {"global": "shared", "person": "private", "chat": "group"}[scope]
+        default_audience = {"global": "shared", "person": "private", "thread": "group"}[scope]
         metadata = {
             "scope": scope,
             "kind": kind or "fact",
             "source": source or "",
             "ts": time.time(),
-            "chat_id": chat_id or "",
+            "thread_id": thread_id or "",
             "person_id": person_id or "",
             "audience": audience or default_audience,
             "where": None,
@@ -302,7 +302,7 @@ class Mem0Backend:
         scope: str = "person",
         kind: str = "fact",
         person_id: str = "",
-        chat_id: str = "",
+        thread_id: str = "",
         audience: str = "",
         source: str = "",
         metadata: dict | None = None,
@@ -320,7 +320,7 @@ class Mem0Backend:
             raise ValueError("privacy level 5/credentials are never stored")
         if SENSITIVE.search(body):
             raise ValueError("text contains a secret/credential")
-        identity = self._identity(scope, person_id, chat_id)
+        identity = self._identity(scope, person_id, thread_id)
         if supersedes:
             old = await self.get(str(supersedes))
             if old is None:
@@ -329,7 +329,7 @@ class Mem0Backend:
                 raise ValueError("superseding memory must share the scope")
             if scope == "person" and old.person_id != person_id:
                 raise ValueError("another person's memory cannot be superseded")
-            if scope == "chat" and old.chat_id != chat_id:
+            if scope == "thread" and old.thread_id != thread_id:
                 raise ValueError("another chat's memory cannot be superseded")
             await self._safe("delete", self._memory.delete, old.id)
         payload = [{"role": "user", "content": body}]
@@ -341,7 +341,7 @@ class Mem0Backend:
                 scope=scope,
                 kind=kind,
                 person_id=person_id,
-                chat_id=chat_id,
+                thread_id=thread_id,
                 audience=audience,
                 source=source,
                 level=level,
@@ -360,7 +360,7 @@ class Mem0Backend:
         messages: list[dict],
         *,
         person_id: str,
-        chat_id: str,
+        thread_id: str,
         audience: str,
         source: str = "turn",
         level: int = 2,
@@ -373,7 +373,7 @@ class Mem0Backend:
             return []
         if any(SENSITIVE.search(_text(item.get("content"))) for item in body):
             return []
-        identity = self._identity("person", person_id, chat_id)
+        identity = self._identity("person", person_id, thread_id)
         async with self._capture_lock:
             result = await self._safe(
                 "capture",
@@ -383,7 +383,7 @@ class Mem0Backend:
                     scope="person",
                     kind="fact",
                     person_id=person_id,
-                    chat_id=chat_id,
+                    thread_id=thread_id,
                     audience=audience,
                     source=source,
                     level=level,
@@ -399,10 +399,10 @@ class Mem0Backend:
     # ---------------------------------------------------------------- read
 
     async def _search_scope(
-        self, scope: str, query: str, person_id: str, chat_id: str, limit: int
+        self, scope: str, query: str, person_id: str, thread_id: str, limit: int
     ) -> list[MemoryHit]:
         try:
-            identity = self._identity(scope, person_id, chat_id)
+            identity = self._identity(scope, person_id, thread_id)
         except ValueError:
             return []
         text = _text(query)
@@ -429,8 +429,8 @@ class Mem0Backend:
                 for hit in hits
                 if not (
                     str(hit.metadata.get("audience") or "") == "group"
-                    and hit.chat_id
-                    and hit.chat_id != chat_id
+                    and hit.thread_id
+                    and hit.thread_id != thread_id
                 )
             ]
         return hits
@@ -440,7 +440,7 @@ class Mem0Backend:
         query: str,
         *,
         person_id: str = "",
-        chat_id: str = "",
+        thread_id: str = "",
         limit: int = 12,
         scopes: tuple[str, ...] = SCOPES,
     ) -> list[MemoryHit]:
@@ -448,7 +448,7 @@ class Mem0Backend:
             self,
             query=query,
             person_id=person_id,
-            chat_id=chat_id,
+            thread_id=thread_id,
             limit=limit,
             scopes=scopes,
         )
@@ -458,10 +458,10 @@ class Mem0Backend:
         *,
         scope: str,
         person_id: str = "",
-        chat_id: str = "",
+        thread_id: str = "",
         limit: int = 20,
     ) -> list[MemoryHit]:
-        return await self._search_scope(scope, "", person_id, chat_id, limit)
+        return await self._search_scope(scope, "", person_id, thread_id, limit)
 
     async def get(self, memory_id: str) -> MemoryHit | None:
         resolved = self._resolve_id(memory_id)
@@ -478,7 +478,7 @@ class Mem0Backend:
         memory_id: str,
         *,
         requester_id: str = "",
-        chat_id: str = "",
+        thread_id: str = "",
         allow_global: bool = False,
     ) -> bool:
         hit = await self.get(memory_id)
@@ -486,7 +486,7 @@ class Mem0Backend:
             return False
         if hit.scope == "person" and hit.person_id != requester_id:
             return False
-        if hit.scope == "chat" and hit.chat_id != chat_id:
+        if hit.scope == "thread" and hit.thread_id != thread_id:
             return False
         if hit.scope == "global" and not allow_global:
             return False
@@ -534,7 +534,7 @@ class Mem0Backend:
         self,
         *,
         person_id: str,
-        chat_id: str,
+        thread_id: str,
         query: str,
         mood=None,
         max_items: int | None = None,
@@ -545,7 +545,7 @@ class Mem0Backend:
                 memory_context.build(
                     self,
                     person_id=person_id,
-                    chat_id=chat_id,
+                    thread_id=thread_id,
                     query=query,
                     max_items=max_items or self._limits.max_items,
                     max_chars=max_chars or self._limits.max_chars,

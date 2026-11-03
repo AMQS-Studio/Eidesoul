@@ -131,8 +131,8 @@ class PrivacyService:
     def _text(self, key: str, **kwargs) -> str:
         return t(f"privacy.{key}", self._lang, **kwargs)
 
-    def _risky(self, hit: MemoryHit, *, is_dm: bool) -> bool:
-        limit = self.config.dm_max_level if is_dm else self.config.group_max_level
+    def _risky(self, hit: MemoryHit, *, direct: bool) -> bool:
+        limit = self.config.dm_max_level if direct else self.config.group_max_level
         if hit.level > limit or hit.vetoed:
             return True
         return hit.level >= self.config.ask_level and not hit.confirmed
@@ -148,8 +148,8 @@ class PrivacyService:
     ) -> ReviewResult:
         if not self.config.enabled or not hits:
             return ReviewResult(False, reply)
-        is_dm = bool(inbound.is_dm)
-        risky = [hit for hit in hits if self._risky(hit, is_dm=is_dm)]
+        direct = bool(inbound.hints.get("dm"))
+        risky = [hit for hit in hits if self._risky(hit, direct=direct)]
         if not risky:
             return ReviewResult(False, reply)
         if self.config.auditor and self.agent.llm is not None:
@@ -157,9 +157,9 @@ class PrivacyService:
         else:
             audit = AuditResult(verdict="ask")
         selected = [hit for hit in hits if hit.id in audit.mentions] or risky
-        requester = inbound.person_id or self.agent._sender(inbound)
+        requester = inbound.actor or self.agent._sender(inbound)
         verdicts = [
-            self.policy.disclose(hit, requester=requester, is_dm=is_dm) for hit in selected
+            self.policy.disclose(hit, requester=requester, direct=direct) for hit in selected
         ]
         if "deny" in verdicts:
             return ReviewResult(False, audit.reply or self._text("keep"))
@@ -167,7 +167,7 @@ class PrivacyService:
             question = self._question(audit)
             approval = await self.agent.approvals.create(
                 kind="disclosure",
-                chat_id=inbound.chat_id,
+                thread_id=inbound.thread,
                 sender=self.agent._sender(inbound),
                 gateway=getattr(gateway, "name", "") or "",
                 tool="disclosure",
@@ -175,8 +175,8 @@ class PrivacyService:
                 payload={"reply": reply, "question": question},
                 summary=question,
             )
-            log.info("disclosure pending chat=%s approval=%s", inbound.chat_id, approval.id)
-            await self.agent.send_text(inbound.chat_id, question, gateway=gateway)
+            log.info("disclosure pending chat=%s approval=%s", inbound.thread, approval.id)
+            await self.agent.send_text(inbound.thread, question, gateway=gateway)
             return ReviewResult(True, "")
         return ReviewResult(False, audit.reply or reply)
 
@@ -187,11 +187,11 @@ class PrivacyService:
     async def _audit(
         self, reply: str, hits: Sequence[MemoryHit], inbound
     ) -> AuditResult:
-        requester = inbound.person_id or self.agent._sender(inbound)
+        requester = inbound.actor or self.agent._sender(inbound)
         lines = []
         for hit in hits:
             verdict = self.policy.disclose(
-                hit, requester=requester, is_dm=bool(inbound.is_dm)
+                hit, requester=requester, direct=bool(inbound.hints.get("dm"))
             )
             lines.append(
                 f"- id={hit.id} level={hit.level} owner={hit.owner_id or '-'} "
@@ -223,41 +223,41 @@ class PrivacyService:
     async def capture_turn(
         self, inbound, reply: str, gateway, reply_ids: tuple[str, ...] = ()
     ) -> None:
-        message = inbound.message
+        message = inbound.payload
         text = str(message.text or "").strip()
         if not text or guard.SENSITIVE.search(text):
             return
         if self.config.enabled and self.agent.llm is not None:
             verdict = await self._assess(f"{text}\n{reply}")
             if verdict is None:
-                log.warning("privacy assess failed; capture skipped chat=%s", inbound.chat_id)
+                log.warning("privacy assess failed; capture skipped chat=%s", inbound.thread)
                 return
         else:
             verdict = PrivacyVerdict(level=self.config.default_level, ask=False)
-        owner = inbound.person_id or self.agent._sender(inbound)
+        owner = inbound.actor or self.agent._sender(inbound)
         subject = owner
         if verdict.subject and self.agent.affect is not None:
             try:
                 subject = self.agent.affect.person_by_name(
-                    inbound.chat_id, verdict.subject
+                    inbound.thread, verdict.subject
                 ) or owner
             except Exception:
                 log.debug("subject lookup failed", exc_info=True)
         level = clamp_level(verdict.level, self.config.default_level)
         targets = (message.id, *reply_ids)
         try:
-            self.agent.windows.set_visibility(inbound.chat_id, targets, level)
-            self.agent.history.set_visibility(inbound.chat_id, targets, level)
+            self.agent.windows.set_visibility(inbound.thread, targets, level)
+            self.agent.history.set_visibility(inbound.thread, targets, level)
         except Exception:
-            log.debug("failed to set chat visibility chat=%s", inbound.chat_id, exc_info=True)
+            log.debug("failed to set chat visibility chat=%s", inbound.thread, exc_info=True)
         ids = await self.agent.memory.capture(
             [
                 {"role": "user", "content": text},
                 {"role": "assistant", "content": reply or ""},
             ],
             person_id=owner,
-            chat_id=inbound.chat_id,
-            audience="private" if inbound.is_dm else "group",
+            thread_id=inbound.thread,
+            audience="private" if bool(inbound.hints.get("dm")) else "group",
             source="turn",
             level=level,
             owner_id=owner,
@@ -269,7 +269,7 @@ class PrivacyService:
         question = verdict.question or self._text("ask_level")
         approval = await self.agent.approvals.create(
             kind="privacy",
-            chat_id=inbound.chat_id,
+            thread_id=inbound.thread,
             sender=self.agent._sender(inbound),
             gateway=getattr(gateway, "name", "") or "",
             tool="memory",
@@ -277,8 +277,8 @@ class PrivacyService:
             payload={"level": verdict.level, "question": question},
             summary=question,
         )
-        log.info("privacy pending chat=%s approval=%s", inbound.chat_id, approval.id)
-        await self.agent.send_text(inbound.chat_id, question, gateway=gateway)
+        log.info("privacy pending chat=%s approval=%s", inbound.thread, approval.id)
+        await self.agent.send_text(inbound.thread, question, gateway=gateway)
 
     async def _assess(self, text: str) -> PrivacyVerdict | None:
         """Label the privacy of one turn; None when the model gives no JSON twice."""
@@ -310,10 +310,10 @@ class PrivacyService:
     # ------------------------------------------------------------- pending
 
     async def handle_pending(self, inbound, gateway, sender: str) -> bool:
-        pending = self.agent.approvals.latest(inbound.chat_id, sender)
+        pending = self.agent.approvals.latest(inbound.thread, sender)
         if pending is None or pending.kind not in KINDS:
             return False
-        answer = await self._resolve_answer(inbound.message.text, pending.kind)
+        answer = await self._resolve_answer(inbound.payload.text, pending.kind)
         if pending.kind == "privacy":
             await self._resolve_privacy(inbound, gateway, pending, answer, sender)
         else:
@@ -329,24 +329,24 @@ class PrivacyService:
             for memory_id in ids:
                 await self.agent.memory.forget(
                     memory_id,
-                    requester_id=inbound.person_id or sender,
-                    chat_id=inbound.chat_id,
+                    requester_id=inbound.actor or sender,
+                    thread_id=inbound.thread,
                 )
             self.agent.approvals.mark(pending.id, "denied", sender, "privacy declined")
-            await self.agent.send_text(inbound.chat_id, self._text("keep"), gateway=gateway)
+            await self.agent.send_text(inbound.thread, self._text("keep"), gateway=gateway)
             return
         level = answer.get("level")
         if level is None and kind == "yes":
             level = pending.payload.get("level")
         if level is None:
-            await self.agent.send_text(inbound.chat_id, self._text("unclear"), gateway=gateway)
+            await self.agent.send_text(inbound.thread, self._text("unclear"), gateway=gateway)
             return
         level = clamp_level(level, self.config.default_level)
         for memory_id in ids:
             await self.agent.memory.set_privacy(memory_id, level=level, confirmed=True)
         self.agent.approvals.mark(pending.id, "approved", sender, f"level {level}")
         await self.agent.send_text(
-            inbound.chat_id, self._text("saved", level=level), gateway=gateway
+            inbound.thread, self._text("saved", level=level), gateway=gateway
         )
 
     async def _resolve_disclosure(
@@ -355,17 +355,17 @@ class PrivacyService:
         kind = answer.get("kind")
         if kind == "no":
             self.agent.approvals.mark(pending.id, "denied", sender, "disclosure declined")
-            await self.agent.send_text(inbound.chat_id, self._text("keep"), gateway=gateway)
+            await self.agent.send_text(inbound.thread, self._text("keep"), gateway=gateway)
             return
         if kind != "yes":
-            await self.agent.send_text(inbound.chat_id, self._text("unclear"), gateway=gateway)
+            await self.agent.send_text(inbound.thread, self._text("unclear"), gateway=gateway)
             return
         self.agent.approvals.mark(pending.id, "approved", sender, "disclosure allowed")
         reply = str(pending.payload.get("reply") or "")
         if not reply.strip():
-            await self.agent.send_text(inbound.chat_id, self._text("empty"), gateway=gateway)
+            await self.agent.send_text(inbound.thread, self._text("empty"), gateway=gateway)
             return
-        await self.agent.send_text(inbound.chat_id, reply, gateway=gateway)
+        await self.agent.send_text(inbound.thread, reply, gateway=gateway)
 
     async def _resolve_answer(self, text: str, kind: str) -> dict:
         if self.agent.llm is not None:

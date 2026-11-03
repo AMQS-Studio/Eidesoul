@@ -12,7 +12,7 @@ from . import CommandContext
 async def _pending(ctx: CommandContext) -> str:
     lang = ctx.lang
     ctx.agent.approvals.expire()
-    rows = ctx.agent.approvals.pending(ctx.chat_id, ctx.sender)
+    rows = ctx.agent.approvals.pending(ctx.thread_id, ctx.sender)
     if not rows:
         return t("command.pending.none", lang)
     lines = [t("command.pending.title", lang, count=len(rows))]

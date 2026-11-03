@@ -7,14 +7,14 @@
 - **Context:** follows from ADR-0001 (canonical), ADR-0003 (worker & consolidation), ADR-0004 (TTL for non-`ok` states); default-on memory needs an age policy
 - **Supersedes:** —
 - **Related:** ADR-0006 (group privacy), ADR-0008 (integrity), ADR-0010, ADR-0011 (purge job), ADR-0016 (column retention)
-- **Amendments:** 2026-11-03 — owner decision: purge/`forget` also removes the **library copy** (`mem0_history.db`: the `history`/`messages` rows), because that file stores `old_memory`/`new_memory` including already-deleted text. 2026-11-03 — audit: `commitment` removed from `core_durability_pin_categories` (an unconditional pin contradicted the rule "pin only while the task is open"); added `commitment_pin_when_open: true`. The retention columns are now final in ADR-0016 §4.2. 2026-11-03 — the `skills`/`skill_revisions` artefacts (ADR-0020) entered §4.7: archived when unused, append-only revisions.
+- **Amendments:** 2026-11-03 — owner decision: purge/`forget` also removes the **library copy** (`mem0_history.db`: the `history`/`messages` rows), because that file stores `old_memory`/`new_memory` including already-deleted text. 2026-11-03 — audit: `commitment` removed from `core_durability_pin_categories` (an unconditional pin contradicted the rule "pin only while the task is open"); added `commitment_pin_when_open: true`. The retention columns are now final in ADR-0016 §4.2. 2026-11-03 — the `skills`/`skill_revisions` artefacts (ADR-0020) entered §4.7: archived when unused, append-only revisions. 2026-11-03 — ADR-0000 §4.4 rename: `chat_eras` → `thread_eras`.
 - **Location note:** ADR lives in `docs/v0.1.0/adr/engine/`; the Indonesian copy is `docs/v0.1.0/adr/engine/id/0005-retention-decay.md`.
 
 ---
 
 ## 1. Context
 
-- No retention at all: no `delete(messages)`; memory, approvals, `chat_eras`, `config_changes`, and the media workspace grow forever.
+- No retention at all: no `delete(messages)`; memory, approvals, `thread_eras`, `config_changes`, and the media workspace grow forever.
 - `veto` hides and `forget` removes through the adapter — but there is no age policy.
 - ADR-0004 sets a 7-day TTL for `pending`/`failed`/`not_worth`; ADR-0005 completes the policy for lines with `state='ok'`.
 - Consolidation (ADR-0003 cool/cold, ADR-0010 reflection) will only mature further, so the base TTL may be long (365 days) without making memory dirty.
@@ -155,7 +155,7 @@ Without content. For audits, and to answer “did we ever have this?”.
 | `turn_actions` | 30 days | Audit of side effects |
 | Approvals | 30 days after completion | The execution TTL remains 900 seconds |
 | `config_changes` | 365 days | Operator audit |
-| `chat_eras` | Follows its content level | It holds content, not neutral metadata |
+| `thread_eras` | Follows its content level | It holds content, not neutral metadata |
 | `skills` `skill_revisions` | Archived when unused (`skills.use_renewal_days`) | Derived procedure; append-only revisions, `archived` not deleted (ADR-0020) |
 
 ## 5. Configuration

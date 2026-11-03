@@ -18,7 +18,7 @@ async def gender(ctx: CommandContext) -> str:
         return t("command.gender.usage", lang)
     name = " ".join(parts[:-1]).strip()
     affect = ctx.agent.affect
-    person_id = affect.person_by_name(ctx.chat_id, name) if affect is not None else None
+    person_id = affect.person_by_name(ctx.thread_id, name) if affect is not None else None
     if not person_id:
         return t("command.gender.unknown", lang, name=name)
     affect.set_gender(person_id, label, 1.0, "manual")

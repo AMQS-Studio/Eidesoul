@@ -19,7 +19,8 @@ from .commands import CommandContext
 from .config import Config
 from .context import (
     AUTHOR_BOT,
-    ChatMessage,
+    TEXT_EXT,
+    Message,
     WorkingMemory,
     build_user_content,
     clean,
@@ -38,7 +39,15 @@ from .decision import (
 from .guard import SafetyPolicy, SandboxGuard, build_safety
 from .i18n import reload_catalogs, t
 from .identity import IdentityStore
-from .inbound import Gateway, GatewayError, Inbound
+from .inbound import (
+    AUTHORIZATION,
+    CONSENT,
+    Action,
+    GatewayCore,
+    GatewayError,
+    Percept,
+    Rich,
+)
 from .knowledge import select_facts
 from .llm import LLM
 from .memory import MemoryBackend, MemoryContext, memory_status
@@ -82,8 +91,31 @@ def command_body(text: str, bot_name: str, handles: set[str]) -> str:
     return body
 
 
-def _stale(answered: dict[str, frozenset[str]], chat_id: str, message: ChatMessage) -> bool:
-    return bool(message.id) and message.id in answered.get(chat_id, frozenset())
+def _stale(answered: dict[str, frozenset[str]], thread_id: str, message: Message) -> bool:
+    return bool(message.id) and message.id in answered.get(thread_id, frozenset())
+
+
+FILE_TEXT_SIZE = 512 * 1024
+FILE_TEXT_CHARS = 4000
+
+
+def file_fallback_text(path: Path, caption: str, language: str) -> str:
+    """What a body without `Rich` delivers instead of the file (ADR-0018 §4.2)."""
+    label = t(
+        "agent.file_fallback",
+        language,
+        name=path.name,
+        caption=f" — {caption}" if caption else "",
+    )
+    if path.suffix.lower() not in TEXT_EXT:
+        return label
+    try:
+        if not path.is_file() or path.stat().st_size > FILE_TEXT_SIZE:
+            return label
+        body = path.read_text(encoding="utf-8", errors="replace").strip()
+    except OSError:
+        return label
+    return f"{label}\n{body[:FILE_TEXT_CHARS]}" if body else label
 
 
 class Agent:
@@ -107,7 +139,7 @@ class Agent:
         ambient=None,
         currents=None,
         vibe=None,
-        gateways: tuple[Gateway, ...] = (),
+        gateways: tuple[GatewayCore, ...] = (),
         documents=None,
         identity=None,
         approvals: ApprovalStore | None = None,
@@ -169,17 +201,20 @@ class Agent:
         self.tasks.add(task)
         task.add_done_callback(self.tasks.discard)
 
-    def _role_set(self, inbound: Inbound) -> tuple[Role, ...]:
-        if inbound.role_override:
-            return self.config.roles.override(inbound.role_override)
-        return self.config.roles.for_person(inbound.person_id)
+    def _role_set(self, inbound: Percept) -> tuple[Role, ...]:
+        declared = inbound.hints.get("roles") or ()
+        names = (declared,) if isinstance(declared, str) else tuple(str(item) for item in declared)
+        if names:
+            return self.config.roles.override(names)
+        return self.config.roles.for_person(inbound.actor)
 
     @staticmethod
-    def _sender(inbound: Inbound) -> str:
-        return inbound.message.sender_id or inbound.message.sender_address or inbound.chat_id
+    def _sender(inbound: Percept) -> str:
+        payload = inbound.payload
+        return payload.sender_id or payload.sender_address or inbound.thread
 
     async def _target(
-        self, inbound: Inbound, gateway: Gateway, messages, message
+        self, inbound: Percept, gateway: GatewayCore, messages, message
     ) -> tuple[str, float, str]:
         """Target gender: manual override, then typing style, avatar only when requested."""
         recent = [
@@ -191,7 +226,7 @@ class Agent:
         stored = ("", 0.0, "")
         if self.affect is not None:
             try:
-                stored = self.affect.gender(inbound.person_id)
+                stored = self.affect.gender(inbound.actor)
             except Exception:
                 log.debug("gender: failed to read the stored value", exc_info=True)
         if stored[0] and stored[2] == "manual":
@@ -214,29 +249,29 @@ class Agent:
         )
         if self.affect is not None and (target, confidence, source) != tuple(stored):
             try:
-                self.affect.set_gender(inbound.person_id, target, confidence, source)
+                self.affect.set_gender(inbound.actor, target, confidence, source)
             except Exception:
                 log.debug("gender: failed to save the label", exc_info=True)
         return (target, confidence, source)
 
     def tool_context(
         self,
-        chat_id: str,
+        thread_id: str,
         sender: str,
         roles: tuple[Role, ...],
-        gateway: Gateway | None,
+        gateway: GatewayCore | None,
         *,
         approved: bool = False,
         approval_id: str = "",
         request: str = "",
         person_id: str = "",
-        is_dm: bool = False,
+        direct: bool = False,
     ) -> ToolContext:
         return ToolContext(
             self.config,
             roles,
             tool_patterns(roles),
-            chat_id=chat_id,
+            thread_id=thread_id,
             sender=sender,
             request=request,
             history=self.history,
@@ -250,26 +285,26 @@ class Agent:
             approved=approved,
             approval_id=approval_id,
             person_id=person_id,
-            is_dm=is_dm,
+            direct=direct,
         )
 
     def command_context(
         self,
-        chat_id: str,
+        thread_id: str,
         sender: str,
         roles: tuple[Role, ...],
-        gateway: Gateway | None,
+        gateway: GatewayCore | None,
         args: str = "",
-        inbound: Inbound | None = None,
+        inbound: Percept | None = None,
     ) -> CommandContext:
         specs = tools_for(self.tools, roles) + (self.hub.specs(roles) if self.hub else [])
         return CommandContext(
             agent=self,
             gateway=gateway,
             roles=roles,
-            chat_id=chat_id,
+            thread_id=thread_id,
             sender=sender,
-            is_dm=inbound.is_dm if inbound is not None else True,
+            direct=bool(inbound.hints.get("dm", False)) if inbound is not None else True,
             args=args,
             commands=tuple(commands_for(self.commands, roles)),
             tools=tuple(specs),
@@ -282,14 +317,16 @@ class Agent:
             specs += self.hub.specs(roles)
         return specs
 
-    def _decision_transcript(self, chat_id: str) -> str:
-        entries: list[ChatMessage] = []
+    def _decision_transcript(self, thread_id: str) -> str:
+        entries: list[Message] = []
         try:
-            entries = list(self.history.recent(chat_id, DECISION_HISTORY))
+            entries = list(self.history.recent(thread_id, DECISION_HISTORY))
         except Exception:  # a broken archive must not fail the decision
-            log.debug("failed to read the archive for the decision chat=%s", chat_id, exc_info=True)
+            log.debug(
+                "failed to read the archive for the decision chat=%s", thread_id, exc_info=True
+            )
         if not entries:
-            entries = self.windows.get(chat_id)[-DECISION_FALLBACK_HISTORY:]
+            entries = self.windows.get(thread_id)[-DECISION_FALLBACK_HISTORY:]
         lines = [
             prompt_entry(entry, self.soul.name, DECISION_LINE_CHARS) for entry in entries
         ]
@@ -297,21 +334,21 @@ class Agent:
 
     # ------------------------------------------------------------ outbound
 
-    def _self_sender_id(self, gateway: Gateway) -> str:
+    def _self_sender_id(self, gateway: GatewayCore) -> str:
         return next(iter(sorted(gateway.self_handles())), "")
 
     async def deliver_text(
         self,
-        chat_id: str,
+        thread_id: str,
         text: str,
         *,
-        gateway: Gateway,
-        reply: Inbound | None = None,
+        gateway: GatewayCore,
+        reply: Percept | None = None,
     ) -> str:
-        message_id = await gateway.send_text(chat_id, text, reply=reply)
+        message_id = await gateway.send_text(thread_id, text, reply=reply)
         self.windows.append(
-            chat_id,
-            ChatMessage(
+            thread_id,
+            Message(
                 id=message_id,
                 sender_name=self.soul.name,
                 sender_id=self._self_sender_id(gateway),
@@ -325,18 +362,26 @@ class Agent:
 
     async def deliver_file(
         self,
-        chat_id: str,
+        thread_id: str,
         path: Path,
         caption: str = "",
         *,
-        gateway: Gateway,
-        reply: Inbound | None = None,
+        gateway: GatewayCore,
+        reply: Percept | None = None,
     ) -> str:
-        message_id = await gateway.send_file(chat_id, path, caption, reply=reply)
+        path = Path(path)
+        if not isinstance(gateway, Rich):
+            return await self.deliver_text(
+                thread_id,
+                file_fallback_text(path, caption, self.soul.language),
+                gateway=gateway,
+                reply=reply,
+            )
+        message_id = await gateway.send_file(thread_id, path, caption, reply=reply)
         note = f"(file terkirim: {path.name}{f' — {caption}' if caption else ''})"
         self.windows.append(
-            chat_id,
-            ChatMessage(
+            thread_id,
+            Message(
                 id=message_id,
                 sender_name=self.soul.name,
                 sender_id=self._self_sender_id(gateway),
@@ -348,15 +393,17 @@ class Agent:
         )
         return message_id
 
-    async def deliver_reaction(
-        self, chat_id: str, message_id: str, *, gateway: Gateway
+    async def deliver_sticker(
+        self, thread_id: str, message_id: str, *, gateway: GatewayCore
     ) -> str | None:
-        label = await gateway.send_reaction(chat_id, message_id)
+        if not isinstance(gateway, Rich):
+            return None
+        label = await gateway.send_sticker(thread_id, message_id)
         if label:
             self.windows.append(
-                chat_id,
-                ChatMessage(
-                    id=f"react-{time.time_ns()}",
+                thread_id,
+                Message(
+                    id=f"sticker-{time.time_ns()}",
                     sender_name=self.soul.name,
                     sender_id=self._self_sender_id(gateway),
                     when=datetime.now(),
@@ -367,7 +414,16 @@ class Agent:
             )
         return label
 
-    async def send_text(self, chat_id: str, text: str, *, gateway: Gateway | None) -> str:
+    async def _typing(self, gateway: GatewayCore, thread_id: str, composing: bool) -> None:
+        """A body without `Rich` has no presence indicator; skip, never fail."""
+        if isinstance(gateway, Rich):
+            await gateway.typing(thread_id, composing)
+
+    async def _prepare_media(self, gateway: GatewayCore, thread_id: str, entry: Message) -> None:
+        if isinstance(gateway, Rich):
+            await gateway.prepare_media(thread_id, entry)
+
+    async def send_text(self, thread_id: str, text: str, *, gateway: GatewayCore | None) -> str:
         """Tool-facing: render the gateway dialect, split, send, return ok:/error:."""
         if gateway is None:
             return "error: gateway is not available"
@@ -379,20 +435,20 @@ class Agent:
             return "error: empty text"
         try:
             for chunk in chunks:
-                await self.deliver_text(chat_id, chunk, gateway=gateway)
+                await self.deliver_text(thread_id, chunk, gateway=gateway)
         except GatewayError as exc:
             return f"error: failed to send text: {exc}"
-        name = gateway.chat_name(chat_id)
+        name = gateway.chat_name(thread_id)
         suffix = f" ({len(chunks)} parts)" if len(chunks) > 1 else ""
-        return f"ok: text sent to {name or chat_id}{suffix}"
+        return f"ok: text sent to {name or thread_id}{suffix}"
 
     async def send_file(
-        self, chat_id: str, path: Path, caption: str = "", *, gateway: Gateway | None
+        self, thread_id: str, path: Path, caption: str = "", *, gateway: GatewayCore | None
     ) -> str:
         if gateway is None:
             return "error: gateway is not available"
         try:
-            await self.deliver_file(chat_id, Path(path), caption, gateway=gateway)
+            await self.deliver_file(thread_id, Path(path), caption, gateway=gateway)
         except GatewayError as exc:
             return f"error: failed to send file: {exc}"
         except OSError as exc:
@@ -401,28 +457,37 @@ class Agent:
 
     # ------------------------------------------------------------- turn
 
-    def _identify(self, inbound: Inbound, gateway: Gateway) -> Inbound:
-        """Core-owned identity: the gateway hands in an address, the core assigns the id."""
-        raw = inbound.person_address or inbound.message.sender_address or self._sender(inbound)
+    def _identify(self, inbound: Percept, gateway: GatewayCore) -> Percept:
+        """Core-owned identity: the body hands in an address, the core assigns the id."""
+        raw = (
+            inbound.actor
+            or inbound.payload.sender_id
+            or inbound.payload.sender_address
+            or self._sender(inbound)
+        )
+        source = inbound.source or gateway.name
         try:
-            return replace(inbound, person_id=self.identity.resolve(gateway.name, raw))
+            return replace(inbound, actor=self.identity.resolve(source, raw))
         except Exception:
-            log.exception("identity resolve failed gateway=%s", gateway.name)
-            return replace(inbound, person_id=inbound.person_id or raw)
+            log.exception("identity resolve failed source=%s", source)
+            return replace(inbound, actor=inbound.actor or raw)
 
-    async def handle(self, inbound: Inbound, gateway: Gateway) -> None:
-        message = inbound.message
-        chat_id = inbound.chat_id
-        self.windows.append(chat_id, message)
+    async def handle(self, inbound: Percept, gateway: GatewayCore) -> list[Action]:
+        """One turn. Returns the actions the turn took; the engine has no transport branch."""
+        actions: list[Action] = []
+        message = inbound.payload
+        thread_id = inbound.thread
+        self.windows.append(thread_id, message)
         if self.ambient is not None:
-            self.ambient.note(chat_id, message)
-        if message.outgoing or inbound.is_self:
-            return
+            self.ambient.note(thread_id, message)
+        if message.outgoing or bool(inbound.hints.get("self")):
+            return actions
         age = time.time() - message.when.timestamp()
-        if gateway.backlog_seconds > 0 and age > gateway.backlog_seconds:
-            self.backlog[chat_id] = self.backlog.get(chat_id, 0) + 1
-            log.info("old message chat=%s age=%.0fs: archive only", chat_id, age)
-            return
+        backlog = float(getattr(gateway, "backlog_seconds", 0.0) or 0.0)
+        if backlog > 0 and age > backlog:
+            self.backlog[thread_id] = self.backlog.get(thread_id, 0) + 1
+            log.info("old message chat=%s age=%.0fs: archive only", thread_id, age)
+            return actions
 
         # Only a message this turn acts on earns an identity: the bot's own echo must not mint one.
         inbound = self._identify(inbound, gateway)
@@ -435,43 +500,49 @@ class Agent:
         if not is_command and await self.privacy.handle_pending(
             inbound, gateway, self._sender(inbound)
         ):
-            return
-        if not is_command and not crisis and self.quiet.get(chat_id, 0.0) > time.time():
-            log.info("quiet chat=%s: message recorded without a reply", chat_id)
-            return
+            return actions
+        if not is_command and not crisis and self.quiet.get(thread_id, 0.0) > time.time():
+            log.info("quiet chat=%s: message recorded without a reply", thread_id)
+            return actions
         if not is_command and not crisis and self.llm is None:
-            return
+            return actions
         head_word, _, rest = body[1:].partition(" ") if is_command else ("", "", "")
         name = head_word.lower()
-        direct = inbound.is_dm or inbound.is_mention or inbound.is_reply
+        direct = (
+            bool(inbound.hints.get("dm"))
+            or bool(inbound.hints.get("mention"))
+            or bool(inbound.hints.get("reply"))
+        )
 
         queue = contextlib.nullcontext() if is_command else self.turn_lock
         async with queue:
-            if not is_command and _stale(self.answered, chat_id, message):
-                log.info("stale message chat=%s: already covered by an earlier burst", chat_id)
-                return
-            missed = self.backlog.pop(chat_id, 0) if not is_command else 0
+            if not is_command and _stale(self.answered, thread_id, message):
+                log.info("stale message chat=%s: already covered by an earlier burst", thread_id)
+                return actions
+            missed = self.backlog.pop(thread_id, 0) if not is_command else 0
             away = away_block(missed)
             vibe = ""
             if self.vibe is not None and not is_command and not crisis and text.strip():
                 try:
-                    vibe = await self.vibe.observe(chat_id, text)
+                    vibe = await self.vibe.observe(thread_id, text)
                 except Exception:
-                    log.exception("failed to update vibe chat=%s", chat_id)
+                    log.exception("failed to update vibe chat=%s", thread_id)
             emotion_block = ""
             turn = None
             if not is_command and self.affect is not None:
                 try:
-                    turn = self.affect.turn_start(chat_id, message.id)
+                    turn = self.affect.turn_start(thread_id, message.id)
                 except Exception:
-                    log.exception("failed to open the emotion turn chat=%s", chat_id)
+                    log.exception("failed to open the emotion turn chat=%s", thread_id)
                 try:
-                    emotion_block = self.affect.prompt(chat_id, inbound.person_id)
+                    emotion_block = self.affect.prompt(thread_id, inbound.actor)
                 except Exception:
-                    log.exception("failed to read the emotion state chat=%s", chat_id)
+                    log.exception("failed to read the emotion state chat=%s", thread_id)
 
-            called = inbound.is_mention or inbound.is_reply
-            unprompted = not inbound.is_dm and not is_command and not crisis and not called
+            called = bool(inbound.hints.get("mention")) or bool(inbound.hints.get("reply"))
+            unprompted = (
+                not bool(inbound.hints.get("dm")) and not is_command and not crisis and not called
+            )
             decision: Decision | None
             safety = ""
             if crisis:
@@ -502,21 +573,21 @@ class Agent:
             else:
                 decision = await decide(
                     self.llm,
-                    chat_id=chat_id,
-                    chat_name=gateway.chat_name(chat_id),
+                    thread_id=thread_id,
+                    chat_name=gateway.chat_name(thread_id),
                     current=prompt_entry(message, self.soul.name, DECISION_LINE_CHARS),
-                    transcript=self._decision_transcript(chat_id),
+                    transcript=self._decision_transcript(thread_id),
                     emotion=turn,
                     relationship=emotion_block,
-                    is_dm=inbound.is_dm,
-                    is_mention=inbound.is_mention,
-                    is_reply=inbound.is_reply,
+                    direct=bool(inbound.hints.get("dm")),
+                    mentioned=bool(inbound.hints.get("mention")),
+                    replied=bool(inbound.hints.get("reply")),
                     away=away,
                     vibe=vibe,
                     soul=self.soul,
                 )
                 if decision is None:
-                    log.warning("empty decision, continuing without a tone: %s", chat_id)
+                    log.warning("empty decision, continuing without a tone: %s", thread_id)
                     decision = Decision(
                         addressed="me" if direct else "unknown",
                         act="reply" if direct else "ignore",
@@ -536,28 +607,28 @@ class Agent:
                             annoyed = next(
                                 (
                                     float(row["annoyance"])
-                                    for row in self.affect.known_people(chat_id, 20)
-                                    if row["person_id"] == inbound.person_id
+                                    for row in self.affect.known_people(thread_id, 20)
+                                    if row["person_id"] == inbound.actor
                                 ),
                                 0.0,
                             )
                         except Exception:
-                            log.debug("failed to read annoyance chat=%s", chat_id, exc_info=True)
+                            log.debug("failed to read annoyance chat=%s", thread_id, exc_info=True)
                     grounded = ground_tone(decision, turn, annoyed)
                     if grounded.tone != decision.tone:
                         log.info(
                             "tone %s->%s chat=%s: feeling does not match",
                             decision.tone,
                             grounded.tone,
-                            chat_id,
+                            thread_id,
                         )
                     decision = grounded
 
             if not is_command and self.affect is not None:
                 try:
                     self.affect.turn_end(
-                        chat_id,
-                        inbound.person_id,
+                        thread_id,
+                        inbound.actor,
                         message.sender_name,
                         message.text,
                         roles[0].name,
@@ -566,27 +637,36 @@ class Agent:
                         message.id,
                     )
                 except Exception:
-                    log.exception("failed to close the emotion turn chat=%s", chat_id)
+                    log.exception("failed to close the emotion turn chat=%s", thread_id)
 
             if not is_command:
                 if decision.act == "ignore":
                     log.info(
                         "diam chat=%s addressed=%s reason=%s",
-                        chat_id,
+                        thread_id,
                         decision.addressed,
                         decision.reason,
                     )
-                    return
+                    return actions
                 if decision.act == "react":
-                    await self.deliver_reaction(chat_id, message.id, gateway=gateway)
-                    return
+                    label = await self.deliver_sticker(thread_id, message.id, gateway=gateway)
+                    if label:
+                        actions.append(
+                            Action(
+                                capability="send_sticker",
+                                target=thread_id,
+                                payload=label,
+                                approval_class=CONSENT,
+                            )
+                        )
+                    return actions
 
-            await gateway.typing(chat_id, True)
-            typing = asyncio.create_task(self._keep_typing(chat_id, gateway))
+            await self._typing(gateway, thread_id, True)
+            typing = asyncio.create_task(self._keep_typing(thread_id, gateway))
             try:
                 log.info(
                     "message chat=%s sender=%s roles=%s act=%s mode=%s tone=%s addressed=%s",
-                    chat_id,
+                    thread_id,
                     message.sender_id,
                     ",".join(role.name for role in roles),
                     getattr(decision, "act", "command"),
@@ -603,7 +683,7 @@ class Agent:
                     reply = await self._command(
                         name,
                         rest.strip(),
-                        chat_id,
+                        thread_id,
                         self._sender(inbound),
                         roles,
                         gateway,
@@ -618,8 +698,8 @@ class Agent:
                         mood = ((float(turn["pleasure"]) + 1.0) / 2.0, float(turn["arousal"]))
                     try:
                         memory_ctx = await self.memory.context(
-                            person_id=inbound.person_id,
-                            chat_id=chat_id,
+                            person_id=inbound.actor,
+                            thread_id=thread_id,
                             query=message.text,
                             mood=mood,
                             max_items=self.config.memory.max_items,
@@ -627,13 +707,13 @@ class Agent:
                         )
                         memory_block = memory_ctx.text
                     except Exception:
-                        log.exception("failed to read memory chat=%s", chat_id)
+                        log.exception("failed to read memory chat=%s", thread_id)
                     actions_block = ""
                     if self.ledger is not None:
                         try:
                             actions_block = self.ledger.actions_context()
                         except Exception:
-                            log.exception("failed to read the action ledger chat=%s", chat_id)
+                            log.exception("failed to read the action ledger chat=%s", thread_id)
                     skill_block = ""
                     if self.skills is not None and any(spec.name == "skill" for spec in specs):
                         try:
@@ -642,25 +722,29 @@ class Agent:
                             log.exception("failed to read the skill index")
                     if self.affect is not None:
                         try:
-                            topic_block = self.affect.topic_block(chat_id)
+                            topic_block = self.affect.topic_block(thread_id)
                         except Exception:
-                            log.exception("failed to read the chat topic chat=%s", chat_id)
+                            log.exception("failed to read the chat topic chat=%s", thread_id)
                     if self.style is not None:
                         try:
-                            style_block = self.style.profile(chat_id)
-                            person_style = self.style.person_profile(inbound.person_id)
+                            style_block = self.style.profile(thread_id)
+                            person_style = self.style.person_profile(inbound.actor)
                         except Exception:
-                            log.debug("style: failed to read the chat profile chat=%s", chat_id, exc_info=True)
+                            log.debug(
+                                "style: failed to read the chat profile chat=%s",
+                                thread_id,
+                                exc_info=True,
+                            )
                     messages = assembly.thread(
                         self.history,
-                        chat_id,
+                        thread_id,
                         message,
                         max_chars=self.config.prompt.thread_chars,
-                        window=self.windows.get(chat_id),
+                        window=self.windows.get(thread_id),
                     )
                     for entry in messages:
                         with contextlib.suppress(Exception):
-                            await gateway.prepare_media(chat_id, entry)
+                            await self._prepare_media(gateway, thread_id, entry)
                     covered = frozenset(entry.id for entry in messages if entry.id)
                     target, confidence, source = await self._target(
                         inbound, gateway, messages, message
@@ -705,22 +789,22 @@ class Agent:
                     try:
                         content = await build_user_content(
                             self.config,
-                            chat_id,
+                            thread_id,
                             messages,
                             message,
-                            chat_name=gateway.chat_name(chat_id),
+                            chat_name=gateway.chat_name(thread_id),
                         )
                     except Exception:
-                        log.exception("failed to assemble the payload chat=%s", chat_id)
+                        log.exception("failed to assemble the payload chat=%s", thread_id)
                         content = fallback_content(self.config, message)
                     tool_ctx = self.tool_context(
-                        chat_id,
+                        thread_id,
                         self._sender(inbound),
                         roles,
                         gateway,
                         request=message.text,
-                        person_id=inbound.person_id,
-                        is_dm=inbound.is_dm,
+                        person_id=inbound.actor,
+                        direct=bool(inbound.hints.get("dm")),
                     )
                     bonuses: dict[str, float] = {}
                     if self.affect is not None:
@@ -728,13 +812,13 @@ class Agent:
                             person_row = next(
                                 (
                                     row
-                                    for row in self.affect.known_people(chat_id, 20)
-                                    if row["person_id"] == inbound.person_id
+                                    for row in self.affect.known_people(thread_id, 20)
+                                    if row["person_id"] == inbound.actor
                                 ),
                                 None,
                             )
                             bonuses = {
-                                "topic": 0.3 if self.affect.pending(chat_id) > 0 else 0.0,
+                                "topic": 0.3 if self.affect.pending(thread_id) > 0 else 0.0,
                                 "person_style": (
                                     0.25
                                     if person_row and int(person_row["interactions"]) >= 15
@@ -748,7 +832,11 @@ class Agent:
                                 "skills": 0.2 if decision.mode == "professional" else 0.0,
                             }
                         except Exception:
-                            log.debug("failed to compute the salience bonus chat=%s", chat_id, exc_info=True)
+                            log.debug(
+                                "failed to compute the salience bonus chat=%s",
+                                thread_id,
+                                exc_info=True,
+                            )
                             bonuses = {}
                     bonuses["memory"] = (
                         0.35
@@ -778,7 +866,7 @@ class Agent:
                             research=research_block(self.config.soul.locale),
                             currents=currents_block,
                             sender=message.sender_name,
-                            is_dm=inbound.is_dm,
+                            direct=bool(inbound.hints.get("dm")),
                             mode=decision.mode,
                             tone=decision.tone,
                             decision_reason=decision.reason,
@@ -788,7 +876,7 @@ class Agent:
                         content,
                         specs,
                         tool_ctx,
-                        session=f"eidesoul-{chat_id}",
+                        session=f"eidesoul-{thread_id}",
                     )
                     reply = (
                         answer
@@ -815,13 +903,13 @@ class Agent:
                             reply,
                             latest=message.text,
                             recent=recent,
-                            is_dm=inbound.is_dm,
+                            direct=bool(inbound.hints.get("dm")),
                             tone=decision.tone if decision is not None else "neutral",
-                            session=f"eidesoul-character-{chat_id}",
+                            session=f"eidesoul-character-{thread_id}",
                         )
                         log.info(
                             "character chat=%s status=%s",
-                            chat_id,
+                            thread_id,
                             "rewrite" if reply != before else "pass",
                         )
                         if not reply.strip():
@@ -835,14 +923,14 @@ class Agent:
                             target=target,
                             confidence=confidence,
                             latest=message.text,
-                            session=f"eidesoul-character-{chat_id}",
+                            session=f"eidesoul-character-{thread_id}",
                             is_professional=bool(
                                 decision is not None and decision.mode == "professional"
                             ),
                         )
                         log.info(
                             "level chat=%s target=%s/%s status=%s",
-                            chat_id,
+                            thread_id,
                             target,
                             f"{confidence:.2f}",
                             "regulated" if reply != before else "pass",
@@ -854,12 +942,12 @@ class Agent:
                         gateway,
                     )
                     if review.handled:
-                        return
+                        return actions
                     reply = review.reply
                     if reply and tool_ctx.cross_reads and guard.cross_chat_leak(
                         reply, tool_ctx.cross_reads
                     ):
-                        log.warning("cross-chat verbatim reply blocked chat=%s", chat_id)
+                        log.warning("cross-chat verbatim reply blocked chat=%s", thread_id)
                         reply = t("agent.cross_chat_blocked", self.soul.language)
 
                 professional = bool(decision is not None and decision.mode == "professional")
@@ -882,19 +970,29 @@ class Agent:
                 delivered_ids: list[str] = []
                 for index, chunk in enumerate(chunks):
                     if pace:
-                        await gateway.typing(chat_id, True)
+                        await self._typing(gateway, thread_id, True)
                         await asyncio.sleep(typing_delay(chunk, humanize))
                     try:
                         delivered_ids.append(
                             await self.deliver_text(
-                                chat_id,
+                                thread_id,
                                 chunk,
                                 gateway=gateway,
                                 reply=inbound if (quote_all or index == 0) else None,
                             )
                         )
+                        actions.append(
+                            Action(
+                                capability="send_text",
+                                target=thread_id,
+                                payload=chunk,
+                                approval_class=(
+                                    CONSENT if thread_id == inbound.thread else AUTHORIZATION
+                                ),
+                            )
+                        )
                     except GatewayError:
-                        log.exception("failed to send the reply to %s", chat_id)
+                        log.exception("failed to send the reply to %s", thread_id)
                         delivered = False
                         break
                     if pace and index < len(chunks) - 1:
@@ -902,7 +1000,7 @@ class Agent:
                             max(0.0, float(humanize.between_delay)) + random.uniform(0, 0.4)
                         )
                 if delivered and covered:
-                    self.answered[chat_id] = covered
+                    self.answered[thread_id] = covered
                 self.runtime.pending_approvals = self.approvals.count_pending()
                 self.approvals.expire()
                 capture = (
@@ -925,22 +1023,23 @@ class Agent:
                 typing.cancel()
                 with contextlib.suppress(asyncio.CancelledError):
                     await typing
-                await gateway.typing(chat_id, False)
+                await self._typing(gateway, thread_id, False)
+        return actions
 
-    async def _keep_typing(self, chat_id: str, gateway: Gateway) -> None:
+    async def _keep_typing(self, thread_id: str, gateway: GatewayCore) -> None:
         while True:
             await asyncio.sleep(TYPING_REFRESH)
-            await gateway.typing(chat_id, True)
+            await self._typing(gateway, thread_id, True)
 
     async def _command(
         self,
         name: str,
         args: str,
-        chat_id: str,
+        thread_id: str,
         sender: str,
         roles: tuple[Role, ...],
-        gateway: Gateway,
-        inbound: Inbound,
+        gateway: GatewayCore,
+        inbound: Percept,
     ) -> str:
         if not name:
             return t("agent.help_hint", self.soul.language)
@@ -965,7 +1064,7 @@ class Agent:
         if recipe is not None:
             from .stores.recipes import run_recipe
 
-            ctx = self.tool_context(chat_id, sender, roles, gateway, request=args)
+            ctx = self.tool_context(thread_id, sender, roles, gateway, request=args)
             if recipe.kind == "recipe":
                 return await run_recipe(recipe, args, ctx)
             if self.llm is None:
@@ -982,9 +1081,9 @@ class Agent:
                 f"{recipe.prompt}\n\nArguments: {args}".strip(),
                 specs,
                 ctx,
-                session=f"eidesoul-recipe-{chat_id}-{name}",
+                session=f"eidesoul-recipe-{thread_id}-{name}",
             )
-        ctx = self.command_context(chat_id, sender, roles, gateway, args, inbound)
+        ctx = self.command_context(thread_id, sender, roles, gateway, args, inbound)
         return await handler.fn(ctx)
 
     # ------------------------------------------------------------ hidup

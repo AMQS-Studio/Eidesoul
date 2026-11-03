@@ -397,7 +397,7 @@ async def _settings(args: dict, ctx: ToolContext) -> str:
     if _requires_approval(ctx, action):
         approval = await agent.approvals.create(
             kind="settings",
-            chat_id=ctx.chat_id,
+            thread_id=ctx.thread_id,
             sender=ctx.sender,
             gateway=getattr(ctx.gateway, "name", "") or "",
             tool="settings",

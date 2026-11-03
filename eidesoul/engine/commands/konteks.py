@@ -20,13 +20,13 @@ def _search(ctx: CommandContext):
         if "web_search" not in specs:
             return "error: web_search not allowed for this role"
         tool_ctx = ctx.agent.tool_context(
-            ctx.chat_id,
+            ctx.thread_id,
             ctx.sender,
             ctx.roles,
             ctx.gateway,
             request=query,
-            person_id=getattr(ctx.inbound, "person_id", "") if ctx.inbound else "",
-            is_dm=bool(getattr(ctx.inbound, "is_dm", False)),
+            person_id=getattr(ctx.inbound, "actor", "") if ctx.inbound else "",
+            direct=bool((getattr(ctx.inbound, "hints", None) or {}).get("dm", False)),
         )
         return await execute(specs, "web_search", {"query": query, "max_results": int(results)}, tool_ctx)
 

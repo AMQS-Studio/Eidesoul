@@ -105,7 +105,7 @@ def test_skill_tool_autonomous_lifecycle(tmp_path: Path) -> None:
     store = SkillStore(database())
     store.save("deploy", "Deploy aman.", "# Deploy\n")
     ctx = ToolContext(
-        make_config(tmp_path), role("member"), ("skill",), chat_id="chat", skills=store
+        make_config(tmp_path), role("member"), ("skill",), thread_id="chat", skills=store
     )
 
     async def call(args: dict) -> str:
@@ -149,7 +149,7 @@ def test_skill_command_list_view_and_read(tmp_path: Path) -> None:
             agent=FakeApp(),
             gateway=None,
             roles=(role("owner"),),
-            chat_id="chat",
+            thread_id="chat",
             args=args,
             commands=(),
             tools=(),

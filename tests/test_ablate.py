@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime
 
 from eidesoul.engine.ablate import classify, replay_metrics
-from eidesoul.engine.context import ChatMessage, Quote
+from eidesoul.engine.context import Message, Quote
 
 BOT = "eidesoul"
 
@@ -17,8 +17,8 @@ def message(
     *,
     outgoing: bool = False,
     quote: Quote | None = None,
-) -> ChatMessage:
-    return ChatMessage(
+) -> Message:
+    return Message(
         id=f"m{second}-{sender}",
         sender_name=sender,
         sender_id=sender,

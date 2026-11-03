@@ -8,7 +8,7 @@
 - **Supersedes:** —
 - **Related:** ADR-0003 (worker), ADR-0007 (capability vs authority), ADR-0008 (integrity), ADR-0011 (crash safety)
 - **Location note:** ADR lives in `docs/v0.1.0/adr/engine/`; the Indonesian copy is `docs/v0.1.0/adr/engine/id/0006-group-privacy.md`.
-- **Amendments:** 2026-11-02 — skeleton normalization (ADR-0009 §4.4): Configuration promoted from subsection 4.5 to section 5; the sections after it shifted. 2026-11-03 — audit: the caller list of `PrivacyPolicy` was completed (the auditor review path, `engine/privacy.py:160,192`), not only tools and commands. 2026-11-03 — audit: the `capture_turn`/`_assess`/`render` ranges were aligned with the actual `def`s in the repo.
+- **Amendments:** 2026-11-02 — skeleton normalization (ADR-0009 §4.4): Configuration promoted from subsection 4.5 to section 5; the sections after it shifted. 2026-11-03 — audit: the caller list of `PrivacyPolicy` was completed (the auditor review path, `engine/privacy.py:160,192`), not only tools and commands. 2026-11-03 — audit: the `capture_turn`/`_assess`/`render` ranges were aligned with the actual `def`s in the repo. 2026-11-03 — ADR-0000 §4.4 rename: `inbound.chat_id` → `inbound.thread`, memory scope `chat` → `thread`.
 
 ---
 
@@ -38,7 +38,7 @@ disclosure path) contains rows that should never be visible in a group.
 in a group only facts the **speaker states about himself** may be stored.
 
 **Confirmation questions leak in a group.** The `verdict.ask` path sends a question to
-`inbound.chat_id` (`eidesoul/engine/privacy.py:267-277`), and the disclosure path does the
+`inbound.thread` (`eidesoul/engine/privacy.py:267-277`), and the disclosure path does the
 same (`:150-172`). In a group, that question reveals the existence of a fact being protected.
 
 **What is already good and kept:**
@@ -95,7 +95,7 @@ In non-DM:
 | A fact the speaker states about himself (`subject` empty or == owner) | Stored: `scope=person(owner)`, `audience="group"`, `level <= group_max_level` |
 | A third-party fact (the speaker states something about someone else) | **Dropped entirely** — no canonical row; needs the subject's consent (ADR-0007) |
 | A reply from the soul itself | **Not stored** as person memory (it may carry context from a DM) |
-| A fact shared with the group (group name, plan, agenda) | May be `scope=chat(chat_id)`, `level <= group_max_level`, `source='soul'` |
+| A fact shared with the group (group name, plan, agenda) | May be `scope=thread(thread_id)`, `level <= group_max_level`, `source='soul'` |
 | Credentials/crisis/dangerous instruction | Hard exclusion, before `memory_events` (ADR-0002/0004) |
 
 `audience="group"` and the cross-chat exception in `_search_scope` are kept. A drop is recorded

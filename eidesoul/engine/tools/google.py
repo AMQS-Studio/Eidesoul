@@ -47,10 +47,10 @@ def _record(ctx: ToolContext, action: str, file_id: str) -> None:
     if ctx.ledger is None:
         return
     try:
-        target_name = ctx.gateway.chat_name(ctx.chat_id) if ctx.gateway else ""
+        target_name = ctx.gateway.chat_name(ctx.thread_id) if ctx.gateway else ""
         ctx.ledger.log_action(
-            ctx.chat_id,
-            ctx.chat_id,
+            ctx.thread_id,
+            ctx.thread_id,
             "google",
             f"{action} {file_id or ''}".strip(),
             source_name="chat",
@@ -58,7 +58,7 @@ def _record(ctx: ToolContext, action: str, file_id: str) -> None:
             request=ctx.request,
         )
     except Exception:
-        log.exception("failed to log the google action chat=%s", ctx.chat_id)
+        log.exception("failed to log the google action chat=%s", ctx.thread_id)
 
 
 async def _google(args: dict, ctx: ToolContext) -> str:
@@ -78,9 +78,9 @@ async def _dispatch(args: dict, ctx: ToolContext, vendor) -> str:
     try:
         service = _service(ctx)
         if action == "login":
-            return await service.login(person_id, is_dm=ctx.is_dm)
+            return await service.login(person_id, direct=ctx.direct)
         if action == "status":
-            return await service.status(person_id, is_dm=ctx.is_dm)
+            return await service.status(person_id, direct=ctx.direct)
         if action not in {"list", "read", "write"}:
             return "error: unknown action; use login, status, list, read, or write"
         identity = service.identity(person_id)

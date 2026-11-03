@@ -38,7 +38,7 @@ from eidesoul.engine.config import load_config, load_env  # noqa: E402
 from eidesoul.engine.context import (  # noqa: E402
     AUTHOR_BOT,
     AUTHOR_UNKNOWN,
-    ChatMessage,
+    Message,
     build_user_content,
 )
 from eidesoul.engine.llm import LLM  # noqa: E402
@@ -81,7 +81,7 @@ def shingles(text: str) -> set[tuple[str, ...]]:
 
 
 def message(text: str, *, speaker: str, when: datetime, index: int, author: str = AUTHOR_UNKNOWN):
-    return ChatMessage(
+    return Message(
         id=f"replay-{index}",
         sender_name=speaker,
         sender_id="owner" if speaker == "Muqsith" else speaker.lower(),
@@ -224,7 +224,7 @@ async def reply_once(
             "## Chat interface\n- WhatsApp formatting only: *bold*, _italic_. No headings."
         ),
         sender=current.sender_name,
-        is_dm=scenario["chat"] == "dm",
+        direct=scenario["chat"] == "dm",
         mode="daily",
         tone="neutral",
         decision_reason="replay turn; reply",
@@ -238,7 +238,7 @@ async def reply_once(
         current,
         chat_name="replay",
     )
-    ctx = ToolContext(config, (Role("owner"),), (), chat_id="replay", sender=current.sender_name)
+    ctx = ToolContext(config, (Role("owner"),), (), thread_id="replay", sender=current.sender_name)
     answer = strip_blocks(
         str(await llm.run(system, content, [], ctx, session=f"replay-{scenario['id']}"))
     ).strip()

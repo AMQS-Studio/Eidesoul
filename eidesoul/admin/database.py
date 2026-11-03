@@ -20,8 +20,6 @@ from ..engine.db import Database
 from ..engine.schema import (
     actions,
     approvals,
-    chat_people,
-    chats,
     config_changes,
     documents,
     drives,
@@ -33,6 +31,8 @@ from ..engine.schema import (
     skill_files,
     skills,
     state,
+    thread_people,
+    threads,
     topics,
 )
 from ..engine.stores.documents import DocumentStore
@@ -44,11 +44,11 @@ LEASE_TTL = 30.0
 COUNT_TABLES = (
     ("documents", documents),
     ("messages", messages),
-    ("chats", chats),
+    ("threads", threads),
     ("people", people),
     ("topics", topics),
     ("drives", drives),
-    ("chat_people", chat_people),
+    ("thread_people", thread_people),
     ("skills", skills),
     ("skill_files", skill_files),
     ("recipes", recipes),
@@ -233,7 +233,7 @@ def format_check(data: dict) -> str:
     for name in (
         "documents",
         "messages",
-        "chats",
+        "threads",
         "people",
         "topics",
         "skills",

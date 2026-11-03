@@ -261,31 +261,31 @@ def _emotion_block(emotion) -> str:
 
 def build_context(
     *,
-    chat_id: str = "",
+    thread_id: str = "",
     chat_name: str = "",
     current: str = "",
     transcript: str = "",
     emotion=None,
     relationship: str = "",
-    is_dm: bool = False,
-    is_mention: bool = False,
-    is_reply: bool = False,
+    direct: bool = False,
+    mentioned: bool = False,
+    replied: bool = False,
     away: str = "",
     vibe: str = "",
 ) -> str:
     """Decision context: transport facts, emotional state, relationships, transcript, last message."""
-    kind = "direct message (DM)" if is_dm else "group"
+    kind = "direct message (DM)" if direct else "group"
     facts = [
         fact
         for fact, on in (
-            ("direct message (DM)", is_dm),
-            ("real mention of you", is_mention),
-            ("reply to your message", is_reply),
+            ("direct message (DM)", direct),
+            ("real mention of you", mentioned),
+            ("reply to your message", replied),
         )
         if on
     ]
     parts = [
-        f"Chat: {chat_name or chat_id or '-'} — {kind}",
+        f"Chat: {chat_name or thread_id or '-'} — {kind}",
         "Transport facts: " + (", ".join(facts) if facts else "no direct tag/reply"),
     ]
     if away.strip():
@@ -306,15 +306,15 @@ def build_context(
 async def decide(
     llm,
     *,
-    chat_id: str,
+    thread_id: str,
     chat_name: str,
     current: str,
     transcript: str,
     emotion=None,
     relationship: str = "",
-    is_dm: bool = False,
-    is_mention: bool = False,
-    is_reply: bool = False,
+    direct: bool = False,
+    mentioned: bool = False,
+    replied: bool = False,
     away: str = "",
     vibe: str = "",
     soul=None,
@@ -333,19 +333,19 @@ async def decide(
         system += f"\n\nYour identity:\n{identity.persona.strip()}"
     system += "\n" + language_line(identity)
     user = build_context(
-        chat_id=chat_id,
+        thread_id=thread_id,
         chat_name=chat_name,
         current=current,
         transcript=transcript,
         emotion=emotion,
         relationship=relationship,
-        is_dm=is_dm,
-        is_mention=is_mention,
-        is_reply=is_reply,
+        direct=direct,
+        mentioned=mentioned,
+        replied=replied,
         away=away,
         vibe=vibe,
     )
-    session = f"eidesoul-decision-{chat_id}"
+    session = f"eidesoul-decision-{thread_id}"
     raw = await llm.complete(system, user, max_tokens=4000, temperature=0.3, session=session)
     if not str(raw or "").strip():
         raw = await llm.complete(system, user, max_tokens=8000, temperature=0.3, session=session)

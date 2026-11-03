@@ -20,26 +20,26 @@ async def _send(args: dict, ctx: ToolContext) -> str:
     if not path.is_file():
         return f"error: file not found: {raw}"
     caption = str(args.get("caption") or "").strip()[:1024]
-    result = await ctx.agent.send_file(ctx.chat_id, path, caption, gateway=ctx.gateway)
+    result = await ctx.agent.send_file(ctx.thread_id, path, caption, gateway=ctx.gateway)
     ok = result.startswith("ok:")
     note = f"{path.name}{f' — {caption}' if caption else ''}"
     if ok:
         ctx.sent.append(
-            {"tool": "send", "target": ctx.chat_id, "kind": "file", "summary": path.name}
+            {"tool": "send", "target": ctx.thread_id, "kind": "file", "summary": path.name}
         )
     if ctx.ledger is not None:
         try:
             ctx.ledger.log_action(
-                ctx.chat_id,
-                ctx.chat_id,
+                ctx.thread_id,
+                ctx.thread_id,
                 "file",
                 note if ok else f"failed — {result}",
                 source_name="chat",
-                target_name=ctx.gateway.chat_name(ctx.chat_id),
+                target_name=ctx.gateway.chat_name(ctx.thread_id),
                 request=ctx.request,
             )
         except Exception:
-            log.exception("failed to log the send action chat=%s", ctx.chat_id)
+            log.exception("failed to log the send action chat=%s", ctx.thread_id)
     return result
 
 

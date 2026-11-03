@@ -8,12 +8,12 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
-from neonize.proto.Neonize_pb2 import Message
+from neonize.proto.Neonize_pb2 import Message as ProtoMessage
 from support import build_config, database
 
 from eidesoul.engine.config import GatewaySettings
-from eidesoul.engine.context import ChatMessage, WorkingMemory
-from eidesoul.engine.inbound import GatewayError, Inbound
+from eidesoul.engine.context import Message, WorkingMemory
+from eidesoul.engine.inbound import GatewayError, Percept
 from eidesoul.engine.stores.history import HistoryStore
 from eidesoul.gateways.whatsapp import directory, ingress
 from eidesoul.gateways.whatsapp.gateway import SENT_TTL, WhatsAppGateway
@@ -71,8 +71,8 @@ def group_event(
     participant: str = "",
     chat: str = "111@g.us",
     sender: str = "628222222222",
-) -> Message:
-    ev = Message()
+) -> ProtoMessage:
+    ev = ProtoMessage()
     ev.Info.ID = "wamid-1"
     ev.Info.Timestamp = 1_700_000_000
     ev.Info.Pushname = "Budi"
@@ -94,12 +94,12 @@ def test_event_to_inbound_dm_and_person(tmp_path) -> None:
     inbound = ingress.event_to_inbound(ev, gateway)
 
     assert inbound is not None
-    assert inbound.chat_id == "628222222222@s.whatsapp.net"
-    assert inbound.is_dm is True
-    assert inbound.person_address == "628222222222"
-    assert inbound.person_id == ""  # the core assigns the person id, not the gateway
-    assert inbound.message.text == "halo"
-    assert inbound.message.sender_name == "Budi"
+    assert inbound.thread == "628222222222@s.whatsapp.net"
+    assert inbound.hints.get("dm") is True
+    assert inbound.actor == "628222222222"  # the core assigns the person id, not the gateway
+    assert inbound.kind == "message"
+    assert inbound.payload.text == "halo"
+    assert inbound.payload.sender_name == "Budi"
 
 
 def test_mention_and_reply_flags_come_from_payload(tmp_path) -> None:
@@ -113,9 +113,9 @@ def test_mention_and_reply_flags_come_from_payload(tmp_path) -> None:
         group_event("iya", participant=f"{BOT}@s.whatsapp.net"), gateway
     )
 
-    assert plain.is_mention is False
-    assert asserted.is_mention is True
-    assert reply.is_reply is True
+    assert plain.hints.get("mention") is False
+    assert asserted.hints.get("mention") is True
+    assert reply.hints.get("reply") is True
 
 
 def test_lid_sender_maps_to_the_pn_address(tmp_path) -> None:
@@ -128,9 +128,9 @@ def test_lid_sender_maps_to_the_pn_address(tmp_path) -> None:
     inbound = ingress.event_to_inbound(ev, gateway)
 
     assert inbound is not None
-    assert inbound.person_address == "628999999999"
-    assert inbound.message.sender_address == "628999999999@s.whatsapp.net"
-    assert inbound.message.sender_id == "628999999999"
+    assert inbound.actor == "628999999999"
+    assert inbound.payload.sender_address == "628999999999@s.whatsapp.net"
+    assert inbound.payload.sender_id == "628999999999"
 
 
 def test_quote_is_read_from_context_info(tmp_path) -> None:
@@ -143,8 +143,8 @@ def test_quote_is_read_from_context_info(tmp_path) -> None:
     inbound = ingress.event_to_inbound(ev, gateway)
 
     assert inbound is not None
-    assert inbound.message.quote is not None
-    assert inbound.message.quote.text == "mau kubantu?"
+    assert inbound.payload.quote is not None
+    assert inbound.payload.quote.text == "mau kubantu?"
 
 
 def test_command_body_strips_only_bot_mentions() -> None:
@@ -181,7 +181,7 @@ def test_send_text_resolves_mentions_and_quotes(tmp_path) -> None:
     gateway.client = client
     gateway.windows.append(
         "111@g.us",
-        ChatMessage(
+        Message(
             id="a",
             sender_name="Ani",
             sender_id="628222222222",
@@ -198,10 +198,13 @@ def test_send_text_resolves_mentions_and_quotes(tmp_path) -> None:
     assert list(payload.contextInfo.mentionedJID) == ["628222222222@s.whatsapp.net"]
 
     raw = group_event("halo")
-    inbound = Inbound(
-        chat_id="111@g.us",
-        message=ChatMessage("q", "Budi", "1", __import__("datetime").datetime.now(), "halo"),
-        is_dm=False,
+    inbound = Percept(
+        source="whatsapp",
+        thread="111@g.us",
+        actor="1",
+        kind="message",
+        payload=Message("q", "Budi", "1", __import__("datetime").datetime.now(), "halo"),
+        hints={"dm": False},
         raw=raw,
     )
     asyncio.run(gateway.send_text("111@g.us", "balasan", reply=inbound))
@@ -268,14 +271,14 @@ def test_self_message_is_manual_unless_the_bot_sent_it(tmp_path) -> None:
 
     manual = ingress.event_to_inbound(ev, gateway)
     assert manual is not None
-    assert manual.message.author == "manual_owner"
-    assert manual.message.sender_name == "Budi"
+    assert manual.payload.author == "manual_owner"
+    assert manual.payload.sender_name == "Budi"
 
     gateway.remember_sent("wamid-1")
     bot = ingress.event_to_inbound(ev, gateway)
     assert bot is not None
-    assert bot.message.author == "bot"
-    assert bot.message.sender_name == gateway.config.soul.name
+    assert bot.payload.author == "bot"
+    assert bot.payload.sender_name == gateway.config.soul.name
 
 
 def test_remember_sent_keeps_only_live_ids(tmp_path) -> None:
@@ -297,8 +300,8 @@ def test_self_jid_ignores_lid(tmp_path) -> None:
     assert ingress.self_jid(None) == ""
 
 
-def seed_sender(gateway, chat: str = "111@g.us", **kwargs) -> ChatMessage:
-    entry = ChatMessage(
+def seed_sender(gateway, chat: str = "111@g.us", **kwargs) -> Message:
+    entry = Message(
         id=kwargs.pop("id", "a"),
         sender_name=kwargs.pop("sender_name", "Budi"),
         sender_id=kwargs.pop("sender_id", "628222222222"),
@@ -352,12 +355,12 @@ def test_sender_lid_with_alt_resolves_to_pn(tmp_path) -> None:
     inbound = ingress.event_to_inbound(ev, gateway)
 
     assert inbound is not None
-    assert inbound.message.sender_address == "628999999999@s.whatsapp.net"
-    assert inbound.message.sender_kind == "person"
-    assert inbound.message.sender_id == "628999999999"
+    assert inbound.payload.sender_address == "628999999999@s.whatsapp.net"
+    assert inbound.payload.sender_kind == "person"
+    assert inbound.payload.sender_id == "628999999999"
 
 
-def view_once_event() -> Message:
+def view_once_event() -> ProtoMessage:
     ev = group_event("")
     ev.Message.viewOnceMessageV2.message.conversation = "sekali lihat"
     return ev
@@ -371,11 +374,11 @@ def test_views_once_detects_the_wrapper_and_flags_the_inbound(tmp_path) -> None:
     assert ingress.views_once(view_once_event().Message) is True
     assert ingress.views_once(group_event("halo").Message) is False
     assert inbound is not None
-    assert inbound.message.view_once is True
-    assert inbound.message.text == "sekali lihat"
+    assert inbound.payload.view_once is True
+    assert inbound.payload.text == "sekali lihat"
 
 
-def revoke_event(target: str, sender: str, *, pushname: str = "Budi") -> Message:
+def revoke_event(target: str, sender: str, *, pushname: str = "Budi") -> ProtoMessage:
     from neonize.proto.waE2E.WAWebProtobufsE2E_pb2 import ProtocolMessage
 
     ev = group_event("")
@@ -433,7 +436,7 @@ def drive_run(tmp_path, monkeypatch):
 
     gateway = make_gateway(tmp_path)
     monkeypatch.setattr(gateway_module, "NewAClient", StubClient)
-    handled: list[Inbound] = []
+    handled: list[Percept] = []
 
     async def handle(inbound, gw) -> None:
         handled.append(inbound)
@@ -448,11 +451,11 @@ def test_gateway_marks_revoked_rows_and_stays_silent(tmp_path, monkeypatch) -> N
     seed_sender(gateway, id="t2", text="isi lain", sender_name="Citra",
                 sender_id="628333333333", sender_address="628333333333@s.whatsapp.net")
 
-    asyncio.run(client.handlers[Message](client, revoke_event("t1", "628222222222")))
+    asyncio.run(client.handlers[ProtoMessage](client, revoke_event("t1", "628222222222")))
     asyncio.run(
-        client.handlers[Message](client, revoke_event("t2", "628222222222", pushname="Budi"))
+        client.handlers[ProtoMessage](client, revoke_event("t2", "628222222222", pushname="Budi"))
     )
-    asyncio.run(client.handlers[Message](client, revoke_event("hilang", "628222222222")))
+    asyncio.run(client.handlers[ProtoMessage](client, revoke_event("hilang", "628222222222")))
 
     rows = {entry.id: entry for entry in gateway.windows.get("111@g.us")}
     assert rows["t1"].deleted is True and rows["t1"].deleted_admin is False
@@ -497,3 +500,24 @@ def test_unreadable_stanza_ignores_available_and_broadcast(tmp_path) -> None:
     ev.Info.MessageSource.Sender.User = "628222222222"
 
     assert ingress.unreadable_message(ev, gateway) is None
+
+
+def test_the_whatsapp_gateway_is_core_rich_and_directory(tmp_path) -> None:
+    from eidesoul.engine.inbound import Directory, GatewayCore, Rich
+
+    gateway = make_gateway(tmp_path)
+
+    assert isinstance(gateway, GatewayCore)
+    assert isinstance(gateway, Rich)
+    assert isinstance(gateway, Directory)
+
+
+def test_participants_proves_a_linked_dm_and_refuses_a_group(tmp_path) -> None:
+    from eidesoul.engine.identity import IdentityStore
+
+    gateway = make_gateway(tmp_path)
+    person = IdentityStore(gateway.db).resolve("whatsapp", "628999999999")
+
+    assert gateway.participants("628999999999@s.whatsapp.net") == {person}
+    assert gateway.participants("628111@s.whatsapp.net") is None
+    assert gateway.participants("111@g.us") is None

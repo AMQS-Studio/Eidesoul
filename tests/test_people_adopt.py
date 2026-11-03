@@ -13,7 +13,7 @@ from eidesoul.engine.config import DatabaseConfig
 from eidesoul.engine.identity import IdentityStore, is_person_id
 from eidesoul.engine.memory.mem0 import Mem0Backend
 from eidesoul.engine.memory.rekey import rekey_memory
-from eidesoul.engine.schema import chat_people, people, state
+from eidesoul.engine.schema import people, state, thread_people
 from eidesoul.engine.stores.documents import DocumentStore
 
 LEGACY = "6285111242960"
@@ -45,9 +45,9 @@ def seed(tmp_path):
         )
         db.upsert(
             conn,
-            chat_people,
-            [{"chat_id": "chat", "person_id": LEGACY, "interactions": 3, "last_seen": 5.0}],
-            ["chat_id", "person_id"],
+            thread_people,
+            [{"thread_id": "chat", "person_id": LEGACY, "interactions": 3, "last_seen": 5.0}],
+            ["thread_id", "person_id"],
         )
         db.upsert(
             conn,
@@ -56,7 +56,12 @@ def seed(tmp_path):
                 {
                     "key": "style",
                     "value": json.dumps(
-                        {"seeded": True, "global": BUCKET, "chats": {}, "people": {LEGACY: BUCKET}}
+                        {
+                            "seeded": True,
+                            "global": BUCKET,
+                            "threads": {},
+                            "people": {LEGACY: BUCKET},
+                        }
                     ),
                     "updated_at": 1.0,
                 }
@@ -87,7 +92,7 @@ def test_adopt_moves_every_legacy_address_and_rewrites_the_roles(tmp_path) -> No
     assert [(item["gateway"], item["address"]) for item in identity.links(new)] == [
         ("whatsapp", LEGACY)
     ]
-    assert [row["person_id"] for row in db.fetch_all(chat_people.select())] == [new]
+    assert [row["person_id"] for row in db.fetch_all(thread_people.select())] == [new]
     assert list(json.loads(db.fetch_one(state.select())["value"])["people"]) == [new]
 
     stored = yaml.safe_load(documents.get("role:owner"))
@@ -123,9 +128,9 @@ def test_rekey_moves_person_and_chat_entries(tmp_path, monkeypatch) -> None:
     with db.connect() as conn:
         db.upsert(
             conn,
-            chat_people,
-            [{"chat_id": "chat", "person_id": new, "interactions": 1, "last_seen": 0.0}],
-            ["chat_id", "person_id"],
+            thread_people,
+            [{"thread_id": "chat", "person_id": new, "interactions": 1, "last_seen": 0.0}],
+            ["thread_id", "person_id"],
         )
     config = build_config(
         tmp_path,
@@ -138,14 +143,14 @@ def test_rekey_moves_person_and_chat_entries(tmp_path, monkeypatch) -> None:
             "suka kopi",
             scope="person",
             person_id=LEGACY,
-            chat_id="chat",
+            thread_id="chat",
             owner_id=LEGACY,
             subject_id=LEGACY,
         )
     )
-    asyncio.run(memory.add("tiket konser", scope="chat", chat_id="chat", owner_id=LEGACY))
+    asyncio.run(memory.add("tiket konser", scope="thread", thread_id="chat", owner_id=LEGACY))
     asyncio.run(
-        memory.add("punya orang lain", scope="person", person_id="per_other000", chat_id="chat")
+        memory.add("punya orang lain", scope="person", person_id="per_other000", thread_id="chat")
     )
 
     moved = asyncio.run(rekey_memory(memory, LEGACY, new, db=db))
@@ -154,6 +159,6 @@ def test_rekey_moves_person_and_chat_entries(tmp_path, monkeypatch) -> None:
     assert asyncio.run(memory.list(scope="person", person_id=LEGACY)) == []
     texts = [hit.text for hit in asyncio.run(memory.list(scope="person", person_id=new))]
     assert texts == ["suka kopi"]
-    chat = asyncio.run(memory.list(scope="chat", chat_id="chat"))
+    chat = asyncio.run(memory.list(scope="thread", thread_id="chat"))
     assert [hit.text for hit in chat] == ["tiket konser"]
     assert chat[0].owner_id == new

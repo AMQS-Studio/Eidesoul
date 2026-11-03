@@ -24,7 +24,7 @@ def _enabled(ctx: CommandContext) -> list[str]:
 def _status(ctx: CommandContext) -> str:
     lang = ctx.lang
     identity = ctx.agent.identity
-    person = ctx.inbound.person_id if ctx.inbound is not None else ""
+    person = ctx.inbound.actor if ctx.inbound is not None else ""
     row = identity.person(person) or {}
     linked = {str(item["gateway"]): item for item in identity.links(person)}
     now = time.time()
@@ -50,10 +50,13 @@ def _status(ctx: CommandContext) -> str:
 async def link(ctx: CommandContext) -> str:
     lang = ctx.lang
     inbound = ctx.inbound
-    if ctx.gateway is None or inbound is None or not inbound.person_address:
+    address = ""
+    if inbound is not None:
+        address = inbound.payload.sender_id or inbound.payload.sender_address
+    if ctx.gateway is None or not address:
         return t("command.link.no_gateway", lang)
     identity = ctx.agent.identity
-    person = inbound.person_id
+    person = inbound.actor
     args = ctx.args.strip()
     if not args:
         return _status(ctx)
@@ -64,7 +67,7 @@ async def link(ctx: CommandContext) -> str:
             code=code,
             person_id=person,
             gateway=ctx.gateway.name,
-            address=inbound.person_address,
+            address=address,
         )
         if merged and target and ctx.agent.style is not None:
             ctx.agent.style.merge_people(merged, target)
@@ -76,7 +79,7 @@ async def link(ctx: CommandContext) -> str:
             "command.link.done",
             lang,
             gateway=ctx.gateway.name,
-            address=mask_address(inbound.person_address),
+            address=mask_address(address),
             name=name,
             id=owner,
         )

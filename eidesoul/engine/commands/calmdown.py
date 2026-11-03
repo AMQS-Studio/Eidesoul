@@ -14,7 +14,7 @@ async def calmdown(ctx: CommandContext) -> str:
         return t("command.calmdown.unavailable", lang)
     target = ctx.args.strip()
     try:
-        was_upset = affect.calm(ctx.chat_id, target)
+        was_upset = affect.calm(ctx.thread_id, target)
     except Exception:
         return t("command.calmdown.failed", lang)
     if not was_upset:

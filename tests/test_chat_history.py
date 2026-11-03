@@ -8,15 +8,15 @@ from datetime import datetime
 from support import make_agent, role
 from test_whatsapp_gateway import make_gateway
 
-from eidesoul.engine.context import ChatMessage
+from eidesoul.engine.context import Message
 from eidesoul.engine.tools import execute
 from eidesoul.gateways.whatsapp import directory
 
 TARGET = "628999999999@s.whatsapp.net"
 
 
-def message(mid: str, text: str, **kwargs) -> ChatMessage:
-    return ChatMessage(
+def message(mid: str, text: str, **kwargs) -> Message:
+    return Message(
         id=mid,
         sender_name=kwargs.get("sender_name", "Budi"),
         sender_id=kwargs.get("sender_id", "628999999999"),
@@ -42,9 +42,9 @@ def env(tmp_path):
     )
 
 
-def context(env, chat_id: str = "111@g.us"):
+def context(env, thread_id: str = "111@g.us"):
     return env.agent.tool_context(
-        chat_id, "628111", (env.config.roles.get("owner"),), env.gateway
+        thread_id, "628111", (env.config.roles.get("owner"),), env.gateway
     )
 
 
@@ -130,7 +130,7 @@ def test_unreadable_rows_read_as_a_note(tmp_path) -> None:
     setup = env(tmp_path)
     setup.history.add(
         "111@g.us",
-        ChatMessage(
+        Message(
             id="b",
             sender_name="Budi",
             sender_id="628999999999",

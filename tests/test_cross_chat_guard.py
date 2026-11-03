@@ -9,7 +9,7 @@ from support import inbound_message, make_agent, role
 from test_whatsapp_gateway import make_gateway
 
 from eidesoul.engine import guard
-from eidesoul.engine.context import ChatMessage
+from eidesoul.engine.context import Message
 from eidesoul.engine.i18n import t
 from eidesoul.engine.tools import execute
 from eidesoul.gateways.whatsapp import directory
@@ -42,7 +42,7 @@ def archive_env(tmp_path):
     )
     env.history.add(
         TARGET,
-        ChatMessage(
+        Message(
             id="b1",
             sender_name="Budi",
             sender_id="628999999999",
@@ -55,9 +55,9 @@ def archive_env(tmp_path):
     return env
 
 
-def context(env, chat_id: str = "111@g.us"):
+def context(env, thread_id: str = "111@g.us"):
     return env.agent.tool_context(
-        chat_id, "628111", (env.config.roles.get("owner"),), env.gateway
+        thread_id, "628111", (env.config.roles.get("owner"),), env.gateway
     )
 
 
@@ -78,7 +78,7 @@ def test_current_chat_read_does_not_fill_cross_reads(tmp_path) -> None:
     env = archive_env(tmp_path)
     env.history.add(
         "111@g.us",
-        ChatMessage(
+        Message(
             id="c1",
             sender_name="Budi",
             sender_id="628111",
@@ -102,6 +102,6 @@ def test_agent_replaces_a_verbatim_cross_room_reply(tmp_path) -> None:
         return SPAN
 
     env.llm.run = run
-    asyncio.run(env.agent.handle(inbound_message("halo", chat_id="chat"), env.gateway))
+    asyncio.run(env.agent.handle(inbound_message("halo", thread="chat"), env.gateway))
 
     assert env.gateway.sent[-1][1] == t("agent.cross_chat_blocked", env.config.soul.language)

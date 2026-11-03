@@ -82,7 +82,7 @@ def test_parse_decision_clamps_and_truncates() -> None:
 
 def test_context_includes_emotion_relationship_and_transcript() -> None:
     text = build_context(
-        chat_id="120@g.us",
+        thread_id="120@g.us",
         chat_name="panitia",
         current="Fahri: kamu culun",
         transcript="Fahri: halo\nkamu (eidesoul): hai",
@@ -102,7 +102,7 @@ def test_context_includes_emotion_relationship_and_transcript() -> None:
             ],
         },
         relationship="- Fahri (member): baru, kesal 0.3",
-        is_mention=True,
+        mentioned=True,
     )
 
     assert "guarded, energized, balanced" in text
@@ -157,7 +157,7 @@ def test_decision_uses_one_llm_call_with_full_context() -> None:
     parsed = asyncio.run(
         decide(
             llm,
-            chat_id="120@g.us",
+            thread_id="120@g.us",
             chat_name="panitia",
             current="Fahri: besok rapat jam 3",
             transcript="Fahri: besok rapat jam 3",
@@ -182,7 +182,7 @@ def test_decision_retries_once_when_empty_then_gives_up() -> None:
     parsed = asyncio.run(
         decide(
             llm,
-            chat_id="120@g.us",
+            thread_id="120@g.us",
             chat_name="panitia",
             current="Fahri: halo",
             transcript="Fahri: halo",
@@ -199,7 +199,7 @@ def test_invalid_json_falls_back_to_ignore_without_regex() -> None:
     parsed = asyncio.run(
         decide(
             llm,
-            chat_id="120@g.us",
+            thread_id="120@g.us",
             chat_name="grup",
             current="Fahri: wkwk",
             transcript="Fahri: wkwk",

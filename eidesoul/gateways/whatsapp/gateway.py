@@ -19,8 +19,8 @@ from neonize.utils.enum import ChatPresence, ChatPresenceMedia
 from neonize.utils.jid import build_jid
 
 from ...engine.config import Config, GatewaySettings, secure_db
-from ...engine.context import ChatMessage, human_size
-from ...engine.inbound import GatewayError, Inbound
+from ...engine.context import Message, human_size
+from ...engine.inbound import GatewayError, Percept
 from ...engine.registry import Handler, discover
 from ...engine.reply import FENCE, clean_prose, strip_blocks
 from ...engine.tools import FAMILIES
@@ -42,7 +42,6 @@ MENTION_NAME = re.compile(r"(?<![\w@])@([^\W\d_][\w.]{1,39})", re.UNICODE)
 
 class WhatsAppGateway:
     name = "whatsapp"
-    capabilities = frozenset({"text", "file", "reaction", "typing", "media", "directory"})
 
     def __init__(
         self,
@@ -106,14 +105,14 @@ class WhatsAppGateway:
                 if revoked is not None:
                     target_id, by_address = revoked
                     source = ev.Info.MessageSource
-                    chat_id = f"{source.Chat.User}@{source.Chat.Server}"
+                    thread = f"{source.Chat.User}@{source.Chat.Server}"
                     name = directory.contact_name(self.db, by_address) or (
                         ev.Info.Pushname or ""
                     ).strip()
-                    if self.windows.mark_deleted(chat_id, target_id, by_address, name):
+                    if self.windows.mark_deleted(thread, target_id, by_address, name):
                         log.info(
                             "message deleted chat=%s id=%s by=%s",
-                            chat_id,
+                            thread,
                             target_id,
                             name or by_address,
                         )
@@ -133,9 +132,9 @@ class WhatsAppGateway:
                 found = ingress.unreadable_message(ev, self)
                 if found is None:
                     return
-                chat_id, message = found
-                self.windows.append(chat_id, message)
-                log.info("unreadable message chat=%s id=%s", chat_id, message.id)
+                thread, message = found
+                self.windows.append(thread, message)
+                log.info("unreadable message chat=%s id=%s", thread, message.id)
             except Exception:
                 log.exception("unreadable message handler failed")
 
@@ -144,15 +143,15 @@ class WhatsAppGateway:
             if ev.Data is None:
                 return
             try:
-                count, chat_ids, done = history_sync.ingest_sync(
+                count, thread_ids, done = history_sync.ingest_sync(
                     self.db, self.history, ev.Data, ingress.self_jid(self.me)
                 )
-                for chat_id in chat_ids:
-                    self.windows.invalidate(chat_id)
+                for thread in thread_ids:
+                    self.windows.invalidate(thread)
                 log.info(
-                    "history sync: %d messages, %d chats, sync=%s progress=%d%s",
+                    "history sync: %d messages, %d threads, sync=%s progress=%d%s",
                     count,
-                    len(chat_ids),
+                    len(thread_ids),
                     ev.Data.syncType,
                     ev.Data.progress,
                     " (done)" if done else "",
@@ -196,13 +195,10 @@ class WhatsAppGateway:
                 await self.client.stop()
             self.client = None
 
-    def data_paths(self) -> list[Path]:
-        return [self.settings.session_db]
-
     # ---------------------------------------------------------------- send
 
-    def _jid(self, chat_id: str):
-        user, _, server = chat_id.partition("@")
+    def _jid(self, thread: str):
+        user, _, server = thread.partition("@")
         return build_jid(user, server)
 
     async def avatar(self, jid: str) -> tuple[bytes, str] | None:
@@ -223,12 +219,12 @@ class WhatsAppGateway:
         stamp = self._sent.get(message_id)
         return stamp is not None and time.monotonic() - stamp < SENT_TTL
 
-    def _resolve_mentions(self, text: str, chat_id: str) -> tuple[str, list[str]]:
+    def _resolve_mentions(self, text: str, thread: str) -> tuple[str, list[str]]:
         if "@" not in text:
             return text, []
         known: dict[str, str] = {}
         names: dict[str, str] = {}
-        for entry in self.windows.get(chat_id):
+        for entry in self.windows.get(thread):
             if not entry.sender_id or not entry.sender_address:
                 continue
             known.setdefault(entry.sender_id, entry.sender_address)
@@ -250,7 +246,7 @@ class WhatsAppGateway:
             digits = "".join(ch for ch in token if ch.isdigit())
             jid = known.get(digits)
             if jid is None:
-                log.warning("unrecognized mention chat=%s token=%s", chat_id, token)
+                log.warning("unrecognized mention chat=%s token=%s", thread, token)
                 return token
             if jid not in mentions:
                 mentions.append(jid)
@@ -268,11 +264,11 @@ class WhatsAppGateway:
         return MENTION_NAME.sub(name, MENTION_TOKEN.sub(number, text)), mentions
 
     async def send_text(
-        self, chat_id: str, text: str, *, reply: Inbound | None = None
+        self, thread: str, text: str, *, reply: Percept | None = None
     ) -> str:
         if self.client is None:
             raise GatewayError("WhatsApp client is not available")
-        body, mentions = self._resolve_mentions(str(text or ""), chat_id)
+        body, mentions = self._resolve_mentions(str(text or ""), thread)
         payload = (
             ExtendedTextMessage(text=body, contextInfo=ContextInfo(mentionedJID=mentions))
             if mentions
@@ -282,12 +278,12 @@ class WhatsAppGateway:
             if reply is not None and reply.raw is not None:
                 sent = await self.client.reply_message(payload, reply.raw)
             else:
-                sent = await self.client.send_message(self._jid(chat_id), payload)
+                sent = await self.client.send_message(self._jid(thread), payload)
         except SendMessageError as exc:
-            log.exception("failed to send text to %s", chat_id)
+            log.exception("failed to send text to %s", thread)
             raise GatewayError(str(exc)) from exc
         except Exception as exc:
-            log.exception("failed to send text to %s", chat_id)
+            log.exception("failed to send text to %s", thread)
             raise GatewayError(f"{type(exc).__name__}: {exc}") from exc
         message_id = getattr(sent, "ID", "") or f"text-{time.time_ns()}"
         self.remember_sent(message_id)
@@ -295,11 +291,11 @@ class WhatsAppGateway:
 
     async def send_file(
         self,
-        chat_id: str,
+        thread: str,
         path: Path,
         caption: str = "",
         *,
-        reply: Inbound | None = None,
+        reply: Percept | None = None,
     ) -> str:
         if self.client is None:
             raise GatewayError("WhatsApp client is not available")
@@ -314,7 +310,7 @@ class WhatsAppGateway:
                 f"file too large ({human_size(size)}; max {human_size(MAX_SEND_BYTES)})"
             )
         kind = send_kind(target)
-        jid = self._jid(chat_id)
+        jid = self._jid(thread)
         try:
             if kind == "sticker":
                 sent = await self.client.send_sticker(jid, str(target))
@@ -327,7 +323,7 @@ class WhatsAppGateway:
                     jid, str(target), caption=caption or None, filename=target.name
                 )
         except Exception as exc:
-            log.exception("failed to send file %s to %s", target, chat_id)
+            log.exception("failed to send file %s to %s", target, thread)
             raise GatewayError(f"{type(exc).__name__}: {exc}") from exc
         message_id = getattr(sent, "ID", "") or f"file-{time.time_ns()}"
         self.remember_sent(message_id)
@@ -345,32 +341,32 @@ class WhatsAppGateway:
                 continue
         return found
 
-    async def send_reaction(self, chat_id: str, message_id: str) -> str | None:
+    async def send_sticker(self, thread: str, message_id: str) -> str | None:
         if self.client is None or not self.config.humanize.reaction_stickers:
             return None
         moment = time.time()
-        if moment - self.reactions.get(chat_id, 0.0) < REACTION_COOLDOWN:
+        if moment - self.reactions.get(thread, 0.0) < REACTION_COOLDOWN:
             return None
         paths = self._sticker_paths()
         if not paths:
-            log.info("reaction skipped: no reaction sticker chat=%s", chat_id)
+            log.info("reaction skipped: no reaction sticker chat=%s", thread)
             return None
         path = secrets.choice(paths)
         try:
-            sent = await self.client.send_sticker(self._jid(chat_id), str(path))
+            sent = await self.client.send_sticker(self._jid(thread), str(path))
         except Exception:
-            log.warning("failed to send the reaction sticker chat=%s", chat_id, exc_info=True)
+            log.warning("failed to send the reaction sticker chat=%s", thread, exc_info=True)
             return None
         self.remember_sent(getattr(sent, "ID", ""))
-        self.reactions[chat_id] = moment
+        self.reactions[thread] = moment
         return f"(reaction sticker: {path.name})"
 
-    async def typing(self, chat_id: str, composing: bool) -> None:
+    async def typing(self, thread: str, composing: bool) -> None:
         if self.client is None:
             return
         try:
             await self.client.send_chat_presence(
-                self._jid(chat_id),
+                self._jid(thread),
                 ChatPresence.CHAT_PRESENCE_COMPOSING
                 if composing
                 else ChatPresence.CHAT_PRESENCE_PAUSED,
@@ -379,12 +375,12 @@ class WhatsAppGateway:
         except Exception:
             log.debug("presence update failed", exc_info=True)
 
-    async def prepare_media(self, chat_id: str, message: ChatMessage) -> None:
+    async def prepare_media(self, thread: str, message: Message) -> None:
         if message.media is not None:
-            await download_media(self.client, self.config, chat_id, message.id, message.media)
+            await download_media(self.client, self.config, thread, message.id, message.media)
         if message.quote is not None and message.quote.media is not None:
             quote_id = message.quote.id or f"{message.id}-quote"
-            await download_media(self.client, self.config, chat_id, quote_id, message.quote.media)
+            await download_media(self.client, self.config, thread, quote_id, message.quote.media)
 
     # -------------------------------------------------------------- display
 
@@ -413,31 +409,31 @@ class WhatsAppGateway:
     def self_handles(self) -> set[str]:
         return ingress.self_handles(self.me)
 
-    def chat_name(self, chat_id: str) -> str:
-        return directory.chat_name(self.db, chat_id)
+    def chat_name(self, thread: str) -> str:
+        return directory.chat_name(self.db, thread)
 
-    async def ensure_group_name(self, chat_id: str) -> None:
-        if directory.chat_name(self.db, chat_id):
+    async def ensure_group_name(self, thread: str) -> None:
+        if directory.chat_name(self.db, thread):
             return
         moment = time.monotonic()
-        if moment - self.name_retry.get(chat_id, 0.0) < GROUP_NAME_RETRY:
+        if moment - self.name_retry.get(thread, 0.0) < GROUP_NAME_RETRY:
             return
-        self.name_retry[chat_id] = moment
+        self.name_retry[thread] = moment
         getter = getattr(self.client, "get_group_info", None)
         if not callable(getter):
             return
         try:
-            info = await asyncio.wait_for(getter(self._jid(chat_id)), GROUP_INFO_TIMEOUT)
+            info = await asyncio.wait_for(getter(self._jid(thread)), GROUP_INFO_TIMEOUT)
         except Exception:
-            log.debug("failed to fetch the group name %s", chat_id, exc_info=True)
+            log.debug("failed to fetch the group name %s", thread, exc_info=True)
             return
         name = directory.group_name(info)
         if name:
-            directory.set_chat_name(self.db, chat_id, name)
-
-    def list_targets(self, query: str, limit: int) -> list[tuple[str, str]]:
-        return directory.list_targets(self.db, query, limit)
+            directory.set_chat_name(self.db, thread, name)
 
     def resolve_target(self, query: str):
-        targets = directory.list_targets(self.db, query, 50)
+        targets = directory.targets(self.db, query, 50)
         return directory.resolve_target(targets, query)
+
+    def participants(self, thread: str) -> set[str] | None:
+        return directory.participants(self.db, thread)

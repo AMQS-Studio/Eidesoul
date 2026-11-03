@@ -57,22 +57,17 @@ def _tables(db: Database) -> list[str]:
     return [str(row["tablename"]) for row in rows if row["tablename"] not in KEEP]
 
 
-def _reset_lease(db: Database) -> None:
-    """A previous run's lease must never block this run's migration."""
-    present = db.scalar(text("SELECT to_regclass('engine_lease')"))
-    if present:
-        with db.connect() as conn:
-            conn.execute(text("DELETE FROM engine_lease"))
-
-
 @pytest.fixture(scope="session")
 def test_store() -> Iterator[Database]:
     url = _require_dsn()
     db = Database(url)
     try:
         with db.engine.connect().execution_options(isolation_level="AUTOCOMMIT") as conn:
+            # The store is a throwaway (ADR-0029 §4.1): start from an empty schema so a
+            # rewritten pre-release baseline cannot leave yesterday's tables behind.
+            conn.execute(text("DROP SCHEMA IF EXISTS public CASCADE"))
+            conn.execute(text("CREATE SCHEMA public"))
             conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
-        _reset_lease(db)
         db.upgrade()
         from eidesoul.gateways import ensure_schemas
 

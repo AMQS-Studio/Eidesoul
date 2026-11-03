@@ -123,12 +123,12 @@ def _rejected(draft: str, text: str, language: str = "id") -> bool:
     return len(text) > max(600, int(len(draft) * 1.5))
 
 
-def polish_payload(draft: str, *, latest: str, recent: str, is_dm: bool, tone: str) -> str:
+def polish_payload(draft: str, *, latest: str, recent: str, direct: bool, tone: str) -> str:
     return "\n\n".join(
         (
             f"LATEST USER MESSAGE:\n{str(latest or '').strip() or '-'}",
             f"RECENT CONTEXT:\n{str(recent or '').strip() or '-'}",
-            f"CHAT: {'direct message' if is_dm else 'group'}",
+            f"CHAT: {'direct message' if direct else 'group'}",
             f"TONE: {str(tone or 'neutral').strip() or 'neutral'}",
             f"DRAFT:\n{str(draft or '').strip()}",
         )
@@ -142,7 +142,7 @@ async def polish(
     *,
     latest: str,
     recent: str = "",
-    is_dm: bool = False,
+    direct: bool = False,
     tone: str = "neutral",
     session: str = "",
 ) -> str:
@@ -158,7 +158,7 @@ async def polish(
     try:
         raw = await llm.complete(
             polish_system(config.soul.name, language),
-            polish_payload(body, latest=latest, recent=recent, is_dm=is_dm, tone=tone),
+            polish_payload(body, latest=latest, recent=recent, direct=direct, tone=tone),
             max_tokens=config.character.max_tokens,
             temperature=config.character.temperature,
             session=session or "eidesoul-character",

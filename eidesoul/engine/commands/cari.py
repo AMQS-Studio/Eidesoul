@@ -32,7 +32,7 @@ async def cari(ctx: CommandContext) -> str:
     if store is None:
         return t("command.cari.unavailable", lang)
     try:
-        rows = store.search(ctx.chat_id, query, limit=MAX_RESULTS)
+        rows = store.search(ctx.thread_id, query, limit=MAX_RESULTS)
     except Exception:
         return t("command.cari.failed", lang)
     if not rows:

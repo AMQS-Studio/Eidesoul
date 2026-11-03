@@ -78,7 +78,7 @@ def clamp_visibility(value: object, default: int = DEFAULT_VISIBILITY) -> int:
     return max(0, min(VISIBILITY_MAX, number))
 
 
-def entry_tag(entry: ChatMessage) -> str:
+def entry_tag(entry: Message) -> str:
     tag = f"role={entry.author} vis=L{entry.visibility}"
     if entry.view_once:
         tag += ", view-once"
@@ -87,7 +87,7 @@ def entry_tag(entry: ChatMessage) -> str:
     return tag
 
 
-def body_note(entry: ChatMessage) -> str:
+def body_note(entry: Message) -> str:
     """Replacement body for a deleted/undecryptable line; "" for a normal line."""
     if entry.deleted:
         if entry.deleted_admin:
@@ -124,7 +124,7 @@ class Quote:
 
 
 @dataclass
-class ChatMessage:
+class Message:
     id: str
     sender_name: str
     sender_id: str
@@ -168,21 +168,21 @@ class WorkingMemory:
     def __init__(self, limit: int = LIVE_BUFFER, store: HistoryStore | None = None):
         self.limit = max(1, limit)
         self.store = store
-        self._data: dict[str, list[ChatMessage]] = {}
+        self._data: dict[str, list[Message]] = {}
         self._loaded: set[str] = set()
 
-    def _ensure(self, chat_id: str) -> None:
-        if self.store is None or chat_id in self._loaded:
+    def _ensure(self, thread_id: str) -> None:
+        if self.store is None or thread_id in self._loaded:
             return
         try:
-            self._data[chat_id] = self.store.recent(chat_id, self.limit)
+            self._data[thread_id] = self.store.recent(thread_id, self.limit)
         except Exception:
-            log.exception("failed to load chat history=%s", chat_id)
-            self._data.setdefault(chat_id, [])
-        self._loaded.add(chat_id)
+            log.exception("failed to load chat history=%s", thread_id)
+            self._data.setdefault(thread_id, [])
+        self._loaded.add(thread_id)
 
     @staticmethod
-    def _merge(old: ChatMessage, new: ChatMessage) -> ChatMessage:
+    def _merge(old: Message, new: Message) -> Message:
         upgrade = AUTHOR_RANK.get(new.author, 0) > AUTHOR_RANK.get(old.author, 0)
         richer = (
             (new.media and not old.media)
@@ -208,9 +208,9 @@ class WorkingMemory:
             unreadable=old.unreadable and not (new.text or new.media),
         )
 
-    def append(self, chat_id: str, message: ChatMessage) -> None:
-        self._ensure(chat_id)
-        history = self._data.setdefault(chat_id, [])
+    def append(self, thread_id: str, message: Message) -> None:
+        self._ensure(thread_id)
+        history = self._data.setdefault(thread_id, [])
         for index, old in enumerate(reversed(history)):
             if message.id and old.id == message.id:
                 history[len(history) - 1 - index] = self._merge(old, message)
@@ -220,79 +220,81 @@ class WorkingMemory:
         del history[: -self.limit]
         if self.store is not None:
             try:
-                self.store.add(chat_id, message)
+                self.store.add(thread_id, message)
             except Exception:
-                log.exception("failed to save message chat=%s id=%s", chat_id, message.id)
+                log.exception("failed to save message chat=%s id=%s", thread_id, message.id)
 
-    def get(self, chat_id: str) -> list[ChatMessage]:
-        self._ensure(chat_id)
-        return list(self._data.get(chat_id, []))
+    def get(self, thread_id: str) -> list[Message]:
+        self._ensure(thread_id)
+        return list(self._data.get(thread_id, []))
 
-    def find(self, chat_id: str, message_id: str) -> ChatMessage | None:
+    def find(self, thread_id: str, message_id: str) -> Message | None:
         if not message_id:
             return None
-        for item in reversed(self.get(chat_id)):
+        for item in reversed(self.get(thread_id)):
             if item.id == message_id:
                 return item
         if self.store is None:
             return None
         try:
-            return self.store.find(chat_id, message_id)
+            return self.store.find(thread_id, message_id)
         except Exception:
-            log.exception("failed to search the old messages chat=%s id=%s", chat_id, message_id)
+            log.exception("failed to search the old messages chat=%s id=%s", thread_id, message_id)
             return None
 
-    def chat_name(self, chat_id: str) -> str:
+    def chat_name(self, thread_id: str) -> str:
         if self.store is None:
             return ""
         try:
-            return self.store.chat_name(chat_id)
+            return self.store.chat_name(thread_id)
         except Exception:
-            log.exception("failed to read the chat name=%s", chat_id)
+            log.exception("failed to read the chat name=%s", thread_id)
             return ""
 
-    def set_chat_name(self, chat_id: str, name: str) -> None:
+    def set_chat_name(self, thread_id: str, name: str) -> None:
         if self.store is None or not str(name or "").strip():
             return
         try:
-            self.store.set_chat_name(chat_id, name)
+            self.store.set_chat_name(thread_id, name)
         except Exception:
-            log.exception("failed to save the chat name=%s", chat_id)
+            log.exception("failed to save the chat name=%s", thread_id)
 
-    def remember_name(self, chat_id: str, name: str) -> None:
+    def remember_name(self, thread_id: str, name: str) -> None:
         if not str(name or "").strip():
             return
         try:
-            if self.store is not None and self.store.chat_name(chat_id):
+            if self.store is not None and self.store.chat_name(thread_id):
                 return
         except Exception:
             return
-        self.set_chat_name(chat_id, name)
+        self.set_chat_name(thread_id, name)
 
     def mark_deleted(
-        self, chat_id: str, message_id: str, by_address: str, by_name: str = ""
+        self, thread_id: str, message_id: str, by_address: str, by_name: str = ""
     ) -> bool:
-        self._ensure(chat_id)
-        for index, entry in enumerate(self._data.setdefault(chat_id, [])):
+        self._ensure(thread_id)
+        for index, entry in enumerate(self._data.setdefault(thread_id, [])):
             if entry.id != message_id or not entry.mark_deleted(by_address, by_name):
                 continue
             if self.store is not None:
                 try:
-                    self.store.add(chat_id, entry)
+                    self.store.add(thread_id, entry)
                 except Exception:
-                    log.exception("failed to save the deletion chat=%s id=%s", chat_id, message_id)
+                    log.exception(
+                        "failed to save the deletion chat=%s id=%s", thread_id, message_id
+                    )
             return True
         if self.store is None:
             return False
-        return self.store.mark_deleted(chat_id, message_id, by_address, by_name)
+        return self.store.mark_deleted(thread_id, message_id, by_address, by_name)
 
-    def set_visibility(self, chat_id: str, message_ids: tuple[str, ...], level: int) -> int:
-        self._ensure(chat_id)
+    def set_visibility(self, thread_id: str, message_ids: tuple[str, ...], level: int) -> int:
+        self._ensure(thread_id)
         wanted = {str(item) for item in message_ids if item}
         if not wanted:
             return 0
         value = clamp_visibility(level)
-        history = self._data.get(chat_id, [])
+        history = self._data.get(thread_id, [])
         changed = 0
         for index, entry in enumerate(history):
             if entry.id in wanted and entry.visibility < value:
@@ -300,16 +302,16 @@ class WorkingMemory:
                 changed += 1
         return changed
 
-    def invalidate(self, chat_id: str) -> None:
-        self._data.pop(chat_id, None)
-        self._loaded.discard(chat_id)
+    def invalidate(self, thread_id: str) -> None:
+        self._data.pop(thread_id, None)
+        self._loaded.discard(thread_id)
 
 
 INVISIBLE = dict.fromkeys(map(ord, "\u2068\u2069\u200e\u200f\u202a\u202b\u202c\u202d\u202e"), None)
 
 
 def clean(text: str) -> str:
-    """Strip the bidi isolation characters wrapping WhatsApp mentions, normalise NBSP."""
+    """Strip the bidi isolation characters wrapping body mentions, normalise NBSP."""
     return (text or "").translate(INVISIBLE).replace("\u00a0", " ")
 
 
@@ -350,8 +352,8 @@ def _relative(config: Config, path: Path) -> str:
         return path.as_posix()
 
 
-def text_path(config: Config, chat_id: str, message_id: str) -> Path:
-    folder = config.workspace / "media" / sanitize(chat_id, 40)
+def text_path(config: Config, thread_id: str, message_id: str) -> Path:
+    folder = config.workspace / "media" / sanitize(thread_id, 40)
     return folder / f"{sanitize(message_id or f'tmp-{time.time_ns()}', 60)}.txt"
 
 
@@ -395,8 +397,8 @@ def _clip(text: str, max_lines: int = PREVIEW_LINES, max_chars: int = PREVIEW_CH
     return cut, len(lines)  # one giant line: no complete line is visible
 
 
-def _save_full(config: Config, chat_id: str, message_id: str, text: str) -> str:
-    path = text_path(config, chat_id, message_id)
+def _save_full(config: Config, thread_id: str, message_id: str, text: str) -> str:
+    path = text_path(config, thread_id, message_id)
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(text, encoding="utf-8")
@@ -416,12 +418,12 @@ def _media_key(config: Config, media: Media) -> str:
     return _relative(config, media.path) if media.path is not None else ""
 
 
-def _text_lines(config: Config, chat_id: str, message: ChatMessage) -> list[str]:
+def _text_lines(config: Config, thread_id: str, message: Message) -> list[str]:
     body = message.text.rstrip()
     preview, remaining = _clip(body)
     lines = [f"  {line}" for line in preview.splitlines()]
     if remaining:
-        lines.append(_clip_marker(remaining, _save_full(config, chat_id, message.id, body)))
+        lines.append(_clip_marker(remaining, _save_full(config, thread_id, message.id, body)))
     return lines
 
 
@@ -481,7 +483,7 @@ def _media_lines(
     return [f"{head} -> {relative} {hint}"]
 
 
-def fallback_content(config: Config, message: ChatMessage) -> str:
+def fallback_content(config: Config, message: Message) -> str:
     """Minimal payload when full assembly fails: the latest message text + its attachment lines."""
     lines = [f"[{entry_tag(message)}] Latest message: {message.text}"]
     if message.media is not None:
@@ -489,7 +491,7 @@ def fallback_content(config: Config, message: ChatMessage) -> str:
     return "\n".join(lines)
 
 
-def _quote_lines(config: Config, chat_id: str, quote: Quote) -> list[str]:
+def _quote_lines(config: Config, thread_id: str, quote: Quote) -> list[str]:
     stamp = f"[{quote.when:%Y-%m-%d %H:%M}] " if quote.when else ""
     name = _flatten(quote.sender_name, NAME_LIMIT) or "-"
     ident = quote.sender_id if quote.sender_id and quote.sender_id != quote.sender_name else ""
@@ -500,14 +502,14 @@ def _quote_lines(config: Config, chat_id: str, quote: Quote) -> list[str]:
         lines = [f'  ↳ replying to {stamp}{who}: "{_flatten(preview)}"']
         if remaining:
             quote_id = quote.id or f"quote-{time.time_ns()}"
-            lines.append(_clip_marker(remaining, _save_full(config, chat_id, quote_id, body)))
+            lines.append(_clip_marker(remaining, _save_full(config, thread_id, quote_id, body)))
         return lines
     if quote.media is not None:
         return [f'  ↳ replying to {stamp}{who}: "(attachment)"']
     return [f'  ↳ replying to {stamp}{who}: "(content not available)"']
 
 
-def prompt_entry(entry: ChatMessage, bot_name: str, limit: int = 300) -> str:
+def prompt_entry(entry: Message, bot_name: str, limit: int = 300) -> str:
     """One context line for the gate/appraisal: author, name, text, media, and short quotes."""
     who = (
         f"you ({bot_name})"
@@ -538,7 +540,7 @@ def prompt_entry(entry: ChatMessage, bot_name: str, limit: int = 300) -> str:
     return f"[{entry_tag(entry)}] {who}: {text}" if text else ""
 
 
-def _render_order(messages: list[ChatMessage]) -> list[Media]:
+def _render_order(messages: list[Message]) -> list[Media]:
     """Media in render order: the quote's media before the message's own media."""
     order: list[Media] = []
     for entry in messages:
@@ -549,7 +551,7 @@ def _render_order(messages: list[ChatMessage]) -> list[Media]:
     return order
 
 
-def _choose_images(config: Config, current: ChatMessage, order: list[Media]) -> set[str]:
+def _choose_images(config: Config, current: Message, order: list[Media]) -> set[str]:
     priority: list[Media] = []
     if current.media is not None:
         priority.append(current.media)
@@ -578,7 +580,9 @@ def _choose_images(config: Config, current: ChatMessage, order: list[Media]) -> 
     return chosen
 
 
-def _plan_images(config: Config, current: ChatMessage, order: list[Media]) -> tuple[dict[str, int], list[Media]]:
+def _plan_images(
+    config: Config, current: Message, order: list[Media]
+) -> tuple[dict[str, int], list[Media]]:
     """Number the selected images in render order; return the key->number map and that order."""
     chosen = _choose_images(config, current, order)
     numbers: dict[str, int] = {}
@@ -593,10 +597,10 @@ def _plan_images(config: Config, current: ChatMessage, order: list[Media]) -> tu
 
 def _message_lines(
     config: Config,
-    chat_id: str,
-    entry: ChatMessage,
+    thread_id: str,
+    entry: Message,
     numbers: dict[str, int],
-    current: ChatMessage,
+    current: Message,
 ) -> list[str]:
     stamp = f"[{entry.when:%Y-%m-%d %H:%M}]"
     tag = entry_tag(entry)
@@ -615,11 +619,11 @@ def _message_lines(
     if note:
         lines.append(f"  {note}")
     elif entry.text.strip():
-        lines.extend(_text_lines(config, chat_id, entry))
+        lines.extend(_text_lines(config, thread_id, entry))
     elif entry.media is not None:
         lines.append("  (no text)")
     if entry.quote is not None and not entry.deleted:
-        lines.extend(_quote_lines(config, chat_id, entry.quote))
+        lines.extend(_quote_lines(config, thread_id, entry.quote))
         if entry.quote.media is not None:
             media = entry.quote.media
             number = numbers.get(_media_key(config, media), 0)
@@ -636,9 +640,9 @@ def _message_lines(
 
 async def build_user_content(
     config: Config,
-    chat_id: str,
-    messages: list[ChatMessage],
-    current: ChatMessage,
+    thread_id: str,
+    messages: list[Message],
+    current: Message,
     chat_name: str = "",
 ) -> str | list[dict]:
     """Assemble the payload: context header, then each message (name, number, time, text, quote)."""
@@ -649,7 +653,7 @@ async def build_user_content(
     lines = [f"Thread{label} ({len(messages)} messages, oldest → newest; local time):"]
     for entry in messages:
         lines.append("")
-        lines.extend(_message_lines(config, chat_id, entry, numbers, current))
+        lines.extend(_message_lines(config, thread_id, entry, numbers, current))
 
     parts: list[dict] = []
     for media in planned:

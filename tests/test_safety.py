@@ -12,7 +12,7 @@ def request(tool: str, **args) -> ActionRequest:
     return ActionRequest(
         tool=tool,
         args=args,
-        chat_id="c",
+        thread_id="c",
         sender="s",
         gateway="g",
         roles=("owner",),

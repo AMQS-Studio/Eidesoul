@@ -9,7 +9,7 @@ from support import build_config
 
 from eidesoul.engine.context import (
     DEFAULT_VISIBILITY,
-    ChatMessage,
+    Message,
     build_user_content,
     prompt_entry,
 )
@@ -24,8 +24,8 @@ def message(
     sender_id: str = "628222",
     author: str = "unknown",
     visibility: int = 2,
-) -> ChatMessage:
-    return ChatMessage(
+) -> Message:
+    return Message(
         id=mid,
         sender_name=sender_name,
         sender_id=sender_id,
@@ -37,9 +37,9 @@ def message(
 
 
 def test_chat_message_normalizes_author_and_clamps_visibility() -> None:
-    entry = ChatMessage("a", "Budi", "1", datetime(2026, 1, 1), "x", author="ghost", visibility=9)
-    low = ChatMessage("b", "Budi", "1", datetime(2026, 1, 1), "x", visibility=-3)
-    broken = ChatMessage("c", "Budi", "1", datetime(2026, 1, 1), "x", visibility="tinggi")  # type: ignore[arg-type]
+    entry = Message("a", "Budi", "1", datetime(2026, 1, 1), "x", author="ghost", visibility=9)
+    low = Message("b", "Budi", "1", datetime(2026, 1, 1), "x", visibility=-3)
+    broken = Message("c", "Budi", "1", datetime(2026, 1, 1), "x", visibility="tinggi")  # type: ignore[arg-type]
 
     assert entry.author == "unknown"
     assert entry.visibility == 4
@@ -101,8 +101,8 @@ def test_working_memory_merge_upgrades_authorship_and_visibility() -> None:
     assert downgrade.text == "halo"
 
 
-def row(mid: str, text: str, **kwargs) -> ChatMessage:
-    return ChatMessage(
+def row(mid: str, text: str, **kwargs) -> Message:
+    return Message(
         id=mid,
         sender_name=kwargs.pop("sender_name", "Budi"),
         sender_id=kwargs.pop("sender_id", "628222"),

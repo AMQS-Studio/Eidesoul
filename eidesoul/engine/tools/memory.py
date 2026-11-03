@@ -1,4 +1,4 @@
-"""Memory tool: one door to person/chat/global memory through Mem0 (async, cross-chat)."""
+"""Memory tool: one door to person/thread/global memory through Mem0 (async, cross-thread)."""
 
 from __future__ import annotations
 
@@ -7,7 +7,7 @@ from ..memory.privacy import MAX_LEVEL, PrivacyPolicy, clamp_level
 from ..registry import Handler
 from . import ToolContext, _int
 
-SCOPES = ("person", "chat", "global")
+SCOPES = ("person", "thread", "global")
 
 
 def _line(hit: MemoryHit) -> str:
@@ -20,16 +20,16 @@ def _line(hit: MemoryHit) -> str:
 
 def _identity(ctx: ToolContext, scope: str) -> tuple[str, str]:
     person = ""
-    chat = ""
+    thread = ""
     if scope == "person":
         person = ctx.person_id or ctx.sender
         if not person:
             raise ValueError("no sender identity")
-    elif scope == "chat":
-        if not ctx.chat_id:
-            raise ValueError("no active chat")
-        chat = ctx.chat_id
-    return person, chat
+    elif scope == "thread":
+        if not ctx.thread_id:
+            raise ValueError("no active thread")
+        thread = ctx.thread_id
+    return person, thread
 
 
 def _owner(ctx: ToolContext) -> str:
@@ -47,9 +47,9 @@ async def _memory(args: dict, ctx: ToolContext) -> str:
     action = str(args.get("action") or "search").strip().lower()
     scope = str(args.get("scope") or "person").strip().lower()
     if scope not in SCOPES:
-        return "error: scope must be 'person', 'chat', or 'global'"
+        return "error: scope must be 'person', 'thread', or 'global'"
     try:
-        person, chat = _identity(ctx, scope)
+        person, thread = _identity(ctx, scope)
     except ValueError as exc:
         return f"error: {exc}"
     limit = max(1, min(_int(args, "limit", 10), 20))
@@ -79,7 +79,7 @@ async def _memory(args: dict, ctx: ToolContext) -> str:
         raw_subject = str(args.get("subject") or "").strip()
         if raw_subject and ctx.affect is not None:
             try:
-                subject = ctx.affect.person_by_name(ctx.chat_id, raw_subject) or owner
+                subject = ctx.affect.person_by_name(ctx.thread_id, raw_subject) or owner
             except Exception:
                 subject = owner
         elif raw_subject:
@@ -90,7 +90,7 @@ async def _memory(args: dict, ctx: ToolContext) -> str:
                 scope=scope,
                 kind=kind,
                 person_id=person,
-                chat_id=chat,
+                thread_id=thread,
                 source="tool",
                 supersedes=str(supersedes) if supersedes not in (None, "") else None,
                 level=level,
@@ -109,14 +109,14 @@ async def _memory(args: dict, ctx: ToolContext) -> str:
         query = str(args.get("query") or "").strip()
         if action == "search" and query:
             rows = await ctx.memory.search(
-                query, person_id=person, chat_id=chat, scopes=(scope,), limit=limit
+                query, person_id=person, thread_id=thread, scopes=(scope,), limit=limit
             )
         else:
             rows = await ctx.memory.list(
-                scope=scope, person_id=person, chat_id=chat, limit=limit
+                scope=scope, person_id=person, thread_id=thread, limit=limit
             )
         policy = _policy(ctx)
-        shown = [row for row in rows if policy.show(row, is_dm=ctx.is_dm)]
+        shown = [row for row in rows if policy.show(row, direct=ctx.direct)]
         ctx.memory_hits.extend(shown)
         if not shown:
             return "No matching memory." if query else "No memory yet."
@@ -131,24 +131,24 @@ async def _memory(args: dict, ctx: ToolContext) -> str:
             removed = await ctx.memory.forget(
                 str(raw_id),
                 requester_id=_owner(ctx),
-                chat_id=ctx.chat_id,
+                thread_id=ctx.thread_id,
                 allow_global=allow_global,
             )
             return "ok: 1 memory deleted." if removed else "No memory was deleted."
         if not query:
             return "error: id or query is required for forget"
         rows = await ctx.memory.search(
-            query, person_id=person, chat_id=chat, scopes=(scope,), limit=limit
+            query, person_id=person, thread_id=thread, scopes=(scope,), limit=limit
         )
         policy = _policy(ctx)
         removed = 0
         for row in rows:
-            if not policy.show(row, is_dm=ctx.is_dm):
+            if not policy.show(row, direct=ctx.direct):
                 continue
             if await ctx.memory.forget(
                 row.id,
                 requester_id=_owner(ctx),
-                chat_id=ctx.chat_id,
+                thread_id=ctx.thread_id,
                 allow_global=allow_global,
             ):
                 removed += 1
@@ -168,12 +168,12 @@ async def _memory(args: dict, ctx: ToolContext) -> str:
         if not query:
             return "error: id or query is required for veto"
         rows = await ctx.memory.search(
-            query, person_id=subject, chat_id=ctx.chat_id, scopes=SCOPES, limit=limit
+            query, person_id=subject, thread_id=ctx.thread_id, scopes=SCOPES, limit=limit
         )
         policy = _policy(ctx)
         changed = 0
         for row in rows:
-            if row.subject_id != subject or not policy.show(row, is_dm=True):
+            if row.subject_id != subject or not policy.show(row, direct=True):
                 continue
             if await ctx.memory.veto(row.id, subject_id=subject, active=active):
                 changed += 1
@@ -188,14 +188,14 @@ TOOL = Handler(
     name="memory",
     family="write",
     description=(
-        "Long-term memory across chats: add/search/list/forget/veto. scope=person stores facts "
-        "about the sender and follows them into every chat; scope=chat keeps group-specific "
-        "things in this chat; scope=global stores shared team facts and requires memory_admin. "
+        "Long-term memory across threads: add/search/list/forget/veto. scope=person stores facts "
+        "about the sender and follows them into every thread; scope=thread keeps group-specific "
+        "things in this thread; scope=global stores shared team facts and requires memory_admin. "
         "level is 0 public, 1 team, 2 personal, 3 sensitive/aib, 4 secret; level 5 and "
         "credentials are never stored. One short question before saving a level>=4 entry, then "
         "retry with confirmed=true. subject=<name> marks the person a third-party fact is "
         "about; only that subject can veto it. veto hides an entry from context and tool "
-        "output; active=false restores it. Never reveal another chat's private memory to a "
+        "output; active=false restores it. Never reveal another thread's private memory to a "
         "third person. Pass supersedes=<id> when a new fact replaces an old entry."
     ),
     fn=_memory,
@@ -207,7 +207,7 @@ TOOL = Handler(
                 "type": "string",
                 "description": "add, search, list, forget, or veto.",
             },
-            "scope": {"type": "string", "description": "person (default), chat, or global."},
+            "scope": {"type": "string", "description": "person (default), thread, or global."},
             "text": {"type": "string", "description": "Memory text for action=add."},
             "kind": {"type": "string", "description": "fact, preference, rule, or note."},
             "level": {

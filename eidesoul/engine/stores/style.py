@@ -110,7 +110,7 @@ class StyleStore:
     # ------------------------------------------------------------------ state
 
     def _load(self) -> dict:
-        data = {"seeded": False, "global": _empty(), "chats": {}, "people": {}}
+        data = {"seeded": False, "global": _empty(), "threads": {}, "people": {}}
         try:
             row = self._db.fetch_one(
                 select(state_table.c.value).where(state_table.c.key == STATE_KEY)
@@ -123,7 +123,7 @@ class StyleStore:
             return data
         data["seeded"] = bool(raw.get("seeded"))
         data["global"] = _merge(data["global"], raw.get("global") or {})
-        for scope in ("chats", "people"):
+        for scope in ("threads", "people"):
             items = raw.get(scope)
             if isinstance(items, dict):
                 data[scope] = {
@@ -192,7 +192,7 @@ class StyleStore:
             keep = sorted(bucket["emojis"].items(), key=lambda item: -item[1])[:TOP]
             bucket["emojis"] = dict(keep)
 
-    def learn(self, text: str, *, chat_id: str = "", person_id: str = "") -> None:
+    def learn(self, text: str, *, thread_id: str = "", person_id: str = "") -> None:
         """One human message; commands, media placeholders, and long text are skipped."""
         body = str(text or "")
         if not body.strip() or body.startswith("/") or len(body) > MAX_TEXT:
@@ -201,8 +201,8 @@ class StyleStore:
             return
         with self._lock:
             self._count(self._data["global"], body)
-            if chat_id:
-                bucket = self._data["chats"].setdefault(chat_id, _empty())
+            if thread_id:
+                bucket = self._data["threads"].setdefault(thread_id, _empty())
                 self._count(bucket, body)
             if person_id:
                 bucket = self._data["people"].setdefault(person_id, _empty())
@@ -250,9 +250,9 @@ class StyleStore:
                 if any(marker in body for marker in PLACEHOLDERS):
                     continue
                 self._count(self._data["global"], body)
-                chat_id = str(item.get("chat_id") or "")
-                if chat_id:
-                    self._count(self._data["chats"].setdefault(chat_id, _empty()), body)
+                thread_id = str(item.get("thread_id") or "")
+                if thread_id:
+                    self._count(self._data["threads"].setdefault(thread_id, _empty()), body)
                 person_id = ""
                 address = str(item.get("sender_address") or "")
                 if address and history is not None:
@@ -272,10 +272,10 @@ class StyleStore:
     def seed_profile(self) -> dict:
         return dict(SEED)
 
-    def _bucket(self, chat_id: str = "") -> dict:
+    def _bucket(self, thread_id: str = "") -> dict:
         with self._lock:
-            if chat_id:
-                bucket = self._data["chats"].get(chat_id)
+            if thread_id:
+                bucket = self._data["threads"].get(thread_id)
                 if bucket is not None and bucket["n"] >= SEED_MIN:
                     return bucket
             bucket = self._data["global"]
@@ -302,7 +302,7 @@ class StyleStore:
             name for name, _ in sorted(bucket["emojis"].items(), key=lambda item: -item[1])[:3]
         ]
         lines = [
-            "How this person chats (mimic the rhythm, not the content or opinions):",
+            "How this person writes (mimic the rhythm, not the content or opinions):",
             (
                 f"- median {median} characters; 90% below {p90}; "
                 f"{round(bucket['lower'] / total * 100)}% lowercase."
@@ -318,9 +318,9 @@ class StyleStore:
         limit = max(200, int(self.config.max_chars))
         return text if len(text) <= limit else text[: limit - 1] + "…"
 
-    def profile(self, chat_id: str = "") -> str:
+    def profile(self, thread_id: str = "") -> str:
         """Chat style prompt block; empty never happens (the seed is the minimal baseline)."""
-        bucket = self._bucket(chat_id)
+        bucket = self._bucket(thread_id)
         if not bucket:
             median, p90 = SEED["median"], SEED["p90"]
             lower = SEED["lower"]
@@ -358,6 +358,6 @@ class StyleStore:
             return {
                 "seeded": bool(self._data.get("seeded")),
                 "global": int(self._data["global"]["n"]),
-                "chats": {key: int(value["n"]) for key, value in self._data["chats"].items()},
+                "threads": {key: int(value["n"]) for key, value in self._data["threads"].items()},
                 "people": len(self._data["people"]),
             }

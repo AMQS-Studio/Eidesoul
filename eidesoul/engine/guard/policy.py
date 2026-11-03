@@ -91,7 +91,7 @@ _SUBSTITUTION = re.compile(r"\$\(([^()]*)\)|`([^`]*)`")
 class ActionRequest:
     tool: str
     args: dict
-    chat_id: str
+    thread_id: str
     sender: str
     gateway: str
     roles: tuple[str, ...]

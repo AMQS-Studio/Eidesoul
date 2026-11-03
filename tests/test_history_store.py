@@ -6,7 +6,7 @@ from datetime import datetime
 
 from support import database
 
-from eidesoul.engine.context import ChatMessage, Media, Quote
+from eidesoul.engine.context import Media, Message, Quote
 from eidesoul.engine.schema import messages
 from eidesoul.engine.stores.history import HistoryStore
 
@@ -27,8 +27,8 @@ def message(
     sender_id: str = "628222",
     view_once: bool = False,
     unreadable: bool = False,
-) -> ChatMessage:
-    return ChatMessage(
+) -> Message:
+    return Message(
         id=mid,
         sender_name=sender_name,
         sender_id=sender_id,
@@ -76,7 +76,7 @@ def test_upsert_keeps_richer_fields(tmp_path) -> None:
     assert store.message_count() == 1
 
 
-def test_chat_name_and_recent_chats(tmp_path) -> None:
+def test_chat_name_and_recent_threads(tmp_path) -> None:
     store = HistoryStore(database())
     store.add("a@g.us", message("a", "x", when=datetime(2026, 1, 1, 10)))
     store.add("b@s.whatsapp.net", message("b", "y", when=datetime(2026, 1, 1, 11)))
@@ -85,7 +85,7 @@ def test_chat_name_and_recent_chats(tmp_path) -> None:
 
     assert store.chat_name("a@g.us") == "Grup Logistik"
     assert store.chat_name("b@s.whatsapp.net") == ""
-    assert store.recent_chats(10) == ["b@s.whatsapp.net", "a@g.us"]
+    assert store.recent_threads(10) == ["b@s.whatsapp.net", "a@g.us"]
 
 
 def test_people_and_style_seed_skip_outgoing(tmp_path) -> None:

@@ -7,7 +7,7 @@ import asyncio
 from support import make_agent, role
 from test_whatsapp_gateway import make_gateway
 
-from eidesoul.engine.context import ChatMessage
+from eidesoul.engine.context import Message
 from eidesoul.engine.tools import execute
 from eidesoul.gateways.whatsapp import directory
 
@@ -69,7 +69,7 @@ def cross_env(tmp_path, role_tools=("send_to", "chat_history", "*")):
     )
     env.history.add(
         TARGET,
-        ChatMessage(
+        Message(
             id="b1",
             sender_name="Budi",
             sender_id="628999999999",

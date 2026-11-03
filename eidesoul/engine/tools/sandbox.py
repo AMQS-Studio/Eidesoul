@@ -132,7 +132,7 @@ async def _sandbox(args: dict, ctx: ToolContext) -> str:
     if cfg.host_workspace is None and not source.is_dir():
         return _source_error(source)
     public_host = source / PUBLIC
-    scratch_host = source / SCRATCH / safe_chat(ctx.chat_id)
+    scratch_host = source / SCRATCH / safe_chat(ctx.thread_id)
     if cfg.host_workspace is None:
         public_host.mkdir(parents=True, exist_ok=True)
         scratch_host.mkdir(parents=True, exist_ok=True)

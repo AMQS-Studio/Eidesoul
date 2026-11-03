@@ -28,9 +28,9 @@ async def mood(ctx: CommandContext) -> str:
     affect = ctx.agent.affect
     if affect is None:
         return t("command.mood.unavailable", lang)
-    person_id = ctx.inbound.person_id if ctx.inbound is not None else ctx.sender
+    person_id = ctx.inbound.actor if ctx.inbound is not None else ctx.sender
     try:
-        data = affect.status(ctx.chat_id, person_id)
+        data = affect.status(ctx.thread_id, person_id)
     except Exception:
         return t("command.mood.failed", lang)
     pleasure = float(data["pleasure"])

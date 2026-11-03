@@ -5,23 +5,22 @@ from __future__ import annotations
 import asyncio
 import getpass
 import logging
-import shutil
 import sys
 import time
 from datetime import datetime
-from pathlib import Path
 
-from ...engine.context import ChatMessage
-from ...engine.inbound import Inbound
+from ...engine.context import Message
+from ...engine.inbound import MESSAGE, CoreDefaults, Percept
 from ...engine.registry import Handler
 from .config import CliSettings
 
 log = logging.getLogger(__name__)
 
 
-class CliGateway:
+class CliGateway(CoreDefaults):
+    """Core only: a terminal has no files, stickers, presence indicator, or directory."""
+
     name = "cli"
-    capabilities = frozenset({"text"})
     backlog_seconds = 0.0
 
     def __init__(self, config, db, history, windows, *, settings=None) -> None:
@@ -63,19 +62,24 @@ class CliGateway:
             if not text.strip():
                 continue
             self.counter += 1
-            inbound = Inbound(
-                chat_id=self.settings.chat_id,
-                message=ChatMessage(
+            user = self.settings.user or "local"
+            hints: dict[str, object] = {"dm": True}
+            if self.settings.role:
+                hints["roles"] = (self.settings.role,)
+            inbound = Percept(
+                source=self.name,
+                thread=self.settings.thread_id,
+                actor=user,
+                kind=MESSAGE,
+                payload=Message(
                     id=f"cli-{time.time_ns()}",
-                    sender_name=self.settings.user or getpass.getuser(),
-                    sender_id=self.settings.user or "local",
+                    sender_name=user or getpass.getuser(),
+                    sender_id=user,
                     when=datetime.now(),
                     text=text,
-                    sender_address=self.settings.user or "local",
+                    sender_address=user,
                 ),
-                is_dm=True,
-                person_address=self.settings.user or "local",
-                role_override=(self.settings.role,) if self.settings.role else (),
+                hints=hints,
             )
             try:
                 await agent.handle(inbound, self)
@@ -85,30 +89,10 @@ class CliGateway:
     async def stop(self) -> None:
         self.stopped = True
 
-    async def send_text(self, chat_id: str, text: str, *, reply: Inbound | None = None) -> str:
+    async def send_text(self, thread: str, text: str, *, reply: Percept | None = None) -> str:
         self.counter += 1
         print(f"\nEidesoul: {text}\n", flush=True)
         return f"cli-{self.counter}"
-
-    async def send_file(
-        self, chat_id: str, path: Path, caption: str = "", *, reply: Inbound | None = None
-    ) -> str:
-        outbox = self.config.workspace / "outbox"
-        outbox.mkdir(parents=True, exist_ok=True)
-        target = outbox / Path(path).name
-        shutil.copy2(path, target)
-        self.counter += 1
-        print(f"\nEidesoul: (file) {target}{f' — {caption}' if caption else ''}\n", flush=True)
-        return f"cli-file-{self.counter}"
-
-    async def send_reaction(self, chat_id: str, message_id: str) -> str | None:
-        return None
-
-    async def typing(self, chat_id: str, composing: bool) -> None:
-        return None
-
-    async def prepare_media(self, chat_id: str, message: ChatMessage) -> None:
-        return None
 
     def render(self, text: str) -> str:
         return str(text or "")
@@ -119,23 +103,12 @@ class CliGateway:
             "- You are answering in a local terminal: plain text, no WhatsApp formatting, no "
             "mentions, no quoting.\n"
             "- Stay brief; the operator can see tool results only through your answer.\n"
-            "- Files you 'send' are copied to the workspace outbox and the path is printed."
+            "- Files are not transferable here: a file becomes the file name and, when it is "
+            "text, its contents."
         )
 
     def self_handles(self) -> set[str]:
         return set()
 
-    def chat_name(self, chat_id: str) -> str:
+    def chat_name(self, thread: str) -> str:
         return self.settings.chat_name
-
-    def list_targets(self, query: str, limit: int) -> list[tuple[str, str]]:
-        return [(self.settings.chat_id, self.settings.chat_name)]
-
-    def resolve_target(self, query: str):
-        value = str(query or "").strip().casefold()
-        if value in {self.settings.chat_id.casefold(), self.settings.chat_name.casefold()}:
-            return (self.settings.chat_id, self.settings.chat_name), []
-        return None, []
-
-    def data_paths(self) -> list[Path]:
-        return []

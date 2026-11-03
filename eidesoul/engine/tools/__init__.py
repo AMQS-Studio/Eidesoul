@@ -32,7 +32,7 @@ class ToolContext:
         roles: tuple[Role, ...],
         allowed: tuple[str, ...],
         *,
-        chat_id: str = "",
+        thread_id: str = "",
         sender: str = "",
         request: str = "",
         history=None,
@@ -46,12 +46,12 @@ class ToolContext:
         approved: bool = False,
         approval_id: str = "",
         person_id: str = "",
-        is_dm: bool = False,
+        direct: bool = False,
     ):
         self.config = config
         self.roles = tuple(roles) if isinstance(roles, (tuple, list)) else (roles,)
         self.allowed = allowed
-        self.chat_id = chat_id
+        self.thread_id = thread_id
         self.sender = sender
         self.request = request
         self.history = history
@@ -65,7 +65,7 @@ class ToolContext:
         self.approved = approved
         self.approval_id = approval_id
         self.person_id = person_id or sender
-        self.is_dm = bool(is_dm)
+        self.direct = bool(direct)
         self.used: list[str] = []
         self.sent: list[dict] = []
         self.reads: set[str] = set()
@@ -82,13 +82,13 @@ class ToolContext:
 
     @property
     def roots(self) -> tuple[Path, ...]:
-        return workspace_roots(self.config, self.roles, self.chat_id)
+        return workspace_roots(self.config, self.roles, self.thread_id)
 
     @property
     def scratch(self) -> Path | None:
         return (
-            self.config.workspace / SCRATCH / safe_chat(self.chat_id)
-            if self.chat_id
+            self.config.workspace / SCRATCH / safe_chat(self.thread_id)
+            if self.thread_id
             else None
         )
 
@@ -108,8 +108,8 @@ def _int(args: dict, key: str, default: int) -> int:
         return default
 
 
-def safe_chat(chat_id: str) -> str:
-    value = re.sub(r"[^A-Za-z0-9_.-]", "_", str(chat_id or "")).strip("._")
+def safe_chat(thread_id: str) -> str:
+    value = re.sub(r"[^A-Za-z0-9_.-]", "_", str(thread_id or "")).strip("._")
     return (value or "chat")[:80]
 
 
@@ -117,13 +117,13 @@ def trusted_roles(roles) -> bool:
     return any("*" in (role.tools or ()) for role in roles)
 
 
-def workspace_roots(config: Config, roles, chat_id: str) -> tuple[Path, ...]:
+def workspace_roots(config: Config, roles, thread_id: str) -> tuple[Path, ...]:
     base = config.workspace.resolve()
     if trusted_roles(roles):
         return (base,)
     found = [base / PUBLIC]
-    if chat_id:
-        found.append(base / SCRATCH / safe_chat(chat_id))
+    if thread_id:
+        found.append(base / SCRATCH / safe_chat(thread_id))
     return tuple(found)
 
 
@@ -140,7 +140,7 @@ def resolve_path(config: Config, raw: str, roots: tuple[Path, ...]) -> Path:
     return path
 
 
-def resolve_for(config: Config, raw: str, roles, chat_id: str) -> Path:
+def resolve_for(config: Config, raw: str, roles, thread_id: str) -> Path:
     """Map the model-facing prefix (`public/`, `scratch/`, `private/`) and resolve per role."""
     text = str(raw or "").strip()
     if not text:
@@ -148,7 +148,7 @@ def resolve_for(config: Config, raw: str, roles, chat_id: str) -> Path:
     trusted = trusted_roles(roles)
     if (
         not trusted
-        and not chat_id
+        and not thread_id
         and not (text == PUBLIC or text.startswith(PUBLIC + "/"))
     ):
         raise PermissionError("scratch needs an active chat")
@@ -156,16 +156,16 @@ def resolve_for(config: Config, raw: str, roles, chat_id: str) -> Path:
         target = text
     elif text == SCRATCH or text.startswith(SCRATCH + "/"):
         rest = text[len(SCRATCH) :].lstrip("/")
-        target = str(Path(SCRATCH) / safe_chat(chat_id) / rest)
+        target = str(Path(SCRATCH) / safe_chat(thread_id) / rest)
     elif text == PRIVATE or text.startswith(PRIVATE + "/") or trusted:
         target = text
     else:
-        target = str(Path(SCRATCH) / safe_chat(chat_id) / text)
-    return resolve_path(config, target, workspace_roots(config, roles, chat_id))
+        target = str(Path(SCRATCH) / safe_chat(thread_id) / text)
+    return resolve_path(config, target, workspace_roots(config, roles, thread_id))
 
 
 def _resolve(ctx: ToolContext, raw: str) -> Path:
-    return resolve_for(ctx.config, raw, ctx.roles, ctx.chat_id)
+    return resolve_for(ctx.config, raw, ctx.roles, ctx.thread_id)
 
 
 def _resolve_write(ctx: ToolContext, raw: str) -> Path:
@@ -193,7 +193,7 @@ async def execute(specs: dict[str, Handler], name: str, args: dict, ctx: ToolCon
             ActionRequest(
                 tool=spec.name,
                 args=dict(args),
-                chat_id=ctx.chat_id,
+                thread_id=ctx.thread_id,
                 sender=ctx.sender,
                 gateway=getattr(ctx.gateway, "name", "") or "",
                 roles=tuple(role.name for role in ctx.roles),
@@ -205,7 +205,7 @@ async def execute(specs: dict[str, Handler], name: str, args: dict, ctx: ToolCon
                 decision = await guard.check(
                     str(args.get("command") or ""),
                     can_approve=command_allowed(ctx.roles, "approve"),
-                    chat_id=ctx.chat_id,
+                    thread_id=ctx.thread_id,
                 )
         if decision.verdict == "deny":
             return f"error: {decision.reason or 'action denied by safety policy'}"
@@ -217,7 +217,7 @@ async def execute(specs: dict[str, Handler], name: str, args: dict, ctx: ToolCon
                 )
             approval = await ctx.agent.approvals.create(
                 kind="tool",
-                chat_id=ctx.chat_id,
+                thread_id=ctx.thread_id,
                 sender=ctx.sender,
                 gateway=getattr(ctx.gateway, "name", "") or "",
                 tool=spec.name,

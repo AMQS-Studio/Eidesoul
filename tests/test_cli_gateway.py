@@ -1,4 +1,4 @@
-"""CLI gateway contract: stdin -> Inbound, output to stdout, /quit stops."""
+"""CLI gateway contract: stdin -> Percept, output to stdout, /quit stops."""
 
 from __future__ import annotations
 
@@ -35,7 +35,7 @@ def make_cli(tmp_path):
         settings=GatewaySettings(
             "cli",
             True,
-            {"role": "owner", "user": "local", "chat_id": "cli:local", "chat_name": "Terminal"},
+            {"role": "owner", "user": "local", "thread_id": "cli:local", "chat_name": "Terminal"},
         ),
     )
     return gateway
@@ -50,10 +50,10 @@ def test_stdin_line_becomes_inbound_and_quit_stops(tmp_path, monkeypatch) -> Non
 
     assert len(agent.inbounds) == 1
     inbound = agent.inbounds[0]
-    assert inbound.chat_id == "cli:local"
-    assert inbound.message.text == "halo"
-    assert inbound.is_dm is True
-    assert inbound.role_override == ("owner",)
+    assert inbound.thread == "cli:local"
+    assert inbound.payload.text == "halo"
+    assert inbound.hints.get("dm") is True
+    assert inbound.hints.get("roles") == ("owner",)
 
 
 def test_send_text_prints_with_prefix(tmp_path, capsys) -> None:
@@ -71,3 +71,16 @@ def test_render_is_identity_and_hints_are_plain(tmp_path) -> None:
     assert gateway.render("**tebal**") == "**tebal**"
     assert "plain text" in gateway.prompt_hints()
     assert gateway.self_handles() == set()
+
+
+def test_the_cli_is_core_only(tmp_path) -> None:
+    from eidesoul.engine.inbound import Directory, GatewayCore, Rich
+
+    gateway = make_cli(tmp_path)
+
+    assert isinstance(gateway, GatewayCore)
+    assert not isinstance(gateway, Rich)
+    assert not isinstance(gateway, Directory)
+    for absent in ("send_file", "send_sticker", "typing", "prepare_media", "participants"):
+        assert not hasattr(gateway, absent), absent
+    assert gateway.chat_name("cli:local") == "Terminal"

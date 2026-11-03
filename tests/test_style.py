@@ -43,17 +43,17 @@ def test_learn_ignores_commands_and_media(tmp_path) -> None:
     store.learn("   ")
     assert store.stats()["global"] == 0
 
-    store.learn("iyaa aku udah cek, aman kok", chat_id="c@g.us", person_id="628111")
+    store.learn("iyaa aku udah cek, aman kok", thread_id="c@g.us", person_id="628111")
     stats = store.stats()
     assert stats["global"] == 1
-    assert stats["chats"] == {"c@g.us": 1}
+    assert stats["threads"] == {"c@g.us": 1}
     store.close()
 
 
 def test_learn_persists_aggregates_only(tmp_path) -> None:
     db = database()
     store = StyleStore(db, StyleConfig(enabled=True))
-    store.learn("wkwk aja sih", chat_id="c@g.us")
+    store.learn("wkwk aja sih", thread_id="c@g.us")
     store.close()
 
     stored = db.scalar(select(state.c.value).where(state.c.key == "style"))
@@ -61,7 +61,7 @@ def test_learn_persists_aggregates_only(tmp_path) -> None:
     assert "wkwk aja sih" not in stored
     reloaded = StyleStore(database(), StyleConfig(enabled=True))
     assert reloaded.stats()["global"] == 1
-    assert reloaded.stats()["chats"] == {"c@g.us": 1}
+    assert reloaded.stats()["threads"] == {"c@g.us": 1}
     reloaded.close()
 
 
@@ -171,7 +171,7 @@ def test_person_profile_learns_individual_style(tmp_path) -> None:
 def test_profile_uses_live_stats_after_enough_samples(tmp_path) -> None:
     store = make_store(tmp_path)
     for _ in range(25):
-        store.learn("iyaa kok gitu sih, aku juga bingung wkwk", chat_id="c@g.us")
+        store.learn("iyaa kok gitu sih, aku juga bingung wkwk", thread_id="c@g.us")
 
     text = store.profile("c@g.us")
 

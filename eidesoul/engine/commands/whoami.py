@@ -9,23 +9,23 @@ from . import CommandContext
 
 def _chat_label(ctx: CommandContext, lang: str) -> str:
     kind = t(f"command.whoami.{_kind_key(ctx)}", lang)
-    name = ctx.gateway.chat_name(ctx.chat_id) if ctx.gateway is not None else ""
+    name = ctx.gateway.chat_name(ctx.thread_id) if ctx.gateway is not None else ""
     if name:
-        return t("command.whoami.chat_label", lang, kind=kind, name=name, id=ctx.chat_id)
-    return t("command.whoami.chat_plain", lang, kind=kind, id=ctx.chat_id)
+        return t("command.whoami.chat_label", lang, kind=kind, name=name, id=ctx.thread_id)
+    return t("command.whoami.chat_plain", lang, kind=kind, id=ctx.thread_id)
 
 
 def _kind_key(ctx: CommandContext) -> str:
-    return "dm" if ctx.is_dm else "group"
+    return "dm" if ctx.direct else "group"
 
 
 async def whoami(ctx: CommandContext) -> str:
     lang = ctx.lang
     roles = ", ".join(role.name.capitalize() for role in ctx.roles) or "-"
-    person_id = ctx.inbound.person_id if ctx.inbound is not None else ""
+    person_id = ctx.inbound.actor if ctx.inbound is not None else ""
     person = ctx.agent.identity.person(person_id) or {}
     lines = [
-        t("command.whoami.user", lang, who=ctx.sender or ctx.chat_id),
+        t("command.whoami.user", lang, who=ctx.sender or ctx.thread_id),
         t("command.whoami.role", lang, roles=roles),
         t(
             "command.whoami.identity",

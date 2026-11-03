@@ -9,7 +9,7 @@ from support import FakeLLM, build_config, database
 
 from eidesoul.engine.ambient import Ambient, drift
 from eidesoul.engine.config import AffectConfig
-from eidesoul.engine.context import ChatMessage
+from eidesoul.engine.context import Message
 from eidesoul.engine.stores.affect import AffectStore
 from eidesoul.engine.stores.history import HistoryStore
 
@@ -33,7 +33,7 @@ def build(tmp_path, digest: dict):
     for index in range(3):
         history.add(
             CHAT,
-            ChatMessage(
+            Message(
                 id=f"m{index}",
                 sender_name="Budi",
                 sender_id="628111",

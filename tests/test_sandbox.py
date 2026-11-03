@@ -33,7 +33,7 @@ class FakeProc:
 
 
 def make_ctx(
-    tmp_path: Path, *, trusted: bool = False, chat_id: str = "chat1", **cfg
+    tmp_path: Path, *, trusted: bool = False, thread_id: str = "chat1", **cfg
 ) -> SimpleNamespace:
     workspace = tmp_path / "work"
     (workspace / "public").mkdir(parents=True, exist_ok=True)
@@ -43,7 +43,7 @@ def make_ctx(
     return SimpleNamespace(
         config=SimpleNamespace(workspace=workspace, sandbox=SandboxConfig(**cfg)),
         trusted=trusted,
-        chat_id=chat_id,
+        thread_id=thread_id,
     )
 
 

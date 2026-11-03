@@ -61,7 +61,7 @@ def test_upsert_chunks_postgres_parameter_limit() -> None:
     rows = [
         {
             "id": i,
-            "chat_id": "chat",
+            "thread_id": "chat",
             "msg_id": f"m{i}",
             "ts": float(i),
             "sender_id": "",
@@ -114,10 +114,10 @@ def test_state_roundtrip(tmp_path) -> None:
 def test_search_is_ilike_per_term(tmp_path) -> None:
     db = database()
     store = HistoryStore(db)
-    from eidesoul.engine.context import ChatMessage
+    from eidesoul.engine.context import Message
 
-    def message(mid: str, text: str, when: datetime) -> ChatMessage:
-        return ChatMessage(id=mid, sender_name="Budi", sender_id="1", when=when, text=text)
+    def message(mid: str, text: str, when: datetime) -> Message:
+        return Message(id=mid, sender_name="Budi", sender_id="1", when=when, text=text)
 
     store.add("chat", message("a", "Rekap RAPAT logistik", datetime(2026, 1, 1, 9)))
     store.add("chat", message("b", "jadwal ronda", datetime(2026, 1, 1, 10)))
@@ -132,10 +132,10 @@ def test_search_is_ilike_per_term(tmp_path) -> None:
 def test_search_time_window_and_other_chat_isolation(tmp_path) -> None:
     db = database()
     store = HistoryStore(db)
-    from eidesoul.engine.context import ChatMessage
+    from eidesoul.engine.context import Message
 
-    def message(mid: str, text: str, stamp: float) -> ChatMessage:
-        return ChatMessage(
+    def message(mid: str, text: str, stamp: float) -> Message:
+        return Message(
             id=mid,
             sender_name="B",
             sender_id="1",

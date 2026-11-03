@@ -12,7 +12,7 @@ from ..engine.db import Database
 from ..engine.identity import IdentityStore, is_person_id
 from ..engine.memory import build_memory
 from ..engine.memory.rekey import rekey_memory
-from ..engine.schema import chat_people, google_device, google_identity, people
+from ..engine.schema import google_device, google_identity, people, thread_people
 from ..engine.stores.documents import ROLES_PREFIX, DocumentStore
 from ..engine.stores.style import StyleStore
 
@@ -88,7 +88,7 @@ def _legacy_ids(
 ) -> list[str]:
     found: set[str] = set(_role_users(documents))
     found.update(str(item) for item in style.people_ids())
-    for table in (people, chat_people, google_identity, google_device):
+    for table in (people, thread_people, google_identity, google_device):
         for row in db.fetch_all(select(table.c.person_id)):
             found.add(str(row["person_id"]))
     return sorted(item for item in found if item and not is_person_id(item))

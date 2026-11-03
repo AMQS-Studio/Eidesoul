@@ -37,7 +37,7 @@ def build(tmp_path):
 def context(env, gateway, args: str, *, person: str, sender: str = SENDER):
     inbound = inbound_message(f"/x {args}".strip(), sender=sender, person_id=person)
     return env.agent.command_context(
-        inbound.chat_id, sender, (role("member"),), gateway, args, inbound
+        inbound.thread, sender, (role("member"),), gateway, args, inbound
     )
 
 

@@ -225,13 +225,13 @@ async def backfill(config_path: str | None) -> int:
     async def on_history(accepted: NewAClient, ev) -> None:
         if ev.Data is None:
             return
-        count, chat_ids, finished = history_sync.ingest_sync(
+        count, thread_ids, finished = history_sync.ingest_sync(
             db, history, ev.Data, ingress.self_jid(accepted.me)
         )
         log.info(
-            "backfill: %d messages, %d chats, sync=%s progress=%d%s",
+            "backfill: %d messages, %d threads, sync=%s progress=%d%s",
             count,
-            len(chat_ids),
+            len(thread_ids),
             ev.Data.syncType,
             ev.Data.progress,
             " (done)" if finished else "",
@@ -266,7 +266,7 @@ async def selftest(config: Config) -> int:
     """Exercise stores, tools, and the LLM against the configured Postgres store."""
 
     from .engine.commands import REGISTRY as COMMANDS
-    from .engine.context import ChatMessage
+    from .engine.context import Message
     from .engine.db import Database
     from .engine.decision import Appraisal, Decision, RelationshipDelta
     from .engine.i18n import t
@@ -326,7 +326,7 @@ async def selftest(config: Config) -> int:
 
         history.add(
             "selftest",
-            ChatMessage(
+            Message(
                 id="selftest-1",
                 sender_name="Tester",
                 sender_id="p1",
@@ -377,12 +377,12 @@ async def selftest(config: Config) -> int:
         probe = MemoryHit(id="x", text="t", level=3, owner_id="a", subject_id="a", confirmed=True)
         vetoed = MemoryHit(id="y", text="t", level=1, vetoed=True)
         checks = (
-            policy.show(probe, is_dm=False) is False,
-            policy.show(probe, is_dm=True) is True,
-            policy.disclose(probe, requester="a", is_dm=False) == "ask",
-            policy.disclose(probe, requester="a", is_dm=True) == "allow",
-            policy.disclose(probe, requester="b", is_dm=True) == "deny",
-            policy.disclose(vetoed, requester="a", is_dm=True) == "deny",
+            policy.show(probe, direct=False) is False,
+            policy.show(probe, direct=True) is True,
+            policy.disclose(probe, requester="a", direct=False) == "ask",
+            policy.disclose(probe, requester="a", direct=True) == "allow",
+            policy.disclose(probe, requester="b", direct=True) == "deny",
+            policy.disclose(vetoed, requester="a", direct=True) == "deny",
         )
         results.append(
             _report("privacy", "PASS" if all(checks) else "FAIL", "" if all(checks) else str(checks))

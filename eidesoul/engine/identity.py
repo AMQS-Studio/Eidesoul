@@ -18,12 +18,12 @@ from sqlalchemy.exc import IntegrityError
 
 from .db import Database
 from .schema import (
-    chat_people,
     google_device,
     google_identity,
     people,
     person_link_codes,
     person_links,
+    thread_people,
 )
 
 log = logging.getLogger(__name__)
@@ -312,19 +312,19 @@ class IdentityStore:
             return
         with self.db.connect() as conn:
             current = {
-                str(row["chat_id"]): row
+                str(row["thread_id"]): row
                 for row in conn.execute(
-                    select(chat_people).where(chat_people.c.person_id == target)
+                    select(thread_people).where(thread_people.c.person_id == target)
                 ).mappings()
             }
             rows = conn.execute(
-                select(chat_people).where(chat_people.c.person_id == source)
+                select(thread_people).where(thread_people.c.person_id == source)
             ).mappings().all()
             for row in rows:
-                chat = str(row["chat_id"])
+                chat = str(row["thread_id"])
                 known = current.get(chat)
                 merged = {
-                    "chat_id": chat,
+                    "thread_id": chat,
                     "person_id": target,
                     "last_seen": max(
                         float(row["last_seen"] or 0.0),
@@ -333,8 +333,8 @@ class IdentityStore:
                     "interactions": int(row["interactions"] or 0)
                     + (int(known["interactions"]) if known else 0),
                 }
-                self.db.upsert(conn, chat_people, [merged], ["chat_id", "person_id"])
-            conn.execute(delete(chat_people).where(chat_people.c.person_id == source))
+                self.db.upsert(conn, thread_people, [merged], ["thread_id", "person_id"])
+            conn.execute(delete(thread_people).where(thread_people.c.person_id == source))
             conn.execute(
                 update(person_links)
                 .where(person_links.c.person_id == source)

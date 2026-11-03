@@ -15,10 +15,10 @@ async def _kirim(ctx: CommandContext) -> str:
         return t("command.kirim.usage", lang)
     target, _, caption = raw.partition(" ")
     try:
-        path = resolve_for(ctx.agent.config, target, ctx.roles, ctx.chat_id)
+        path = resolve_for(ctx.agent.config, target, ctx.roles, ctx.thread_id)
     except OSError as exc:
         return f"error: {exc}"
-    result = await ctx.agent.send_file(ctx.chat_id, path, caption.strip(), gateway=ctx.gateway)
+    result = await ctx.agent.send_file(ctx.thread_id, path, caption.strip(), gateway=ctx.gateway)
     if result.startswith("ok:"):
         return t("command.kirim.sent", lang, name=path.name)
     return t("command.kirim.failed", lang, detail=result.removeprefix("error: ").strip())

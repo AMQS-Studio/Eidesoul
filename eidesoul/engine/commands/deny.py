@@ -13,12 +13,12 @@ async def _deny(ctx: CommandContext) -> str:
     raw = ctx.args.strip()
     key, _, reason = raw.partition(" ")
     if key.lower() in {"last", "terakhir", ""}:
-        approval = agent.approvals.latest(ctx.chat_id, ctx.sender)
+        approval = agent.approvals.latest(ctx.thread_id, ctx.sender)
     else:
         approval = agent.approvals.get(key.lstrip("#"))
     if approval is None:
         return t("command.deny.none", lang)
-    if approval.chat_id != ctx.chat_id or approval.sender != ctx.sender:
+    if approval.thread_id != ctx.thread_id or approval.sender != ctx.sender:
         return t("command.deny.foreign", lang)
     if approval.status != "pending":
         return t("command.deny.already", lang, id=approval.id, status=approval.status)

@@ -20,14 +20,14 @@ from ...vendor import emotion_engine as engine
 from .. import guard
 from ..config import AffectConfig
 from ..db import Database
-from ..schema import chat_eras, chat_people, drives, people, state, topics
+from ..schema import drives, people, state, thread_eras, thread_people, topics
 
 log = logging.getLogger(__name__)
 
 CHARACTER = "soul"
 STATE_KEY = "emotion"
 SEEDED_KEY = "seeded"
-CHAT_PEOPLE_SEEDED_KEY = "chat_people_seeded"
+THREAD_PEOPLE_SEEDED_KEY = "thread_people_seeded"
 NOTES_KEEP = 4
 NOTES_TEXT = 120
 PROMPT_CHARS = 1200
@@ -201,10 +201,10 @@ class AffectStore:
         )
 
     def _state(self, conn, *, for_update: bool = False) -> dict:
-        """The single v3 state (shared by all chats); created once with a baseline from the soul."""
+        """The single v3 state (shared by all threads), seeded once from the soul."""
         return self._load_state(conn, for_update=for_update)
 
-    def _session(self, state: dict, chat_id: str) -> tuple[dict, str]:
+    def _session(self, state: dict, thread_id: str) -> tuple[dict, str]:
         """One session keeps running for every chat.
 
         A migrated state may still hold an old active session (a chat id); that session is
@@ -223,11 +223,11 @@ class AffectStore:
             return state, active
         return state, CHARACTER
 
-    def turn_start(self, chat_id: str, message_id: str) -> dict:
+    def turn_start(self, thread_id: str, message_id: str) -> dict:
         """Open the session plus one decay step before the LLM decision is made."""
         with self._lock, self.db.connect() as conn:
             state = self._state(conn, for_update=True)
-            state, session_id = self._session(state, chat_id)
+            state, session_id = self._session(state, thread_id)
             state, _ = engine.pre_turn_decay(
                 state,
                 session_id=session_id,
@@ -242,7 +242,7 @@ class AffectStore:
                 if not isinstance(item, dict):
                     continue
                 entry = dict(item)
-                entry["other_chat"] = str(entry.get("chat_id") or "") not in ("", chat_id)
+                entry["other_chat"] = str(entry.get("thread_id") or "") not in ("", thread_id)
                 log_lines.append(entry)
             return {
                 "summary": engine.emotion_summary(state),
@@ -256,7 +256,7 @@ class AffectStore:
 
     def turn_end(
         self,
-        chat_id: str,
+        thread_id: str,
         person_id: str,
         name: str,
         text: str,
@@ -271,7 +271,7 @@ class AffectStore:
             state = self._state(conn, for_update=True)
             if message_id and engine.event_already_processed(state, message_id):
                 return  # the same event must not move the emotion twice
-            state, session_id = self._session(state, chat_id)
+            state, session_id = self._session(state, thread_id)
             addressed = ""
             act = ""
             if decision is not None:
@@ -316,19 +316,19 @@ class AffectStore:
                     and isinstance(entries[-1], dict)
                     and entries[-1].get("event_id") == message_id
                 ):
-                    entries[-1]["chat_id"] = chat_id
+                    entries[-1]["thread_id"] = thread_id
                     entries[-1]["person_name"] = " ".join(str(name or "").split())[:80]
                 if str(result.get("status")) not in {"recorded", "state_only", "already_closed"}:
                     log.warning(
                         "emotion turn not applied chat=%s status=%s active=%s",
-                        chat_id,
+                        thread_id,
                         result.get("status"),
                         result.get("active_session_id"),
                     )
             person = self._touch_person(conn, person_id, name, role, moment)
-            self._touch_chat_person(conn, chat_id, person_id, moment)
-            self._touch_drives(conn, chat_id, moment, activity=True)
-            self._bump_topic(conn, chat_id, moment)
+            self._touch_chat_person(conn, thread_id, person_id, moment)
+            self._touch_drives(conn, thread_id, moment, activity=True)
+            self._bump_topic(conn, thread_id, moment)
             if decision is not None and addressed == "me" and act != "ignore":
                 self._apply_relationship(conn, person_id, person, decision.relationship, moment)
             if decision is not None:
@@ -443,61 +443,61 @@ class AffectStore:
         )
         return person
 
-    def _touch_chat_person(self, conn, chat_id: str, person_id: str, moment: float) -> None:
+    def _touch_chat_person(self, conn, thread_id: str, person_id: str, moment: float) -> None:
         """Chat membership: who actually talks here, not globally."""
         self.db.upsert(
             conn,
-            chat_people,
+            thread_people,
             [
                 {
-                    "chat_id": chat_id,
+                    "thread_id": thread_id,
                     "person_id": person_id,
                     "last_seen": moment,
                     "interactions": 1,
                 }
             ],
-            ["chat_id", "person_id"],
+            ["thread_id", "person_id"],
             update=lambda stmt: {
                 "last_seen": stmt.excluded.last_seen,
-                "interactions": chat_people.c.interactions + 1,
+                "interactions": thread_people.c.interactions + 1,
             },
         )
 
-    def _bump_topic(self, conn, chat_id: str, moment: float) -> None:
+    def _bump_topic(self, conn, thread_id: str, moment: float) -> None:
         self.db.upsert(
             conn,
             topics,
-            [{"chat_id": chat_id, "pending": 1, "last_message": moment}],
-            ["chat_id"],
+            [{"thread_id": thread_id, "pending": 1, "last_message": moment}],
+            ["thread_id"],
             update=lambda stmt: {
                 "pending": topics.c.pending + 1,
                 "last_message": stmt.excluded.last_message,
             },
         )
 
-    def _drives(self, conn, chat_id: str) -> dict:
+    def _drives(self, conn, thread_id: str) -> dict:
         """Drives belong to Eidesoul itself, not the room: one row for every chat."""
         row = conn.execute(
-            select(drives).where(drives.c.chat_id == CHARACTER)
+            select(drives).where(drives.c.thread_id == CHARACTER)
         ).mappings().first()
         if row is None:
-            return {"chat_id": CHARACTER, **DRIVE_DEFAULTS}
+            return {"thread_id": CHARACTER, **DRIVE_DEFAULTS}
         return dict(row)
 
-    def _write_drives(self, conn, chat_id: str, data: dict) -> None:
+    def _write_drives(self, conn, thread_id: str, data: dict) -> None:
         self.db.upsert(
             conn,
             drives,
             [
                 {
-                    "chat_id": CHARACTER,
+                    "thread_id": CHARACTER,
                     "energy": _clamp(float(data["energy"])),
                     "boredom": _clamp(float(data["boredom"])),
                     "loneliness": _clamp(float(data["loneliness"])),
                     "last_pulse": float(data["last_pulse"]),
                 }
             ],
-            ["chat_id"],
+            ["thread_id"],
             update=lambda stmt: {
                 "energy": stmt.excluded.energy,
                 "boredom": stmt.excluded.boredom,
@@ -506,37 +506,37 @@ class AffectStore:
             },
         )
 
-    def _touch_drives(self, conn, chat_id: str, moment: float, *, activity: bool) -> None:
+    def _touch_drives(self, conn, thread_id: str, moment: float, *, activity: bool) -> None:
         """An incoming message satisfies the drives; elapsed hours are handled by `pulse`."""
-        data = self._drives(conn, chat_id)
+        data = self._drives(conn, thread_id)
         if activity:
             data["boredom"] = _clamp(float(data["boredom"]) - 0.15)
             data["loneliness"] = _clamp(float(data["loneliness"]) - 0.20)
             data["energy"] = _clamp(float(data["energy"]) + 0.03)
         data["last_pulse"] = moment
-        self._write_drives(conn, chat_id, data)
+        self._write_drives(conn, thread_id, data)
 
     # ------------------------------------------------------------------ heartbeat
 
-    def drives(self, chat_id: str) -> dict:
+    def drives(self, thread_id: str) -> dict:
         """Public drives (energy, boredom, loneliness) for the prompt."""
         with self._lock, self.db.connect() as conn:
-            data = self._drives(conn, chat_id)
+            data = self._drives(conn, thread_id)
         return {key: float(data[key]) for key in ("energy", "boredom", "loneliness")}
 
-    def _latest_affection(self, conn, chat_id: str) -> float:
+    def _latest_affection(self, conn, thread_id: str) -> float:
         row = conn.execute(
             select(people.c.affection)
             .select_from(
-                chat_people.join(people, people.c.person_id == chat_people.c.person_id)
+                thread_people.join(people, people.c.person_id == thread_people.c.person_id)
             )
-            .where(chat_people.c.chat_id == chat_id)
-            .order_by(chat_people.c.last_seen.desc())
+            .where(thread_people.c.thread_id == thread_id)
+            .order_by(thread_people.c.last_seen.desc())
             .limit(1)
         ).first()
         return _clamp(row[0]) if row is not None else 0.2
 
-    def pulse(self, chat_id: str) -> dict:
+    def pulse(self, thread_id: str) -> dict:
         """A 24/7 heartbeat: the state decays (at most one step per 5 minutes) and drives grow."""
         moment = time.time()
         event_id = f"pulse:{CHARACTER}:{int(moment // 300)}"
@@ -544,9 +544,9 @@ class AffectStore:
             state_data = self._state(conn, for_update=True)
             if engine.event_already_processed(state_data, event_id):
                 # a tick inside the same bucket writes nothing: the state stays put.
-                data = self._drives(conn, chat_id)
+                data = self._drives(conn, thread_id)
                 return self._payload(state_data, data)
-            state_data, session_id = self._session(state_data, chat_id)
+            state_data, session_id = self._session(state_data, thread_id)
             state_data, _ = engine.pre_turn_decay(
                 state_data,
                 session_id=session_id,
@@ -555,24 +555,24 @@ class AffectStore:
                 relationship_id=CHARACTER,
             )
             self._save_state(conn, state_data)
-            data = self._drives(conn, chat_id)
+            data = self._drives(conn, thread_id)
             last = float(data["last_pulse"] or 0.0)
             if last <= 0:  # old chat/new DB: the first tick only anchors the time
                 data["last_pulse"] = moment
-                self._write_drives(conn, chat_id, data)
+                self._write_drives(conn, thread_id, data)
                 return self._payload(state_data, data)
             elapsed = min(max(0.0, moment - last), PULSE_MAX_HOURS * 3600.0)
             if elapsed >= PULSE_MINUTES * 60:
                 hours = elapsed / 3600.0
                 data["energy"] = _clamp(float(data["energy"]) - 0.06 * hours)
                 data["boredom"] = _clamp(float(data["boredom"]) + 0.08 * hours)
-                attachment = self._latest_affection(conn, chat_id)
+                attachment = self._latest_affection(conn, thread_id)
                 data["loneliness"] = _clamp(
                     float(data["loneliness"]) + (0.03 + 0.05 * attachment) * hours
                 )
                 self._soothe(conn, hours)
                 data["last_pulse"] = moment
-                self._write_drives(conn, chat_id, data)
+                self._write_drives(conn, thread_id, data)
             return self._payload(state_data, data)
 
     def _soothe(self, conn, hours: float) -> None:
@@ -610,7 +610,7 @@ class AffectStore:
 
     # ------------------------------------------------------------------ calm
 
-    def calm(self, chat_id: str, person_id: str = "") -> bool:
+    def calm(self, thread_id: str, person_id: str = "") -> bool:
         """Repair turn: PAD returns to baseline and the target person's annoyance halves."""
         target = " ".join(str(person_id or "").split())
         with self._lock, self.db.connect() as conn:
@@ -640,11 +640,11 @@ class AffectStore:
                 rows = conn.execute(
                     select(people.c.person_id, people.c.annoyance)
                     .select_from(
-                        chat_people.join(
-                            people, people.c.person_id == chat_people.c.person_id
+                        thread_people.join(
+                            people, people.c.person_id == thread_people.c.person_id
                         )
                     )
-                    .where(chat_people.c.chat_id == chat_id)
+                    .where(thread_people.c.thread_id == thread_id)
                 ).all()
             emotion = state_data["emotion"]
             annoyance = max(
@@ -658,7 +658,7 @@ class AffectStore:
                     .where(people.c.person_id == str(row.person_id))
                     .values(annoyance=_clamp(float(row.annoyance) * 0.5))
                 )
-            state_data, session_id = self._session(state_data, chat_id)
+            state_data, session_id = self._session(state_data, thread_id)
             baseline = state_data["personality_baseline"]
             state_data, _ = engine.record_turn(
                 state_data,
@@ -678,14 +678,14 @@ class AffectStore:
 
     # ------------------------------------------------------------------ topic & people
 
-    def topic(self, chat_id: str) -> dict:
+    def topic(self, thread_id: str) -> dict:
         with self._lock, self.db.connect() as conn:
             row = conn.execute(
-                select(topics).where(topics.c.chat_id == chat_id)
+                select(topics).where(topics.c.thread_id == thread_id)
             ).mappings().first()
         if row is None:
             return {
-                "chat_id": chat_id,
+                "thread_id": thread_id,
                 "summary": "",
                 "keywords": [],
                 "unresolved": [],
@@ -701,12 +701,12 @@ class AffectStore:
         data["unresolved"] = _as_list(data["unresolved"])
         return data
 
-    def topic_block(self, chat_id: str) -> str:
-        data = self.topic(chat_id)
+    def topic_block(self, thread_id: str) -> str:
+        data = self.topic(thread_id)
         summary = str(data["summary"]).strip()
         if not summary:
             return ""
-        past = self.eras(chat_id, 1)
+        past = self.eras(thread_id, 1)
         lines: list[str] = []
         if past:
             lines.append(f"{ERA_PREFIX}{str(past[0]['summary']).strip()}")
@@ -725,7 +725,7 @@ class AffectStore:
 
     def archive_era(
         self,
-        chat_id: str,
+        thread_id: str,
         summary: str,
         keywords: list[str],
         unresolved: list[str],
@@ -738,8 +738,8 @@ class AffectStore:
         clean_pending = [str(item).strip() for item in unresolved if str(item).strip()][:5]
         with self._lock, self.db.connect() as conn:
             conn.execute(
-                insert(chat_eras).values(
-                    chat_id=chat_id,
+                insert(thread_eras).values(
+                    thread_id=thread_id,
                     started_at=float(started_at),
                     ended_at=float(ended_at),
                     summary=" ".join(str(summary or "").split())[:240],
@@ -748,14 +748,14 @@ class AffectStore:
                 )
             )
 
-    def eras(self, chat_id: str, limit: int = 3) -> list[dict]:
+    def eras(self, thread_id: str, limit: int = 3) -> list[dict]:
         """Closed topic eras for this chat, newest first."""
         with self._lock, self.db.connect() as conn:
             rows = (
                 conn.execute(
-                    select(chat_eras)
-                    .where(chat_eras.c.chat_id == chat_id)
-                    .order_by(chat_eras.c.ended_at.desc(), chat_eras.c.id.desc())
+                    select(thread_eras)
+                    .where(thread_eras.c.thread_id == thread_id)
+                    .order_by(thread_eras.c.ended_at.desc(), thread_eras.c.id.desc())
                     .limit(max(1, int(limit)))
                 )
                 .mappings()
@@ -771,7 +771,7 @@ class AffectStore:
 
     def set_topic(
         self,
-        chat_id: str,
+        thread_id: str,
         summary: str,
         keywords: list[str],
         unresolved: list[str],
@@ -786,14 +786,14 @@ class AffectStore:
                 topics,
                 [
                     {
-                        "chat_id": chat_id,
+                        "thread_id": thread_id,
                         "summary": " ".join(str(summary or "").split())[:240],
                         "keywords": clean_keywords,
                         "unresolved": clean_pending,
                         "last_message": moment,
                     }
                 ],
-                ["chat_id"],
+                ["thread_id"],
                 update=lambda stmt: {
                     "summary": stmt.excluded.summary,
                     "keywords": stmt.excluded.keywords,
@@ -802,30 +802,30 @@ class AffectStore:
                 },
             )
 
-    def pending(self, chat_id: str) -> int:
-        return int(self.topic(chat_id)["pending"])
+    def pending(self, thread_id: str) -> int:
+        return int(self.topic(thread_id)["pending"])
 
-    def mark_digest(self, chat_id: str, now: float | None = None) -> None:
+    def mark_digest(self, thread_id: str, now: float | None = None) -> None:
         moment = time.time() if now is None else float(now)
         with self._lock, self.db.connect() as conn:
             self.db.upsert(
                 conn,
                 topics,
-                [{"chat_id": chat_id, "pending": 0, "last_digest": moment}],
-                ["chat_id"],
+                [{"thread_id": thread_id, "pending": 0, "last_digest": moment}],
+                ["thread_id"],
                 update=lambda stmt: {
                     "pending": 0,
                     "last_digest": stmt.excluded.last_digest,
                 },
             )
 
-    def mark_research(self, chat_id: str, now: float | None = None) -> None:
+    def mark_research(self, thread_id: str, now: float | None = None) -> None:
         moment = time.time() if now is None else float(now)
         day = time.strftime("%Y-%m-%d", time.localtime(moment))
         with self._lock, self.db.connect() as conn:
             row = conn.execute(
                 select(topics.c.research_count, topics.c.research_day).where(
-                    topics.c.chat_id == chat_id
+                    topics.c.thread_id == thread_id
                 )
             ).first()
             if row is None:
@@ -837,13 +837,13 @@ class AffectStore:
                 topics,
                 [
                     {
-                        "chat_id": chat_id,
+                        "thread_id": thread_id,
                         "last_research": moment,
                         "research_day": day,
                         "research_count": count,
                     }
                 ],
-                ["chat_id"],
+                ["thread_id"],
                 update=lambda stmt: {
                     "last_research": stmt.excluded.last_research,
                     "research_day": stmt.excluded.research_day,
@@ -872,22 +872,22 @@ class AffectStore:
                 return str(row.person_id)
         return None
 
-    def person_by_name(self, chat_id: str, name: str) -> str | None:
+    def person_by_name(self, thread_id: str, name: str) -> str | None:
         with self._lock, self.db.connect() as conn:
             return self._person_by_name(conn, name)
 
-    def _known_people(self, conn, chat_id: str, limit: int) -> list[dict]:
+    def _known_people(self, conn, thread_id: str, limit: int) -> list[dict]:
         rows = conn.execute(
             select(
                 people,
-                chat_people.c.interactions.label("chat_interactions"),
-                chat_people.c.last_seen.label("chat_last_seen"),
+                thread_people.c.interactions.label("chat_interactions"),
+                thread_people.c.last_seen.label("chat_last_seen"),
             )
             .select_from(
-                chat_people.join(people, people.c.person_id == chat_people.c.person_id)
+                thread_people.join(people, people.c.person_id == thread_people.c.person_id)
             )
-            .where(chat_people.c.chat_id == chat_id)
-            .order_by(chat_people.c.last_seen.desc())
+            .where(thread_people.c.thread_id == thread_id)
+            .order_by(thread_people.c.last_seen.desc())
             .limit(max(1, int(limit)))
         ).mappings().all()
         result: list[dict] = []
@@ -898,10 +898,10 @@ class AffectStore:
             result.append(item)
         return result
 
-    def known_people(self, chat_id: str, limit: int = 8) -> list[dict]:
-        """People who actually take part in this chat, newest first; other chats never leak in."""
+    def known_people(self, thread_id: str, limit: int = 8) -> list[dict]:
+        """People who actually take part in this thread, newest first; others never leak in."""
         with self._lock, self.db.connect() as conn:
-            return self._known_people(conn, chat_id, limit)
+            return self._known_people(conn, thread_id, limit)
 
     def note_person(self, person_id: str, note: str, language: str = "id") -> None:
         text = guard.safe_text(note, NOTES_TEXT, language=language)
@@ -967,7 +967,7 @@ class AffectStore:
 
     # ------------------------------------------------------------------ prompt
 
-    def _payload(self, state_data: dict, drives_data: dict, person_id: str = "", chat_id: str = "") -> dict:
+    def _payload(self, state_data: dict, drives_data: dict, person_id: str = "", thread_id: str = "") -> dict:
         emotion = state_data["emotion"]
         trust_tier = engine.public_status(state_data)["trust_tier"]
         person = None
@@ -975,7 +975,7 @@ class AffectStore:
             person = next(
                 (
                     item
-                    for item in self.known_people(chat_id, 50)
+                    for item in self.known_people(thread_id, 50)
                     if item["person_id"] == person_id
                 ),
                 None,
@@ -1006,14 +1006,14 @@ class AffectStore:
             "person_name": str(person["name"]) if person is not None else "",
         }
 
-    def status(self, chat_id: str, person_id: str = "") -> dict:
+    def status(self, thread_id: str, person_id: str = "") -> dict:
         """Data for /mood: state summary, PAD, trust, and the relationship with the sender."""
         with self._lock, self.db.connect() as conn:
             state_data = self._state(conn)
-            drives_data = self._drives(conn, chat_id)
-        return self._payload(state_data, drives_data, person_id, chat_id)
+            drives_data = self._drives(conn, thread_id)
+        return self._payload(state_data, drives_data, person_id, thread_id)
 
-    def pad(self, chat_id: str) -> dict:
+    def pad(self, thread_id: str) -> dict:
         """Current PAD: used to tag the valence/arousal of written memories."""
         with self._lock, self.db.connect() as conn:
             state_data = self._state(conn)
@@ -1024,12 +1024,12 @@ class AffectStore:
             "dominance": float(emotion["dominance"]),
         }
 
-    def prompt(self, chat_id: str, person_id: str = "") -> str:
+    def prompt(self, thread_id: str, person_id: str = "") -> str:
         """Prompt block: state summary, pulse, PAD, latest log, and stance toward the chat."""
         with self._lock, self.db.connect() as conn:
             state_data = self._state(conn)
-            drives_data = self._drives(conn, chat_id)
-            people = self._known_people(conn, chat_id, 6)
+            drives_data = self._drives(conn, thread_id)
+            people = self._known_people(conn, thread_id, 6)
         emotion = state_data["emotion"]
         trust_tier = engine.public_status(state_data)["trust_tier"]
         parts = [
@@ -1050,7 +1050,7 @@ class AffectStore:
             if not cue and not label:
                 continue
             who = str(entry.get("person_name") or "").strip()
-            other = str(entry.get("chat_id") or "") not in ("", chat_id)
+            other = str(entry.get("thread_id") or "") not in ("", thread_id)
             tag = ""
             if who or other:
                 tag = f" [{who or 'other chat'}{', other chat' if who and other else ''}]"
@@ -1150,20 +1150,20 @@ class AffectStore:
                 continue
             stamp = float(item.get("ts") or 0.0)
             bucket = grouped.setdefault(
-                person_id, {"names": {}, "last": 0.0, "chats": {}, "count": 0}
+                person_id, {"names": {}, "last": 0.0, "threads": {}, "count": 0}
             )
             name = str(item.get("sender_name") or "").strip()
             if name:
                 bucket["names"][name] = bucket["names"].get(name, 0) + 1
             bucket["count"] += 1
             bucket["last"] = max(bucket["last"], stamp)
-            chat_id = str(item.get("chat_id") or "")
-            if chat_id:
-                seen, count = bucket["chats"].get(chat_id, (0.0, 0))
-                bucket["chats"][chat_id] = (max(seen, stamp), count + 1)
+            thread_id = str(item.get("thread_id") or "")
+            if thread_id:
+                seen, count = bucket["threads"].get(thread_id, (0.0, 0))
+                bucket["threads"][thread_id] = (max(seen, stamp), count + 1)
         with self._lock, self.db.connect() as conn:
             for person_id, bucket in grouped.items():
-                self._seed_chat_rows(conn, person_id, bucket["chats"])
+                self._seed_chat_rows(conn, person_id, bucket["threads"])
                 if conn.execute(
                     select(people.c.person_id).where(people.c.person_id == person_id)
                 ).first() is not None:
@@ -1189,18 +1189,18 @@ class AffectStore:
         return len(grouped)
 
     @staticmethod
-    def _seed_chat_rows(conn, person_id: str, chats: dict) -> None:
-        for chat_id, (seen, count) in chats.items():
+    def _seed_chat_rows(conn, person_id: str, threads: dict) -> None:
+        for thread_id, (seen, count) in threads.items():
             existing = conn.execute(
-                select(chat_people.c.last_seen, chat_people.c.interactions).where(
-                    chat_people.c.chat_id == chat_id,
-                    chat_people.c.person_id == person_id,
+                select(thread_people.c.last_seen, thread_people.c.interactions).where(
+                    thread_people.c.thread_id == thread_id,
+                    thread_people.c.person_id == person_id,
                 )
             ).first()
             if existing is None:
                 conn.execute(
-                    insert(chat_people).values(
-                        chat_id=chat_id,
+                    insert(thread_people).values(
+                        thread_id=thread_id,
                         person_id=person_id,
                         last_seen=float(seen),
                         interactions=int(count),
@@ -1208,10 +1208,10 @@ class AffectStore:
                 )
                 continue
             conn.execute(
-                update(chat_people)
+                update(thread_people)
                 .where(
-                    chat_people.c.chat_id == chat_id,
-                    chat_people.c.person_id == person_id,
+                    thread_people.c.thread_id == thread_id,
+                    thread_people.c.person_id == person_id,
                 )
                 .values(
                     last_seen=max(float(existing.last_seen), float(seen)),
@@ -1219,10 +1219,10 @@ class AffectStore:
                 )
             )
 
-    def seed_chat_people(self, history) -> int:
+    def seed_thread_people(self, history) -> int:
         """Once, for an old emotion DB: fill in each chat's membership from the archive."""
         with self._lock, self.db.connect() as conn:
-            if self._flag(conn, CHAT_PEOPLE_SEEDED_KEY) == "1":
+            if self._flag(conn, THREAD_PEOPLE_SEEDED_KEY) == "1":
                 return 0
         try:
             rows = history.people_seed(5000) if history is not None else []
@@ -1231,20 +1231,20 @@ class AffectStore:
             rows = []
         grouped: dict[str, dict[str, tuple[float, int]]] = {}
         for item in rows:
-            chat_id = str(item.get("chat_id") or "")
+            thread_id = str(item.get("thread_id") or "")
             address = str(item.get("sender_address") or "")
             person_id = self._resolve_person(history, address) or str(item.get("sender_id") or "")
-            if not chat_id or not person_id:
+            if not thread_id or not person_id:
                 continue
             stamp = float(item.get("ts") or 0.0)
-            chats = grouped.setdefault(person_id, {})
-            seen, count = chats.get(chat_id, (0.0, 0))
-            chats[chat_id] = (max(seen, stamp), count + 1)
+            threads = grouped.setdefault(person_id, {})
+            seen, count = threads.get(thread_id, (0.0, 0))
+            threads[thread_id] = (max(seen, stamp), count + 1)
         with self._lock, self.db.connect() as conn:
-            for person_id, chats in grouped.items():
-                self._seed_chat_rows(conn, person_id, chats)
-            self._set_flag(conn, CHAT_PEOPLE_SEEDED_KEY)
-        return sum(len(chats) for chats in grouped.values())
+            for person_id, threads in grouped.items():
+                self._seed_chat_rows(conn, person_id, threads)
+            self._set_flag(conn, THREAD_PEOPLE_SEEDED_KEY)
+        return sum(len(threads) for threads in grouped.values())
 
     def stats(self) -> dict:
         with self._lock, self.db.connect() as conn:
@@ -1258,6 +1258,6 @@ class AffectStore:
                 "people": _count(people),
                 "topics": _count(topics),
                 "drives": _count(drives),
-                "chat_people": _count(chat_people),
+                "thread_people": _count(thread_people),
                 "states": 1 if states is not None else 0,
             }

@@ -22,6 +22,7 @@ from eidesoul.engine.config import (
     StyleConfig,
 )
 from eidesoul.engine.db import Database
+from eidesoul.engine.inbound import CoreDefaults
 from eidesoul.engine.memory import MemoryContext, MemoryHit
 from eidesoul.engine.roles import Role, RoleRegistry
 from eidesoul.engine.soul import Soul, SoulStyle
@@ -190,21 +191,16 @@ class FakeMem0:
         return None
 
 
-class FakeGateway:
-    """Contract gateway: records sends, no transport."""
+class FakeGateway(CoreDefaults):
+    """Core only: text delivery and the catalog, no media and no directory (ADR-0018 §4.1)."""
 
     name = "fake"
-    capabilities = frozenset({"text"})
     backlog_seconds = 0.0
 
     def __init__(self, *, name: str = "fake", backlog_seconds: float = 0.0, tools=(), commands=()):
         self.name = name
         self.backlog_seconds = backlog_seconds
         self.sent: list[tuple[str, str, object]] = []
-        self.files: list[tuple[str, Path, str]] = []
-        self.reactions: list[tuple[str, str]] = []
-        self.typing_events: list[tuple[str, bool]] = []
-        self.media: list[tuple[str, object]] = []
         self._tools = list(tools)
         self._commands = list(commands)
 
@@ -220,23 +216,9 @@ class FakeGateway:
     async def stop(self):
         return None
 
-    async def send_text(self, chat_id: str, text: str, *, reply=None) -> str:
-        self.sent.append((chat_id, text, reply))
+    async def send_text(self, thread: str, text: str, *, reply=None) -> str:
+        self.sent.append((thread, text, reply))
         return f"msg-{len(self.sent)}"
-
-    async def send_file(self, chat_id: str, path: Path, caption: str = "", *, reply=None) -> str:
-        self.files.append((chat_id, Path(path), caption))
-        return f"file-{len(self.files)}"
-
-    async def send_reaction(self, chat_id: str, message_id: str):
-        self.reactions.append((chat_id, message_id))
-        return "(reaction sticker: x)"
-
-    async def typing(self, chat_id: str, composing: bool) -> None:
-        self.typing_events.append((chat_id, composing))
-
-    async def prepare_media(self, chat_id: str, message) -> None:
-        self.media.append((chat_id, message.id))
 
     def render(self, text: str) -> str:
         return str(text or "")
@@ -247,17 +229,61 @@ class FakeGateway:
     def self_handles(self) -> set[str]:
         return {"628567770837"}
 
-    def chat_name(self, chat_id: str) -> str:
+    def chat_name(self, thread: str) -> str:
         return "Chat"
 
-    def list_targets(self, query: str, limit: int):
-        return []
+
+class RichFakeGateway(FakeGateway):
+    """Core + `Rich`: records files, stickers, typing, and media preparation."""
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.files: list[tuple[str, Path, str]] = []
+        self.stickers: list[tuple[str, str]] = []
+        self.typing_events: list[tuple[str, bool]] = []
+        self.media: list[tuple[str, object]] = []
+
+    async def send_file(self, thread: str, path: Path, caption: str = "", *, reply=None) -> str:
+        self.files.append((thread, Path(path), caption))
+        return f"file-{len(self.files)}"
+
+    async def send_sticker(self, thread: str, message_id: str):
+        self.stickers.append((thread, message_id))
+        return "(sticker: x)"
+
+    async def typing(self, thread: str, composing: bool) -> None:
+        self.typing_events.append((thread, composing))
+
+    async def prepare_media(self, thread: str, message) -> None:
+        self.media.append((thread, message.id))
+
+
+class DirectoryFakeGateway(FakeGateway):
+    """Core + `Directory`: target resolution and membership evidence."""
+
+    def __init__(self, *, targets=None, members=None, **kwargs):
+        super().__init__(**kwargs)
+        self.targets: dict[str, tuple[str, str]] = dict(targets or {})
+        self.members = members
 
     def resolve_target(self, query: str):
-        return None, []
+        target = self.targets.get(str(query or "").strip().casefold())
+        return (target, []) if target else (None, [])
 
-    def data_paths(self):
-        return []
+    def participants(self, thread: str) -> set[str] | None:
+        return self.members(thread) if callable(self.members) else self.members
+
+
+class RichDirectoryFakeGateway(RichFakeGateway):
+    """Core + `Rich` + `Directory`: the default agent fixture."""
+
+    resolve_target = DirectoryFakeGateway.resolve_target
+    participants = DirectoryFakeGateway.participants
+
+    def __init__(self, *, targets=None, members=None, **kwargs):
+        super().__init__(**kwargs)
+        self.targets: dict[str, tuple[str, str]] = dict(targets or {})
+        self.members = members
 
 
 class FakeMemory:
@@ -281,7 +307,7 @@ class FakeMemory:
             text=text,
             scope=kwargs.get("scope", "person"),
             person_id=kwargs.get("person_id", ""),
-            chat_id=kwargs.get("chat_id", ""),
+            thread_id=kwargs.get("thread_id", ""),
             level=kwargs.get("level", 2),
             owner_id=kwargs.get("owner_id", ""),
             subject_id=kwargs.get("subject_id", ""),
@@ -298,7 +324,7 @@ class FakeMemory:
             text=text,
             scope="person",
             person_id=kwargs.get("person_id", ""),
-            chat_id=kwargs.get("chat_id", ""),
+            thread_id=kwargs.get("thread_id", ""),
             level=kwargs.get("level", 2),
             owner_id=kwargs.get("owner_id", ""),
             subject_id=kwargs.get("subject_id", ""),
@@ -404,7 +430,7 @@ def make_agent(
     soul=None,
     currents=None,
 ):
-    """Build a full Agent on the test store with FakeGateway."""
+    """Build a full Agent on the test store with the rich directory fake."""
     from types import SimpleNamespace
 
     from eidesoul.engine.agent import Agent
@@ -438,7 +464,7 @@ def make_agent(
     config.workspace.mkdir(parents=True, exist_ok=True)
     (config.workspace / "public").mkdir(parents=True, exist_ok=True)
     (config.workspace / "scratch").mkdir(parents=True, exist_ok=True)
-    gateway = gateway or FakeGateway()
+    gateway = gateway or RichDirectoryFakeGateway()
     history = HistoryStore(db, config.workspace)
     windows = WorkingMemory(store=history)
     ledger = ActionLedger(db)
@@ -486,25 +512,30 @@ def make_agent(
 def inbound_message(
     text: str,
     *,
-    chat_id: str = "chat",
-    is_dm: bool = True,
+    thread: str = "chat",
+    dm: bool = True,
     sender: str = "628111",
     sender_name: str = "Budi",
     person_id: str = "628111",
-    is_mention: bool = False,
-    is_reply: bool = False,
+    mention: bool = False,
+    reply: bool = False,
     role_override: tuple[str, ...] = (),
     message_id: str = "",
 ):
     from datetime import datetime
 
-    from eidesoul.engine.context import ChatMessage
-    from eidesoul.engine.inbound import Inbound
+    from eidesoul.engine.context import Message
+    from eidesoul.engine.inbound import MESSAGE, Percept
 
-    return Inbound(
-        chat_id=chat_id,
-        person_address=sender,
-        message=ChatMessage(
+    hints: dict[str, object] = {"dm": dm, "mention": mention, "reply": reply}
+    if role_override:
+        hints["roles"] = role_override
+    return Percept(
+        source="fake",
+        thread=thread,
+        actor=person_id or sender,
+        kind=MESSAGE,
+        payload=Message(
             id=message_id or f"m-{text[:8]}",
             sender_name=sender_name,
             sender_id=sender,
@@ -512,11 +543,7 @@ def inbound_message(
             text=text,
             sender_address=f"{sender}@s.whatsapp.net",
         ),
-        is_dm=is_dm,
-        is_mention=is_mention,
-        is_reply=is_reply,
-        person_id=person_id,
-        role_override=role_override,
+        hints=hints,
     )
 
 

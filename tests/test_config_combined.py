@@ -41,7 +41,7 @@ BASE = {
         },
     },
     "soul_file": "soul.yaml",
-    "gateways": {"cli": {"enabled": True, "role": "guest", "chat_id": "cli:local"}},
+    "gateways": {"cli": {"enabled": True, "role": "guest", "thread_id": "cli:local"}},
 }
 
 SOUL = "name: Eidesoul\nlanguage: en\npronouns: aku\n"

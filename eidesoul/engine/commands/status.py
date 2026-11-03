@@ -21,9 +21,9 @@ def _ago(stamp: float, lang: str) -> str:
 
 
 def _chat_label(ctx: CommandContext, lang: str) -> str:
-    key = "chat_dm" if ctx.is_dm else "chat_group"
+    key = "chat_dm" if ctx.direct else "chat_group"
     kind = t(f"command.status.{key}", lang)
-    name = ctx.gateway.chat_name(ctx.chat_id) if ctx.gateway is not None else ""
+    name = ctx.gateway.chat_name(ctx.thread_id) if ctx.gateway is not None else ""
     label = t("command.status.chat_label", lang, kind=kind, name=name) if name else kind
     return t("command.status.chat_roles", lang, label=label, roles=ctx.role_names())
 
@@ -64,7 +64,7 @@ async def status(ctx: CommandContext) -> str:
     if store is not None:
         try:
             total = store.message_count()
-            window = len(agent.windows.get(ctx.chat_id))
+            window = len(agent.windows.get(ctx.thread_id))
             lines.append(t("command.status.archive", lang, total=total, window=window))
         except Exception:
             lines.append(t("command.status.archive_unreadable", lang))

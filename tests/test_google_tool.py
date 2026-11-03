@@ -46,7 +46,7 @@ def service(tmp_path) -> GoogleWorkspace:
 
 
 def test_login_requires_a_direct_message(tmp_path) -> None:
-    result = asyncio.run(service(tmp_path).login("p1", is_dm=False))
+    result = asyncio.run(service(tmp_path).login("p1", direct=False))
 
     assert result == "error: Google login is only allowed in a direct message."
 
@@ -76,7 +76,7 @@ def test_device_login_polls_until_verified(tmp_path, monkeypatch) -> None:
     monkeypatch.setattr(svc, "_get", get)
 
     async def flow():
-        text = await svc.login("p1", is_dm=True)
+        text = await svc.login("p1", direct=True)
         for _ in range(40):
             if svc.identity("p1") is not None:
                 return text
@@ -91,7 +91,7 @@ def test_device_login_polls_until_verified(tmp_path, monkeypatch) -> None:
 
 
 def test_status_without_identity_is_not_connected(tmp_path) -> None:
-    result = asyncio.run(service(tmp_path).status("p1", is_dm=True))
+    result = asyncio.run(service(tmp_path).status("p1", direct=True))
 
     assert result == "not connected; use action=login"
 
@@ -281,7 +281,7 @@ def test_tool_blocks_actions_without_an_identity(tmp_path, monkeypatch) -> None:
         config,
         config.roles.default_role(),
         ("google",),
-        chat_id="chat",
+        thread_id="chat",
         sender="p1",
         person_id="p1",
     )
@@ -300,10 +300,10 @@ def test_tool_login_in_group_is_rejected(tmp_path, monkeypatch) -> None:
         config,
         config.roles.default_role(),
         ("google",),
-        chat_id="chat",
+        thread_id="chat",
         sender="p1",
         person_id="p1",
-        is_dm=False,
+        direct=False,
     )
 
     result = asyncio.run(google_tool._google({"action": "login"}, ctx))
@@ -338,7 +338,7 @@ def test_tool_routes_actions_with_a_linked_identity(tmp_path, monkeypatch) -> No
         config,
         config.roles.default_role(),
         ("google",),
-        chat_id="chat",
+        thread_id="chat",
         sender="p1",
         person_id="p1",
     )

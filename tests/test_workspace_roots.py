@@ -40,9 +40,9 @@ def member_env(tmp_path):
     )
 
 
-def member_ctx(env, chat_id: str = "111@g.us"):
+def member_ctx(env, thread_id: str = "111@g.us"):
     return env.agent.tool_context(
-        chat_id, "628111", (env.config.roles.get("member"),), env.gateway
+        thread_id, "628111", (env.config.roles.get("member"),), env.gateway
     )
 
 
@@ -65,7 +65,7 @@ def test_member_reads_public_and_writes_scratch(tmp_path) -> None:
     assert "isi publik" in read
     assert write.startswith("ok:")
     assert "halo" in read_again
-    assert (env.config.workspace / "scratch" / safe_chat(ctx.chat_id) / "a.txt").is_file()
+    assert (env.config.workspace / "scratch" / safe_chat(ctx.thread_id) / "a.txt").is_file()
 
 
 def test_member_bare_path_is_relative_to_scratch(tmp_path) -> None:
@@ -77,7 +77,7 @@ def test_member_bare_path_is_relative_to_scratch(tmp_path) -> None:
 
     assert write.startswith("ok:")
     assert "bare" in read
-    target = env.config.workspace / "scratch" / safe_chat(ctx.chat_id) / "catatan.txt"
+    target = env.config.workspace / "scratch" / safe_chat(ctx.thread_id) / "catatan.txt"
     assert target.is_file()
 
 
