@@ -72,6 +72,15 @@ async def status(ctx: CommandContext) -> str:
 
     lines.append(t("command.status.memory", lang, value=memory_status(agent.memory)))
     lines.append(t("command.status.approvals", lang, value=agent.approvals.count_pending()))
+    if agent.runtime.notice_failed:
+        lines.append(
+            t(
+                "command.status.notice_failed",
+                lang,
+                count=agent.runtime.notice_failed,
+                error=agent.runtime.last_notice_error or "-",
+            )
+        )
     skills = len(agent.skills.names()) if agent.skills is not None else 0
     lines.append(t("command.status.skills", lang, value=skills))
     people = 0

@@ -1,14 +1,14 @@
 # ADR-0013: Turn Lifecycle, Resume, Backlog & Notice
 
 - **Status:** accepted
-- **Implementation:** draft — no `turns`/`turn_steps`/notice table yet
+- **Implementation:** partial — present: `turns`/`turn_steps`/`outbound_messages` (revision 3), the checkpointed state machine, per-chunk ledger + resume, notices, `/stop` cancellation, `tests/test_turn_lifecycle.py`; remaining: backlog pacing/fairness (`per_message_then_consolidate`, `max_resume_per_chat`, per-minute limit)
 - **Date:** 2026-11-01
 - **Deciders:** Muqsith (owner), omp (reviewer)
 - **Context:** follow-up to ADR-0011 (crash safety) and ADR-0012 (lease safety); the question: if the bot dies in the middle of a turn, is it continued?
 - **Supersedes:** —
 - **Related:** ADR-0011 (durability), ADR-0012 (fencing), ADR-0003 (worker), ADR-0004 (labeling)
 - **Location note:** ADR lives in `docs/v0.1.0/adr/engine/`; the Indonesian copy is `docs/v0.1.0/adr/engine/id/0013-turn-lifecycle.md`.
-- **Amendments:** 2026-11-02 — normalization of the skeleton (ADR-0009 §4.4): added Options considered, Decision (summary), and Interaction with other ADRs; numbering 3-14 shifted to 5-17. 2026-11-03 — audit: the range `supervisor.py` was corrected to `36-129`; the path `eidesoul/engine/gateways` was corrected to `eidesoul/gateways/`; the notice key was standardized to `resume_notice.after_seconds`; the stale line about ADR-0009 was aligned. 2026-11-03 — audit: the turn status `pending` (not in the enum) was replaced by `received`/`running`/`sending`/`interrupted`; the reaper claim uses `clock_timestamp()`; the ledger uses `scope_key`. 2026-11-03 — `send`/`send_to` are no longer called "tools"; both are engine actions (gateway), and `send_to` was once considered a synonym — correction 2026-11-03: `send` and `send_to` are **gateway tools** (`gateways/whatsapp/tools/`), not engine steps; what needs distinguishing is the automation step of ADR-0014.
+- **Amendments:** 2026-11-02 — normalization of the skeleton (ADR-0009 §4.4): added Options considered, Decision (summary), and Interaction with other ADRs; numbering 3-14 shifted to 5-17. 2026-11-03 — audit: the range `supervisor.py` was corrected to `36-129`; the path `eidesoul/engine/gateways` was corrected to `eidesoul/gateways/`; the notice key was standardized to `resume_notice.after_seconds`; the stale line about ADR-0009 was aligned. 2026-11-03 — audit: the turn status `pending` (not in the enum) was replaced by `received`/`running`/`sending`/`interrupted`; the reaper claim uses `clock_timestamp()`; the ledger uses `scope_key`. 2026-11-03 — `send`/`send_to` are no longer called "tools"; both are engine actions (gateway), and `send_to` was once considered a synonym — correction 2026-11-03: `send` and `send_to` are **gateway tools** (`gateways/whatsapp/tools/`), not engine steps; what needs distinguishing is the automation step of ADR-0014. 2026-11-03 — ADR-0016 §4.1: the canonical table name is `turn_steps` (ADR-0009/0016), so the former `turn_actions` block is renamed and gains `step`/`started_at`/`finished_at` for the step history; the action columns stay.
 
 ---
 
@@ -81,13 +81,16 @@ turns(
  created_at double precision not null,
  updated_at double precision not null)
 
-turn_actions(
+turn_steps(
  turn_id text not null,
  step_index int not null,
- tool text not null,
- args_hash text not null,
+ step text not null, -- received|decided|drafted|reviewed|sending|delivered
+ tool text not null default '',
+ args_hash text not null default '',
  result text,
  status text not null, -- executed|failed
+ started_at double precision not null default 0,
+ finished_at double precision not null default 0,
  primary key (turn_id, step_index))
 
 outbound_messages(
@@ -169,14 +172,14 @@ Eligibility for resume:
 
 - `age < max_age_seconds` (default 900),
 - `attempt < max_attempts` (default 2),
-- no non-idempotent action already `executed` (see `turn_actions`),
+- no non-idempotent action already `executed` (see `turn_steps`),
 - has not passed `stale_after_seconds` for the `consolidate` policy.
 
 ### 8.2 From where
 
 - Start from `turns.step`; a step that already has a stored output is not repeated.
 - **Idempotent tools** (`read`, `web_search`, `chat_history`, `memory` read): may be run again.
-- **Side-effecting tools** (gateway `send`/`send_to`, plus `shell`, `sandbox`, `settings`): not run again; their results are taken from `turn_actions` and put back into the LLM context.
+- **Side-effecting tools** (gateway `send`/`send_to`, plus `shell`, `sandbox`, `settings`): not run again; their results are taken from `turn_steps` and put back into the LLM context.
 - A non-idempotent action already `executed` and a turn not yet finished → `interrupted`, not repeated.
 
 ### 8.3 Delivery
@@ -296,7 +299,7 @@ Key meaning:
 
 | Risks | Mitigation |
 |---|---|
-| Replay triggers a double side effect | Tool classification + `turn_actions` + generation (ADR-0012) |
+| Replay triggers a double side effect | Tool classification + `turn_steps` + generation (ADR-0012) |
 | A notice is taken as an answer | `kind='notice:*'`; it does not mark `delivered` |
 | Notice spam | One per chat per epoch; `resume_notice.after_seconds` |
 | Backlog floods | Limit per chat/minute; `consolidate`; humanized pacing |

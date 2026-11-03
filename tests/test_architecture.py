@@ -168,3 +168,25 @@ def test_core_defaults_labels_a_thread_by_its_id() -> None:
 
     assert Bare().chat_name("thread-1") == "thread-1"
     assert set(CORE_MEMBERS) >= {"name", "send_text", "tools", "commands", "run", "stop"}
+
+
+def test_no_blocking_db_block_inside_an_async_def() -> None:
+    """ADR-0017 §4.1: `with db.connect()` belongs in an offloaded helper, never in `async def`."""
+    offenders: list[str] = []
+    for path in ENGINE.rglob("*.py"):
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.AsyncFunctionDef):
+                continue
+            for inner in ast.walk(node):
+                if not isinstance(inner, ast.With):
+                    continue
+                for item in inner.items:
+                    call = item.context_expr
+                    if (
+                        isinstance(call, ast.Call)
+                        and isinstance(call.func, ast.Attribute)
+                        and call.func.attr == "connect"
+                    ):
+                        offenders.append(f"{path.relative_to(ROOT)}:{inner.lineno}")
+    assert offenders == []

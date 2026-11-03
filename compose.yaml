@@ -33,6 +33,8 @@ services:
         # the image stays core: no gateway and no plugin is bundled (ADR-0027)
         EXTRAS: ""
     restart: unless-stopped
+    # ADR-0011: the drain+notice budget (25 s) must fit inside the orchestrator's grace.
+    stop_grace_period: 30s
     depends_on:
       postgres:
         condition: service_healthy

@@ -285,6 +285,82 @@ engine_control = Table(
     Column("frozen", Boolean, nullable=False, default=False),
     Column("frozen_by", String(120), nullable=False, default=""),
     Column("frozen_at", Float, nullable=False, default=0.0),
+    Column("shutting_down", Boolean, nullable=False, default=False, server_default=text("false")),
+)
+
+# ---------------------------------------------------------------- turns
+# ADR-0013 §6: one row per incoming message, message id is the idempotency key.
+
+TURN_STATUSES = ("received", "running", "sending", "delivered", "interrupted", "expired")
+TURN_STEPS = ("received", "decided", "drafted", "reviewed", "sending", "delivered")
+TURN_TERMINAL = frozenset({"delivered", "interrupted", "expired"})
+
+turns = Table(
+    "turns",
+    metadata,
+    Column("id", String(160), primary_key=True),
+    Column("thread_id", String(120), nullable=False),
+    Column("person_id", String(80), nullable=False, default=""),
+    Column("status", String(20), nullable=False, default="received"),
+    Column("step", String(20), nullable=False, default="received"),
+    Column("attempt", Integer, nullable=False, default=0, server_default="0"),
+    Column("lease_owner", String(80), nullable=False, default="", server_default=""),
+    Column("lease_until", Float, nullable=False, default=0.0, server_default="0"),
+    Column("generation", BigInteger, nullable=False, default=0, server_default="0"),
+    Column("decision_json", JSONB, nullable=True),
+    Column("draft_text", Text, nullable=True),
+    Column("reviewed_text", Text, nullable=True),
+    Column("planned_chunks", Integer, nullable=False, default=0, server_default="0"),
+    Column("delivered_chunks", Integer, nullable=False, default=0, server_default="0"),
+    Column("shutdown_epoch", BigInteger, nullable=False, default=0, server_default="0"),
+    Column("boot_epoch", BigInteger, nullable=False, default=0, server_default="0"),
+    Column("last_error", Text, nullable=False, default="", server_default=""),
+    Column("created_at", Float, nullable=False),
+    Column("updated_at", Float, nullable=False),
+    CheckConstraint(
+        "status IN ('received','running','sending','delivered','interrupted','expired')",
+        name="ck_turns_status",
+    ),
+    CheckConstraint(
+        "step IN ('received','decided','drafted','reviewed','sending','delivered')",
+        name="ck_turns_step",
+    ),
+)
+Index("ix_turns_status_lease", turns.c.status, turns.c.lease_until)
+Index("ix_turns_thread_created", turns.c.thread_id, turns.c.created_at)
+
+# `turn_steps` is the one step log named by ADR-0009/0011/0016: it carries the columns
+# ADR-0013 §6 assigns to `turn_actions` plus the checkpoint name and its timestamps.
+turn_steps = Table(
+    "turn_steps",
+    metadata,
+    Column("turn_id", String(160), nullable=False),
+    Column("step_index", Integer, nullable=False),
+    Column("step", String(20), nullable=False, default="drafted", server_default="drafted"),
+    Column("tool", Text, nullable=False),
+    Column("args_hash", String(64), nullable=False),
+    Column("result", Text, nullable=True),
+    Column("status", String(20), nullable=False, default="executed"),
+    Column("started_at", Float, nullable=False, default=0.0, server_default="0"),
+    Column("finished_at", Float, nullable=True),
+    PrimaryKeyConstraint("turn_id", "step_index", name="pk_turn_steps"),
+    CheckConstraint("status IN ('executed','failed')", name="ck_turn_steps_status"),
+)
+
+outbound_messages = Table(
+    "outbound_messages",
+    metadata,
+    Column("scope_key", Text, nullable=False),
+    Column("chunk_index", Integer, nullable=False),
+    Column("gateway", String(40), nullable=False, default=""),
+    Column("thread_id", String(120), nullable=False, default=""),
+    Column("provider_id", Text, nullable=False, default="", server_default=""),
+    Column("status", String(20), nullable=False, default="intent", server_default="intent"),
+    Column("generation", BigInteger, nullable=False, default=0, server_default="0"),
+    PrimaryKeyConstraint("scope_key", "chunk_index", name="pk_outbound_messages"),
+    CheckConstraint(
+        "status IN ('intent','sent','unknown')", name="ck_outbound_messages_status"
+    ),
 )
 
 google_identity = Table(

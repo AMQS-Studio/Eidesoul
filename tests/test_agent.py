@@ -30,14 +30,15 @@ def handle(env, inbound):
 def test_dm_reply_is_delivered_and_recorded(tmp_path) -> None:
     env = make_agent(tmp_path)
 
-    handle(env, inbound_message("halo", thread=DM))
+    inbound = inbound_message("halo", thread=DM)
+    handle(env, inbound)
 
     assert env.gateway.sent
     thread_id, text, reply = env.gateway.sent[0]
     assert thread_id == DM and text == "halo juga"
     assert reply is not None
     ids = [item.id for item in env.windows.get(DM)]
-    assert ids[0] == "m-halo" and len(ids) == 2
+    assert ids[0] == inbound.payload.id and len(ids) == 2
     assert env.llm.calls == 1 and env.llm.decisions == 1
 
 
@@ -105,11 +106,12 @@ def test_backlog_is_archived_not_answered(tmp_path) -> None:
 def test_stale_burst_is_not_answered_twice(tmp_path) -> None:
     env = make_agent(tmp_path)
     inbound = inbound_message("halo", thread=DM, message_id="same")
-    env.agent.answered[DM] = frozenset({"same"})
 
     handle(env, inbound)
+    handle(env, inbound)
 
-    assert env.gateway.sent == []
+    assert len(env.gateway.sent) == 1
+    assert env.agent.turns.get("same")["status"] == "delivered"
 
 
 def test_auto_capture_runs_for_memory_role(tmp_path) -> None:
@@ -131,7 +133,8 @@ def test_memory_block_and_runtime_reach_prompt(tmp_path) -> None:
     memory = FakeMemory(block="Long-term memory (cross-chat):\n- [person] suka kopi")
     env = make_agent(tmp_path, memory=memory)
 
-    handle(env, inbound_message("halo", thread=DM))
+    inbound = inbound_message("halo", thread=DM)
+    handle(env, inbound)
 
     person = env.agent.identity.resolve("fake", "628111")
     assert memory.context_calls and memory.context_calls[0]["person_id"] == person
@@ -167,14 +170,15 @@ def test_humanize_splits_bubbles(tmp_path) -> None:
         humanize=HumanizeConfig(enabled=True, min_delay=0, max_delay=0, between_delay=0),
     )
 
-    handle(env, inbound_message("halo", thread=DM))
+    inbound = inbound_message("halo", thread=DM)
+    handle(env, inbound)
 
     assert [text for _chat, text, _reply in env.gateway.sent] == ["satu", "dua"]
 
 
 def test_shell_requires_approval_then_approve_executes(tmp_path) -> None:
     class ToolLLM(FakeLLM):
-        async def run(self, system, content, specs, ctx, session=None):
+        async def run(self, system, content, specs, ctx, session=None, deadline=None, **kwargs):
             self.ctx = ctx
             self.call = await execute(
                 {handler.name: handler for handler in specs},
@@ -213,7 +217,7 @@ def test_shell_requires_approval_then_approve_executes(tmp_path) -> None:
 
 def test_sensitive_shell_command_waits_then_approve_executes(tmp_path) -> None:
     class ToolLLM(FakeLLM):
-        async def run(self, system, content, specs, ctx, session=None):
+        async def run(self, system, content, specs, ctx, session=None, deadline=None, **kwargs):
             self.ctx = ctx
             self.call = await execute(
                 {handler.name: handler for handler in specs},
@@ -275,12 +279,13 @@ def test_send_text_tool_wrapper_reports_ok(tmp_path) -> None:
 
 def test_typing_events_around_turn(tmp_path) -> None:
     env = make_agent(tmp_path)
-    handle(env, inbound_message("halo", thread=DM))
+    inbound = inbound_message("halo", thread=DM)
+    handle(env, inbound)
     assert env.gateway.typing_events[0] == (DM, True)
     assert env.gateway.typing_events[-1] == (DM, False)
 
 
-def test_partial_send_does_not_mark_answered(tmp_path) -> None:
+def test_partial_send_leaves_the_turn_resumable(tmp_path) -> None:
     from eidesoul.engine.inbound import GatewayError
 
     class FailingGateway(FakeGateway):
@@ -306,7 +311,9 @@ def test_partial_send_does_not_mark_answered(tmp_path) -> None:
     handle(env, inbound)
 
     assert gateway.calls == 2
-    assert env.agent.answered.get(DM, frozenset()) == frozenset()
+    turn = env.agent.turns.get("burst-1")
+    assert turn["status"] == "sending"
+    assert turn["delivered_chunks"] == 1
 
 
 def test_gender_command_sets_a_manual_target(tmp_path) -> None:

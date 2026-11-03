@@ -208,7 +208,7 @@ class WorkingMemory:
             unreadable=old.unreadable and not (new.text or new.media),
         )
 
-    def append(self, thread_id: str, message: Message) -> None:
+    def append(self, thread_id: str, message: Message, *, persist: bool = True) -> None:
         self._ensure(thread_id)
         history = self._data.setdefault(thread_id, [])
         for index, old in enumerate(reversed(history)):
@@ -218,7 +218,7 @@ class WorkingMemory:
         else:
             history.append(message)
         del history[: -self.limit]
-        if self.store is not None:
+        if persist and self.store is not None:
             try:
                 self.store.add(thread_id, message)
             except Exception:

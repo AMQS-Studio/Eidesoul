@@ -1,17 +1,17 @@
-> Terjemahan turunan — jangan sunting; sumber: engine/0013-turn-lifecycle.md (sha256: 053818f8bb67)
+> Terjemahan turunan — jangan sunting; sumber: engine/0013-turn-lifecycle.md (sha256: 435819e8f1ac)
 > Teks ini ditulis manusia; baris yang tidak bisa diterjemahkan mesin disalin apa adanya ke sumber English, jadi sumber bercampur dua bahasa.
 
 # ADR-0013: Turn Lifecycle, Resume, Backlog & Notice
 
 - **Status:** accepted
-- **Implementasi:** draft — belum ada `turns`/`turn_steps`/tabel notice
+- **Implementasi:** partial — ada: `turns`/`turn_steps`/`outbound_messages` (revisi 3), state machine ber-checkpoint, ledger per chunk + resume, notice, pembatalan `/stop`, `tests/test_turn_lifecycle.py`; sisa: pacing/fairness backlog (`per_message_then_consolidate`, `max_resume_per_chat`, limit per menit)
 - **Tanggal:** 2026-11-01
 - **Deciders:** Muqsith (owner), omp (reviewer)
 - **Konteks:** lanjutan ADR-0011 (crash safety) dan ADR-0012 (lease safety); pertanyaan: kalau bot mati di tengah turn, apakah dilanjutkan?
 - **Supersedes:** —
 - **Terkait:** ADR-0011 (durability), ADR-0012 (fencing), ADR-0003 (worker), ADR-0004 (labeling)
 - **Catatan lokasi:** ADR hidup di `docs/v0.1.0/adr/engine/`; salinan Indonesia di `docs/v0.1.0/adr/engine/id/0013-turn-lifecycle.md`.
-- **Amandemen:** 2026-11-02 — normalisasi kerangka (ADR-0009 §4.4): menambah Opsi yang dipertimbangkan, Keputusan (ringkasan), dan Interaksi dengan ADR lain; penomoran 3–14 bergeser ke 5–17. 2026-11-03 — audit: rentang `supervisor.py` diperbaiki menjadi `36-129`; path `eidesoul/engine/gateways` dibetulkan menjadi `eidesoul/gateways/`; kunci notice diseragamkan ke `resume_notice.after_seconds`; baris basi soal ADR-0009 diselaraskan. 2026-11-03 — audit: status turn `pending` (tidak ada di enum) diganti `received`/`running`/`sending`/`interrupted`; klaim reaper memakai `clock_timestamp()`; ledger memakai `scope_key`. 2026-11-03 — `send`/`send_to` tidak lagi disebut "tool"; keduanya aksi engine (gateway), dan `send_to` sempat dianggap sinonim — koreksi 2026-11-03: `send` dan `send_to` adalah **tool gateway** (`gateways/whatsapp/tools/`), bukan langkah engine; yang perlu dibedakan adalah langkah otomasi ADR-0014.
+- **Amandemen:** 2026-11-02 — normalisasi kerangka (ADR-0009 §4.4): menambah Opsi yang dipertimbangkan, Keputusan (ringkasan), dan Interaksi dengan ADR lain; penomoran 3–14 bergeser ke 5–17. 2026-11-03 — audit: rentang `supervisor.py` diperbaiki menjadi `36-129`; path `eidesoul/engine/gateways` dibetulkan menjadi `eidesoul/gateways/`; kunci notice diseragamkan ke `resume_notice.after_seconds`; baris basi soal ADR-0009 diselaraskan. 2026-11-03 — audit: status turn `pending` (tidak ada di enum) diganti `received`/`running`/`sending`/`interrupted`; klaim reaper memakai `clock_timestamp()`; ledger memakai `scope_key`. 2026-11-03 — `send`/`send_to` tidak lagi disebut "tool"; keduanya aksi engine (gateway), dan `send_to` sempat dianggap sinonim — koreksi 2026-11-03: `send` dan `send_to` adalah **tool gateway** (`gateways/whatsapp/tools/`), bukan langkah engine; yang perlu dibedakan adalah langkah otomasi ADR-0014. 2026-11-03 — ADR-0016 §4.1: nama tabel kanonik adalah `turn_steps` (ADR-0009/0016), jadi blok `turn_actions` diganti nama dan mendapat `step`/`started_at`/`finished_at` untuk riwayat langkah; kolom aksi tetap.
 
 ---
 
@@ -85,13 +85,16 @@ turns(
   updated_at       double precision not null
 )
 
-turn_actions(
+turn_steps(
   turn_id    text not null,
   step_index int  not null,
-  tool       text not null,
-  args_hash  text not null,
+  step       text not null,   -- received|decided|drafted|reviewed|sending|delivered
+  tool       text not null default '',
+  args_hash  text not null default '',
   result     text,
   status     text not null,   -- executed|failed
+  started_at  double precision not null default 0,
+  finished_at double precision not null default 0,
   primary key (turn_id, step_index)
 )
 
@@ -176,14 +179,14 @@ Kelayakan resume:
 
 - `age < max_age_seconds` (default 900),
 - `attempt < max_attempts` (default 2),
-- tidak ada aksi non-idempoten yang sudah `executed` (lihat `turn_actions`),
+- tidak ada aksi non-idempoten yang sudah `executed` (lihat `turn_steps`),
 - belum melewati `stale_after_seconds` untuk kebijakan `consolidate`.
 
 ### 8.2 Dari mana
 
 - Mulai dari `turns.step`; langkah yang sudah punya output tersimpan tidak diulang.
 - **Tool idempoten** (`read`, `web_search`, `chat_history`, `memory` baca): boleh dijalankan ulang.
-- **Tool ber efek samping** (gateway `send`/`send_to`, serta `shell`, `sandbox`, `settings`): tidak dijalankan ulang; hasil diambil dari `turn_actions` dan dimasukkan kembali ke konteks LLM.
+- **Tool ber efek samping** (gateway `send`/`send_to`, serta `shell`, `sandbox`, `settings`): tidak dijalankan ulang; hasil diambil dari `turn_steps` dan dimasukkan kembali ke konteks LLM.
 - Aksi non-idempoten yang sudah `executed` dan turn belum selesai → `interrupted`, bukan diulang.
 
 ### 8.3 Pengiriman
@@ -303,7 +306,7 @@ Makna kunci:
 
 | Risiko | Mitigasi |
 |---|---|
-| Replay memicu efek samping dobel | Klasifikasi tool + `turn_actions` + generation (ADR-0012) |
+| Replay memicu efek samping dobel | Klasifikasi tool + `turn_steps` + generation (ADR-0012) |
 | Notice dianggap jawaban | `kind='notice:*'`; tidak menandai `delivered` |
 | Spam notice | Satu per chat per epoch; `resume_notice.after_seconds` |
 | Backlog membanjir | Batas per chat/menit; `consolidate`; pacing humanize |

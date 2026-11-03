@@ -1,7 +1,7 @@
 # ADR-0017: Turn Isolation, Deadline, and Primary Gate
 
 - **Status:** accepted
-- **Implementation:** draft — `turn_lock` is still global; no deadline, no per-chat lock, no primary gate
+- **Implementation:** implemented — evidence: `agent.py` per-thread LRU locks, turn deadline + `min_call_seconds`, `eidesoul/engine/io.py` executor, `_send_gate` (mode + generation), `tests/test_turn_lifecycle.py`, `tests/test_architecture.py` async-DB rule; gate result: `pytest -q` 604 passed after the wave
 - **Date:** 2026-11-03
 - **Deciders:** Muqsith (owner), omp (reviewer)
 - **Context:** review (`Eidesoul-Review-Arsitektur-2026-11-01.md`) §15 P0-4: `turn_lock` is global, synchronous DB/mem0 work blocks the same event loop that renews the heartbeat lease, and `agent.mode` is never read, so a standby instance could still send

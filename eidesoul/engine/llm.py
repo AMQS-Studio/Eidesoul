@@ -6,15 +6,20 @@ import json
 import logging
 import time
 
-from openai import APIError, AsyncOpenAI
+from openai import APIError, APITimeoutError, AsyncOpenAI
 
 from . import guard
 from .config import Config
 from .i18n import t
 from .registry import Handler
+from .stores.turns import args_hash
 from .tools import ToolContext, execute
 
 log = logging.getLogger(__name__)
+
+
+class DeadlineExceeded(RuntimeError):
+    """The turn deadline is exhausted; no new call is started (ADR-0017 §4.3)."""
 
 BUDGET_TEXT = "Time is up. Write the best answer from the tool results you already have; do not call tools again."
 USER_AGENT = "eidesoul"
@@ -147,6 +152,28 @@ class LLM:
         effort = self.config.llm.reasoning_effort
         return {"reasoning_effort": effort} if effort else {}
 
+    def _request_client(self, deadline: float | None, min_call_seconds: float):
+        """Per-call layer: `min(llm.timeout_seconds, remaining)` and the turn retry count."""
+        if deadline is None:
+            return self.client, None
+        remaining = float(deadline) - time.monotonic()
+        if remaining < float(min_call_seconds):
+            raise DeadlineExceeded(
+                f"remaining {remaining:.1f}s is below min_call_seconds "
+                f"{float(min_call_seconds):.1f}s"
+            )
+        timeout = min(float(self.config.llm.timeout_seconds), max(0.05, remaining))
+        attempts = max(1, int(self.config.llm.retry.turn_attempts))
+        return (
+            self.client.with_options(timeout=timeout, max_retries=attempts - 1),
+            timeout,
+        )
+
+    def _deadline_request_failed(self, deadline: float | None, min_call_seconds: float) -> bool:
+        if deadline is None:
+            return False
+        return float(deadline) - time.monotonic() < float(min_call_seconds)
+
     async def run(
         self,
         system: str,
@@ -154,6 +181,11 @@ class LLM:
         specs: list[Handler],
         ctx: ToolContext,
         session: str = "",
+        *,
+        deadline: float | None = None,
+        min_call_seconds: float = 0.0,
+        on_step=None,
+        lookup_step=None,
     ) -> str:
         messages: list[dict] = [
             {"role": "system", "content": system},
@@ -166,17 +198,20 @@ class LLM:
         last_sig: tuple[str, str] | None = None
         repeat = 0
         while True:
-            if time.monotonic() - start > float(self.config.llm.run_budget_seconds):
+            client, _timeout = self._request_client(deadline, min_call_seconds)
+            if deadline is None and (
+                time.monotonic() - start > float(self.config.llm.run_budget_seconds)
+            ):
                 messages.append({"role": "system", "content": BUDGET_TEXT})
                 try:
-                    final = await self.client.chat.completions.create(
+                    final = await client.chat.completions.create(
                         model=self.config.llm.model,
                         messages=messages,
                         temperature=float(self.config.llm.temperature),
                         extra_headers=self.config.llm.session_headers(session or USER_AGENT),
                         **self._effort(),
                     )
-                except (APIError, TimeoutError):
+                except (APIError, APITimeoutError, TimeoutError):
                     log.exception("LLM failed")
                     return t("agent.api_error", self.config.soul.language)
                 return (final.choices[0].message.content or "").strip()
@@ -190,16 +225,20 @@ class LLM:
             if tools:
                 kwargs["tools"] = tools
             try:
-                response = await self.client.chat.completions.create(**kwargs)
+                response = await client.chat.completions.create(**kwargs)
             except APIError as exc:
                 if images and _client_error(exc):  # model without vision: drop images, retry once
                     log.warning("model rejected the images, retrying without them: %s", exc)
                     messages[1] = {"role": "user", "content": _text_only(user_content)}
                     images = False
                     continue
+                if self._deadline_request_failed(deadline, min_call_seconds):
+                    raise DeadlineExceeded("request consumed the turn deadline") from exc
                 log.exception("LLM failed")
                 return t("agent.api_error", self.config.soul.language)
-            except TimeoutError:
+            except (APITimeoutError, TimeoutError):
+                if self._deadline_request_failed(deadline, min_call_seconds):
+                    raise DeadlineExceeded("request consumed the turn deadline") from None
                 log.exception("LLM failed")
                 return t("agent.api_error", self.config.soul.language)
             message = response.choices[0].message
@@ -213,7 +252,8 @@ class LLM:
                     for entry in ctx.sent
                 )
                 try:
-                    confirm = await self.client.chat.completions.create(
+                    confirm_client, _ = self._request_client(deadline, min_call_seconds)
+                    confirm = await confirm_client.chat.completions.create(
                         model=self.config.llm.model,
                         messages=[
                             *messages,
@@ -231,7 +271,9 @@ class LLM:
                         extra_headers=self.config.llm.session_headers(session or USER_AGENT),
                         **self._effort(),
                     )
-                except (APIError, TimeoutError):
+                except DeadlineExceeded:
+                    raise
+                except (APIError, APITimeoutError, TimeoutError):
                     log.warning("send confirmation failed, keeping the original answer")
                     return text
                 return (confirm.choices[0].message.content or "").strip() or text
@@ -251,7 +293,22 @@ class LLM:
                     if repeat >= 3:
                         result = "error: repeated call, change the arguments or answer from the existing result"
                     else:
-                        result = await execute(by_name, name, args if isinstance(args, dict) else {}, ctx)
+                        result = None
+                        if lookup_step is not None:
+                            result = lookup_step(name, args if isinstance(args, dict) else {})
+                        if result is None:
+                            started = time.monotonic()
+                            result = await execute(
+                                by_name, name, args if isinstance(args, dict) else {}, ctx
+                            )
+                            if on_step is not None:
+                                on_step(
+                                    name,
+                                    args if isinstance(args, dict) else {},
+                                    result,
+                                    started,
+                                    time.monotonic(),
+                                )
                 messages.append({"role": "tool", "tool_call_id": call.id, "content": result})
 
     async def complete(
@@ -263,8 +320,11 @@ class LLM:
         temperature: float = 0.2,
         session: str = "",
         model: str = "",
+        deadline: float | None = None,
+        min_call_seconds: float = 0.0,
     ) -> str:
         """One tool-free call for decisions/summaries; failure yields an empty string."""
+        client, _timeout = self._request_client(deadline, min_call_seconds)
         messages = [
             {"role": "system", "content": str(system or "")},
             {"role": "user", "content": user if isinstance(user, list) else str(user or "")},
@@ -278,8 +338,12 @@ class LLM:
             **self._effort(),
         }
         try:
-            response = await self.client.chat.completions.create(**kwargs)
-        except (APIError, TimeoutError, OSError) as exc:  # background paths are best-effort
+            response = await client.chat.completions.create(**kwargs)
+        except DeadlineExceeded:
+            raise
+        except (APIError, APITimeoutError, TimeoutError, OSError) as exc:  # background is best-effort
+            if self._deadline_request_failed(deadline, min_call_seconds):
+                raise DeadlineExceeded("request consumed the turn deadline") from exc
             log.warning("background LLM call failed: %s", exc)
             return ""
         choice = response.choices[0]

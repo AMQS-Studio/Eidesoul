@@ -318,6 +318,8 @@ async def decide(
     away: str = "",
     vibe: str = "",
     soul=None,
+    deadline: float | None = None,
+    min_call_seconds: float = 0.0,
 ) -> Decision | None:
     """One LLM decision; empty after one retry = None (no regex fallback)."""
     from .soul import Soul, language_line
@@ -346,9 +348,25 @@ async def decide(
         vibe=vibe,
     )
     session = f"eidesoul-decision-{thread_id}"
-    raw = await llm.complete(system, user, max_tokens=4000, temperature=0.3, session=session)
+    raw = await llm.complete(
+        system,
+        user,
+        max_tokens=4000,
+        temperature=0.3,
+        session=session,
+        deadline=deadline,
+        min_call_seconds=min_call_seconds,
+    )
     if not str(raw or "").strip():
-        raw = await llm.complete(system, user, max_tokens=8000, temperature=0.3, session=session)
+        raw = await llm.complete(
+            system,
+            user,
+            max_tokens=8000,
+            temperature=0.3,
+            session=session,
+            deadline=deadline,
+            min_call_seconds=min_call_seconds,
+        )
     if not str(raw or "").strip():
         return None
     parsed = parse_decision(raw)

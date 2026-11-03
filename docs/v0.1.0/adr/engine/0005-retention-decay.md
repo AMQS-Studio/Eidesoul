@@ -152,7 +152,7 @@ Without content. For audits, and to answer “did we ever have this?”.
 | `llm_calls` | 90 days (`engine.metrics.retention_days`) | Cost metric; its contents are ids + numbers, with no content |
 | Media workspace | 30 days | Large, rarely used after a turn |
 | `outbound_messages` | 30 days | For dedupe; unnecessary afterwards |
-| `turn_actions` | 30 days | Audit of side effects |
+| `turn_steps` | 30 days | Audit of side effects |
 | Approvals | 30 days after completion | The execution TTL remains 900 seconds |
 | `config_changes` | 365 days | Operator audit |
 | `thread_eras` | Follows its content level | It holds content, not neutral metadata |

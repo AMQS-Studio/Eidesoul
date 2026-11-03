@@ -11,6 +11,7 @@ from datetime import datetime
 
 from sqlalchemy import Text, and_, case, cast, func, literal, or_, select
 from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from ..context import (
     AUTHOR_RANK,
@@ -21,7 +22,7 @@ from ..context import (
     clamp_visibility,
 )
 from ..db import Database
-from ..schema import messages, threads
+from ..schema import messages, threads, turns
 
 log = logging.getLogger(__name__)
 
@@ -180,19 +181,81 @@ class HistoryStore:
     def add(self, thread_id: str, message: Message) -> None:
         self.add_many([(thread_id, message)])
 
+    def _upsert_messages(self, conn, rows: list[dict]) -> int:
+        if not rows:
+            return 0
+        self.db.upsert(
+            conn,
+            messages,
+            rows,
+            ["thread_id", "msg_id"],
+            update=self._merge,
+        )
+        return len(rows)
+
     def add_many(self, items: list[tuple[str, Message]]) -> int:
         rows = [self._row(thread_id, message) for thread_id, message in items]
         if not rows:
             return 0
         with self.db.connect() as conn:
-            self.db.upsert(
-                conn,
-                messages,
-                rows,
-                ["thread_id", "msg_id"],
-                update=self._merge,
-            )
+            self._upsert_messages(conn, rows)
         return len(rows)
+
+    def intake(self, thread_id: str, message: Message, person_id: str = "") -> bool:
+        """The one intake transaction (ADR-0011 §4.1): `messages` + `turns(received)`.
+
+        W3 extends this function with memories/memory_events and cognition_jobs; no other
+        writer repeats the transaction. A duplicate message id is idempotent: the existing
+        turn is kept and `False` is returned. A failure here propagates, so the turn is not
+        processed (fail fast, never a fail-open archive).
+        """
+        now = time.time()
+        row = self._row(thread_id, message)
+        with self.db.connect() as conn:
+            self._upsert_messages(conn, [row])
+            created = conn.execute(
+                pg_insert(turns)
+                .values(
+                    id=str(message.id or row["msg_id"]),
+                    thread_id=str(thread_id),
+                    person_id=str(person_id or "")[:80],
+                    status="received",
+                    step="received",
+                    attempt=0,
+                    lease_owner="",
+                    lease_until=0.0,
+                    generation=0,
+                    planned_chunks=0,
+                    delivered_chunks=0,
+                    shutdown_epoch=0,
+                    boot_epoch=0,
+                    last_error="",
+                    created_at=now,
+                    updated_at=now,
+                )
+                .on_conflict_do_nothing(index_elements=["id"])
+                .returning(turns.c.id)
+            ).scalar()
+        return created is not None
+
+    def add_notice(
+        self, thread_id: str, text: str, *, kind: str, message_id: str = ""
+    ) -> None:
+        """Record a `notice:*` bot message; `kind` rides in `messages.data`, never `turns`."""
+        when = datetime.now()
+        message = Message(
+            id=str(message_id or f"notice-{time.time_ns()}"),
+            sender_name="",
+            sender_id="",
+            when=when,
+            text=str(text or ""),
+            outgoing=True,
+            author="bot",
+        )
+        row = self._row(thread_id, message)
+        row["data"] = {**(row["data"] or {}), "kind": str(kind)}
+        with self.db.connect() as conn:
+            self._upsert_messages(conn, [row])
 
     def set_visibility(self, thread_id: str, message_ids: Sequence[str], level: int) -> int:
         """Raise the privacy mark of archive rows; visibility may only go up, never down."""

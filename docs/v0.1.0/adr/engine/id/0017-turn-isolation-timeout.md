@@ -1,10 +1,10 @@
-> Terjemahan turunan — jangan sunting; sumber: engine/0017-turn-isolation-timeout.md (sha256: ace143b1e398)
+> Terjemahan turunan — jangan sunting; sumber: engine/0017-turn-isolation-timeout.md (sha256: bca424354b5e)
 > Teks ini ditulis manusia; baris yang tidak bisa diterjemahkan mesin disalin apa adanya ke sumber English, jadi sumber bercampur dua bahasa.
 
 # ADR-0017: Isolasi Turn, Batas Waktu, dan Gerbang Primary
 
 - **Status:** accepted
-- **Implementasi:** draft — `turn_lock` masih global; belum ada deadline, lock per chat, gerbang primary
+- **Implementasi:** implemented — bukti: lock LRU per thread di `agent.py`, deadline turn + `min_call_seconds`, executor `eidesoul/engine/io.py`, `_send_gate` (mode + generation), `tests/test_turn_lifecycle.py`, aturan async-DB di `tests/test_architecture.py`; hasil gate: `pytest -q` 604 lulus setelah wave ini
 - **Tanggal:** 2026-11-03
 - **Deciders:** Muqsith (owner), omp (reviewer)
 - **Konteks:** review (`Eidesoul-Review-Arsitektur-2026-11-01.md`) §15 P0-4 — `turn_lock` global, DB/embedder sinkron memblokir event loop yang sama dengan heartbeat lease, dan `agent.mode` tidak pernah dibaca sehingga instance standby masih bisa mengirim

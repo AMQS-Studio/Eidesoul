@@ -8,6 +8,7 @@ from dataclasses import dataclass
 
 from sqlalchemy import select, update
 
+from . import io
 from .config import ApprovalConfig
 from .db import Database
 from .schema import approvals
@@ -89,14 +90,43 @@ class ApprovalStore:
         diff: str = "",
         roles: tuple[str, ...] = (),
     ) -> Approval:
+        return await io.run(
+            self._create_sync,
+            kind=kind,
+            thread_id=thread_id,
+            sender=sender,
+            gateway=gateway,
+            tool=tool,
+            args=dict(args or {}),
+            payload=dict(payload or {}),
+            summary=summary,
+            diff=diff,
+            roles=roles,
+        )
+
+    def _create_sync(
+        self,
+        *,
+        kind: str,
+        thread_id: str,
+        sender: str,
+        gateway: str,
+        tool: str,
+        args: dict,
+        payload: dict,
+        summary: str,
+        diff: str,
+        roles: tuple[str, ...],
+    ) -> Approval:
         self.expire()
-        args = dict(args or {})
-        payload = dict(payload or {})
         if roles:
             payload["roles"] = list(roles)
         wanted = self._fingerprint(kind, tool, args, payload)
         for existing in self.pending(thread_id, sender):
-            if self._fingerprint(existing.kind, existing.tool, existing.args, existing.payload) == wanted:
+            same = self._fingerprint(
+                existing.kind, existing.tool, existing.args, existing.payload
+            )
+            if same == wanted:
                 return existing
         now = time.time()
         row = {

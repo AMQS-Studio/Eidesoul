@@ -5,10 +5,11 @@ from __future__ import annotations
 import time
 
 from sqlalchemy import func, select
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from ..db import Database
 from ..guard import SENSITIVE
-from ..schema import actions
+from ..schema import actions, outbound_messages
 
 ACTION_ITEMS = 10
 ACTION_CHARS = 1200
@@ -95,3 +96,108 @@ class ActionLedger:
 
     def close(self) -> None:
         """Shutdown compatibility hook; the Database is owned by the runtime."""
+
+
+class OutboundLedger:
+    """Delivery ledger (ADR-0011 §4.3): one row per chunk, `scope_key` covers automations.
+
+    Status is `intent` before the transport call, `sent` with the provider id after it, and
+    `unknown` for the gap between the two. A resumed turn sends only chunks that are not
+    `sent`; an `unknown` chunk follows the `partial_delivery` policy.
+    """
+
+    def __init__(self, db: Database) -> None:
+        self.db = db
+
+    @staticmethod
+    def turn_scope(turn_id: str) -> str:
+        return f"turn:{turn_id}"
+
+    def status(self, scope_key: str, chunk_index: int) -> str | None:
+        found = self.db.fetch_one(
+            select(outbound_messages.c.status).where(
+                outbound_messages.c.scope_key == str(scope_key),
+                outbound_messages.c.chunk_index == int(chunk_index),
+            )
+        )
+        return str(found["status"]) if found else None
+
+    def begin(
+        self,
+        scope_key: str,
+        chunk_index: int,
+        *,
+        gateway: str,
+        thread_id: str,
+        generation: int = 0,
+    ) -> str:
+        """Write `intent` unless a row exists, then return the stored status (`new` if free)."""
+        with self.db.connect() as conn:
+            conn.execute(
+                pg_insert(outbound_messages)
+                .values(
+                    scope_key=str(scope_key),
+                    chunk_index=int(chunk_index),
+                    gateway=str(gateway)[:40],
+                    thread_id=str(thread_id)[:120],
+                    provider_id="",
+                    status="intent",
+                    generation=int(generation),
+                )
+                .on_conflict_do_nothing(
+                    index_elements=["scope_key", "chunk_index"]
+                )
+            )
+            found = conn.execute(
+                select(outbound_messages.c.status).where(
+                    outbound_messages.c.scope_key == str(scope_key),
+                    outbound_messages.c.chunk_index == int(chunk_index),
+                )
+            ).scalar()
+        return str(found) if found is not None else "new"
+
+    def mark_sent(self, scope_key: str, chunk_index: int, provider_id: str) -> None:
+        with self.db.connect() as conn:
+            conn.execute(
+                outbound_messages.update()
+                .where(
+                    outbound_messages.c.scope_key == str(scope_key),
+                    outbound_messages.c.chunk_index == int(chunk_index),
+                )
+                .values(status="sent", provider_id=str(provider_id or "")[:400])
+            )
+
+    def mark_unknown(self, scope_key: str, chunk_index: int) -> None:
+        with self.db.connect() as conn:
+            conn.execute(
+                outbound_messages.update()
+                .where(
+                    outbound_messages.c.scope_key == str(scope_key),
+                    outbound_messages.c.chunk_index == int(chunk_index),
+                )
+                .values(status="unknown")
+            )
+
+    def forget(self, scope_key: str, chunk_index: int) -> None:
+        """A gate refusal means nothing left the process; the intent is not a delivery."""
+        with self.db.connect() as conn:
+            conn.execute(
+                outbound_messages.delete().where(
+                    outbound_messages.c.scope_key == str(scope_key),
+                    outbound_messages.c.chunk_index == int(chunk_index),
+                    outbound_messages.c.status == "intent",
+                )
+            )
+
+    def count_sent(self, scope_key: str) -> int:
+        return int(
+            self.db.scalar(
+                select(func.count())
+                .select_from(outbound_messages)
+                .where(
+                    outbound_messages.c.scope_key == str(scope_key),
+                    outbound_messages.c.status == "sent",
+                )
+            )
+            or 0
+        )

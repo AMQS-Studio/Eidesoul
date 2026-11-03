@@ -1,7 +1,7 @@
 # ADR-0011: Crash Safety & Durability: Transactional Queue, Job Claim, Neat Shutdown
 
 - **Status:** accepted
-- **Implementation:** draft — no `turns`/`turn_steps` + ledger outbox yet
+- **Implementation:** partial — present: transactional intake (`HistoryStore.intake`), turn claim/reaper with backoff + dead-letter, delivery ledger, phased shutdown, recovery, `tests/test_turn_shutdown.py`; remaining: `cognition_jobs` claim/retry (ADR-0003, W3) and the memory writes in the same intake transaction (W3)
 - **Date:** 2026-11-01
 - **Deciders:** Muqsith (owner), omp (reviewer)
 - **Context:** follow-up to ADR-0001 (canonical), ADR-0002 (capture), ADR-0003 (worker C/D), ADR-0004 (labeling fallback)

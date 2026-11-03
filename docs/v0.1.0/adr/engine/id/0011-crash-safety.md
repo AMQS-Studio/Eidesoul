@@ -1,10 +1,10 @@
-> Terjemahan turunan — jangan sunting; sumber: engine/0011-crash-safety.md (sha256: 5585fe09b768)
+> Terjemahan turunan — jangan sunting; sumber: engine/0011-crash-safety.md (sha256: d6ec6e9bdf8d)
 > Teks ini ditulis manusia; baris yang tidak bisa diterjemahkan mesin disalin apa adanya ke sumber English, jadi sumber bercampur dua bahasa.
 
 # ADR-0011: Crash Safety & Durability — Antrean Transaksional, Klaim Job, Shutdown Rapi
 
 - **Status:** accepted
-- **Implementasi:** draft — belum ada `turns`/`turn_steps` + ledger outbox
+- **Implementasi:** partial — ada: intake transaksional (`HistoryStore.intake`), claim/reaper turn dengan backoff + dead-letter, ledger kirim, shutdown bertahap, recovery, `tests/test_turn_shutdown.py`; sisa: claim/retry `cognition_jobs` (ADR-0003, W3) dan tulisan memori dalam transaksi intake yang sama (W3)
 - **Tanggal:** 2026-11-01
 - **Deciders:** Muqsith (owner), omp (reviewer)
 - **Konteks:** lanjutan ADR-0001 (canonical), ADR-0002 (capture), ADR-0003 (worker C/D), ADR-0004 (labeling fallback)

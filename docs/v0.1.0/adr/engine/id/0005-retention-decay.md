@@ -1,4 +1,4 @@
-> Terjemahan turunan — jangan sunting; sumber: engine/0005-retention-decay.md (sha256: d7cb34cef3c2)
+> Terjemahan turunan — jangan sunting; sumber: engine/0005-retention-decay.md (sha256: ea674ab371db)
 > Teks ini ditulis manusia; baris yang tidak bisa diterjemahkan mesin disalin apa adanya ke sumber English, jadi sumber bercampur dua bahasa.
 
 # ADR-0005: Retention & Decay — Hybrid TTL, Renewal Saat Dipakai, dan Pin Otomatis
@@ -157,7 +157,7 @@ Tanpa isi. Untuk audit dan menjawab “apakah dulu kami punya ini?”.
 | `llm_calls` | 90 hari (`engine.metrics.retention_days`) | Metrik biaya; isinya id + angka, tanpa konten |
 | Media workspace | 30 hari | Besar, jarang dipakai setelah turn |
 | `outbound_messages` | 30 hari | Untuk dedupe; setelah itu tidak perlu |
-| `turn_actions` | 30 hari | Audit efek samping |
+| `turn_steps` | 30 hari | Audit efek samping |
 | Approvals | 30 hari setelah selesai | TTL eksekusi tetap 900 detik |
 | `config_changes` | 365 hari | Audit operator |
 | `thread_eras` | Mengikuti level isinya | Memuat konten, bukan metadata netral |

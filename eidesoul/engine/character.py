@@ -13,7 +13,7 @@ from functools import lru_cache
 
 from . import lexicon
 from .config import CharacterConfig, Config
-from .llm import LLM
+from .llm import LLM, DeadlineExceeded
 
 MARKDOWN = re.compile(r"(?m)^\s*(?:#{1,6}\s+|[-*]\s+|\d+[.)]\s+)")
 SENTENCE = re.compile(r"[.!?]+(?:\s|$)")
@@ -145,6 +145,8 @@ async def polish(
     direct: bool = False,
     tone: str = "neutral",
     session: str = "",
+    deadline: float | None = None,
+    min_call_seconds: float = 0.0,
 ) -> str:
     """Draft -> more human chat text; the original draft is used when in doubt."""
     body = str(draft or "").strip()
@@ -162,7 +164,11 @@ async def polish(
             max_tokens=config.character.max_tokens,
             temperature=config.character.temperature,
             session=session or "eidesoul-character",
+            deadline=deadline,
+            min_call_seconds=min_call_seconds,
         )
+    except DeadlineExceeded:
+        raise
     except Exception:
         import logging
 
@@ -317,6 +323,8 @@ async def regulate(
     latest: str,
     session: str = "",
     is_professional: bool = False,
+    deadline: float | None = None,
+    min_call_seconds: float = 0.0,
 ) -> str:
     """Does the reply exceed its level? Rewrite once; on failure keep the reply, never stall."""
     body = str(reply or "").strip()
@@ -349,7 +357,11 @@ async def regulate(
             max_tokens=config.character.max_tokens,
             temperature=0.4,
             session=session or "eidesoul-character",
+            deadline=deadline,
+            min_call_seconds=min_call_seconds,
         )
+    except DeadlineExceeded:
+        raise
     except Exception:
         import logging
 

@@ -6,6 +6,7 @@ import hashlib
 import math
 import os
 import re
+import uuid
 from dataclasses import replace
 from pathlib import Path
 
@@ -17,7 +18,6 @@ from eidesoul.engine.config import (
     HumanizeConfig,
     LLMConfig,
     Paths,
-    ReplyConfig,
     SandboxConfig,
     StyleConfig,
 )
@@ -109,7 +109,6 @@ def build_config(
         documents=None,
         llm=LLMConfig(base_url="http://x", model="m", api_key_env="K"),
         workspace=workspace_path,
-        reply=ReplyConfig(),
         approval=approval or ApprovalConfig(),
         roles=RoleRegistry(by_name=role_map, default=default_role),
         default_role=default_role,
@@ -400,7 +399,7 @@ class FakeLLM:
         self.decisions += 1
         return json.dumps(self.decision)
 
-    async def run(self, system, content, specs, ctx, session=None):
+    async def run(self, system, content, specs, ctx, session=None, **kwargs):
         self.system = system
         self.ctx = ctx
         self.calls += 1
@@ -492,6 +491,7 @@ def make_agent(
         approvals=ApprovalStore(db, config.approval),
     )
     agent.lease = None
+    agent.mode = "primary"
     return SimpleNamespace(
         agent=agent,
         gateway=gateway,
@@ -536,7 +536,7 @@ def inbound_message(
         actor=person_id or sender,
         kind=MESSAGE,
         payload=Message(
-            id=message_id or f"m-{text[:8]}",
+            id=message_id or f"m-{uuid.uuid4().hex[:12]}",
             sender_name=sender_name,
             sender_id=sender,
             when=datetime.now(),
@@ -619,6 +619,7 @@ def make_runtime(
         documents=documents,
         approvals=ApprovalStore(db, config.approval),
     )
+    agent.mode = "primary"
     return SimpleNamespace(
         agent=agent,
         gateway=gateway,

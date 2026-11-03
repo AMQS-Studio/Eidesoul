@@ -97,7 +97,7 @@ def test_current_chat_read_does_not_fill_cross_reads(tmp_path) -> None:
 def test_agent_replaces_a_verbatim_cross_room_reply(tmp_path) -> None:
     env = make_agent(tmp_path, answer=SPAN)
 
-    async def run(system, content, specs, ctx, session=None):
+    async def run(system, content, specs, ctx, session=None, deadline=None, **kwargs):
         ctx.cross_reads.append(SPAN)
         return SPAN
 

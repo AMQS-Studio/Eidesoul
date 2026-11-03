@@ -30,6 +30,11 @@ class RuntimeFacts:
     db_label: str = ""
     memory_status: str = "unavailable"
     pending_approvals: int = 0
+    standby_refused: int = 0
+    turn_timeout_total: int = 0
+    notice_failed: int = 0
+    last_notice_error: str = ""
+    phase: str = "running"  # running | draining | noticed | stopped (ADR-0011 §4.4)
     paths: Paths | None = None
 
     @property

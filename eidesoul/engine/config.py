@@ -67,6 +67,84 @@ class Documents(Protocol):
 
 
 @dataclass(frozen=True)
+class RetryConfig:
+    """Retry per path (ADR-0017 §4.6): the turn fails visibly, background work backs off."""
+
+    turn_attempts: int = 1
+    worker_attempts: int = 3
+    base_seconds: float = 2.0
+    cap_seconds: float = 60.0
+    jitter: float = 0.2
+    retry_after_max_seconds: float = 10.0
+
+
+@dataclass(frozen=True)
+class IOConfig:
+    workers: int = 8
+
+
+@dataclass(frozen=True)
+class ConcurrencyConfig:
+    max_chat_locks: int = 256
+
+
+@dataclass(frozen=True)
+class NoticeRetryConfig:
+    attempts: int = 2
+    backoff_seconds: float = 1.0
+
+
+@dataclass(frozen=True)
+class ResumeNoticeConfig:
+    after_seconds: int = 300
+
+
+@dataclass(frozen=True)
+class ShutdownConfig:
+    grace_seconds: float = 25.0
+    drain_seconds: float = 15.0
+    notice_seconds: float = 5.0
+    notice_per_chat: bool = True
+    notice_retry: NoticeRetryConfig = field(default_factory=NoticeRetryConfig)
+    resume_notice: ResumeNoticeConfig = field(default_factory=ResumeNoticeConfig)
+    stop_grace_period: float = 30.0  # the orchestrator's stopped deadline (ADR-0013 §9)
+
+
+@dataclass(frozen=True)
+class TurnConfig:
+    resume: bool = True
+    max_attempts: int = 2
+    max_age_seconds: int = 900
+    stale_after_seconds: int = 21600
+    partial_delivery: str = "skip"  # skip | resend
+    max_resume_per_chat: int = 5
+    max_resume_per_minute: int = 10
+    backlog_policy: str = "per_message_then_consolidate"
+    timeout_seconds: float = 90.0
+    min_call_seconds: float = 5.0
+    shutdown: ShutdownConfig = field(default_factory=ShutdownConfig)
+
+
+@dataclass(frozen=True)
+class WorkerRetryConfig:
+    attempts: int = 5
+    backoff_seconds: float = 2.0
+    dead_letter_after: int = 5
+
+
+@dataclass(frozen=True)
+class ReaperConfig:
+    every_seconds: float = 30.0
+    batch: int = 100
+
+
+@dataclass(frozen=True)
+class WorkerConfig:
+    retry: WorkerRetryConfig = field(default_factory=WorkerRetryConfig)
+    reaper: ReaperConfig = field(default_factory=ReaperConfig)
+
+
+@dataclass(frozen=True)
 class LLMConfig:
     provider: str = ""  # chosen by the operator at init; never a provider default
     base_url: str = ""
@@ -79,6 +157,7 @@ class LLMConfig:
     timeout_seconds: float = 120.0
     temperature: float = 0.9
     run_budget_seconds: int = 240
+    retry: RetryConfig = field(default_factory=RetryConfig)
 
     def session_headers(self, session: str) -> dict[str, str]:
         """Per-request headers for a session; empty when the provider wants none."""
@@ -146,11 +225,6 @@ class MemoryConfig:
     extraction_model: str = ""  # empty = llm.model
     telemetry: bool = False
     privacy: PrivacyConfig = field(default_factory=PrivacyConfig)
-
-
-@dataclass(frozen=True)
-class ReplyConfig:
-    quiet_seconds: int = 600
 
 
 @dataclass(frozen=True)
@@ -310,7 +384,6 @@ class Config:
     documents: Documents | None
     llm: LLMConfig
     workspace: Path
-    reply: ReplyConfig
     approval: ApprovalConfig
     roles: RoleRegistry
     default_role: str
@@ -329,6 +402,10 @@ class Config:
     ambient: AmbientConfig = field(default_factory=AmbientConfig)
     guard: GuardConfig = field(default_factory=GuardConfig)
     language: LanguageConfig = field(default_factory=LanguageConfig)
+    turns: TurnConfig = field(default_factory=TurnConfig)
+    worker: WorkerConfig = field(default_factory=WorkerConfig)
+    io: IOConfig = field(default_factory=IOConfig)
+    concurrency: ConcurrencyConfig = field(default_factory=ConcurrencyConfig)
 
     def api_key(self) -> str:
         """The key for this provider; a local endpoint accepts any non-empty string."""
@@ -657,6 +734,18 @@ def _gateways(raw: Mapping, *, required: bool = False) -> dict[str, GatewaySetti
     return result
 
 
+def _retry_config(raw: Mapping) -> RetryConfig:
+    """`engine.llm.retry`: one retry on the turn path, backoff for background work."""
+    return RetryConfig(
+        turn_attempts=max(1, int(_num(raw.get("turn_attempts"), 1))),
+        worker_attempts=max(1, int(_num(raw.get("worker_attempts"), 3))),
+        base_seconds=max(0.0, _num(raw.get("base_seconds"), 2.0)),
+        cap_seconds=max(0.1, _num(raw.get("cap_seconds"), 60.0)),
+        jitter=max(0.0, min(1.0, _num(raw.get("jitter"), 0.2))),
+        retry_after_max_seconds=max(0.0, _num(raw.get("retry_after_max_seconds"), 10.0)),
+    )
+
+
 def _llm_config(
     llm_raw: Mapping, *, require_key: bool, require_model: bool
 ) -> LLMConfig:
@@ -697,6 +786,79 @@ def _llm_config(
         timeout_seconds=_num(llm_raw.get("timeout_seconds"), 120.0),
         temperature=_num(llm_raw.get("temperature"), 0.9),
         run_budget_seconds=int(_num(llm_raw.get("run_budget_seconds"), 240)),
+        retry=_retry_config(_section(llm_raw, "retry")),
+    )
+
+
+BACKLOG_POLICIES = frozenset(
+    {"per_message", "per_message_then_consolidate", "consolidate", "last_only"}
+)
+PARTIAL_DELIVERY = frozenset({"skip", "resend"})
+
+
+def _turn_config(raw: Mapping, turn_raw: Mapping) -> TurnConfig:
+    """`engine.turns` (resume/shutdown) plus `engine.turn` (the one-turn deadline)."""
+    shutdown_raw = _section(raw, "shutdown")
+    notices = _section(shutdown_raw, "notice_retry")
+    resume_raw = _section(shutdown_raw, "resume_notice")
+    partial = str(raw.get("partial_delivery") or "skip").strip().lower()
+    if partial not in PARTIAL_DELIVERY:
+        raise ConfigError("turns.partial_delivery must be 'skip' or 'resend'")
+    policy = str(raw.get("backlog_policy") or "per_message_then_consolidate").strip().lower()
+    if policy not in BACKLOG_POLICIES:
+        raise ConfigError(f"turns.backlog_policy must be one of {sorted(BACKLOG_POLICIES)}")
+    shutdown = ShutdownConfig(
+        grace_seconds=max(1.0, _num(shutdown_raw.get("grace_seconds"), 25.0)),
+        drain_seconds=max(0.0, _num(shutdown_raw.get("drain_seconds"), 15.0)),
+        notice_seconds=max(0.0, _num(shutdown_raw.get("notice_seconds"), 5.0)),
+        notice_per_chat=_bool(shutdown_raw.get("notice_per_chat"), True),
+        notice_retry=NoticeRetryConfig(
+            attempts=max(0, int(_num(notices.get("attempts"), 2))),
+            backoff_seconds=max(0.0, _num(notices.get("backoff_seconds"), 1.0)),
+        ),
+        resume_notice=ResumeNoticeConfig(
+            after_seconds=max(0, int(_num(resume_raw.get("after_seconds"), 300)))
+        ),
+        stop_grace_period=max(1.0, _num(shutdown_raw.get("stop_grace_period"), 30.0)),
+    )
+    if not shutdown.grace_seconds > shutdown.drain_seconds + shutdown.notice_seconds:
+        raise ConfigError(
+            "turns.shutdown.grace_seconds must be greater than drain_seconds + notice_seconds "
+            f"({shutdown.drain_seconds:g} + {shutdown.notice_seconds:g})"
+        )
+    if not shutdown.grace_seconds < shutdown.stop_grace_period:
+        raise ConfigError(
+            "turns.shutdown.grace_seconds must be less than stop_grace_period "
+            f"({shutdown.stop_grace_period:g}); the orchestrator would cut the shutdown short"
+        )
+    return TurnConfig(
+        resume=_bool(raw.get("resume"), True),
+        max_attempts=max(1, int(_num(raw.get("max_attempts"), 2))),
+        max_age_seconds=max(1, int(_num(raw.get("max_age_seconds"), 900))),
+        stale_after_seconds=max(1, int(_num(raw.get("stale_after_seconds"), 21600))),
+        partial_delivery=partial,
+        max_resume_per_chat=max(1, int(_num(raw.get("max_resume_per_chat"), 5))),
+        max_resume_per_minute=max(1, int(_num(raw.get("max_resume_per_minute"), 10))),
+        backlog_policy=policy,
+        timeout_seconds=max(1.0, _num(turn_raw.get("timeout_seconds"), 90.0)),
+        min_call_seconds=max(0.0, _num(turn_raw.get("min_call_seconds"), 5.0)),
+        shutdown=shutdown,
+    )
+
+
+def _worker_config(raw: Mapping) -> WorkerConfig:
+    retry = _section(raw, "retry")
+    reaper = _section(raw, "reaper")
+    return WorkerConfig(
+        retry=WorkerRetryConfig(
+            attempts=max(1, int(_num(retry.get("attempts"), 5))),
+            backoff_seconds=max(0.0, _num(retry.get("backoff_seconds"), 2.0)),
+            dead_letter_after=max(1, int(_num(retry.get("dead_letter_after"), 5))),
+        ),
+        reaper=ReaperConfig(
+            every_seconds=max(1.0, _num(reaper.get("every_seconds"), 30.0)),
+            batch=max(1, int(_num(reaper.get("batch"), 100))),
+        ),
     )
 
 
@@ -743,7 +905,6 @@ def load_config(
         migrations=database.migrations,
     )
 
-    reply_raw = _section(engine, "reply")
     memory_raw = _section(engine, "memory")
     approval_raw = _section(engine, "approval")
     skills_raw = _section(engine, "skills")
@@ -790,7 +951,6 @@ def load_config(
         documents=documents,
         llm=llm,
         workspace=host.workspace,
-        reply=ReplyConfig(quiet_seconds=int(_num(reply_raw.get("quiet_seconds"), 600))),
         approval=ApprovalConfig(
             mode=approval_mode,
             sensitive_tools=_str_tuple(approval_raw.get("sensitive_tools")),
@@ -888,4 +1048,12 @@ def load_config(
             max_command_chars=_clamped(guard_raw.get("max_command_chars"), 4000, 200, 100_000),
         ),
         language=language,
+        turns=_turn_config(_section(engine, "turns"), _section(engine, "turn")),
+        worker=_worker_config(_section(engine, "worker")),
+        io=IOConfig(workers=max(1, int(_num(_section(engine, "io").get("workers"), 8)))),
+        concurrency=ConcurrencyConfig(
+            max_chat_locks=max(
+                1, int(_num(_section(engine, "concurrency").get("max_chat_locks"), 256))
+            )
+        ),
     )

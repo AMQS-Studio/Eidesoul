@@ -90,10 +90,10 @@ def clean_store(test_store: Database) -> Iterator[None]:
             conn.execute(text(f"TRUNCATE TABLE {tables} RESTART IDENTITY CASCADE"))
         conn.execute(
             text(
-                "INSERT INTO engine_control (id, frozen, frozen_by, frozen_at) "
-                "VALUES (1, false, '', 0.0) "
+                "INSERT INTO engine_control (id, frozen, frozen_by, frozen_at, shutting_down) "
+                "VALUES (1, false, '', 0.0, false) "
                 "ON CONFLICT (id) DO UPDATE "
-                "SET frozen = false, frozen_by = '', frozen_at = 0.0"
+                "SET frozen = false, frozen_by = '', frozen_at = 0.0, shutting_down = false"
             )
         )
     yield
