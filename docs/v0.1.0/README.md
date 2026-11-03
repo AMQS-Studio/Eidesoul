@@ -61,6 +61,7 @@ re-stamp the hash. No machine translator ships with the repo.
 | [0025](adr/engine/0025-turn-cost.md) | Turn Cost — Stable Prefix, Gating `polish`, and Call Budgets | engine | implemented |
 | [0026](adr/engine/0026-search.md) | Full-Text Search of Messages, Trigrams, and Scope | engine | implemented |
 | [0032](adr/engine/0032-address-and-command.md) | One Address, One Command — Embodiment-Neutral Output, Refusal over Guessing | engine | implemented |
+| [0033](adr/0033-neutral-core.md) | Neutral Core, Specialized Edges — No Culture, Transport, or Vendor in Mechanism | root | draft |
 
 ADRs are grouped by folder: cross-cutting decisions at the `adr/` root, engine decisions under
 `adr/engine/`, web/panel decisions under `adr/web/`. Numbers are chronological and unique across the
@@ -72,10 +73,10 @@ Indonesian copies in its own `id/` subfolder.
 
 ```
 python scripts/adr.py --check
-OK: 33/33 ADR lolos check; folder root=7, engine=26, web=0; implemented=31 partial=2 draft=0; sinonim digerbang=119 baris prosa=44
+OK: 34/34 ADR lolos check; folder root=8, engine=26, web=0; implemented=31 partial=2 draft=1; sinonim digerbang=119 baris prosa=44
 
 python scripts/adr.py --translate-check
-TURUNAN 33 berkas, 0 masalah
+TURUNAN 34 berkas, 0 masalah
 ```
 
 Re-run both after any edit. The Indonesian copies carry the source hash, so `--translate-check` fails

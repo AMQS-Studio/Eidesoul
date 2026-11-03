@@ -190,6 +190,11 @@ Hard rules for changes in this repo.
 - Chat-visible strings live only in `eidesoul/lang/<code>.yaml`; `soul.language` selects the catalog,
   so adding a language means adding one YAML file with the same `messages:` keys. `/language <code>`
   (administrator-only) writes the soul and its `soul.yaml` mirror.
+- Culture is data, not mechanism (ADR-0033). No language literal, country default, transport, or
+  vendor name in `eidesoul/engine/**`: word lists live in `eidesoul/library/<kind>/<lang>.json`,
+  `language` and `tz` are required values with no code default, and a plugin or gateway is named only
+  in its own tree and manifest (a template writes `plugins: {}`). `scripts/neutral.py --check` gates
+  this once the ADR's phases land; until then the rule binds every new change.
 
 ## Optional integrations and distribution
 

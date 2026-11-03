@@ -1,5 +1,33 @@
 # LOG
 
+## 2026-11-04 — ADR-0033 decides a neutral core
+
+One decision record for the rule the tree was missing: **core is mechanism, never culture,
+geography, transport, or vendor.** The evidence is measured in §1, not asserted — thirteen
+`language="id"` defaults (nine signatures plus `soul.language`, `normalize_language`, the `auto`
+alias, `parse_digest`), four word tables in code (`privacy` ×2, `character.SEVERITY`,
+`target.py`), a crisis regex that only knows Indonesian and a handful of English phrases,
+`DEFAULT_TZ = "Asia/Jakarta"`, `currents` carrying one country's news topics and answerability to
+one politician, four plugin references (template default, role grant, a three-name `ENV_TAIL`
+against a manifest that declares one, `TARGET_TYPES`), five transport references (`relay`'s DM,
+`dm_thread` ×3, `Chat`, `digest`), twelve non-English surface names, and four legacy markers.
+The shipped library makes the same point from the data side: the only pattern and fact packs are
+`language: id`, so `packs_for("en")` is empty.
+
+**Decided** — culture becomes packs (`library/safety/<lang>.json`, `library/severity/<lang>.json`,
+`affirmations`/`level_words` in `lexicon`); `language` and a manifest's `tz` are required values
+with no code default; `currents` is deleted in full (module pair, `/konteks`, prompt block, state
+key); `dm_thread`, `Chat`, and `digest` move behind the inbound seam; templates write `plugins: {}`
+and derive `.env` from installed manifests' `secrets`; tool target types come from the tool's own
+declaration; `cari`/`kirim`/`memori` become `search`/`send`/`memory` with no localized aliases;
+`LEGACY`, `LEGACY_GATEWAY`, and the compatibility hooks are deleted rather than deprecated.
+A language without a safety pack is refused unless `engine.safety.allow_degraded: true`, in which
+case `/status` and `selftest` report `degraded`.
+
+**Implementation: draft.** Nothing above is code yet; §6 names the gate (`scripts/neutral.py
+--check`) and the counts to drive to zero, and §7 is the acceptance list. The Indonesian copy is
+`docs/v0.1.0/adr/id/0033-neutral-core.md`; the register row is in `docs/v0.1.0/README.md`.
+
 ## 2026-11-04 — Pyright is clean: zero errors, and the ratchet has nothing left to permit
 
 `pyright` over `eidesoul`, `admin`, `gateways`, and `scripts` reports **0 errors**, so
