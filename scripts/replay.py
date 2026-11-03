@@ -27,15 +27,15 @@ sys.path.insert(0, str(ROOT / "scripts"))
 
 from _paths import safe_path
 
-from eidesoul.engine.character import (
+from eidesoul.engine.character.character import (
     MARKDOWN,
     assistant_tell,
     effective_limits,
     regulate,
 )
+from eidesoul.engine.character.patterns import load_lexicon, room_register, select_patterns
 from eidesoul.engine.config import load_config, load_env
 from eidesoul.engine.llm import LLM
-from eidesoul.engine.patterns import load_lexicon, room_register, select_patterns
 from eidesoul.engine.roles import Role
 from eidesoul.engine.runtime import RuntimeFacts
 from eidesoul.engine.target import combine, score_style

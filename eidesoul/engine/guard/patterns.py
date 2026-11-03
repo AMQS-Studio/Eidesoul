@@ -10,7 +10,7 @@ language-independent patterns run.
 import re
 from functools import lru_cache
 
-from .. import lexicon
+from ..character import lexicon
 
 CRISIS = re.compile(
     r"(bunuh diri|mau mati|pengen mati|ingin mati|self[ -]?harm|nyakitin diri|overdosis|gantung diri)",

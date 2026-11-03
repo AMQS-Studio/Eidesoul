@@ -10,7 +10,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from .. import lexicon
+from ..character import lexicon
 from ..permissions import normalize
 
 if TYPE_CHECKING:

@@ -19,8 +19,8 @@
 | Block `self` holds `Mode`, `uptime`, `lease` — it changes without a soul/config change | `eidesoul/engine/turn/prompts.py:150-186` (`:170`) |
 | Blocks `topic`/`currents`/`style`/`person_style`/`skills` enter `COMPETING` and their order depends on salience | `eidesoul/engine/turn/salience.py:20-24,48-71`, `eidesoul/engine/turn/prompts.py:373-385` |
 | LLM calls per turn: decision, reply loop with tools, then two polish calls | `eidesoul/engine/agent.py:503,758,810,829` |
-| `polish` and `regulate` have no trigger: they are called every turn (unless empty) | `eidesoul/engine/character.py:122,293` |
-| Deterministic tells already exist but are not yet used as a gate | `eidesoul/engine/character.py:62,105` |
+| `polish` and `regulate` have no trigger: they are called every turn (unless empty) | `eidesoul/engine/character/character.py:122,293` |
+| Deterministic tells already exist but are not yet used as a gate | `eidesoul/engine/character/character.py:62,105` |
 | Guard against repeated calls: `repeat >= 3` for the same tool | `eidesoul/engine/llm.py:246-255` |
 | Today's budget = time (`run_budget_seconds`), not the number of calls | `eidesoul/engine/llm.py:160-200`, `eidesoul/engine/config.py:79` |
 | Affinity/session only via a provider header | `eidesoul/engine/llm.py:156,176,187,231`, `eidesoul/providers/openai.py:15` |
@@ -61,7 +61,7 @@ The consequences: the prompt prefix **changes every turn**, so provider prompt c
 
 ### 4.3 `polish`/`regulate` gated by deterministic triggers
 
-- `polish` runs only if the draft triggers the tell check (`ASSISTANT_TELL`/`MARKDOWN`, `eidesoul/engine/character.py:62,105`).
+- `polish` runs only if the draft triggers the tell check (`ASSISTANT_TELL`/`MARKDOWN`, `eidesoul/engine/character/character.py:62,105`).
 - `regulate` runs only when `polish` changes the text.
 - Neither runs when the draft is empty or when `llm.run` ends the turn with `error:`.
 - At most one polish call per turn.
@@ -139,7 +139,7 @@ engine:
 - `eidesoul/engine/turn/prompts.py:141-147` — `roles_block`.
 - `eidesoul/engine/turn/salience.py:20-24,48-71` — `COMPETING`/`ORDER`/`select`.
 - `eidesoul/engine/agent.py:503,758,810,829` — decision, reply loop, `polish`, `regulate`.
-- `eidesoul/engine/character.py:62,105,122,293` — deterministic tells and the two polish functions.
+- `eidesoul/engine/character/character.py:62,105,122,293` — deterministic tells and the two polish functions.
 - `eidesoul/engine/llm.py:160-200` — the loop with `run_budget_seconds` and the budget message.
 - `eidesoul/engine/llm.py:246-255` — the guard for repeated tool calls (`repeat >= 3`).
 - `eidesoul/engine/llm.py:156,176,187,231` — `session_headers` per request.

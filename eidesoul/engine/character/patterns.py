@@ -15,12 +15,12 @@ import re
 from functools import cache
 from pathlib import Path
 
-from . import embed
+from .. import embed
 
 log = logging.getLogger(__name__)
 
 MODEL = embed.MODEL
-LIBRARY = Path(__file__).resolve().parent.parent / "library" / "patterns"
+LIBRARY = Path(__file__).resolve().parents[2] / "library" / "patterns"
 PACK = re.compile(r"^[a-z0-9][a-z0-9-]{0,63}$")
 DIM = embed.DIM
 LEXICON_KEYS = ("serious", "laughter", "roast", "meme")

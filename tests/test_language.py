@@ -16,7 +16,8 @@ import pytest
 import yaml
 from support import build_config, inbound_message, make_agent, make_runtime
 
-from eidesoul.engine import guard, i18n, lexicon
+from eidesoul.engine import guard, i18n
+from eidesoul.engine.character import lexicon
 from eidesoul.engine.roles import Role
 from eidesoul.engine.soul import Soul, load_soul, normalize_language
 from eidesoul.engine.turn import salience

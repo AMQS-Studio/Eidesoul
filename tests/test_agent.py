@@ -178,7 +178,7 @@ def test_memory_block_and_runtime_reach_prompt(tmp_path) -> None:
 
 
 def test_character_patterns_reach_the_system_prompt(tmp_path, monkeypatch) -> None:
-    from eidesoul.engine import patterns as pattern_catalog
+    from eidesoul.engine.character import patterns as pattern_catalog
     from eidesoul.engine.soul import SoulStyle
 
     monkeypatch.setattr(pattern_catalog, "_load_vectors", lambda name: {})

@@ -10,9 +10,9 @@ original draft is used.
 import re
 from functools import lru_cache
 
+from ..config import CharacterConfig, Config
+from ..llm import LLM, DeadlineExceeded
 from . import lexicon
-from .config import CharacterConfig, Config
-from .llm import LLM, DeadlineExceeded
 
 MARKDOWN = re.compile(r"(?m)^\s*(?:#{1,6}\s+|[-*]\s+|\d+[.)]\s+)")
 SENTENCE = re.compile(r"[.!?]+(?:\s|$)")

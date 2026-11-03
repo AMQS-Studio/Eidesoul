@@ -14,7 +14,9 @@ from pathlib import Path
 
 from . import guard, io, plugins
 from .approvals import ApprovalStore
-from .character import effective_limits, polish, regulate
+from .character.character import effective_limits, polish, regulate
+from .character.knowledge import select_facts
+from .character.patterns import load_lexicon, room_register, select_patterns
 from .commands import REGISTRY as CORE_COMMANDS
 from .commands import CommandContext
 from .config import Config
@@ -29,11 +31,9 @@ from .inbound import (
     Percept,
     StandbyError,
 )
-from .knowledge import select_facts
 from .llm import LLM, DeadlineExceeded
 from .memory import MemoryBackend, MemoryContext, intent, memory_status
 from .memory.ledger import OutboundLedger
-from .patterns import load_lexicon, room_register, select_patterns
 from .permissions import command_allowed, commands_for, tool_patterns, tools_for
 from .privacy import PrivacyService
 from .registry import Handler, Registry

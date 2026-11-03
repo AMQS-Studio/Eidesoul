@@ -8,10 +8,10 @@ from dataclasses import replace
 import pytest
 from support import default_soul, inbound_message, make_agent
 
-from eidesoul.engine import patterns as pattern_catalog
+from eidesoul.engine.character import patterns as pattern_catalog
+from eidesoul.engine.character.knowledge import load_facts, select_facts
+from eidesoul.engine.character.patterns import load_lexicon, load_patterns, select_patterns
 from eidesoul.engine.config import CharacterConfig
-from eidesoul.engine.knowledge import load_facts, select_facts
-from eidesoul.engine.patterns import load_lexicon, load_patterns, select_patterns
 from eidesoul.engine.soul import Soul, SoulStyle
 
 DM = "628111@s.whatsapp.net"

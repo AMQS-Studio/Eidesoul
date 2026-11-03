@@ -13,7 +13,7 @@ import re
 from collections.abc import Sequence
 from dataclasses import dataclass
 
-from . import lexicon
+from .character import lexicon
 from .config import PrivacyConfig
 from .i18n import t
 from .memory import MemoryHit

@@ -18,7 +18,7 @@ from pathlib import Path
 log = logging.getLogger(__name__)
 
 SCHEMA_VERSION = 1
-DEFAULT_DIR = Path(__file__).resolve().parents[1] / "library" / "lexicon"
+DEFAULT_DIR = Path(__file__).resolve().parents[2] / "library" / "lexicon"
 LIST_KEYS = ("negations", "stopwords", "assistant_tells", "injection")
 
 

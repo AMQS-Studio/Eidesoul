@@ -7,7 +7,7 @@ import pytest
 import yaml
 
 from eidesoul.admin import library
-from eidesoul.engine import knowledge, patterns
+from eidesoul.engine.character import knowledge, patterns
 
 
 def _write(path, body: dict) -> None:

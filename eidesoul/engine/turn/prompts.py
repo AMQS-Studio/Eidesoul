@@ -3,7 +3,7 @@
 
 from datetime import date
 
-from .. import lexicon
+from ..character import lexicon
 from ..config import Config
 from ..roles import Role
 from ..runtime import RuntimeFacts

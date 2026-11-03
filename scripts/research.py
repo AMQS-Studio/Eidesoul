@@ -33,9 +33,9 @@ import xlsx
 from _paths import safe_path
 from patterns import REGISTERS, TARGETS
 
+from eidesoul.engine.character.patterns import load_patterns
 from eidesoul.engine.config import load_config, load_env
 from eidesoul.engine.llm import LLM
-from eidesoul.engine.patterns import load_patterns
 from eidesoul.engine.tools.web_search import _search_sync
 
 OUT = ROOT / "workspace" / "research"

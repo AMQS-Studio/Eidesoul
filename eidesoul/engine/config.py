@@ -16,7 +16,7 @@ from typing import Protocol
 import yaml
 
 from ..providers import resolve
-from . import lexicon
+from .character import lexicon
 from .roles import RoleError, RoleRegistry, load_roles
 from .soul import Soul, load_soul
 

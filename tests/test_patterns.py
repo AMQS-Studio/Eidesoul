@@ -6,8 +6,13 @@ from pathlib import Path
 
 import pytest
 
-from eidesoul.engine import patterns
-from eidesoul.engine.patterns import load_lexicon, load_patterns, room_register, select_patterns
+from eidesoul.engine.character import patterns
+from eidesoul.engine.character.patterns import (
+    load_lexicon,
+    load_patterns,
+    room_register,
+    select_patterns,
+)
 
 ROOT = Path(__file__).resolve().parents[1]
 DIM = patterns.DIM

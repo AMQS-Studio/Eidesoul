@@ -15,7 +15,7 @@ import time
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 
-from .. import lexicon
+from ..character import lexicon
 from .store import MemoryStore
 
 log = logging.getLogger(__name__)

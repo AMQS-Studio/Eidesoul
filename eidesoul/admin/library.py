@@ -15,7 +15,8 @@ from pathlib import Path
 
 import yaml
 
-from ..engine import embed, knowledge, patterns
+from ..engine import embed
+from ..engine.character import knowledge, patterns
 from ..engine.soul import Soul, SoulStyle, load_soul
 
 FLOOR = 0.35  # cosine below this never selects a pack

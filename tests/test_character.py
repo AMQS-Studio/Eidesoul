@@ -6,7 +6,7 @@ from dataclasses import replace
 
 from support import build_config
 
-from eidesoul.engine.character import (
+from eidesoul.engine.character.character import (
     effective_limits,
     needs_polish,
     over_level,
