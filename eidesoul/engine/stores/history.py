@@ -29,6 +29,16 @@ from ..turn.context import (
 
 log = logging.getLogger(__name__)
 
+
+class RouteConflict(RuntimeError):
+    """A second body claimed a thread another body already owns (ADR-0032 §4.7)."""
+
+    def __init__(self, thread: str, owner: str, claimant: str) -> None:
+        super().__init__(f"thread '{thread}' is owned by '{owner}', not '{claimant}'")
+        self.thread = thread
+        self.owner = owner
+        self.claimant = claimant
+
 # Facts ride in the `data` blob but never make a row richer: the upsert keeps the old content
 # when the incoming row carries nothing but these keys.
 FACT_KEYS = ("sender_kind",)
@@ -283,9 +293,9 @@ class HistoryStore:
         now = time.time()
         row = self._row(thread_id, message)
         with self.db.connect() as conn:
+            self._route(conn, str(thread_id), str(gateway or ""), audience)
             self._upsert_messages(conn, [row])
             self._upsert_media(conn, [(thread_id, message)])
-            self._route(conn, str(thread_id), str(gateway or ""), audience)
             created = conn.execute(
                 pg_insert(turns)
                 .values(
@@ -336,7 +346,17 @@ class HistoryStore:
         return True
 
     def _route(self, conn, thread_id: str, gateway: str, audience: str) -> None:
-        """ADR-0014 §4.6: the first body that sees a thread owns its durable route."""
+        """ADR-0014 §4.6: the first body that sees a thread owns its durable route.
+
+        A second body claiming the same thread is refused before any row is written
+        (ADR-0032 §4.7); storing the message under the wrong body is the failure this removes.
+        """
+        if gateway:
+            owner = conn.execute(
+                select(threads.c.gateway).where(threads.c.thread_id == str(thread_id))
+            ).scalar()
+            if owner and str(owner) != str(gateway):
+                raise RouteConflict(str(thread_id), str(owner), str(gateway))
         insert = pg_insert(threads).values(
             thread_id=thread_id,
             name="",

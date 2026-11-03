@@ -19,7 +19,6 @@ keywords.
 
 import asyncio
 import contextlib
-import hashlib
 import logging
 import os
 import random
@@ -28,7 +27,6 @@ import shlex
 import time
 from datetime import date, datetime, timedelta
 from datetime import time as clock_time
-from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from sqlalchemy import func, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
@@ -38,6 +36,7 @@ from ..access.relay import RelayStore
 from ..config import AutomationConfig, parse_quiet_hours
 from ..db import Database
 from ..i18n import t
+from ..inbound import Action, Address, GatewayError
 from ..schema import (
     AUTOMATION_STATES,
     AUTOMATION_STEP_KINDS,
@@ -48,12 +47,23 @@ from ..schema import (
 )
 from ..tools import execute
 from ..turn import observability
+from .schedule import (
+    DAY,
+    DEFAULT_TZ,
+    ManifestError,
+    _at_list,
+    _date,
+    _days,
+    _first_occurrence,
+    in_quiet,
+    next_after,
+    occurrence_key,
+    quiet_end,
+    zone,
+)
 
 log = logging.getLogger(__name__)
 
-DAY = 86400.0
-DEFAULT_TZ = "Asia/Jakarta"
-WEEKDAYS = ("mon", "tue", "wed", "thu", "fri", "sat", "sun")
 TOOL_STEPS = {"web_search": "web_search", "write": "write", "remember": "memory"}
 DETAIL_CHARS = 2000
 NL_JUDGEMENT_TOKENS = 100  # the daily NL budget is charged per judgement at its ceiling
@@ -61,10 +71,6 @@ _RETRY_AFTER = re.compile(r"retry[- ]after[: ]+(\d+)", re.IGNORECASE)
 COLLECT_CHARS = 12000
 COMPOSE_CHARS = 4000
 MATERIALIZE_CAP = 100
-
-
-class ManifestError(ValueError):
-    """A request that cannot be expressed honestly is refused, not stored half-way."""
 
 
 class StepError(Exception):
@@ -80,162 +86,6 @@ class StepSkipped(Exception):
 
 
 # --------------------------------------------------------------------- clock helpers
-
-
-def occurrence_key(automation_id: int | str, scheduled_at: float) -> str:
-    """`hash(automation_id, scheduled_at_utc)`; stable across restarts and takeovers."""
-    payload = f"{int(automation_id)}:{int(float(scheduled_at))}"
-    return hashlib.sha256(payload.encode("utf-8")).hexdigest()[:32]
-
-
-def zone(name: object) -> ZoneInfo:
-    try:
-        return ZoneInfo(str(name or DEFAULT_TZ))
-    except (ZoneInfoNotFoundError, ValueError) as exc:
-        raise ManifestError(f"unknown timezone: {name}") from exc
-
-
-def _minutes(value: str) -> int:
-    hour, _, minute = str(value).partition(":")
-    return int(hour) * 60 + int(minute)
-
-
-def _at_list(value: object) -> list[int]:
-    if isinstance(value, str):
-        value = [value]
-    if not isinstance(value, (list, tuple)) or not value:
-        raise ManifestError("schedule 'at' must be a non-empty list of HH:MM")
-    found: list[int] = []
-    for item in value:
-        text = str(item or "").strip()
-        try:
-            hour, _, minute = text.partition(":")
-            if len(text) != 5 or _ != ":":
-                raise ValueError
-            parsed = (int(hour), int(minute))
-        except ValueError as exc:
-            raise ManifestError(f"invalid time: {text}") from exc
-        if not (0 <= parsed[0] <= 23 and 0 <= parsed[1] <= 59):
-            raise ManifestError(f"invalid time: {text}")
-        found.append(parsed[0] * 60 + parsed[1])
-    return sorted(set(found))
-
-
-def _days(value: object) -> tuple[str, int]:
-    if value in (None, "", "daily"):
-        return "daily", 1
-    if isinstance(value, str):
-        text = value.strip().lower()
-        if text.startswith("every:"):
-            try:
-                step = int(text.split(":", 1)[1])
-            except ValueError as exc:
-                raise ManifestError("days 'every:N' needs a number") from exc
-            if step < 1:
-                raise ManifestError("days 'every:N' needs N >= 1")
-            return "every", step
-        names = [part.strip()[:3] for part in text.split(",") if part.strip()]
-        if names and all(name in WEEKDAYS for name in names):
-            return "set", 0
-        raise ManifestError("days must be 'daily', a day list, or 'every:N'")
-    if isinstance(value, (list, tuple)):
-        names = [str(item or "").strip()[:3].lower() for item in value]
-        if names and all(name in WEEKDAYS for name in names):
-            return "set", 0
-    raise ManifestError("days must be 'daily', a day list, or 'every:N'")
-
-
-def _day_names(value: object) -> set[str]:
-    if isinstance(value, str):
-        return {part.strip()[:3].lower() for part in value.split(",") if part.strip()}
-    if isinstance(value, (list, tuple)):
-        return {str(item or "").strip()[:3].lower() for item in value}
-    return set()
-
-
-def _date(value: object, field: str) -> date | None:
-    text = str(value or "").strip()
-    if not text:
-        return None
-    try:
-        return date.fromisoformat(text)
-    except ValueError as exc:
-        raise ManifestError(f"{field} must be YYYY-MM-DD") from exc
-
-
-def in_quiet(epoch: float, tz_name: object, window: tuple[int, int] | None) -> bool:
-    if window is None:
-        return False
-    moment = datetime.fromtimestamp(float(epoch), zone(tz_name))
-    minute = moment.hour * 60 + moment.minute
-    start, end = window
-    if start < end:
-        return start <= minute < end
-    return minute >= start or minute < end
-
-
-def quiet_end(epoch: float, tz_name: object, window: tuple[int, int] | None) -> float:
-    """First moment outside the quiet window, in the source timezone."""
-    if window is None:
-        return float(epoch)
-    zoneinfo = zone(tz_name)
-    moment = datetime.fromtimestamp(float(epoch), zoneinfo)
-    _start, end = window
-    minutes = end
-    target = moment.replace(
-        hour=minutes // 60, minute=minutes % 60, second=0, microsecond=0
-    )
-    while target <= moment:
-        target += timedelta(days=1)
-    return target.timestamp()
-
-
-def next_after(
-    event: dict, after: float, *, anchor: float
-) -> float | None:
-    """The first occurrence strictly after `after`, or None when the schedule is finished."""
-    tz_name = event.get("tz") or DEFAULT_TZ
-    zoneinfo = zone(tz_name)
-    starts = _date(event.get("start"), "start")
-    until = _date(event.get("until"), "until")
-    if event.get("every"):
-        step = max(60, int(event["every"]))
-        base = (
-            datetime.combine(starts, clock_time(0, 0), tzinfo=zoneinfo).timestamp()
-            if starts is not None
-            else float(anchor)
-        )
-        if after < base:
-            return base
-        return base + (int((after - base) // step) + 1) * step
-    times = sorted({_minutes(str(value)) for value in event.get("at") or []})
-    if not times:
-        return None
-    mode, every = _days(event.get("days"))
-    names = _day_names(event.get("days"))
-    anchor_date = datetime.fromtimestamp(float(anchor), zoneinfo).date()
-    moment = datetime.fromtimestamp(float(after), zoneinfo)
-    for offset in range(0, 400):
-        current = moment.date() + timedelta(days=offset)
-        if starts is not None and current < starts:
-            continue
-        if until is not None and current > until:
-            return None
-        if mode == "set" and WEEKDAYS[current.weekday()] not in names:
-            continue
-        if mode == "every" and (current - anchor_date).days % max(1, every) != 0:
-            continue
-        for minute in times:
-            candidate = datetime.combine(
-                current, clock_time(minute // 60, minute % 60), tzinfo=zoneinfo
-            ).timestamp()
-            if candidate > after:
-                return candidate
-    return None
-
-
-def _first_occurrence(event: dict, now: float, created_at: float) -> float | None:
-    return next_after(event, float(now) - 1.0, anchor=created_at)
 
 
 # --------------------------------------------------------------------- manifest
@@ -1783,14 +1633,16 @@ class AutomationWorker:
             raise StepError("send has no text to deliver", transient=False)
         target = self._send_target(step, automation)
         owner = str(automation["owner"])
-        origin = str(automation["event"].get("thread") or owner)
+        origin_thread = str(automation["event"].get("thread") or owner)
+        attribution = target not in {owner, origin_thread}
         await self._deliver(
             target,
             text,
             automation,
             run,
             facts,
-            attribution=target not in {owner, origin},
+            attribution=attribution,
+            origin=Address(self._route_name(origin_thread), origin_thread),
         )
 
     def _send_target(self, step: dict, automation: dict) -> str:
@@ -1802,25 +1654,24 @@ class AutomationWorker:
             return str(automation["event"].get("thread") or owner)
         return target
 
-    def _thread_gateway(self, thread_id: str) -> str:
-        """ADR-0014 §4.6: the body that first saw this thread owns its route."""
-        found = getattr(self.agent, "history", None)
-        lookup = getattr(found, "gateway_of", None)
-        if not callable(lookup):
-            return ""
+    def _address(self, target: str) -> Address:
+        """The routed thread, or the person's DM thread (ADR-0032 §4.1: a route or a refusal)."""
         try:
-            return str(lookup(str(thread_id)) or "")
-        except Exception:
-            log.debug("gateway_of failed thread=%s", thread_id, exc_info=True)
-            return ""
+            return self.agent.address_of(str(target))
+        except GatewayError as exc:
+            dm = str(getattr(self.agent.history, "dm_thread", lambda _p: "")(str(target)) or "")
+            if not dm:
+                raise StepError(str(exc), transient=False) from None
+            return self.agent.address_of(dm)
 
-    def _gateway(self, prefer: str = ""):
-        gateways = tuple(getattr(self.agent, "gateways", ()) or ())
-        if prefer:
-            found = next((item for item in gateways if item.name == prefer), None)
-            if found is not None:
-                return found
-        return gateways[0] if gateways else None
+    def _route_name(self, thread_id: str) -> str:
+        """ADR-0014 §4.6: the body that first saw this thread owns its route."""
+        try:
+            return str(self.agent.address_of(str(thread_id)).gateway or "")
+        except GatewayError:
+            raise StepError(
+                f"no body owns thread '{thread_id}'; the send is refused", transient=False
+            ) from None
 
     async def _deliver(
         self,
@@ -1831,35 +1682,35 @@ class AutomationWorker:
         facts: dict,
         *,
         attribution: bool = False,
+        origin: Address | None = None,
     ) -> None:
-        gateway = self._gateway(self._thread_gateway(target))
-        if gateway is None:
-            raise StepError("no gateway is available for send", transient=False)
         from ..turn.reply import split_text
 
+        address = self._address(str(target))
+        owner = str(automation["owner"])
+        reason = t("automation.attribution", self._language()) if attribution else ""
         body = str(text)
         if attribution:
-            body = f"{t('automation.attribution', self._language())}\n{body}"
-        scope = f"automation:{run['id']}"
+            body = f"{reason}\n{body}"
         for chunk in split_text(body) or [body]:
             index = int(facts.get("chunk") or 0)
-            state = self.agent.outbox.begin(
-                scope, index, gateway=gateway.name, thread_id=target, generation=self._generation()
+            action = Action(
+                address=address,
+                capability="send_text",
+                payload=chunk,
+                id=f"automation:{run['id']}:{index}",
             )
-            if state == "sent":
+            receipt = await self.agent.dispatch(
+                owner, address, action, origin=origin or address, reason=reason
+            )
+            if receipt.state == "sent":
                 facts["chunk"] = index + 1
                 continue
-            if state == "unknown":
+            if receipt.state == "unknown":
                 raise StepError("delivery is unknown; not resending", transient=False)
-            try:
-                provider = await self.agent.deliver_text(target, chunk, gateway=gateway)
-            except Exception as exc:
-                self.agent.outbox.mark_unknown(scope, index)
-                raise StepError(
-                    f"send failed: {type(exc).__name__}", transient=True
-                ) from exc
-            self.agent.outbox.mark_sent(scope, index, provider)
-            facts["chunk"] = index + 1
+            if receipt.state == "pending":
+                raise StepError(f"needs approval ({receipt.reason})", transient=False)
+            raise StepError(f"send refused: {receipt.reason}", transient=False)
 
     async def _relay(self, step: dict, automation: dict, run: dict, facts: dict) -> None:
         owner = str(automation["owner"])
@@ -1876,7 +1727,7 @@ class AutomationWorker:
                 to_person=target,
                 scope_ref=str(step.get("scope_ref") or ""),
                 thread_id=owner,
-                gateway=self._gateway(),
+                address=self.agent.address_of(owner),
                 expires_at=deadline,
                 now=time.time(),
             )
@@ -2003,11 +1854,14 @@ class AutomationWorker:
             or facts.get("thread")
             or owner
         )
+        gateway = self.agent.body_of(thread)
+        if gateway is None:
+            raise StepError(f"no body owns thread '{thread}'", transient=False)
         return self.agent.tool_context(
             thread,
             owner,
             roles,
-            self._gateway(),
+            gateway,
             request="automation",
         )
 
@@ -2063,12 +1917,15 @@ class AutomationWorker:
         policy = automation.get("policy") if isinstance(automation.get("policy"), dict) else {}
         if str(policy.get("on_error") or "notify_owner") != "notify_owner":
             return
-        gateway = self._gateway()
-        if gateway is None:
-            return
         text = t(key, self._language(), **kw)
         try:
-            await self.agent.send_text(str(automation["owner"]), text, gateway=gateway)
+            address = self._address(str(automation["owner"]))
+            gateway = self.agent.body(address.gateway)
+            if gateway is None:
+                return
+            await self.agent.send_text(
+                address.thread, text, gateway=gateway, subject=str(automation["owner"])
+            )
         except Exception as exc:  # a notice never fails the run
             log.warning("automation notice failed: %s", type(exc).__name__)
 

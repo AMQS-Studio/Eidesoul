@@ -4,7 +4,7 @@
 import asyncio
 from datetime import datetime
 
-from support import inbound_message, make_agent, role
+from support import inbound_message, make_agent, role, specs
 from test_whatsapp_gateway import make_gateway
 
 from eidesoul.engine import guard
@@ -67,7 +67,7 @@ def test_cross_room_read_fills_cross_reads(tmp_path) -> None:
     ctx = context(env)
 
     text = asyncio.run(
-        execute(env.agent.tools.by_name, "chat_history", {"chat": "budi"}, ctx)
+        execute(specs(env), "chat_history", {"chat": "budi"}, ctx)
     )
 
     assert SPAN in text
@@ -89,7 +89,7 @@ def test_current_chat_read_does_not_fill_cross_reads(tmp_path) -> None:
     )
     ctx = context(env)
 
-    text = asyncio.run(execute(env.agent.tools.by_name, "chat_history", {}, ctx))
+    text = asyncio.run(execute(specs(env), "chat_history", {}, ctx))
 
     assert "rapat jam tiga" in text
     assert ctx.cross_reads == []

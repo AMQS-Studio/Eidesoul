@@ -25,6 +25,8 @@ messages:
   command.approve.none: "No pending approvals."
   command.approve.not_found: "error: approval #{id} does not exist"
   command.approve.ran: "✅ Approval #{id} executed.\n{result}"
+  command.approve.send_failed: "error: approval #{id} was not delivered ({state}): {reason}"
+  command.approve.sent: "✅ Approval #{id} sent to {target}."
   command.approve.relay_done: "✅ Relay decision for approval #{id} recorded as {mode}."
   command.approve.relay_mode: "error: choose a relay mode: {modes}"
   command.approve.role_missing: "error: the role on this approval no longer exists"

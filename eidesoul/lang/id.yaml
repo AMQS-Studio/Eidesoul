@@ -25,6 +25,8 @@ messages:
   command.approve.none: "Tidak ada approval pending."
   command.approve.not_found: "error: approval #{id} tidak ada"
   command.approve.ran: "✅ Approval #{id} dijalankan.\n{result}"
+  command.approve.send_failed: "error: approval #{id} tidak terkirim ({state}): {reason}"
+  command.approve.sent: "✅ Approval #{id} terkirim ke {target}."
   command.approve.relay_done: "✅ Keputusan relay untuk approval #{id} tercatat sebagai {mode}."
   command.approve.relay_mode: "error: pilih mode relay: {modes}"
   command.approve.role_missing: "error: role pada approval ini sudah tidak ada"

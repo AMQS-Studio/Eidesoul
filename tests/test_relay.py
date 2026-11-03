@@ -11,10 +11,11 @@ import time
 import pytest
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
-from support import inbound_message, make_agent, role
+from support import inbound_message, make_agent, role, specs
 from test_whatsapp_gateway import FakeClient, make_gateway
 
 from eidesoul.engine.access.relay import MODES, RelayRefused, RelayStore
+from eidesoul.engine.inbound import Address
 from eidesoul.engine.schema import people, person_links, relay_grants
 from eidesoul.engine.tools import execute
 from eidesoul.gateways.whatsapp import directory
@@ -65,7 +66,7 @@ def send(env, ctx, *, relay=True, text=ANSWER, reason=""):
         args.update({"relay_task": TASK, "relay_from": FROM})
     elif reason:
         args["reason"] = reason
-    return asyncio.run(execute(env.agent.tools.by_name, "send_to", args, ctx))
+    return asyncio.run(execute(specs(env), "send_to", args, ctx))
 
 
 def ask(env, *, expires_at=None):
@@ -77,7 +78,7 @@ def ask(env, *, expires_at=None):
             to_person=TO,
             scope_ref=SOURCE,
             thread_id=SOURCE,
-            gateway=env.gateway,
+            address=Address(env.gateway.name, SOURCE),
             to_label="A",
             topic="the obstacles",
             expires_at=expires_at,
@@ -317,7 +318,7 @@ def test_a_relay_needs_both_arguments(tmp_path) -> None:
 
     result = asyncio.run(
         execute(
-            env.agent.tools.by_name,
+            specs(env),
             "send_to",
             {"chat": "A", "text": ANSWER, "relay_task": TASK},
             ctx,

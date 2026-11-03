@@ -36,10 +36,11 @@ def test_dm_reply_is_delivered_and_recorded(tmp_path) -> None:
     handle(env, inbound)
 
     assert env.gateway.sent
-    thread_id, text, reply = env.gateway.sent[0]
+    thread_id, text, _reply = env.gateway.sent[0]
     assert thread_id == DM
     assert text == "halo juga"
-    assert reply is not None
+    assert [item.capability for item in env.gateway.dispatched] == ["send_text"]
+    assert env.gateway.dispatched[0].address.thread == DM
     ids = [item.id for item in env.windows.get(DM)]
     assert ids[0] == inbound.payload.id
     assert len(ids) == 2
@@ -405,7 +406,11 @@ def _dm(env, thread_id: str, person_id: str, *, kind: str = "dm", extra: str = "
     with env.db.connect() as conn:
         conn.execute(
             threads.insert().values(
-                thread_id=thread_id, name="", reset_ts=0.0, kind=kind, gateway=""
+                thread_id=thread_id,
+                name="",
+                reset_ts=0.0,
+                kind=kind,
+                gateway=env.gateway.name,
             )
         )
         conn.execute(people.insert().values(person_id=person_id, name="Budi"))

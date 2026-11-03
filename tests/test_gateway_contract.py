@@ -18,6 +18,7 @@ from support import (
     inbound_message,
     make_agent,
     role,
+    specs,
 )
 
 from eidesoul.engine.config import ConfigError, GatewaySettings
@@ -54,21 +55,28 @@ def call_tool(env, name: str, args: dict, *, thread: str = "chat"):
     )
     from eidesoul.engine.tools import execute
 
-    return asyncio.run(execute(env.agent.tools.by_name, name, args, ctx))
+    return asyncio.run(execute(specs(env), name, args, ctx))
 
 
-def test_gateway_tools_and_commands_are_merged(tmp_path) -> None:
-    gateway = FakeGateway(tools=[handler("extra_tool")])
-    env = make_agent(tmp_path, gateway=gateway)
-    assert env.agent.tools.get("extra_tool") is not None
-    assert "extra_tool" in env.agent.tools.names()
+def test_gateway_tools_are_indexed_per_body(tmp_path) -> None:
+    """ADR-0032 §4.6: the same name in two bodies is not a collision, it is two tools."""
+    first = FakeGateway(name="a", tools=[handler("send")])
+    second = FakeGateway(name="b", tools=[handler("send")])
+    env = make_agent(tmp_path, gateways=[first, second])
+
+    index = env.agent.tool_index
+    assert set(index.specs("a")) >= {"send"}
+    assert set(index.specs("b")) >= {"send"}
+    assert index.specs("a")["send"] is not index.specs("b")["send"]
+    assert index.resolve("b__send", "a")[0] == "send"
+    assert env.agent.tools.get("send") is None
+    assert index.other_bodies("a") == ("b",)
 
 
-def test_duplicate_handler_names_raise(tmp_path) -> None:
-    first = FakeGateway(name="a", tools=[handler("clash")])
-    second = FakeGateway(name="b", tools=[handler("clash")])
+def test_a_duplicate_inside_one_body_still_raises(tmp_path) -> None:
+    gateway = FakeGateway(name="a", tools=[handler("clash"), handler("clash")])
     with pytest.raises(RegistryError):
-        make_agent(tmp_path, gateways=[first, second])
+        make_agent(tmp_path, gateway=gateway)
 
 
 def test_core_only_gateway_runs_a_full_text_turn(tmp_path) -> None:
@@ -303,7 +311,7 @@ def test_the_harness_body_completes_a_turn_and_returns_its_actions(tmp_path) -> 
     assert actions[0].capability == "send_text"
     assert gateway.actions == actions
     assert gateway.sent == [str(action.payload) for action in actions]
-    assert "run" in env.agent.tools.names()
+    assert "run" in env.agent.tool_index.names("harness")
     assert "inspect" in env.agent.commands.names()
 
 
@@ -320,7 +328,7 @@ def test_the_harness_tools_go_through_the_same_tool_door(tmp_path) -> None:
     ctx = env.agent.tool_context(gateway.thread, "harness", (owner,), gateway)
 
     result = asyncio.run(
-        execute(env.agent.tools.by_name, "run", {"command": "printf harness-ok"}, ctx)
+        execute(specs(env), "run", {"command": "printf harness-ok"}, ctx)
     )
 
     assert result.startswith("exit=0")
@@ -328,7 +336,7 @@ def test_the_harness_tools_go_through_the_same_tool_door(tmp_path) -> None:
 
     denied = asyncio.run(
         execute(
-            env.agent.tools.by_name,
+            specs(env),
             "run",
             {"command": "printf no"},
             env.agent.tool_context(

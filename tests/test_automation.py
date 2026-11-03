@@ -61,7 +61,33 @@ def build(tmp_path, *, tools=("*",), automations=None):
         env.agent.config = replace(env.agent.config, automations=automations)
     env.agent.mode = "primary"
     env.store = AutomationStore(env.db, env.agent.config.automations)
+    seed_dm(env)
     return env
+
+
+def seed_dm(env, thread: str = OWNER) -> str:
+    """ADR-0032 §4.1: a send needs a route, so the owner has a DM thread with the fake body."""
+    from sqlalchemy.dialects.postgresql import insert as pg_insert
+
+    from eidesoul.engine.schema import people, thread_people, threads
+
+    with env.db.connect() as conn:
+        conn.execute(
+            pg_insert(people)
+            .values(person_id=thread, name="Budi")
+            .on_conflict_do_nothing(index_elements=["person_id"])
+        )
+        conn.execute(
+            pg_insert(threads)
+            .values(thread_id=thread, name="", reset_ts=0.0, kind="dm", gateway=env.gateway.name)
+            .on_conflict_do_nothing(index_elements=["thread_id"])
+        )
+        conn.execute(
+            pg_insert(thread_people)
+            .values(thread_id=thread, person_id=thread)
+            .on_conflict_do_nothing()
+        )
+    return thread
 
 
 def approved(env):
@@ -157,7 +183,7 @@ def test_one_occurrence_is_one_run_and_a_duplicate_tick_never_doubles(tmp_path) 
     assert occurrence_key(1, at(10)) == occurrence_key(1, at(10))
     delivered = env.db.fetch_all(select(outbound_messages))
     assert len(delivered) == 1
-    assert delivered[0]["scope_key"] == f"automation:{found[0]['id']}"
+    assert delivered[0]["scope_key"] == f"automation:{found[0]['id']}:0"
     assert delivered[0]["status"] == "sent"
 
 
@@ -327,6 +353,7 @@ def test_relay_sends_when_a_grant_exists(tmp_path) -> None:
         ),
         now=at(9, 50),
     )
+    seed_dm(env, "629999")
     worker = AutomationWorker(env.agent, store=env.store)
     asyncio.run(worker.run_once(now=at(10, 1)))
     approval = env.agent.approvals.latest(OWNER, OWNER)
@@ -552,4 +579,5 @@ def test_the_durable_route_survives_a_restart(tmp_path) -> None:
 
     assert env.history.gateway_of(thread_id) == "other"
     env.agent._turn_gateways.clear()  # a fresh boot keeps no in-memory map
-    assert env.agent._gateway_for(thread_id) is other
+    assert env.agent.address_of(thread_id).gateway == "other"
+    assert env.agent.body_of(thread_id) is other

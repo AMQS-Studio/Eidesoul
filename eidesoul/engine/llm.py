@@ -258,9 +258,10 @@ class LLM:
                 continue
             spec = None
             agent = ctx.agent
-            registry = getattr(agent, "tools", None) if agent is not None else None
-            if registry is not None:
-                spec = registry.get(name)
+            index = getattr(agent, "tool_index", None) if agent is not None else None
+            gateway = getattr(getattr(ctx, "gateway", None), "name", "") or ""
+            if index is not None:
+                spec = index.get(name, gateway)
             hub = getattr(agent, "hub", None) if agent is not None else None
             if spec is None and hub is not None:
                 spec = next((item for item in hub.specs(ctx.roles) if item.name == name), None)

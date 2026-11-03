@@ -308,16 +308,18 @@ def cross_refusal(ctx: ToolContext, thread_id: str) -> str:
         return ""
     requester = ctx.person_id or ctx.sender
     gateway = ctx.gateway
-    if rooms.source != "recorded" and isinstance(gateway, Directory):
-        members = gateway.participants(thread_id)
-        if members is not None:
-            return "" if requester and requester in members else "denied: room"
-        _count_capability(ctx, "miss_participants")
-        # The gateway cannot prove membership: fall through to the recorded layer.
-    elif rooms.source != "recorded" and gateway is not None:
-        _count_capability(ctx, "miss_directory")
-        return "denied: room"
-    if requester and thread_id in rooms_of(ctx):
+    recorded = rooms_of(ctx)
+    if rooms.source != "recorded":
+        if isinstance(gateway, Directory):
+            members = gateway.participants(thread_id)
+            if members is not None:
+                # The body proved the membership: the read is allowed, no archive fallback.
+                return "" if requester and requester in members else "denied: room"
+            _count_capability(ctx, "miss_participants")
+        elif gateway is not None:
+            _count_capability(ctx, "miss_directory")
+            return "denied: room"
+    if requester and thread_id in recorded:
         known = set(ctx.reads) - {ctx.thread_id}
         if thread_id not in known and len(known) >= int(rooms.max_rooms_per_turn):
             return "denied: room"
@@ -415,3 +417,83 @@ REGISTRY = Registry(
     discover(__name__, Path(__file__).parent, "TOOL", "tool", FAMILIES),
     "tool",
 )
+
+
+class ToolIndex:
+    """Tools keyed by body: core, plugins, and each enabled body's own (ADR-0032 §4.6).
+
+    The index is rebuilt at boot from `gateway.tools()` and never stored. A name collision
+    between two bodies is impossible by construction; a body tool shadows a core name with one
+    warning, and a qualified call (`<body>__<tool>`) names another body's handler explicitly.
+    """
+
+    def __init__(
+        self,
+        core: Registry,
+        body: dict[str, list[Handler]],
+        plugins: Registry | None = None,
+    ) -> None:
+        self.core = core
+        self.plugins = plugins or Registry([], "tool")
+        self.body: dict[str, Registry] = {
+            str(name): Registry(handlers, f"tool:{name}") for name, handlers in body.items()
+        }
+        self._registries: dict[str, Registry] = {}
+        for name, registry in self.body.items():
+            shadowed = sorted(set(registry.by_name) & set(self.core.by_name))
+            if shadowed:
+                log.warning(
+                    "body tool shadows a core tool body=%s names=%s", name, ",".join(shadowed)
+                )
+
+    def specs(self, gateway: str) -> dict[str, Handler]:
+        """Everything the current body may call: core, plugins, then its own overrides."""
+        merged = dict(self.core.by_name)
+        merged.update(self.plugins.by_name)
+        own = self.body.get(str(gateway))
+        if own is not None:
+            merged.update(own.by_name)
+        return merged
+
+    def registry(self, gateway: str) -> Registry:
+        """The registry a caller filters by role; the body wins on a name it also declares."""
+        name = str(gateway or "")
+        cached = self._registries.get(name)
+        if cached is not None:
+            return cached
+        handlers = list(self.specs(name).values())
+        merged = Registry(handlers, "tool") if handlers else Registry([], "tool")
+        self._registries[name] = merged
+        return merged
+
+    def resolve(self, name: str, gateway: str) -> tuple[str, Handler] | None:
+        """`<body>__<tool>` names that body; a bare name is this body, core, then plugins."""
+        wanted = str(name or "").strip()
+        if not wanted:
+            return None
+        if "__" in wanted:
+            prefix, _, rest = wanted.partition("__")
+            own = self.body.get(prefix)
+            if own is None:
+                return None
+            found = own.get(rest)
+            return (str(found.name), found) if found is not None else None
+        current = self.body.get(str(gateway or ""))
+        for registry in (current, self.core, self.plugins):
+            if registry is None:
+                continue
+            found = registry.get(wanted)
+            if found is not None:
+                return (str(found.name), found)
+        return None
+
+    def get(self, name: str, gateway: str = "") -> Handler | None:
+        found = self.resolve(name, gateway)
+        return found[1] if found is not None else None
+
+    def names(self, gateway: str) -> tuple[str, ...]:
+        return tuple(sorted(self.specs(gateway)))
+
+    def other_bodies(self, gateway: str) -> tuple[str, ...]:
+        """The other enabled bodies, for the one prompt line (ADR-0025 keeps the prefix stable)."""
+        return tuple(sorted(name for name in self.body if name != str(gateway or "")))

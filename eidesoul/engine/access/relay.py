@@ -179,7 +179,7 @@ class RelayStore:
         to_person: str,
         scope_ref: str = "",
         thread_id: str = "",
-        gateway=None,
+        address=None,
         question: str = "",
         to_label: str = "",
         topic: str = "",
@@ -226,7 +226,7 @@ class RelayStore:
             kind=CONSENT,
             thread_id=str(thread_id or owner),
             sender=owner,
-            gateway=getattr(gateway, "name", "") or "",
+            gateway=getattr(address, "gateway", "") or "",
             tool="relay",
             args={
                 "task_id": task,
@@ -245,7 +245,23 @@ class RelayStore:
             summary=text,
         )
         if thread_id:
-            await agent.send_text(str(thread_id), text, gateway=gateway)
+            origin = address or agent.address_of(str(thread_id))
+            gateway = agent.body(origin.gateway)
+            if gateway is not None:
+                from ..inbound import Action
+
+                await agent.dispatch(
+                    owner,
+                    origin,
+                    Action(
+                        address=origin,
+                        capability="send_text",
+                        payload=text,
+                        id=f"relay:{task}",
+                    ),
+                    origin=origin,
+                    reason="relay consent question",
+                )
         return approval
 
     def decide(

@@ -35,7 +35,10 @@ def test_consent_inside_the_requester_scope() -> None:
     proof = scope_proof(request)
 
     assert proof["class"] == "consent"
-    assert proof["targets"] == [{"kind": "path", "value": "/w/scratch/c/note.txt"}]
+    assert proof["targets"] == [
+        {"kind": "path", "value": "/w/scratch/c/note.txt"},
+        {"kind": "body", "value": "g"},
+    ]
 
 
 def test_authorization_outside_the_scope_or_on_the_host() -> None:

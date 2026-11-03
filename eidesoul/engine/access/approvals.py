@@ -206,6 +206,22 @@ class ApprovalStore:
         found = self.pending(thread_id, sender)
         return found[-1] if found else None
 
+    def find_action(self, action_id: str, *, limit: int = 50) -> Approval | None:
+        """The newest `send` row for a correlation id, whatever its status (ADR-0032 §4.3)."""
+        if not str(action_id or "").strip():
+            return None
+        found = self.db.fetch_all(
+            select(approvals)
+            .where(approvals.c.kind == "send")
+            .order_by(approvals.c.created_at.desc())
+            .limit(max(1, int(limit)))
+        )
+        for row in found:
+            payload = row["payload"] if isinstance(row.get("payload"), dict) else {}
+            if str(payload.get("action_id") or "") == str(action_id):
+                return self._approval(row)
+        return None
+
     def count_pending(self) -> int:
         found = self.db.fetch_all(
             select(approvals.c.id).where(

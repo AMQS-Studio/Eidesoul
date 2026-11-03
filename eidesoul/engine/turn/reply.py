@@ -16,13 +16,13 @@ from pathlib import Path
 
 from ..i18n import t
 from ..inbound import (
-    AUTHORIZATION,
-    CONSENT,
     Action,
     Address,
     GatewayError,
     Percept,
+    Receipt,
     Rich,
+    SendRefused,
     StandbyError,
 )
 from ..runtime import ACTIVE_GENERATION
@@ -193,20 +193,8 @@ class Delivery:
     def __init__(self, agent) -> None:
         self.agent = agent
 
-    def _self_sender_id(self, gateway) -> str:
-        return next(iter(sorted(gateway.self_handles())), "")
-
-    async def text(
-        self,
-        thread_id: str,
-        text: str,
-        *,
-        gateway,
-        reply: Percept | None = None,
-        kind: str = "",
-    ) -> str:
-        self.agent._send_gate()
-        message_id = await gateway.send_text(thread_id, text, reply=reply)
+    def remember(self, thread_id: str, text: str, *, gateway, message_id: str) -> None:
+        """The bot's own message joins the window: the next turn reads what it just said."""
         self.agent.windows.append(
             thread_id,
             Message(
@@ -219,6 +207,52 @@ class Delivery:
                 author=AUTHOR_BOT,
             ),
         )
+
+    def _self_sender_id(self, gateway) -> str:
+        return next(iter(sorted(gateway.self_handles())), "")
+
+    async def _door(
+        self, action: Action, *, subject: str, origin: Address | None
+    ) -> Receipt:
+        """One call to the door; the caller maps the receipt, never retries on its own."""
+        return await self.agent.dispatch(
+            str(subject or ""),
+            action.address,
+            action,
+            origin=origin or action.address,
+        )
+
+    @staticmethod
+    def _reference(receipt: Receipt) -> str:
+        """The body's reference for a delivered action, or the refusal that stopped it."""
+        if receipt.state == "sent":
+            return receipt.reference
+        if receipt.state == "unknown":
+            raise GatewayError(receipt.reason or "delivery is unknown")
+        if receipt.state == "pending":
+            raise SendRefused(f"needs approval ({receipt.reason})")
+        if "delivery refused" in receipt.reason:
+            raise StandbyError(receipt.reason)
+        raise SendRefused(receipt.reason or "the send was refused")
+
+    async def text(
+        self,
+        thread_id: str,
+        text: str,
+        *,
+        gateway,
+        reply: Percept | None = None,
+        kind: str = "",
+        subject: str = "",
+        origin: Address | None = None,
+    ) -> str:
+        address = Address(str(gateway.name), str(thread_id))
+        action = Action(
+            address=address, capability="send_text", payload=str(text or "")
+        )
+        receipt = await self._door(action, subject=subject, origin=origin)
+        message_id = self._reference(receipt)
+        self.remember(thread_id, text, gateway=gateway, message_id=message_id)
         if kind:
             with contextlib.suppress(Exception):
                 self.agent.history.add_notice(thread_id, text, kind=kind, message_id=message_id)
@@ -232,7 +266,8 @@ class Delivery:
         *,
         gateway,
         reply: Percept | None = None,
-        action_id: str = "",
+        subject: str = "",
+        origin: Address | None = None,
     ) -> str:
         path = Path(path)
         if not isinstance(gateway, Rich):
@@ -243,8 +278,14 @@ class Delivery:
                 gateway=gateway,
                 reply=reply,
             )
-        self.agent._send_gate()
-        message_id = await gateway.send_file(thread_id, path, caption, reply=reply)
+        address = Address(str(gateway.name), str(thread_id))
+        action = Action(
+            address=address,
+            capability="send_file",
+            payload={"path": str(path), "caption": str(caption or "")},
+        )
+        receipt = await self._door(action, subject=subject, origin=origin)
+        message_id = self._reference(receipt)
         note = f"(file terkirim: {path.name}{f' — {caption}' if caption else ''})"
         self.agent.windows.append(
             thread_id,
@@ -261,13 +302,26 @@ class Delivery:
         return message_id
 
     async def sticker(
-        self, thread_id: str, message_id: str, *, gateway, action_id: str = ""
+        self,
+        thread_id: str,
+        message_id: str,
+        *,
+        gateway,
+        subject: str = "",
+        origin: Address | None = None,
+        action_id: str = "",
     ) -> str | None:
         if not isinstance(gateway, Rich):
             self.agent.runtime.miss_rich()
             return None
-        self.agent._send_gate()
-        label = await gateway.send_sticker(thread_id, message_id)
+        address = Address(str(gateway.name), str(thread_id))
+        action = Action(
+            address=address,
+            capability="send_sticker",
+            payload=str(message_id),
+            **({"id": action_id} if action_id else {}),
+        )
+        label = self._reference(await self._door(action, subject=subject, origin=origin))
         if label:
             self.agent.windows.append(
                 thread_id,
@@ -296,7 +350,15 @@ class Delivery:
             return
         await gateway.prepare_media(thread_id, entry)
 
-    async def send_text(self, thread_id: str, text: str, *, gateway) -> str:
+    async def send_text(
+        self,
+        thread_id: str,
+        text: str,
+        *,
+        gateway,
+        subject: str = "",
+        origin: Address | None = None,
+    ) -> str:
         """Tool-facing: render the gateway dialect, split, send, return ok:/error:."""
         if gateway is None:
             return "error: gateway is not available"
@@ -308,22 +370,39 @@ class Delivery:
             return "error: empty text"
         try:
             for chunk in chunks:
-                await self.text(thread_id, chunk, gateway=gateway)
+                await self.text(
+                    thread_id, chunk, gateway=gateway, subject=subject, origin=origin
+                )
         except StandbyError:
             return "error: delivery refused"
+        except SendRefused as exc:
+            return f"error: {exc}"
         except GatewayError as exc:
             return f"error: failed to send text: {exc}"
         name = gateway.chat_name(thread_id)
         suffix = f" ({len(chunks)} parts)" if len(chunks) > 1 else ""
         return f"ok: text sent to {name or thread_id}{suffix}"
 
-    async def send_file(self, thread_id: str, path: Path, caption: str = "", *, gateway) -> str:
+    async def send_file(
+        self,
+        thread_id: str,
+        path: Path,
+        caption: str = "",
+        *,
+        gateway,
+        subject: str = "",
+        origin: Address | None = None,
+    ) -> str:
         if gateway is None:
             return "error: gateway is not available"
         try:
-            await self.file(thread_id, Path(path), caption, gateway=gateway)
+            await self.file(
+                thread_id, Path(path), caption, gateway=gateway, subject=subject, origin=origin
+            )
         except StandbyError:
             return "error: delivery refused"
+        except SendRefused as exc:
+            return f"error: {exc}"
         except GatewayError as exc:
             return f"error: failed to send file: {exc}"
         except OSError as exc:
@@ -344,55 +423,50 @@ class Delivery:
         partial: str,
         humanize,
     ) -> tuple[list[str], list[Action], str]:
-        """Send the planned chunks of one turn; `stop` is "", "superseded", or "failed"."""
+        """Send the planned chunks of one turn.
+
+        `stop` is "", "failed:<reason>", or "refused:<reason>"; the caller decides what a stop
+        means for the turn, never the delivery path.
+        """
         self.agent.turns.plan_sending(turn_id, len(chunks))
         sent_ids: list[str] = []
         actions: list[Action] = []
-        scope_key = self.agent.outbox.turn_scope(turn_id)
         for index, chunk in enumerate(chunks):
-            if pace:
-                await self.typing(gateway, thread_id, True)
-                await asyncio.sleep(typing_delay(chunk, humanize))
-            state = self.agent.outbox.begin(
-                scope_key,
-                index,
-                gateway=gateway.name,
-                thread_id=thread_id,
-                generation=generation,
+            action = Action(
+                address=Address(str(gateway.name), str(thread_id)),
+                capability="send_text",
+                payload=chunk,
+                id=f"turn:{turn_id}:{index}",
             )
+            state = self.agent.outbox.status(action.id, 0) or ""
             if state == "sent":
                 continue
             if state == "unknown" and partial == "skip":
                 log.info("chunk %d of turn %s is unknown: skipped", index, turn_id)
                 continue
+            if state == "unknown":
+                # A policy-allowed resend: the unknown row is cleared before the second attempt.
+                self.agent.outbox.retry(action.id, 0)
+            if pace:
+                await self.typing(gateway, thread_id, True)
+                await asyncio.sleep(typing_delay(chunk, humanize))
             try:
-                provider = await self.text(
-                    thread_id,
-                    chunk,
-                    gateway=gateway,
-                    reply=inbound if (quote_all or index == 0) else None,
+                receipt = await self._door(
+                    action,
+                    subject=str(inbound.actor or ""),
+                    origin=Address(str(gateway.name), str(inbound.thread)),
                 )
-            except StandbyError:
-                self.agent.outbox.forget(scope_key, index)
-                return sent_ids, actions, "superseded"
-            except GatewayError:
+            except GatewayError as exc:
                 log.exception("failed to send the reply to %s", thread_id)
-                self.agent.outbox.mark_unknown(scope_key, index)
-                return sent_ids, actions, "failed"
-            self.agent.outbox.mark_sent(scope_key, index, provider)
+                return sent_ids, actions, f"failed:{exc}"
+            if receipt.state == "unknown":
+                return sent_ids, actions, "failed:delivery is unknown"
+            if receipt.state != "sent":
+                return sent_ids, actions, f"refused:{receipt.reason or receipt.state}"
             self.agent.turns.chunk_sent(turn_id)
-            sent_ids.append(provider)
-            actions.append(
-                Action(
-                    address=Address(gateway.name, thread_id),
-                    capability="send_text",
-                    payload=chunk,
-                    approval_class=(
-                        CONSENT if thread_id == inbound.thread else AUTHORIZATION
-                    ),
-                    id=f"turn:{turn_id}:{index}",
-                )
-            )
+            self.remember(thread_id, chunk, gateway=gateway, message_id=receipt.reference)
+            sent_ids.append(receipt.reference)
+            actions.append(action)
             if pace and index < len(chunks) - 1:
                 await asyncio.sleep(
                     max(0.0, float(humanize.between_delay)) + random.uniform(0, 0.4)

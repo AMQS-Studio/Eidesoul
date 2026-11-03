@@ -18,19 +18,22 @@ KINDS = (
 
 
 def manifest(ctx: ToolContext) -> SelfKnowledge:
-    """One manifest per agent, built once: the generators are cached at boot (ADR-0015 §4.8)."""
+    """One manifest per body, built once: the generators are cached at boot (ADR-0015 §4.8)."""
     agent = ctx.agent
+    gateway = getattr(getattr(ctx, "gateway", None), "name", "") or ""
     cached = getattr(agent, "_self_knowledge", None) if agent is not None else None
-    if isinstance(cached, SelfKnowledge) and cached.config is ctx.config:
-        return cached
-    found = SelfKnowledge(
-        ctx.config,
-        getattr(agent, "tools", None),
-        getattr(agent, "commands", None),
-    )
+    if isinstance(cached, dict):
+        found = cached.get(gateway)
+        if isinstance(found, SelfKnowledge) and found.config is ctx.config:
+            return found
+    index = getattr(agent, "tool_index", None) if agent is not None else None
+    tools = index.registry(gateway) if index is not None else getattr(agent, "tools", None)
+    built = SelfKnowledge(ctx.config, tools, getattr(agent, "commands", None))
     if agent is not None:
-        agent._self_knowledge = found
-    return found
+        cache = cached if isinstance(cached, dict) else {}
+        cache[gateway] = built
+        agent._self_knowledge = cache
+    return built
 
 
 async def _info(args: dict, ctx: ToolContext) -> str:

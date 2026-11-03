@@ -8,11 +8,16 @@ gate lowered and the lease released (ADR-0017 §4.4: gate down before release).
 
 
 import asyncio
+import contextlib
 import logging
 import signal
+import time
+from collections import deque
 
 from sqlalchemy import text
 
+from .. import io
+from ..inbound import MESSAGE, Percept
 from .automation import AutomationWorker
 from .cognition import CognitionWorker
 from .lease import Lease
@@ -21,6 +26,212 @@ log = logging.getLogger(__name__)
 
 TICK = 5.0
 RENEW_FAILURES = 3
+# ADR-0013 §11: the resume budget is a rolling minute, not a fixed per-pass cap.
+RESUME_WINDOW = 60.0
+
+# --------------------------------------------------------------- turn recovery
+
+
+def _is_action(row: dict) -> bool:
+    """`turns.category` marks a single-action turn: never consolidated away (ADR-0013 §11)."""
+    return str(row.get("category") or "chat") == "action"
+
+def expire_consolidated(agent, thread: str, turn_ids: list[str]) -> int:
+    """Expire the consolidated tail of one chat and let the away block explain it."""
+    expired = 0
+    for turn_id in turn_ids:
+        try:
+            agent.turns.expire(turn_id, "consolidate")
+        except Exception:
+            log.exception("failed to expire consolidated turn %s", turn_id)
+            continue
+        expired += 1
+    if expired:
+        agent.backlog[thread] = agent.backlog.get(thread, 0) + expired
+        log.info("recovery: %d turn(s) consolidated chat=%s", expired, thread)
+    return expired
+
+def select_resume(agent, rows: list[dict], allowed: int) -> list[dict]:
+    """Pace, fair-share, and consolidate one backlog (ADR-0013 §11).
+
+    Selection is round-robin across chats so one busy room cannot starve the others; the
+    global minute budget bounds the whole pass and the per-chat quota bounds one room. Under
+    `per_message_then_consolidate` the rows past that quota are expired with
+    `reason=consolidate`, which the away block turns into one consolidated answer; an
+    `action` turn is always selected on its own and never expired.
+    """
+    cfg = agent.config.turns
+    policy = str(cfg.backlog_policy)
+    budget = max(0, int(allowed))
+    if not budget:
+        return []
+    groups = backlog_groups(rows)
+    if policy == "last_only":
+        return [group[-1] for group in groups.values()][:budget]
+    if policy == "consolidate":
+        return consolidate(agent, groups)[:budget]
+    quota = max(1, int(cfg.max_resume_per_chat))
+    actions, chats = split_actions(groups)
+    taken = dict.fromkeys(groups, 0)
+    selected = round_robin(groups, actions, chats, taken, quota, budget)
+    if policy == "per_message_then_consolidate":
+        for thread in sorted(groups):
+            if taken[thread] < quota:
+                continue
+            expire_consolidated(agent, thread, [str(row["id"]) for row in chats[thread]])
+    return selected
+
+def backlog_groups(rows: list[dict]) -> dict[str, list[dict]]:
+    groups: dict[str, list[dict]] = {}
+    for row in sorted(
+        rows, key=lambda item: (str(item["thread_id"]), float(item["created_at"]))
+    ):
+        groups.setdefault(str(row["thread_id"]), []).append(row)
+    return groups
+
+def split_actions(
+    groups: dict[str, list[dict]],
+) -> tuple[dict[str, list[dict]], dict[str, list[dict]]]:
+    actions = {
+        thread: [row for row in group if _is_action(row)]
+        for thread, group in groups.items()
+    }
+    chats = {
+        thread: [row for row in group if not _is_action(row)]
+        for thread, group in groups.items()
+    }
+    return actions, chats
+
+def consolidate(agent, groups: dict[str, list[dict]]) -> list[dict]:
+    """`consolidate`: the last chat row per room plus every action row, oldest first."""
+    chosen: list[dict] = []
+    for thread in sorted(groups):
+        group = groups[thread]
+        chats = [row for row in group if not _is_action(row)]
+        chosen.extend(row for row in group if _is_action(row))
+        if chats:
+            chosen.append(chats[-1])
+        expire_consolidated(agent, thread, [str(row["id"]) for row in chats[:-1]])
+    chosen.sort(key=lambda row: float(row["created_at"]))
+    return chosen
+
+def round_robin(
+    groups: dict[str, list[dict]],
+    actions: dict[str, list[dict]],
+    chats: dict[str, list[dict]],
+    taken: dict[str, int],
+    quota: int,
+    budget: int,
+) -> list[dict]:
+    """One row per room per lap: an action row first, then a chat row under the quota."""
+    selected: list[dict] = []
+    while len(selected) < budget:
+        progressed = False
+        for thread in sorted(groups):
+            if len(selected) >= budget:
+                break
+            if actions[thread]:
+                selected.append(actions[thread].pop(0))
+                progressed = True
+                continue
+            if taken[thread] >= quota or not chats[thread]:
+                continue
+            selected.append(chats[thread].pop(0))
+            taken[thread] += 1
+            progressed = True
+        if not progressed:
+            break
+    return selected
+
+async def recover(agent) -> int:
+    """Recovery pass on the primary (ADR-0011 §4.5, ADR-0013 §8)."""
+    cfg = agent.config.turns
+    if not cfg.resume or not agent._accepting():
+        return 0
+    generation = int(getattr(agent.lease, "generation", 0) or 0)
+    rows, dead = await io.run(
+        agent.turns.claim_expired,
+        owner=getattr(agent.lease, "instance_id", "") or "local",
+        generation=generation,
+        lease_seconds=max(60.0, float(cfg.timeout_seconds) + 30.0),
+        limit=max(1, int(agent.config.worker.reaper.batch)),
+        max_attempts=int(cfg.max_attempts),
+        dead_letter_after=min(
+            int(agent.config.worker.retry.dead_letter_after),
+            int(agent.config.worker.retry.attempts),
+            int(agent.config.llm.retry.worker_attempts),
+        ),
+        boot_epoch=agent.boot_epoch,
+    )
+    if dead:
+        log.warning("recovery: %d turn(s) abandoned after attempts were exhausted", dead)
+    moment = time.time()
+    agent._resume_times = deque(
+        stamp for stamp in agent._resume_times if moment - stamp < RESUME_WINDOW
+    )
+    allowed = max(0, int(cfg.max_resume_per_minute) - len(agent._resume_times))
+    selected = select_resume(agent, rows, allowed)
+    picked = {str(row["id"]) for row in selected}
+    unselected = [str(row["id"]) for row in rows if str(row["id"]) not in picked]
+    if unselected:
+        released = await io.run(agent.turns.release, unselected)
+        if released:
+            log.info("recovery: %d turn(s) released for a later pass", released)
+    resumed = 0
+    noticed: set[str] = set()
+    for row in selected:
+        thread = str(row["thread_id"])
+        turn_id = str(row["id"])
+        message = await io.run(agent.history.find, thread, turn_id)
+        if message is None:
+            agent.turns.expire(turn_id, "resume: message missing")
+            continue
+        age = time.time() - message.when.timestamp()
+        if age > float(cfg.stale_after_seconds):
+            agent.turns.expire(turn_id, "resume: stale")
+            continue
+        if age > float(cfg.max_age_seconds) and str(cfg.backlog_policy) not in {
+            "consolidate",
+            "per_message_then_consolidate",
+        }:
+            agent.turns.expire(turn_id, "resume: too old")
+            continue
+        gateway = agent.body_of(thread)
+        if gateway is None:
+            log.warning("recovery: no body for chat=%s turn=%s", thread, turn_id)
+            continue
+        downtime = time.time() - float(
+            row.get("previous_updated_at") or row.get("updated_at") or 0.0
+        )
+        if (
+            thread not in noticed
+            and downtime > float(agent.config.turns.shutdown.resume_notice.after_seconds)
+        ):
+            noticed.add(thread)
+            with contextlib.suppress(Exception):
+                await agent._notice(
+                    thread,
+                    gateway,
+                    "turn.notice.resumed",
+                    scope_key=f"notice:{thread}:resumed:{agent.boot_epoch}",
+                    kind="notice:resumed",
+                )
+        inbound = Percept(
+            source=gateway.name,
+            thread=thread,
+            actor=str(row.get("person_id") or ""),
+            kind=MESSAGE,
+            payload=message,
+            hints={},
+        )
+        agent._resume_times.append(time.time())
+        agent.spawn(agent.handle(inbound, gateway, claimed=row))
+        resumed += 1
+    if resumed:
+        log.info("recovery resumed %d turn(s)", resumed)
+    return resumed
+
+# ---------------------------------------------------------------- supervisor
 
 
 class Supervisor:

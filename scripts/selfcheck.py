@@ -31,6 +31,48 @@ from eidesoul.engine.config import (
 from eidesoul.engine.self_knowledge import SelfKnowledge, check
 from eidesoul.engine.soul import Soul
 
+ENGINE = ROOT / "eidesoul" / "engine"
+TOP_LEVEL_CAP = 15
+# ADR-0031 §4.1 caps. The allowlist is the four modules this ADR does not split.
+LINE_CAPS = {
+    "eidesoul/engine/agent.py": 1_800,
+    "eidesoul/engine/jobs/automation.py": 2_000,
+    "eidesoul/engine/memory/store.py": 2_400,
+}
+OVER_CAP_ALLOWED = {
+    "eidesoul/engine/config.py",
+    "eidesoul/engine/stores/affect.py",
+    "eidesoul/engine/jobs/cognition.py",
+    "eidesoul/engine/schema.py",
+}
+MODULE_CAP = 800
+
+
+def size_problems() -> list[str]:
+    """ADR-0031 §6: the top level, the three concentrated modules, and the 800-line ceiling."""
+    problems: list[str] = []
+    top = sorted(path.name for path in ENGINE.glob("*.py"))
+    if len(top) > TOP_LEVEL_CAP:
+        problems.append(
+            f"engine top level holds {len(top)} modules (cap {TOP_LEVEL_CAP}): {', '.join(top)}"
+        )
+    for relative, cap in LINE_CAPS.items():
+        path = ROOT / relative
+        if not path.is_file():
+            problems.append(f"{relative} is missing (ADR-0031 §4.2 target)")
+            continue
+        lines = len(path.read_text(encoding="utf-8").splitlines())
+        if lines > cap:
+            problems.append(f"{relative} is {lines} lines (cap {cap})")
+    for path in sorted(ENGINE.rglob("*.py")):
+        relative = path.relative_to(ROOT).as_posix()
+        if relative in LINE_CAPS or relative in OVER_CAP_ALLOWED:
+            continue
+        lines = len(path.read_text(encoding="utf-8").splitlines())
+        if lines > MODULE_CAP:
+            problems.append(f"{relative} is {lines} lines (module cap {MODULE_CAP})")
+    return problems
+
 
 def sample_config() -> Config:
     """A default Config with no real secret: enough for the generators and the token scan."""
@@ -73,7 +115,7 @@ def main(argv: list[str] | None = None) -> int:
         parser.print_help()
         return 0
     config = sample_config()
-    problems = check(config)
+    problems = [*check(config), *size_problems()]
     manifest = SelfKnowledge(config)
     topics = ", ".join(manifest.topics())
     if problems:

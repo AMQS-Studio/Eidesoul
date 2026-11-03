@@ -122,6 +122,7 @@ class ActionRequest:
     sender: str
     gateway: str
     roles: tuple[str, ...]
+    origin_gateway: str = ""
     workspace: str = ""
     roots: tuple[str, ...] = ()
     paths: tuple[str, ...] = ()  # already resolved by the caller, never re-derived here
@@ -295,6 +296,10 @@ def action_targets(request: ActionRequest) -> list[dict]:
     if request.tool in {"send", "send_to"}:
         room = str(args.get("chat") or "").strip()
         targets.append({"kind": "room", "value": room or request.thread_id})
+    if request.gateway:
+        targets.append({"kind": "body", "value": request.gateway})
+    if request.origin_gateway:
+        targets.append({"kind": "origin", "value": request.origin_gateway})
     if request.tool == "settings":
         value = f"{args.get('file') or ''}:{args.get('path') or ''}"
         targets.append({"kind": "config", "value": value})

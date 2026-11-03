@@ -8,6 +8,7 @@ from ..access.permissions import command_allowed, tool_allowed
 from ..access.relay import MODES, RelayRefused, RelayStore
 from ..guard import ActionRequest, recheck_scope, scope_proof
 from ..i18n import t
+from ..inbound import Address, action_from_json
 from ..registry import Handler
 from ..tools import execute, resolve_for
 from . import CommandContext
@@ -67,6 +68,48 @@ async def _settings_decision(ctx: CommandContext, approval) -> str:
     return t("command.approve.applied", lang, id=approval.id, summary=summary)[:CLIP]
 
 
+async def _send_decision(ctx: CommandContext, approval) -> str:
+    """Re-dispatch an approved outbound `Action` through the one door."""
+    agent = ctx.agent
+    lang = ctx.lang
+    payload = approval.args if isinstance(approval.args, dict) else {}
+    try:
+        action = action_from_json(payload.get("action") or {})
+        origin_data = payload.get("origin") or {}
+        origin = Address(
+            gateway=str(origin_data.get("gateway") or ""),
+            thread=str(origin_data.get("thread") or ""),
+            proof=str(origin_data.get("proof") or ""),
+        )
+    except (TypeError, ValueError, AttributeError):
+        agent.approvals.mark(approval.id, "failed", ctx.sender, "stored action is invalid")
+        return t("command.approve.denied", lang, id=approval.id, reason="stored action")
+    snapshot = set(approval.roles)
+    if snapshot and not {role.name for role in ctx.roles} <= snapshot:
+        agent.approvals.mark(approval.id, "denied", ctx.sender, "role changed")
+        return t("command.approve.denied", lang, id=approval.id, reason="role changed")
+    if not command_allowed(tuple(ctx.roles), "approve"):
+        agent.approvals.mark(approval.id, "denied", ctx.sender, "approver role required")
+        return t("command.approve.class_denied", lang, id=approval.id)
+    agent.approvals.mark(approval.id, "approved", ctx.sender, "send approved")
+    receipt = await agent.dispatch(
+        ctx.sender,
+        action.address,
+        action,
+        origin=origin,
+        reason=str(payload.get("reason") or ""),
+    )
+    if receipt.state != "sent":
+        return t(
+            "command.approve.send_failed",
+            lang,
+            id=approval.id,
+            state=receipt.state,
+            reason=receipt.reason,
+        )
+    return t("command.approve.sent", lang, id=approval.id, target=action.address.thread)
+
+
 async def _approve(ctx: CommandContext) -> str:
     agent = ctx.agent
     lang = ctx.lang
@@ -92,6 +135,9 @@ async def _approve(ctx: CommandContext) -> str:
 
     if approval.tool == "relay":
         return _relay_decision(ctx, approval, extra)
+    if approval.kind == "send":
+        # ADR-0032 §4.4: the row already holds the authorization proof; rebuild the message.
+        return await _send_decision(ctx, approval)
 
     current = tuple(ctx.roles)
     snapshot = set(approval.roles)
@@ -159,7 +205,7 @@ async def _approve(ctx: CommandContext) -> str:
     if special is not None:
         return await special(ctx, approval)
 
-    specs = {handler.name: handler for handler in agent.tools.by_name.values()}
+    specs = agent.tool_index.specs(approval.gateway or (ctx.gateway.name if ctx.gateway else ""))
     if agent.hub is not None:
         specs.update({handler.name: handler for handler in agent.hub.specs(current)})
     result = await execute(specs, approval.tool, approval.args, tool_ctx)

@@ -42,10 +42,21 @@ def _infra_visible(roles: tuple[Role, ...], mode: str) -> bool:
     return any(role.protected or "*" in (role.tools or ()) for role in roles)
 
 
-def _capability_index(config: Config, roles: tuple[Role, ...]) -> str:
+def _capability_index(
+    config: Config,
+    roles: tuple[Role, ...],
+    *,
+    tools=None,
+    commands=None,
+    bodies: tuple[str, ...] = (),
+) -> str:
+    """The Self index, scoped to this body; other bodies are one line, never a schema (ADR-0032 §4.6)."""
     from ..self_knowledge import SelfKnowledge
 
-    return SelfKnowledge(config).index(roles)
+    text = SelfKnowledge(config, tools, commands).index(roles)
+    if bodies:
+        text = f"{text}\n- other bodies: {', '.join(bodies)}"
+    return text
 
 DAILY_STYLE = (
     "Daily chat: ONE short bubble by default, usually 20-60 characters. Add a second bubble only for "
@@ -279,6 +290,9 @@ def system_prompt(
     decision_reason: str = "",
     query: str = "",
     bonuses: dict[str, float] | None = None,
+    tools=None,
+    commands=None,
+    bodies: tuple[str, ...] = (),
 ) -> str:
     role_names = ", ".join(role.name for role in roles) or "-"
     language = config.soul.language
@@ -458,7 +472,9 @@ def system_prompt(
         "memory": memory,
         "actions": actions,
         "skills": skills,
-        "capabilities": _capability_index(config, roles),
+        "capabilities": _capability_index(
+            config, roles, tools=tools, commands=commands, bodies=bodies
+        ),
     }
     stable = salience.JOIN.join(text for _, text in stable_blocks.items() if text.strip())
     # Pinned blocks skip the selection, so the budget governs the competing references only.

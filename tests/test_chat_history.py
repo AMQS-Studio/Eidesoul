@@ -4,7 +4,7 @@
 import asyncio
 from datetime import datetime
 
-from support import make_agent, role
+from support import make_agent, role, specs
 from test_whatsapp_gateway import make_gateway
 
 from eidesoul.engine.tools import execute
@@ -50,7 +50,7 @@ def context(env, thread_id: str = "111@g.us"):
 
 
 def run(env, args: dict, ctx):
-    return asyncio.run(execute(env.agent.tools.by_name, "chat_history", args, ctx))
+    return asyncio.run(execute(specs(env), "chat_history", args, ctx))
 
 
 def test_reads_current_chat_by_default(tmp_path) -> None:

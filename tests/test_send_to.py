@@ -3,7 +3,7 @@
 
 import asyncio
 
-from support import make_agent, role
+from support import make_agent, role, specs
 from test_whatsapp_gateway import make_gateway
 
 from eidesoul.engine.tools import execute
@@ -23,7 +23,7 @@ def test_unknown_target_never_falls_back_to_the_only_contact(tmp_path) -> None:
     ctx = env.agent.tool_context("111@g.us", "628111", (env.config.roles.get("owner"),), gateway)
 
     result = asyncio.run(
-        execute(env.agent.tools.by_name, "send_to", {"chat": "tidak-ada@g.us", "text": "x"}, ctx)
+        execute(specs(env), "send_to", {"chat": "tidak-ada@g.us", "text": "x"}, ctx)
     )
 
     assert result.startswith("error:")
@@ -42,7 +42,7 @@ def test_send_to_listing_without_chat(tmp_path) -> None:
     )
     ctx = env.agent.tool_context("111@g.us", "628111", (env.config.roles.get("owner"),), gateway)
 
-    result = asyncio.run(execute(env.agent.tools.by_name, "send_to", {}, ctx))
+    result = asyncio.run(execute(specs(env), "send_to", {}, ctx))
 
     assert "Contacts in the archive" in result
     assert "Budi" in result
@@ -90,7 +90,7 @@ def test_cross_chat_send_refused_before_reading_the_target(tmp_path) -> None:
     env, ctx = cross_env(tmp_path)
 
     result = asyncio.run(
-        execute(env.agent.tools.by_name, "send_to", {"chat": "budi", "text": "halo"}, ctx)
+        execute(specs(env), "send_to", {"chat": "budi", "text": "halo"}, ctx)
     )
 
     assert "read the archive of Budi" in result
@@ -105,10 +105,10 @@ def test_cross_chat_send_works_after_reading_the_target(tmp_path) -> None:
     env, ctx = cross_env(tmp_path)
     env.gateway.client = FakeClient()
 
-    read = asyncio.run(execute(env.agent.tools.by_name, "chat_history", {"chat": "budi"}, ctx))
+    read = asyncio.run(execute(specs(env), "chat_history", {"chat": "budi"}, ctx))
     result = asyncio.run(
         execute(
-            env.agent.tools.by_name,
+            specs(env),
             "send_to",
             {"chat": "budi", "text": "halo", "reason": "jawab budi"},
             ctx,
@@ -128,7 +128,7 @@ def test_failed_cross_chat_send_is_logged_as_failure(tmp_path) -> None:
 
     result = asyncio.run(
         execute(
-            env.agent.tools.by_name,
+            specs(env),
             "send_to",
             {"chat": "budi", "text": "halo", "reason": "jawab budi"},
             ctx,

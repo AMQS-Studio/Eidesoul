@@ -212,7 +212,11 @@ class PrivacyService:
             first=str(pair.get("first") or "").strip()[:160],
             second=str(pair.get("second") or "").strip()[:160],
         )
-        sent = await agent.send_text(thread, text, gateway=agent._gateway_for(thread))
+        body = agent.body_of(thread)
+        if body is None:
+            log.info("dispute question skipped: no body owns %s", thread)
+            return "skipped: no dm"
+        sent = await agent.send_text(thread, text, gateway=body, subject=subject)
         if not str(sent).startswith("ok:"):
             return f"failed: {sent}"
         agent.memory.mark_dispute_asked(ids)
@@ -231,24 +235,22 @@ class PrivacyService:
         agent = self.agent
         if not thread_id or not memory_ids:
             return
-        gateway = agent._turn_gateways.get(thread_id) or (
-            agent.gateways[0] if agent.gateways else None
-        )
-        if gateway is None:
+        body = agent.body_of(thread_id)
+        if body is None:
             return
         text = question or self._text("ask_level")
         approval = await agent.approvals.create(
             kind="privacy",
             thread_id=thread_id,
             sender=person_id,
-            gateway=getattr(gateway, "name", "") or "",
+            gateway=str(body.name or ""),
             tool="memory",
             args={"memory_ids": list(memory_ids)},
             payload={"level": int(level), "question": text},
             summary=text,
         )
         log.info("privacy pending thread=%s approval=%s", thread_id, approval.id)
-        await agent.send_text(thread_id, text, gateway=gateway)
+        await agent.send_text(thread_id, text, gateway=body, subject=person_id)
 
     # ------------------------------------------------------------- pending
 

@@ -67,7 +67,7 @@ def test_a_turn_is_checkpointed_and_delivered(tmp_path) -> None:
     assert turn["delivered_chunks"] == 1
     assert turn["attempt"] == 1
     ledger = OutboundLedger(env.db)
-    assert ledger.status(f"turn:{inbound.payload.id}", 0) == "sent"
+    assert ledger.status(f"turn:{inbound.payload.id}:0", 0) == "sent"
 
 
 def test_a_delivered_turn_is_never_processed_twice(tmp_path) -> None:
@@ -393,6 +393,7 @@ def backlog(env, thread: str, count: int, *, action: bool = False) -> list[str]:
             message.payload,
             message.actor,
             category="action" if action else "chat",
+            gateway=env.gateway.name,
         )
         ids.append(str(message.payload.id))
     return ids

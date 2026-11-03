@@ -25,25 +25,32 @@ from .commands import REGISTRY as CORE_COMMANDS
 from .commands import CommandContext
 from .config import Config
 from .guard import SafetyPolicy, SandboxGuard, build_safety
+from .guard.policy import ActionRequest, approval_summary, scope_proof
 from .i18n import reload_catalogs, t
 from .inbound import (
+    AUTHORIZATION,
     CONSENT,
-    MESSAGE,
     Action,
     Address,
     GatewayCore,
+    GatewayError,
     Percept,
+    Receipt,
     StandbyError,
+    action_json,
+    refusal,
 )
+from .jobs import supervisor
 from .llm import LLM, DeadlineExceeded
 from .memory import MemoryBackend, MemoryContext, intent, memory_status
 from .memory.ledger import OutboundLedger
 from .registry import Handler, Registry
 from .runtime import ACTIVE_GENERATION as runtime_generation
 from .runtime import RuntimeFacts
+from .stores.history import RouteConflict
 from .stores.turns import SIDE_EFFECTING, TurnStore, args_hash
 from .tools import REGISTRY as CORE_TOOLS
-from .tools import ToolContext
+from .tools import ToolContext, ToolIndex
 from .turn import assembly, observability
 from .turn.context import (
     Message,
@@ -187,8 +194,9 @@ class Agent:
                 *(value for h in gateway_commands for value in (h.name, *h.aliases)),
             ],
         )
-        handlers = [*CORE_TOOLS.by_name.values(), *gateway_tools, *self.plugins.tools]
-        self.tools = Registry(handlers, "tool")
+        self.tools = Registry([*CORE_TOOLS.by_name.values(), *self.plugins.tools], "tool")
+        self.body_tools = {str(item.name): list(item.tools()) for item in self.gateways}
+        self.tool_index = ToolIndex(self.tools, self.body_tools)
         handlers = [
             *CORE_COMMANDS.by_name.values(),
             *gateway_commands,
@@ -424,10 +432,9 @@ class Agent:
                 break
             if sent and not bool(self.config.turns.shutdown.notice_per_chat):
                 break
-            gateway = self._shutdown_gateways.get(thread) or (
-                self.gateways[0] if self.gateways else None
-            )
+            gateway = self._shutdown_gateways.get(thread) or self.body_of(thread)
             if gateway is None:
+                log.warning("shutdown notice skipped: no body owns chat=%s", thread)
                 continue
             self._interrupt(turn_id, "shutdown", force=True)
             if await self._notice(
@@ -447,226 +454,165 @@ class Agent:
 
     # --------------------------------------------------------- recovery
 
-    def _gateway_for(self, thread_id: str) -> GatewayCore | None:
-        """The body that serves this thread: turn map, then the durable route, then the first."""
-        found = self._turn_gateways.get(thread_id)
-        if found is not None:
-            return found
-        lookup = getattr(self.history, "gateway_of", None)
-        if callable(lookup):
-            try:
-                name = str(lookup(str(thread_id)) or "")
-            except Exception:
-                log.debug("route lookup failed thread=%s", thread_id, exc_info=True)
-                name = ""
-            if name:
-                match = next((item for item in self.gateways if item.name == name), None)
-                if match is not None:
-                    return match
-        return self.gateways[0] if self.gateways else None
+    def body(self, name: str) -> GatewayCore | None:
+        """The body instance behind a name, or None (a name the config no longer enables)."""
+        wanted = str(name or "")
+        return next((item for item in self.gateways if item.name == wanted), None)
 
-    @staticmethod
-    def _is_action(row: dict) -> bool:
-        """`turns.category` marks a single-action turn: never consolidated away (ADR-0013 §11)."""
-        return str(row.get("category") or "chat") == "action"
+    def body_of(self, thread_id: str) -> GatewayCore | None:
+        """The body that owns a thread, or None when no route and no turn map claims it."""
+        try:
+            return self.body(self.address_of(thread_id).gateway)
+        except GatewayError:
+            return None
 
-    def _expire_consolidated(self, thread: str, turn_ids: list[str]) -> int:
-        """Expire the consolidated tail of one chat and let the away block explain it."""
-        expired = 0
-        for turn_id in turn_ids:
-            try:
-                self.turns.expire(turn_id, "consolidate")
-            except Exception:
-                log.exception("failed to expire consolidated turn %s", turn_id)
-                continue
-            expired += 1
-        if expired:
-            self.backlog[thread] = self.backlog.get(thread, 0) + expired
-            log.info("recovery: %d turn(s) consolidated chat=%s", expired, thread)
-        return expired
+    def address_of(self, thread_id: str) -> Address:
+        """The body that owns a thread: the turn map, then the durable route (ADR-0032 §4.1).
 
-    def _select_resume(self, rows: list[dict], allowed: int) -> list[dict]:
-        """Pace, fair-share, and consolidate one backlog (ADR-0013 §11).
-
-        Selection is round-robin across chats so one busy room cannot starve the others; the
-        global minute budget bounds the whole pass and the per-chat quota bounds one room. Under
-        `per_message_then_consolidate` the rows past that quota are expired with
-        `reason=consolidate`, which the away block turns into one consolidated answer; an
-        `action` turn is always selected on its own and never expired.
+        Membership is proven separately at the door (`refusal`); this only resolves the owner.
+        A thread nobody owns is a refusal, never a fallback to the first registered body.
         """
-        cfg = self.config.turns
-        policy = str(cfg.backlog_policy)
-        budget = max(0, int(allowed))
-        if not budget:
-            return []
-        groups = self._backlog_groups(rows)
-        if policy == "last_only":
-            return [group[-1] for group in groups.values()][:budget]
-        if policy == "consolidate":
-            return self._consolidate(groups)[:budget]
-        quota = max(1, int(cfg.max_resume_per_chat))
-        actions, chats = self._split_actions(groups)
-        taken = dict.fromkeys(groups, 0)
-        selected = self._round_robin(groups, actions, chats, taken, quota, budget)
-        if policy == "per_message_then_consolidate":
-            for thread in sorted(groups):
-                if taken[thread] < quota:
-                    continue
-                self._expire_consolidated(thread, [str(row["id"]) for row in chats[thread]])
-        return selected
+        found = self._turn_gateways.get(thread_id)
+        name = str(getattr(found, "name", "") or "")
+        if not name:
+            lookup = getattr(self.history, "gateway_of", None)
+            if callable(lookup):
+                try:
+                    name = str(lookup(str(thread_id)) or "")
+                except Exception:
+                    log.debug("route lookup failed thread=%s", thread_id, exc_info=True)
+                    name = ""
+        if not name:
+            raise GatewayError(f"no body owns thread '{thread_id}'")
+        return Address(name, str(thread_id))
 
-    @staticmethod
-    def _backlog_groups(rows: list[dict]) -> dict[str, list[dict]]:
-        groups: dict[str, list[dict]] = {}
-        for row in sorted(
-            rows, key=lambda item: (str(item["thread_id"]), float(item["created_at"]))
-        ):
-            groups.setdefault(str(row["thread_id"]), []).append(row)
-        return groups
-
-    @staticmethod
-    def _split_actions(
-        groups: dict[str, list[dict]],
-    ) -> tuple[dict[str, list[dict]], dict[str, list[dict]]]:
-        actions = {
-            thread: [row for row in group if Agent._is_action(row)]
-            for thread, group in groups.items()
-        }
-        chats = {
-            thread: [row for row in group if not Agent._is_action(row)]
-            for thread, group in groups.items()
-        }
-        return actions, chats
-
-    def _consolidate(self, groups: dict[str, list[dict]]) -> list[dict]:
-        """`consolidate`: the last chat row per room plus every action row, oldest first."""
-        chosen: list[dict] = []
-        for thread in sorted(groups):
-            group = groups[thread]
-            chats = [row for row in group if not self._is_action(row)]
-            chosen.extend(row for row in group if self._is_action(row))
-            if chats:
-                chosen.append(chats[-1])
-            self._expire_consolidated(thread, [str(row["id"]) for row in chats[:-1]])
-        chosen.sort(key=lambda row: float(row["created_at"]))
-        return chosen
-
-    def _round_robin(
+    def _send_gate_or_receipt(self, action: Action) -> Receipt | None:
+        """The primary gate, as a refusal instead of an exception (`_send_gate` counts it)."""
+        try:
+            self._send_gate()
+        except StandbyError:
+            return Receipt(action.id, "refused", reason="delivery refused")
+        return None
+    async def dispatch(
         self,
-        groups: dict[str, list[dict]],
-        actions: dict[str, list[dict]],
-        chats: dict[str, list[dict]],
-        taken: dict[str, int],
-        quota: int,
-        budget: int,
-    ) -> list[dict]:
-        """One row per room per lap: an action row first, then a chat row under the quota."""
-        selected: list[dict] = []
-        while len(selected) < budget:
-            progressed = False
-            for thread in sorted(groups):
-                if len(selected) >= budget:
-                    break
-                if actions[thread]:
-                    selected.append(actions[thread].pop(0))
-                    progressed = True
-                    continue
-                if taken[thread] >= quota or not chats[thread]:
-                    continue
-                selected.append(chats[thread].pop(0))
-                taken[thread] += 1
-                progressed = True
-            if not progressed:
-                break
-        return selected
+        subject: str,
+        address: Address,
+        action: Action,
+        *,
+        origin: Address,
+        reason: str = "",
+    ) -> Receipt:
+        """The one door to a body: policy, then ledger, then `dispatch` (ADR-0032 §4.4)."""
+        body = self.body(address.gateway)
+        if body is None:
+            return Receipt(
+                action.id, "refused", reason=f"unknown body '{address.gateway}'"
+            )
+        same = (
+            address.gateway == origin.gateway and str(address.thread) == str(origin.thread)
+        )
+        approval_class = CONSENT if same else AUTHORIZATION
+        action = replace(action, approval_class=approval_class)
+        if not same:
+            requester = str(subject or "").strip()
+            if not requester:
+                return Receipt(
+                    action.id, "refused", reason="no person id; a cross-body act is refused"
+                )
+            denial = refusal(
+                body,
+                address.thread,
+                requester,
+                recorded=self.history.rooms_of(requester),
+            )
+            if denial:
+                return Receipt(action.id, "refused", reason=denial)
+            if not str(reason or "").strip():
+                return Receipt(
+                    action.id, "refused", reason="cross_send needs a reason from the requester"
+                )
+        request = ActionRequest(
+            tool="send",
+            args={
+                "chat": str(address.thread),
+                "capability": action.capability,
+                "action_id": action.id,
+            },
+            thread_id=str(address.thread),
+            sender=str(subject or ""),
+            gateway=str(address.gateway),
+            origin_gateway=str(origin.gateway),
+            roles=tuple(role.name for role in self.config.roles.for_person(subject)),
+            workspace=str(self.config.workspace),
+            roots=(),
+        )
+        decision = self.safety.check(request)
+        if decision.verdict == "pending":
+            row = self.approvals.find_action(action.id)
+            if row is not None:
+                if row.status == "approved":
+                    pass
+                elif row.status == "pending":
+                    return Receipt(action.id, "pending", reason=f"approval #{row.id}")
+                else:
+                    return Receipt(
+                        action.id, "refused", reason=f"approval #{row.id} {row.status}"
+                    )
+            else:
+                proof = scope_proof(request, extra=self.config.guard.credential_patterns)
+                row = await self.approvals.create(
+                    kind="send",
+                    thread_id=str(address.thread),
+                    sender=str(subject or ""),
+                    gateway=str(address.gateway),
+                    tool="",
+                    args={
+                        "action": action_json(action),
+                        "origin": asdict(origin),
+                        "reason": str(reason or ""),
+                    },
+                    payload={"action_id": action.id},
+                    summary=approval_summary("send", request, proof),
+                    scope_proof=proof,
+                    approval_class=approval_class,
+                )
+                return Receipt(action.id, "pending", reason=f"approval #{row.id}")
+        elif decision.verdict == "deny":
+            return Receipt(action.id, "refused", reason=str(decision.reason or "denied"))
+
+        receipt = self._send_gate_or_receipt(action)
+        if receipt is not None:
+            return receipt
+        scope_key = action.id
+        try:
+            state = self.outbox.begin(
+                scope_key,
+                0,
+                gateway=str(address.gateway),
+                thread_id=str(address.thread),
+                generation=ACTIVE_GENERATION.get(),
+            )
+        except Exception:
+            log.exception("failed to open the outbound ledger action=%s", action.id)
+            state = "new"
+        if state == "sent":
+            return Receipt(action.id, "sent", self.outbox.reference(scope_key, 0))
+        if state == "unknown":
+            return Receipt(action.id, "unknown")
+        try:
+            reference = str(await body.dispatch(action) or "")
+        except GatewayError as exc:
+            self.outbox.mark_unknown(scope_key, 0)
+            return Receipt(action.id, "unknown", reason=str(exc))
+        except StandbyError:
+            self.outbox.forget(scope_key, 0)
+            return Receipt(action.id, "refused", reason="delivery refused")
+        self.outbox.mark_sent(scope_key, 0, reference)
+        return Receipt(action.id, "sent", reference)
 
     async def recover(self) -> int:
         """Recovery pass on the primary (ADR-0011 §4.5, ADR-0013 §8)."""
-        cfg = self.config.turns
-        if not cfg.resume or not self._accepting():
-            return 0
-        generation = int(getattr(self.lease, "generation", 0) or 0)
-        rows, dead = await io.run(
-            self.turns.claim_expired,
-            owner=getattr(self.lease, "instance_id", "") or "local",
-            generation=generation,
-            lease_seconds=max(60.0, float(cfg.timeout_seconds) + 30.0),
-            limit=max(1, int(self.config.worker.reaper.batch)),
-            max_attempts=int(cfg.max_attempts),
-            dead_letter_after=min(
-                int(self.config.worker.retry.dead_letter_after),
-                int(self.config.worker.retry.attempts),
-                int(self.config.llm.retry.worker_attempts),
-            ),
-            boot_epoch=self.boot_epoch,
-        )
-        if dead:
-            log.warning("recovery: %d turn(s) abandoned after attempts were exhausted", dead)
-        moment = time.time()
-        self._resume_times = deque(
-            stamp for stamp in self._resume_times if moment - stamp < RESUME_WINDOW
-        )
-        allowed = max(0, int(cfg.max_resume_per_minute) - len(self._resume_times))
-        selected = self._select_resume(rows, allowed)
-        picked = {str(row["id"]) for row in selected}
-        unselected = [str(row["id"]) for row in rows if str(row["id"]) not in picked]
-        if unselected:
-            released = await io.run(self.turns.release, unselected)
-            if released:
-                log.info("recovery: %d turn(s) released for a later pass", released)
-        resumed = 0
-        noticed: set[str] = set()
-        for row in selected:
-            thread = str(row["thread_id"])
-            turn_id = str(row["id"])
-            message = await io.run(self.history.find, thread, turn_id)
-            if message is None:
-                self.turns.expire(turn_id, "resume: message missing")
-                continue
-            age = time.time() - message.when.timestamp()
-            if age > float(cfg.stale_after_seconds):
-                self.turns.expire(turn_id, "resume: stale")
-                continue
-            if age > float(cfg.max_age_seconds) and str(cfg.backlog_policy) not in {
-                "consolidate",
-                "per_message_then_consolidate",
-            }:
-                self.turns.expire(turn_id, "resume: too old")
-                continue
-            gateway = self._gateway_for(thread)
-            if gateway is None:
-                log.warning("recovery: no gateway for chat=%s turn=%s", thread, turn_id)
-                continue
-            downtime = time.time() - float(
-                row.get("previous_updated_at") or row.get("updated_at") or 0.0
-            )
-            if (
-                thread not in noticed
-                and downtime > float(self.config.turns.shutdown.resume_notice.after_seconds)
-            ):
-                noticed.add(thread)
-                with contextlib.suppress(Exception):
-                    await self._notice(
-                        thread,
-                        gateway,
-                        "turn.notice.resumed",
-                        scope_key=f"notice:{thread}:resumed:{self.boot_epoch}",
-                        kind="notice:resumed",
-                    )
-            inbound = Percept(
-                source=gateway.name,
-                thread=thread,
-                actor=str(row.get("person_id") or ""),
-                kind=MESSAGE,
-                payload=message,
-                hints={},
-            )
-            self._resume_times.append(time.time())
-            self.spawn(self.handle(inbound, gateway, claimed=row))
-            resumed += 1
-        if resumed:
-            log.info("recovery resumed %d turn(s)", resumed)
-        return resumed
+        return await supervisor.recover(self)
 
     def start_reaper(self) -> None:
         if self._reaper_task is None or self._reaper_task.done():
@@ -746,7 +692,10 @@ class Agent:
         args: str = "",
         inbound: Percept | None = None,
     ) -> CommandContext:
-        specs = tools_for(self.tools, roles) + (self.hub.specs(roles) if self.hub else [])
+        registry = gateway.name if gateway is not None else ""
+        specs = tools_for(self.tool_index.registry(registry), roles) + (
+            self.hub.specs(roles) if self.hub else []
+        )
         return CommandContext(
             agent=self,
             gateway=gateway,
@@ -760,8 +709,9 @@ class Agent:
             inbound=inbound,
         )
 
-    def _specs(self, roles: tuple[Role, ...]) -> list[Handler]:
-        specs = list(tools_for(self.tools, roles))
+    def _specs(self, roles: tuple[Role, ...], gateway: GatewayCore | None = None) -> list[Handler]:
+        registry = self.tool_index.registry(gateway.name if gateway is not None else "")
+        specs = list(tools_for(registry, roles))
         if self.hub is not None:
             specs += self.hub.specs(roles)
         return specs
@@ -822,13 +772,30 @@ class Agent:
     ) -> None:
         await self.delivery.prepare_media(gateway, thread_id, entry)
 
-    async def send_text(self, thread_id: str, text: str, *, gateway: GatewayCore | None) -> str:
-        return await self.delivery.send_text(thread_id, text, gateway=gateway)
+    async def send_text(
+        self,
+        thread_id: str,
+        text: str,
+        *,
+        gateway: GatewayCore | None,
+        subject: str = "",
+    ) -> str:
+        return await self.delivery.send_text(
+            thread_id, text, gateway=gateway, subject=subject
+        )
 
     async def send_file(
-        self, thread_id: str, path: Path, caption: str = "", *, gateway: GatewayCore | None
+        self,
+        thread_id: str,
+        path: Path,
+        caption: str = "",
+        *,
+        gateway: GatewayCore | None,
+        subject: str = "",
     ) -> str:
-        return await self.delivery.send_file(thread_id, path, caption, gateway=gateway)
+        return await self.delivery.send_file(
+            thread_id, path, caption, gateway=gateway, subject=subject
+        )
 
     # ------------------------------------------------------------- turn
 
@@ -936,6 +903,14 @@ class Agent:
                 category="action" if inbound.hints.get("action") is True else "chat",
                 gateway=getattr(gateway, "name", "") or "",
             )
+        except RouteConflict as conflict:
+            log.warning(
+                "route conflict thread=%s owner=%s claimant=%s",
+                conflict.thread,
+                conflict.owner,
+                conflict.claimant,
+            )
+            return []
         except Exception:
             log.exception(
                 "intake failed chat=%s id=%s: the turn is not processed", thread_id, turn_id
@@ -1278,7 +1253,7 @@ class Agent:
                             inbound,
                         )
                     else:
-                        specs = self._specs(roles)
+                        specs = self._specs(roles, gateway)
                         cross_send = any(spec.name == "send_to" for spec in specs)
                         mood = None
                         if emotion is not None:
@@ -1317,7 +1292,7 @@ class Agent:
                                     thread_id=thread_id,
                                     person_id=inbound.actor,
                                     held_tools=tuple(spec.name for spec in specs),
-                                    catalog_tools=tuple(self.tools.by_name),
+                                    catalog_tools=self.tool_index.names(gateway.name),
                                     max_chars=int(self.config.skills.max_chars),
                                 )
                             except Exception:
@@ -1482,6 +1457,9 @@ class Agent:
                                 decision_reason=decision.reason,
                                 query=message.text,
                                 bonuses=bonuses,
+                                tools=self.tool_index.registry(gateway.name),
+                                commands=self.commands,
+                                bodies=self.tool_index.other_bodies(gateway.name),
                             ),
                             content,
                             specs,
@@ -1604,10 +1582,13 @@ class Agent:
                         humanize=humanize,
                     )
                     actions.extend(sent_actions)
-                    if stop == "superseded":
-                        self._interrupt(turn_id, "superseded", force=True)
+                    if stop.startswith("refused:"):
+                        self._interrupt(
+                            turn_id, f"send refused: {stop.split(':', 1)[1]}", force=True
+                        )
+                        await self._notice_interrupted(turn_id, thread_id, gateway)
                         return actions
-                    if stop == "failed":
+                    if stop.startswith("failed"):
                         self.turns.defer(
                             turn_id,
                             "send failed",
@@ -1700,7 +1681,7 @@ class Agent:
                 return await run_recipe(recipe, args, ctx)
             if self.llm is None:
                 return t("agent.no_llm", self.soul.language)
-            specs = self._specs(roles)
+            specs = self._specs(roles, gateway)
             return await self.llm.run(
                 system_prompt(
                     self.config,
@@ -1708,6 +1689,9 @@ class Agent:
                     runtime=self.runtime,
                     gateway_hints=gateway.prompt_hints(),
                     mode="professional",
+                    tools=self.tool_index.registry(gateway.name),
+                    commands=self.commands,
+                    bodies=self.tool_index.other_bodies(gateway.name),
                 ),
                 f"{recipe.prompt}\n\nArguments: {args}".strip(),
                 specs,

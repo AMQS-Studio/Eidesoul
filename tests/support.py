@@ -546,6 +546,14 @@ def make_agent(
     )
 
 
+def specs(env) -> dict:
+    """Every tool the test's current body may call: core, plugins, and its own (ADR-0032 §4.6)."""
+    index = getattr(env.agent, "tool_index", None)
+    if index is None:
+        return dict(env.agent.tools.by_name)
+    return index.specs(getattr(env.gateway, "name", ""))
+
+
 def inbound_message(
     text: str,
     *,

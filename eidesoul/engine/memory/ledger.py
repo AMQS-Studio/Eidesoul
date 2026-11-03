@@ -159,6 +159,16 @@ class OutboundLedger:
             ).scalar()
         return str(found) if found is not None else "new"
 
+    def reference(self, scope_key: str, chunk_index: int = 0) -> str:
+        """The provider reference the body returned for that delivery ("" when none)."""
+        found = self.db.fetch_one(
+            select(outbound_messages.c.provider_id).where(
+                outbound_messages.c.scope_key == str(scope_key),
+                outbound_messages.c.chunk_index == int(chunk_index),
+            )
+        )
+        return str(found["provider_id"] or "") if found else ""
+
     def mark_sent(self, scope_key: str, chunk_index: int, provider_id: str) -> None:
         with self.db.connect() as conn:
             conn.execute(
@@ -189,6 +199,16 @@ class OutboundLedger:
                     outbound_messages.c.scope_key == str(scope_key),
                     outbound_messages.c.chunk_index == int(chunk_index),
                     outbound_messages.c.status == "intent",
+                )
+            )
+
+    def retry(self, scope_key: str, chunk_index: int = 0) -> None:
+        """Clear one row for an explicit resend; only a policy that allows it calls this."""
+        with self.db.connect() as conn:
+            conn.execute(
+                outbound_messages.delete().where(
+                    outbound_messages.c.scope_key == str(scope_key),
+                    outbound_messages.c.chunk_index == int(chunk_index),
                 )
             )
 

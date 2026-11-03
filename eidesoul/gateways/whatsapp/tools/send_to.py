@@ -126,7 +126,9 @@ def _relay(ctx: ToolContext, thread_id: str, args: dict, text: str):
 async def _deliver_text(
     ctx: ToolContext, thread_id: str, name: str, text: str, grant
 ) -> tuple[str, dict | None]:
-    result = await ctx.agent.send_text(thread_id, text, gateway=ctx.gateway)
+    result = await ctx.agent.send_text(
+        thread_id, text, gateway=ctx.gateway, subject=ctx.person_id or ctx.sender
+    )
     ok = not result.startswith("error:")
     _record(
         ctx, thread_id, name, "text", text if ok else f"failed — {result}", relay=grant, ok=ok
@@ -146,7 +148,9 @@ async def _deliver_text(
 async def _deliver_file(
     ctx: ToolContext, thread_id: str, name: str, path, caption: str, grant
 ) -> tuple[str, dict | None]:
-    result = await ctx.agent.send_file(thread_id, path, caption, gateway=ctx.gateway)
+    result = await ctx.agent.send_file(
+        thread_id, path, caption, gateway=ctx.gateway, subject=ctx.person_id or ctx.sender
+    )
     ok = not result.startswith("error:")
     summary = f"{path.name}{f' — {caption}' if caption else ''}"
     _record(
