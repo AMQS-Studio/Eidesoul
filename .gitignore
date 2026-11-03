@@ -1,5 +1,6 @@
 .env
 .eidesoul/
+.sanka/
 .venv/
 __pycache__/
 *.pyc
