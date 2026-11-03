@@ -165,9 +165,9 @@ lease:
 
 ## 11. Code references
 
-- `eidesoul/engine/lease.py:56-129` — acquire/renew/release.
-- `eidesoul/engine/lease.py:145-163` — freeze.
-- `eidesoul/engine/supervisor.py:36-129` — primary/standby loop.
+- `eidesoul/engine/jobs/lease.py:56-129` — acquire/renew/release.
+- `eidesoul/engine/jobs/lease.py:145-163` — freeze.
+- `eidesoul/engine/jobs/supervisor.py:36-129` — primary/standby loop.
 - `eidesoul/engine/schema.py:270-290` — `engine_lease`, `engine_control`.
 - `eidesoul/engine/db.py:57-86` — create_all/ensure vector.
 

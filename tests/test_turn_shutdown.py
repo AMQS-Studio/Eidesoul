@@ -8,7 +8,7 @@ from sqlalchemy import text
 from support import make_agent, make_runtime
 
 from eidesoul.engine.config import ConfigError
-from eidesoul.engine.supervisor import Supervisor
+from eidesoul.engine.jobs.supervisor import Supervisor
 
 
 class FakeLease:

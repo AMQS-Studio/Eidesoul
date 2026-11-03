@@ -418,7 +418,7 @@ automations:
 - `eidesoul/engine/tools/__init__.py:180-235` — the single permission door `execute` + permission check.
 - `eidesoul/engine/access/approvals.py` + `eidesoul/engine/commands/approve.py` — approval and authority recheck.
 - `eidesoul/engine/stores/recipes.py` — `run_recipe` as the `recipe` step.
-- `eidesoul/engine/ambient.py:1-4,103-160` — the autonomy limit (never greets first).
+- `eidesoul/engine/jobs/ambient.py:1-4,103-160` — the autonomy limit (never greets first).
 - `eidesoul/engine/memory/mem0.py:308-392` — memory-write metadata (`source`, `owner_id`, `subject_id`).
 - `eidesoul/engine/agent.py:440-460,600-640,900-918` — turn lane, memory block, capture gate.
 - `eidesoul/engine/guard/policy.py:198-215` — deterministic policy patterns before the small models.

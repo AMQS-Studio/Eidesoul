@@ -9,7 +9,7 @@ import logging
 import time
 from datetime import date, datetime
 
-from .stores.currents import TTL_SECONDS, CurrentsStore
+from ..stores.currents import TTL_SECONDS, CurrentsStore
 
 log = logging.getLogger(__name__)
 

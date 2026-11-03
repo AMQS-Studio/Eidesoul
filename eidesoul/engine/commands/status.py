@@ -237,7 +237,7 @@ def _metrics_lines(agent, lang: str, now: float) -> list[str]:
 
 
 def _body_lines(ctx: CommandContext, agent, lang: str, now: float) -> list[str]:
-    from ..automation import automation_counters
+    from ..jobs.automation import automation_counters
     from ..memory import memory_status
 
     lines: list[str] = []

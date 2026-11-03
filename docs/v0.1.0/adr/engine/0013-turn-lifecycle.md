@@ -319,7 +319,7 @@ Key meaning:
 - `eidesoul/engine/agent.py:413-926` — `handle` without a checkpoint.
 - `eidesoul/engine/agent.py:145-147` — `answered`/`backlog`/`quiet` in memory.
 - `eidesoul/engine/agent.py:881-905` — the chunk delivery loop and the `answered` marking.
-- `eidesoul/engine/supervisor.py:36-129` — shutdown/primary lifecycle.
+- `eidesoul/engine/jobs/supervisor.py:36-129` — shutdown/primary lifecycle.
 - `eidesoul/gateways/` — the intake that must be stopped while draining (outside the core; the core does not import it).
 - `eidesoul/engine/tools/__init__.py:182-240` — the single execution door (the idempotence classification point).
 

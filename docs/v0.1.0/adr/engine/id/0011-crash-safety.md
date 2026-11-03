@@ -1,4 +1,4 @@
-> Terjemahan turunan — jangan sunting; sumber: engine/0011-crash-safety.md (sha256: 5fc222f7042c)
+> Terjemahan turunan — jangan sunting; sumber: engine/0011-crash-safety.md (sha256: 83e00e414d33)
 > Teks ini ditulis manusia; baris yang tidak bisa diterjemahkan mesin disalin apa adanya ke sumber English, jadi sumber bercampur dua bahasa.
 
 # ADR-0011: Crash Safety & Durability — Antrean Transaksional, Klaim Job, Shutdown Rapi
@@ -171,8 +171,8 @@ turns:
 - `eidesoul/engine/agent.py:917-921` — spawn capture.
 - `eidesoul/engine/turn/context.py:210-225` — `WorkingMemory.append` fail-open.
 - `eidesoul/engine/db.py:95-145` — `connect`, `upsert`.
-- `eidesoul/engine/supervisor.py:36-129` — lifecycle primary/standby.
-- `eidesoul/engine/lease.py:103-129` — renew/release.
+- `eidesoul/engine/jobs/supervisor.py:36-129` — lifecycle primary/standby.
+- `eidesoul/engine/jobs/lease.py:103-129` — renew/release.
 - `eidesoul/engine/tools/shell.py:13-18` — subprocess tanpa process group.
 
 ---

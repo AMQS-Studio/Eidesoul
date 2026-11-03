@@ -6,8 +6,8 @@ from datetime import datetime, timedelta
 
 from support import FakeLLM, build_config, database
 
-from eidesoul.engine.ambient import Ambient, drift
 from eidesoul.engine.config import AffectConfig
+from eidesoul.engine.jobs.ambient import Ambient, drift
 from eidesoul.engine.stores.affect import AffectStore
 from eidesoul.engine.stores.history import HistoryStore
 from eidesoul.engine.turn.context import Message

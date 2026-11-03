@@ -1,4 +1,4 @@
-> Terjemahan turunan — jangan sunting; sumber: engine/0017-turn-isolation-timeout.md (sha256: bca424354b5e)
+> Terjemahan turunan — jangan sunting; sumber: engine/0017-turn-isolation-timeout.md (sha256: 40b63131650e)
 > Teks ini ditulis manusia; baris yang tidak bisa diterjemahkan mesin disalin apa adanya ke sumber English, jadi sumber bercampur dua bahasa.
 
 # ADR-0017: Isolasi Turn, Batas Waktu, dan Gerbang Primary
@@ -183,8 +183,8 @@ Tidak ada kunci baru untuk shutdown: `grace_seconds`/`drain_seconds`/`notice_sec
 - `eidesoul/engine/agent.py:143,413,448,1066` — lock global, `handle()`, titik tunggu lock, gather shutdown.
 - `eidesoul/engine/db.py:53,95` — `create_engine` dan `connect()` sinkron (seam offload).
 - `eidesoul/engine/embed.py:53-62` — `encode` sinkron.
-- `eidesoul/engine/supervisor.py:62,111` — penulisan `mode` primary/standby.
-- `eidesoul/engine/lease.py:56-101` — `acquire`/`renew` (pemilik `generation`).
+- `eidesoul/engine/jobs/supervisor.py:62,111` — penulisan `mode` primary/standby.
+- `eidesoul/engine/jobs/lease.py:56-101` — `acquire`/`renew` (pemilik `generation`).
 - `eidesoul/engine/guard/sandbox.py:168` — preseden `asyncio.wait_for` untuk pekerjaan berbatas.
 - `eidesoul/engine/llm.py:122-128` — client `AsyncOpenAI(timeout=...)`; `:165-169` — `run_budget_seconds` dihitung per `run()` (dasar pemisahan dua lapis).
 - `eidesoul/gateways/cli/gateway.py:81`, `eidesoul/gateways/whatsapp/gateway.py:124` — dua pemanggil `handle()`.

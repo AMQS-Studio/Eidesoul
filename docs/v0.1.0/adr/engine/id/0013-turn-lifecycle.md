@@ -1,4 +1,4 @@
-> Terjemahan turunan — jangan sunting; sumber: engine/0013-turn-lifecycle.md (sha256: abb98423ae2f)
+> Terjemahan turunan — jangan sunting; sumber: engine/0013-turn-lifecycle.md (sha256: a7245feec7db)
 > Teks ini ditulis manusia; baris yang tidak bisa diterjemahkan mesin disalin apa adanya ke sumber English, jadi sumber bercampur dua bahasa.
 
 # ADR-0013: Turn Lifecycle, Resume, Backlog & Notice
@@ -326,7 +326,7 @@ Makna kunci:
 - `eidesoul/engine/agent.py:413-926` — `handle` tanpa checkpoint.
 - `eidesoul/engine/agent.py:145-147` — `answered`/`backlog`/`quiet` in-memory.
 - `eidesoul/engine/agent.py:881-905` — loop pengiriman chunk dan penandaan `answered`.
-- `eidesoul/engine/supervisor.py:36-129` — lifecycle shutdown/primary.
+- `eidesoul/engine/jobs/supervisor.py:36-129` — lifecycle shutdown/primary.
 - `eidesoul/gateways/` — intake yang harus dihentikan saat draining (di luar core; core tidak mengimpornya).
 - `eidesoul/engine/tools/__init__.py:182-240` — satu pintu eksekusi (titik klasifikasi idempotensi).
 

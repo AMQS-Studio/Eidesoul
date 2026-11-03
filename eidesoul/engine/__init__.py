@@ -1,19 +1,26 @@
-"""Core Eidesoul: agent, config, database, turn, access, store, tool, command. Tanpa gateway."""
+"""The engine, mapped by domain (ADR-0031 §4.3).
 
+Top level holds the handle and the seams; every other module lives in the folder that owns its
+reason to change::
 
-from . import agent, commands, config, db, schema, stores, tools
-from .access import roles
-from .turn import context, prompts
+    agent.py          the handle: one turn, one orchestration
+    inbound.py        the body seam: Percept, Action, the protocols, refusal
+    plugins.py        plugin loader (manifest, digest, one import)
+    registry.py       Handler and Registry: the discovery contract
+    llm.py            the model client, tool loop, cost rows
+    config.py  db.py  schema.py  soul.py     configuration, storage, soul
+    embed.py  i18n.py  io.py  runtime.py  self_knowledge.py
 
-__all__ = [
-    "agent",
-    "commands",
-    "config",
-    "context",
-    "db",
-    "prompts",
-    "roles",
-    "schema",
-    "stores",
-    "tools",
-]
+    turn/       one message becomes one reply: context, decision, assembly, salience,
+                prompts, reply, observability
+    character/  persona data resolution: character, knowledge, lexicon, patterns
+    access/     who may do what: roles, permissions, identity, privacy, approvals,
+                relay, target
+    jobs/       background work and lifecycle: cognition, automation, supervisor,
+                lease, ambient, currents, mcp
+    memory/  stores/  tools/  commands/  guard/     fixed contracts, unchanged
+
+A module has one reason to change and stays at or below 800 lines (ADR-0031 §4.1); the growth
+budget in §4.5 says a new engine module replaces one, splits an oversized one, or the ADR that
+introduces it names the reason.
+"""

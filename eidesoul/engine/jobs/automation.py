@@ -33,12 +33,12 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from sqlalchemy import func, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
-from . import io
-from .access.relay import RelayStore
-from .config import AutomationConfig, parse_quiet_hours
-from .db import Database
-from .i18n import t
-from .schema import (
+from .. import io
+from ..access.relay import RelayStore
+from ..config import AutomationConfig, parse_quiet_hours
+from ..db import Database
+from ..i18n import t
+from ..schema import (
     AUTOMATION_STATES,
     AUTOMATION_STEP_KINDS,
     AUTOMATION_TERMINAL,
@@ -46,8 +46,8 @@ from .schema import (
     automation_state_log,
     automations,
 )
-from .tools import execute
-from .turn import observability
+from ..tools import execute
+from ..turn import observability
 
 log = logging.getLogger(__name__)
 
@@ -1748,7 +1748,7 @@ class AutomationWorker:
     async def _compose(self, step: dict, automation: dict, facts: dict) -> None:
         if self.agent.llm is None:
             raise StepError("compose needs the LLM", transient=False)
-        from .turn.prompts import system_prompt
+        from ..turn.prompts import system_prompt
 
         owner = str(automation["owner"])
         roles = self.agent.config.roles.for_person(owner)
@@ -1835,7 +1835,7 @@ class AutomationWorker:
         gateway = self._gateway(self._thread_gateway(target))
         if gateway is None:
             raise StepError("no gateway is available for send", transient=False)
-        from .turn.reply import split_text
+        from ..turn.reply import split_text
 
         body = str(text)
         if attribution:
@@ -1931,7 +1931,7 @@ class AutomationWorker:
         roles = self.agent.config.roles.for_person(str(automation["owner"]))
         if not ({role.name for role in roles} & set(recipe.roles)):
             raise StepError("recipe is not allowed for the owner", transient=False)
-        from .stores.recipes import run_recipe
+        from ..stores.recipes import run_recipe
 
         ctx = self._tool_context(automation, facts)
         result = await run_recipe(recipe, str(step.get("args") or ""), ctx)

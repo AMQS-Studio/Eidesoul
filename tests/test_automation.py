@@ -12,7 +12,7 @@ from support import inbound_message, make_agent
 
 from eidesoul.engine.access.relay import RelayStore
 from eidesoul.engine.access.roles import Role
-from eidesoul.engine.automation import (
+from eidesoul.engine.jobs.automation import (
     AutomationStore,
     AutomationWorker,
     ManifestError,
@@ -407,7 +407,7 @@ def test_clean_shutdown_marks_interrupted_and_boot_resumes_it(tmp_path) -> None:
 
 def test_describe_names_event_steps_and_policy(tmp_path) -> None:
     env = build(tmp_path)
-    from eidesoul.engine.automation import validate_manifest
+    from eidesoul.engine.jobs.automation import validate_manifest
 
     described = describe(validate_manifest(manifest(), env.agent.config.automations))
     assert "at 10:00" in described

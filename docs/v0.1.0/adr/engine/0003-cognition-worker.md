@@ -1,7 +1,7 @@
 # ADR-0003: Cognition Worker & Model Batching — Gate vs Label Boundary
 
 - **Status:** accepted
-- **Implementation:** implemented — evidence: `cognition_jobs` (revision 5), `eidesoul/engine/cognition.py` queue + worker, `FOR UPDATE SKIP LOCKED` claim, reaper, backoff + dead-letter, intake enqueue in the same transaction, supervisor lifecycle, `tests/test_cognition.py`
+- **Implementation:** implemented — evidence: `cognition_jobs` (revision 5), `eidesoul/engine/jobs/cognition.py` queue + worker, `FOR UPDATE SKIP LOCKED` claim, reaper, backoff + dead-letter, intake enqueue in the same transaction, supervisor lifecycle, `tests/test_cognition.py`
 - **Date:** 2026-11-01
 - **Deciders:** Muqsith (owner), omp (reviewer)
 - **Context:** follow-up to ADR-0001 (canonical + Mem0 adapter) and ADR-0002 (capture gate + assess batch); the default-on memory plan
@@ -249,7 +249,7 @@ The agreed default: **quick consolidation every 60 seconds, deep reflection ever
 - `eidesoul/engine/access/privacy.py:141-214` — `review` (auditor) as the current gate.
 - `eidesoul/engine/guard/policy.py:200-213` — deterministic policy that stays inline.
 - `eidesoul/engine/tools/__init__.py:182-240` — the single tool execution door.
-- `eidesoul/engine/supervisor.py:36-129` — primary/standby lifecycle, the parent of worker C.
+- `eidesoul/engine/jobs/supervisor.py:36-129` — primary/standby lifecycle, the parent of worker C.
 - `eidesoul/engine/stores/affect.py` — a worker/state-document pattern that can be copied.
 - `eidesoul/engine/config.py:130-138` — `MemoryConfig` for the worker knobs.
 

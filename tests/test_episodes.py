@@ -6,7 +6,7 @@ import time
 
 from support import build_config, database
 
-from eidesoul.engine.cognition import CognitionWorker
+from eidesoul.engine.jobs.cognition import CognitionWorker
 from eidesoul.engine.memory import episodes
 from eidesoul.engine.memory.store import MemoryStore
 from eidesoul.engine.schema import message_media, messages, turn_steps, turns

@@ -7,7 +7,7 @@ import time
 
 from support import build_config, database
 
-from eidesoul.engine.cognition import CognitionWorker
+from eidesoul.engine.jobs.cognition import CognitionWorker
 from eidesoul.engine.memory import efficiency
 from eidesoul.engine.memory.ledger import ActionLedger
 from eidesoul.engine.memory.store import MemoryStore
@@ -272,7 +272,7 @@ def test_propose_automation_creates_an_approval_and_no_row(tmp_path) -> None:
             }
         ]
     )
-    from eidesoul.engine.automation import AutomationStore
+    from eidesoul.engine.jobs.automation import AutomationStore
 
     store = AutomationStore(db, env.agent.config.automations)
 

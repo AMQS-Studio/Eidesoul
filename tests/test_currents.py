@@ -6,7 +6,7 @@ import time
 
 from support import database
 
-from eidesoul.engine.currents import ITEM_CHARS, TOPICS, YEAR, format_block, query, refresh
+from eidesoul.engine.jobs.currents import ITEM_CHARS, TOPICS, YEAR, format_block, query, refresh
 from eidesoul.engine.stores.currents import TTL_SECONDS, CurrentsStore
 
 

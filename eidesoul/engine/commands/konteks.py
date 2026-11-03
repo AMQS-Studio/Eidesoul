@@ -3,8 +3,8 @@
 
 import time
 
-from ..currents import refresh
 from ..i18n import t
+from ..jobs.currents import refresh
 from ..registry import Handler
 from ..tools import execute
 from . import CommandContext

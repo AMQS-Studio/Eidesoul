@@ -62,6 +62,6 @@ class CurrentsStore:
             )
 
     def block(self, now: float, limit: int = 6) -> str:
-        from ..currents import format_block
+        from ..jobs.currents import format_block
 
         return format_block(self.load(), now, limit)

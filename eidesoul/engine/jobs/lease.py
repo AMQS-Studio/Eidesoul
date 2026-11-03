@@ -15,7 +15,7 @@ from dataclasses import dataclass
 
 from sqlalchemy import text
 
-from .db import Database
+from ..db import Database
 
 log = logging.getLogger(__name__)
 

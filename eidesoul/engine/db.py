@@ -146,7 +146,7 @@ class Database:
         """Refuse when another instance is a live primary; a standby never migrates."""
         from sqlalchemy.exc import SQLAlchemyError
 
-        from .lease import TTL
+        from .jobs.lease import TTL
 
         try:
             row = self.fetch_one(

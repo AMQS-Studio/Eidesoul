@@ -17,7 +17,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from eidesoul.engine import ablate
+from ablate_engine import ABLATABLE, classify, decision_shift, prompt_budget, replay_metrics
+
 from eidesoul.engine.config import load_config, load_env, load_host, resolve_database_url
 from eidesoul.engine.db import Database
 from eidesoul.engine.llm import LLM
@@ -27,6 +28,7 @@ from eidesoul.engine.stores.documents import DocumentStore
 from eidesoul.engine.stores.history import HistoryStore
 from eidesoul.engine.stores.skills import SkillStore
 from eidesoul.engine.stores.style import StyleStore
+from eidesoul.engine.turn import salience
 
 
 def open_stores(config, db, memory) -> dict:
@@ -49,7 +51,7 @@ def blocks_for(chat: str, stores: dict):
     style = stores.get("style")
 
     def build(message) -> dict:
-        blocks = dict.fromkeys(ablate.salience.COMPETING, "")
+        blocks = dict.fromkeys(salience.COMPETING, "")
         if memory is not None and getattr(memory, "available", False):
             with suppress(Exception):
                 blocks["memory"] = asyncio.run(
@@ -127,7 +129,7 @@ def main() -> int:
     args = parser.parse_args()
 
     names = tuple(name.strip() for name in args.ablate.split(",") if name.strip())
-    unknown = [name for name in names if name not in ablate.ABLATABLE]
+    unknown = [name for name in names if name not in ABLATABLE]
     if unknown:
         raise SystemExit(f"blocks cannot be ablated: {', '.join(unknown)}")
     if args.llm_sample < 0 or args.last <= 0:
@@ -151,11 +153,11 @@ def main() -> int:
     if not messages:
         db.dispose()
         raise SystemExit(f"chat {chat} has no messages in the archive")
-    rows = ablate.classify(messages, bot_name=config.soul.name)
+    rows = classify(messages, bot_name=config.soul.name)
     memory = asyncio.run(build_memory(config, db=db))
     stores = open_stores(config, db, memory)
     try:
-        budget = ablate.prompt_budget(
+        budget = prompt_budget(
             config,
             messages,
             sample=0,
@@ -170,7 +172,7 @@ def main() -> int:
                 )
             else:
                 shift = asyncio.run(
-                    ablate.decision_shift(
+                    decision_shift(
                         LLM(config),
                         config,
                         rows,
@@ -182,11 +184,11 @@ def main() -> int:
                         direct=not chat.endswith("@g.us"),
                     )
                 )
-        print(report(chat, ablate.replay_metrics(rows), budget, shift))
+        print(report(chat, replay_metrics(rows), budget, shift))
         if args.json is not None:
             payload = {
                 "chat": chat,
-                "replay": ablate.replay_metrics(rows),
+                "replay": replay_metrics(rows),
                 "prompt_budget": budget,
                 "decision_shift": shift,
             }

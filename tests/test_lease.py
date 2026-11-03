@@ -9,8 +9,8 @@ import pytest
 from sqlalchemy import select, text
 from support import database
 
-from eidesoul.engine import lease as lease_module
-from eidesoul.engine.lease import Lease, Superseded
+from eidesoul.engine.jobs import lease as lease_module
+from eidesoul.engine.jobs.lease import Lease, Superseded
 from eidesoul.engine.schema import actions
 
 

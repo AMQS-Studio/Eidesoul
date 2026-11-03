@@ -1,4 +1,4 @@
-> Terjemahan turunan — jangan sunting; sumber: engine/0010-reflection-disputed.md (sha256: 13b4c457a77c)
+> Terjemahan turunan — jangan sunting; sumber: engine/0010-reflection-disputed.md (sha256: 31e4a1721961)
 > Teks ini ditulis manusia; baris yang tidak bisa diterjemahkan mesin disalin apa adanya ke sumber English, jadi sumber bercampur dua bahasa.
 
 # ADR-0010: Reflection, Kontradiksi & Status `disputed`
@@ -352,7 +352,7 @@ Kunci ini bagian dari dokumen `engine` (seed `config.yaml`, mirror di DB); mengu
 
 ## 10. Referensi kode
 
-- `eidesoul/engine/ambient.py:1-4`, `:103-200`, `:203-315` — loop menganggur yang ada; batas “tidak pernah
+- `eidesoul/engine/jobs/ambient.py:1-4`, `:103-200`, `:203-315` — loop menganggur yang ada; batas “tidak pernah
   mengirim pesan” dan bentuk tulisan `scope=chat, kind=note, source=ambient:<thread_id>`.
 - `eidesoul/engine/config.py:236-252` — `AmbientConfig` (preseden kunci anggaran: `tick_seconds`,
   `idle_minutes`, `research_per_day`).

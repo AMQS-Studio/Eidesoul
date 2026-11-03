@@ -1,10 +1,10 @@
-> Terjemahan turunan — jangan sunting; sumber: engine/0003-cognition-worker.md (sha256: f39cb28607a7)
+> Terjemahan turunan — jangan sunting; sumber: engine/0003-cognition-worker.md (sha256: 6665e5debde0)
 > Teks ini ditulis manusia; baris yang tidak bisa diterjemahkan mesin disalin apa adanya ke sumber English, jadi sumber bercampur dua bahasa.
 
 # ADR-0003: Cognition Worker & Model Batching — Batas Gate vs Label
 
 - **Status:** accepted
-- **Implementasi:** implemented — bukti: `cognition_jobs` (revisi 5), antrean + worker `eidesoul/engine/cognition.py`, klaim `FOR UPDATE SKIP LOCKED`, reaper, backoff + dead-letter, enqueue intake dalam transaksi yang sama, siklus supervisor, `tests/test_cognition.py`
+- **Implementasi:** implemented — bukti: `cognition_jobs` (revisi 5), antrean + worker `eidesoul/engine/jobs/cognition.py`, klaim `FOR UPDATE SKIP LOCKED`, reaper, backoff + dead-letter, enqueue intake dalam transaksi yang sama, siklus supervisor, `tests/test_cognition.py`
 - **Tanggal:** 2026-11-01
 - **Deciders:** Muqsith (owner), omp (reviewer)
 - **Konteks:** lanjutan ADR-0001 (canonical + Mem0 adapter) dan ADR-0002 (gate capture + assess batch); rencana memori default-on
@@ -253,7 +253,7 @@ Default yang disepakati: **konsolidasi cepat tiap 60 detik, deep reflection tiap
 - `eidesoul/engine/access/privacy.py:141-214` — `review` (auditor) sebagai gate saat ini.
 - `eidesoul/engine/guard/policy.py:200-213` — policy deterministik yang tetap inline.
 - `eidesoul/engine/tools/__init__.py:182-240` — satu pintu eksekusi tool.
-- `eidesoul/engine/supervisor.py:36-129` — lifecycle primary/standby yang menjadi induk worker C.
+- `eidesoul/engine/jobs/supervisor.py:36-129` — lifecycle primary/standby yang menjadi induk worker C.
 - `eidesoul/engine/stores/affect.py` — pola worker/state document yang bisa ditiru.
 - `eidesoul/engine/config.py:130-138` — `MemoryConfig` untuk knob worker.
 

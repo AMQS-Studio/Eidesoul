@@ -1,4 +1,4 @@
-> Terjemahan turunan — jangan sunting; sumber: engine/0014-automation.md (sha256: f026b929a0de)
+> Terjemahan turunan — jangan sunting; sumber: engine/0014-automation.md (sha256: 66c150ed47ec)
 > Teks ini ditulis manusia; baris yang tidak bisa diterjemahkan mesin disalin apa adanya ke sumber English, jadi sumber bercampur dua bahasa.
 
 # ADR-0014: Automation — Event → Aksi, Wewenang Pemilik, dan Sandbox sebagai Langkah
@@ -511,7 +511,7 @@ automations:
 - `eidesoul/engine/tools/__init__.py:180-235` — satu pintu `execute` + pemeriksaan permission.
 - `eidesoul/engine/access/approvals.py` + `eidesoul/engine/commands/approve.py` — approval dan pemeriksaan ulang wewenang.
 - `eidesoul/engine/stores/recipes.py` — `run_recipe` sebagai langkah `recipe`.
-- `eidesoul/engine/ambient.py:1-4,103-160` — batas otonomi yang ada (tidak pernah menyapa lebih dulu).
+- `eidesoul/engine/jobs/ambient.py:1-4,103-160` — batas otonomi yang ada (tidak pernah menyapa lebih dulu).
 - `eidesoul/engine/memory/mem0.py:308-392` — metadata penulisan memori (`source`, `owner_id`, `subject_id`).
 - `eidesoul/engine/agent.py:440-460,600-640,900-918` — jalur turn, blok memori, gerbang capture.
 - `eidesoul/engine/guard/policy.py:198-215` — pola kebijakan deterministik sebelum model kecil.

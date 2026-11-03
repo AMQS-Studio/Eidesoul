@@ -11,8 +11,8 @@ from sqlalchemy import text as sql
 from support import FakeLLM, build_config, database
 
 from eidesoul.admin import templates
-from eidesoul.engine.cognition import CognitionQueue, CognitionWorker
-from eidesoul.engine.lease import Lease
+from eidesoul.engine.jobs.cognition import CognitionQueue, CognitionWorker
+from eidesoul.engine.jobs.lease import Lease
 from eidesoul.engine.memory import gate
 from eidesoul.engine.memory.store import MemoryStore
 from eidesoul.engine.stores.history import HistoryStore

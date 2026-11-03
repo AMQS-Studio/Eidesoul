@@ -10,9 +10,9 @@ from functools import partial
 from mcp import Client, StdioServerParameters
 from mcp.types import TextContent
 
-from .access.permissions import tool_allowed
-from .config import MCPServerConfig
-from .registry import Handler
+from ..access.permissions import tool_allowed
+from ..config import MCPServerConfig
+from ..registry import Handler
 
 log = logging.getLogger(__name__)
 

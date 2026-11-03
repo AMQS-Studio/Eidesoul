@@ -99,7 +99,7 @@ max-complexity = 12
 # The list is per file on purpose, so a new module is still held to the rule.
 "eidesoul/__main__.py" = ["C901", "PLR0912", "PLR0915"]
 "eidesoul/engine/agent.py" = ["C901", "PLR0912", "PLR0915"]
-"eidesoul/engine/ambient.py" = ["C901", "PLR0912"]
+"eidesoul/engine/jobs/ambient.py" = ["C901", "PLR0912"]
 "eidesoul/engine/commands/approve.py" = ["C901", "PLR0912", "PLR0915"]
 "eidesoul/engine/commands/help.py" = ["C901", "PLR0912"]
 "eidesoul/engine/commands/memori.py" = ["C901", "PLR0912"]
@@ -117,6 +117,7 @@ max-complexity = 12
 "eidesoul/gateways/whatsapp/tools/chat_history.py" = ["C901", "PLR0912"]
 "eidesoul/gateways/whatsapp/tools/send_to.py" = ["C901", "PLR0912"]
 "scripts/ablate.py" = ["PLR0915"]
+"scripts/ablate_engine.py" = ["PLR0915"]
 
 [tool.coverage.run]
 branch = true

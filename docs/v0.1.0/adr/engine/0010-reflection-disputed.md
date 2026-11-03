@@ -349,7 +349,7 @@ payload; `refs`/row ids still do not enter the user prompt.
 
 ## 10. Code references
 
-- `eidesoul/engine/ambient.py:1-4`, `:103-200`, `:203-315` — the idle loop that exists; the limit "never
+- `eidesoul/engine/jobs/ambient.py:1-4`, `:103-200`, `:203-315` — the idle loop that exists; the limit "never
 sends a message" and the write shape `scope=chat, kind=note, source=ambient:<thread_id>`.
 - `eidesoul/engine/config.py:236-252` — `AmbientConfig` (precedent for budget keys: `tick_seconds`,
 `idle_minutes`, `research_per_day`).

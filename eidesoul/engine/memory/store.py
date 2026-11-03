@@ -23,7 +23,7 @@ from .. import io
 from ..config import PrivacyConfig
 from ..db import Database
 from ..guard import SENSITIVE, is_crisis, is_injection
-from ..lease import Superseded
+from ..jobs.lease import Superseded
 from ..schema import (
     memories,
     memories_readable,

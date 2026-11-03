@@ -167,7 +167,7 @@ def test_a_pass_reports_the_pairs_it_opened(tmp_path) -> None:
 
 
 def test_the_worker_asks_one_question_per_pass(tmp_path) -> None:
-    from eidesoul.engine.cognition import CognitionWorker, Job
+    from eidesoul.engine.jobs.cognition import CognitionWorker, Job
 
     memory = store(tmp_path)
     write(memory, "aku suka kopi")

@@ -177,8 +177,8 @@ No new keys for shutdown: `grace_seconds`/`drain_seconds`/`notice_seconds` remai
 - `eidesoul/engine/agent.py:143,413,448,1066` — global lock, `handle()`, lock wait point, gather on shutdown.
 - `eidesoul/engine/db.py:53,95` — `create_engine` and the synchronous `connect()` (offload seam).
 - `eidesoul/engine/embed.py:53-62` — synchronous `encode`.
-- `eidesoul/engine/supervisor.py:62,111` — where `mode` primary/standby is written.
-- `eidesoul/engine/lease.py:56-101` — `acquire`/`renew` (owner of `generation`).
+- `eidesoul/engine/jobs/supervisor.py:62,111` — where `mode` primary/standby is written.
+- `eidesoul/engine/jobs/lease.py:56-101` — `acquire`/`renew` (owner of `generation`).
 - `eidesoul/engine/guard/sandbox.py:168` — precedent for `asyncio.wait_for` around bounded work.
 - `eidesoul/engine/llm.py:122-128` — `run()` client `AsyncOpenAI(timeout=...)`; `:165-169` `run_budget_seconds` counted per `run()` (basis for the two-layer split).
 - `eidesoul/gateways/cli/gateway.py:81`, `eidesoul/gateways/whatsapp/gateway.py:124` — the two callers of `handle()`.

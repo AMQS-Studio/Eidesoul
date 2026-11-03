@@ -189,7 +189,7 @@ ADR-0009 governs where these decisions live and gates the copies. ADR-0016 is un
 - `eidesoul/engine/turn/reply.py` — receives the delivery helpers.
 - `eidesoul/engine/runtime.py` — receives the capability counters.
 - `eidesoul/engine/memory/store.py` — the single port; statements move to `memory/queries.py`.
-- `eidesoul/engine/automation.py` — second delivery copy removed in §4.2.
+- `eidesoul/engine/jobs/automation.py` — second delivery copy removed in §4.2.
 - `eidesoul/admin/templates.py` — defaults derived from the dataclass tree in §4.6.
 - `scripts/adr.py` — `--stamp` in §4.6.
 - `scripts/selfcheck.py` — reports the module count and over-size modules in §6.

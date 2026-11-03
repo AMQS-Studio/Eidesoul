@@ -1,9 +1,14 @@
 """Ablation harness contract: replay gates from the archive without touching runtime."""
 
 
+import sys
 from datetime import datetime
+from pathlib import Path
 
-from eidesoul.engine.ablate import classify, replay_metrics
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
+
+from ablate_engine import classify, replay_metrics
+
 from eidesoul.engine.turn.context import Message, Quote
 
 BOT = "eidesoul"

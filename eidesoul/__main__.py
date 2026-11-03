@@ -56,12 +56,13 @@ async def build_runtime(config_path: str | None, *, console: bool = False):
     """Required bootstrap: host -> DB -> documents -> config -> stores -> gateways -> agent."""
     from .engine.access.roles import RoleError
     from .engine.agent import Agent
-    from .engine.ambient import Ambient
     from .engine.config import load_host, resolve_database_url
     from .engine.db import Database
-    from .engine.lease import Lease, lock_data_dir
+    from .engine.jobs.ambient import Ambient
+    from .engine.jobs.lease import Lease, lock_data_dir
+    from .engine.jobs.mcp import Hub
+    from .engine.jobs.supervisor import Supervisor
     from .engine.llm import LLM
-    from .engine.mcp import Hub
     from .engine.memory import build_memory
     from .engine.memory.ledger import ActionLedger
     from .engine.stores.affect import AffectStore
@@ -72,7 +73,6 @@ async def build_runtime(config_path: str | None, *, console: bool = False):
     from .engine.stores.skills import SkillStore
     from .engine.stores.style import StyleStore
     from .engine.stores.vibe import VibeRunner
-    from .engine.supervisor import Supervisor
     from .engine.turn.context import WorkingMemory
     from .gateways import build_gateways, ensure_schemas
 
@@ -163,7 +163,7 @@ async def build_runtime(config_path: str | None, *, console: bool = False):
 
 
 async def serve(config_path: str | None, *, console: bool = False, takeover: bool = False) -> int:
-    from .engine.lease import Lease
+    from .engine.jobs.lease import Lease
 
     runtime = await build_runtime(config_path, console=console)
     agent = runtime["agent"]
@@ -287,8 +287,8 @@ async def selftest(config: Config) -> int:
     from .engine.commands import REGISTRY as COMMANDS
     from .engine.db import Database
     from .engine.i18n import t
+    from .engine.jobs.mcp import Hub
     from .engine.llm import LLM
-    from .engine.mcp import Hub
     from .engine.memory import MemoryHit, build_memory, memory_status
     from .engine.memory.ledger import ActionLedger
     from .engine.stores.affect import AffectStore

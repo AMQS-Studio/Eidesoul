@@ -25,6 +25,18 @@ Hard rules for changes in this repo.
 - Allowed root trees are `docs/`, `scripts/`, `tests/`, `migrations/`, `plugins/`, `panel/`
   (the operator app), and `apps/` (any future application that imports the engine). Schema changes live only in `migrations/`; the engine may hold
   `plugins.py` (plugin loader) and `self_knowledge.py` (capability index) beside its other modules.
+- The engine tree is the one in ADR-0031 §4.3. The top level is 15 files — `agent.py` (the handle),
+  `inbound.py` (the body seam), `plugins.py`, `registry.py`, `llm.py`, `config.py`, `db.py`,
+  `schema.py`, `embed.py`, `i18n.py`, `io.py`, `runtime.py`, `soul.py`, `self_knowledge.py`, and
+  `__init__.py` (a written map, no imports). Everything else lives in the folder that owns its reason
+  to change: `turn/` (context, decision, assembly, salience, prompts, reply, observability),
+  `character/` (character, knowledge, lexicon, patterns), `access/` (roles, permissions, identity,
+  privacy, approvals, relay, target), `jobs/` (cognition, automation, supervisor, lease, ambient,
+  currents, mcp), plus the fixed contracts `memory/`, `stores/`, `tools/`, `commands/`, `guard/`.
+  `ablate.py` is a research tool, not engine code: it lives at `scripts/ablate_engine.py`.
+- A module has one reason to change and stays at or below 800 lines; a stateful module above that
+  needs a line in the ADR that introduces it (ADR-0031 §4.1). A new engine module is allowed when it
+  replaces one, splits a module over the cap, or the ADR names the reason (§4.5).
 - Core lives in `eidesoul/engine/` and must not import `eidesoul.gateways` or `neonize`.
   Root `eidesoul/` only holds `__main__.py`, `admin/`, `gateways/`, `library/`, `lang/`, `providers/`,
   `vendor/`.

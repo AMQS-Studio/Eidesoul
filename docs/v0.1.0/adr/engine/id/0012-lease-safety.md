@@ -1,4 +1,4 @@
-> Terjemahan turunan — jangan sunting; sumber: engine/0012-lease-safety.md (sha256: 36f681ebae8c)
+> Terjemahan turunan — jangan sunting; sumber: engine/0012-lease-safety.md (sha256: 2522f3942819)
 > Teks ini ditulis manusia; baris yang tidak bisa diterjemahkan mesin disalin apa adanya ke sumber English, jadi sumber bercampur dua bahasa.
 
 # ADR-0012: Lease Safety — CAS, Fencing Token, dan Jam Database
@@ -169,9 +169,9 @@ lease:
 
 ## 11. Referensi kode
 
-- `eidesoul/engine/lease.py:56-129` — acquire/renew/release.
-- `eidesoul/engine/lease.py:145-163` — freeze.
-- `eidesoul/engine/supervisor.py:36-129` — loop primary/standby.
+- `eidesoul/engine/jobs/lease.py:56-129` — acquire/renew/release.
+- `eidesoul/engine/jobs/lease.py:145-163` — freeze.
+- `eidesoul/engine/jobs/supervisor.py:36-129` — loop primary/standby.
 - `eidesoul/engine/schema.py:270-290` — `engine_lease`, `engine_control`.
 - `eidesoul/engine/db.py:57-86` — create_all/ensure vector.
 
