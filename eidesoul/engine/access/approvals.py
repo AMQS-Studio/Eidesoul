@@ -159,7 +159,10 @@ class ApprovalStore:
         }
         with self.db.connect() as conn:
             result = conn.execute(approvals.insert().values(row))
-            new_id = int(result.inserted_primary_key[0])
+            primary_key = result.inserted_primary_key
+            if primary_key is None:  # single-row INSERT: SQLAlchemy reports one or nothing
+                raise RuntimeError("the new approval got no primary key")
+            new_id = int(primary_key[0])
         found = self.get(new_id)
         if found is None:  # pragma: no cover - a new row is always readable
             raise RuntimeError("the new approval could not be read back")
