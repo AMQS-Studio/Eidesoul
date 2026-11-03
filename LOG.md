@@ -16,7 +16,7 @@ the capability index + `info`, per-tool caps with `grep`/`fetch`, input validati
 **W6**: `turn_id` + JSON logs + the `/status` card and declarative automations. **W7**: the plugin model
 with digest fetch (Google moved to `plugins/google/`), the installer and interactive `init`. The web
 panel remains operator-owned and planned, so ADR-0027 and ADR-0030 stay `partial` on that box.
-**Verification** — `pytest -q` 798 passed on Postgres+pgvector; `scripts/adr.py --check` 31/31,
+**Verification** — `pytest -q` 792 passed on Postgres+pgvector; `scripts/adr.py --check` 31/31,
 implemented=18 partial=13 draft=0; `--translate-check` 31 files, 0 issues; `scripts/selfcheck.py
 --check` ok; `uv lock --check` clean; `bash install.sh --dry-run` writes nothing.
 
