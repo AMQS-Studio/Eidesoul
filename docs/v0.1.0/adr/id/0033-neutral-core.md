@@ -1,4 +1,4 @@
-> Terjemahan turunan — jangan sunting; sumber: 0033-neutral-core.md (sha256: c1e8a98e5d51)
+> Terjemahan turunan — jangan sunting; sumber: 0033-neutral-core.md (sha256: 93737197d77c)
 > Ditulis tangan (bukan mesin), mengikuti sumber English baris demi baris.
 
 # ADR-0033: Core Netral, Tepi Terspesialisasi — Tanpa Budaya, Transport, atau Vendor di Dalam Mekanisme
@@ -9,7 +9,7 @@
 - **Konteks:** lanjutan ADR-0000 (bentuk permukaan dan data bahasa), ADR-0009 (rumah ADR dan gate-nya), ADR-0018 (kontrak gateway), ADR-0027 (clean by default), ADR-0028 (unit plugin), ADR-0031 (tata letak, anggaran pertumbuhan, gate), ADR-0032 (satu pintu)
 - **Supersedes:** —
 - **Terkait:** ADR-0006 (plafon privasi), ADR-0007 (kelas approval), ADR-0014 (automation), ADR-0019 (`/status`), ADR-0022 (role), ADR-0025 (prefix prompt stabil)
-- **Implementasi:** partial — §4.2-§4.4, §4.6, §4.7, §4.9, §4.11-§4.13 sudah mendarat bersama gate-nya (`scripts/neutral.py --check`, suite kontrak prompt, migrasi 0014-0016). Masih terbuka dari §4.5: seam relay/`dm_thread`, protokol `Chat`, digest grup, render kutipan, dan placeholder media di `stores/style.py`.
+- **Implementasi:** implemented — setiap bagian sudah mendarat bersama gate-nya (`scripts/neutral.py --check`, suite kontrak prompt, migrasi 0014-0016); seam transport terakhir pindah ke body pada gelombang yang sama.
 - **Catatan lokasi:** lintas-potong (mengatur setiap permukaan engine), jadi ia duduk di akar rumah ADR. Salinan Indonesia di `docs/v0.1.0/adr/id/0033-neutral-core.md`.
 
 ---
@@ -123,7 +123,7 @@ Manifest automation wajib menyatakan `event.tz`; `tz` yang hilang adalah `Manife
 
 `dm_thread`, protokol `Chat`, `digest`, ringkasan grup, semantik stiker dan reaksi, render kutipan, placeholder media, id pesan, status pengiriman, dan "model hidup di chat" keluar dari kosakata engine sendiri. Ketika engine membutuhkan "thread privat dengan orang ini", body menjawabnya lewat seam inbound (ADR-0018, ADR-0032).
 
-Fakta transport mencapai prompt dari body, tidak pernah dari cabang core. `CoreDefaults` memperoleh `prompt_section() -> str`, yang mengembalikan teks milik body itu sendiri: bagaimana ia menyapa orang, apa arti mention di sini, kutipan, penanda view-once atau undecryptable, stiker, dan target mana yang bisa dijangkau tool-nya. Engine menyusun `neutral base + body section`, sehingga CLI dan WhatsApp mendeskripsikan dirinya sendiri, dan body tanpa ruang — robot dengan satu thread per sensor, body email — mengembalikan kosong dan mendapat prompt netral. Section itu statis per boot, berbahasa Inggris, dibatasi 1200 karakter, tidak boleh menginterpolasi data pengguna, secret, atau nilai runtime, dan ikut masuk system prompt, sehingga `prompt_prefix_hash` (ADR-0025) mencakupnya dan cache prefix tetap benar.
+Fakta transport mencapai prompt dari body, tidak pernah dari cabang core. `CoreDefaults` memperoleh `prompt_section() -> str`, yang mengembalikan teks milik body itu sendiri: bagaimana ia menyapa orang, apa arti mention di sini, kutipan, penanda view-once atau undecryptable, stiker, dan target mana yang bisa dijangkau tool-nya. Engine menyusun `neutral base + body section`, sehingga CLI dan WhatsApp mendeskripsikan dirinya sendiri, dan body tanpa ruang — robot dengan satu thread per sensor, body email — mengembalikan kosong dan mendapat prompt netral. Section itu statis per boot, berbahasa Inggris, dibatasi 1200 karakter, tidak boleh menginterpolasi data pengguna, secret, atau nilai runtime, dan ikut masuk system prompt, sehingga `prompt_prefix_hash` (ADR-0025) mencakupnya dan cache prefix tetap benar. Render kutipan adalah format core dari data kutipan yang dipasok body (pengirim, waktu, teks); body memutuskan apakah ia memasok kutipan, dan dialeknya hidup di section-nya. Thread privat milik seseorang juga fakta body: `PrivateThread` menjawabnya, engine tidak pernah membaca jenis thread atau alamat transport.
 
 ### 4.6 Nama vendor absen dari core, kecuali spine
 

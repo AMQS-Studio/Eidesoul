@@ -1667,7 +1667,7 @@ class AutomationWorker:
         try:
             return self.agent.address_of(str(target))
         except GatewayError as exc:
-            dm = str(getattr(self.agent.history, "dm_thread", lambda _p: "")(str(target)) or "")
+            dm = str(self.agent.private_thread(str(target)) or "")
             if not dm:
                 raise StepError(str(exc), transient=False) from None
             return self.agent.address_of(dm)

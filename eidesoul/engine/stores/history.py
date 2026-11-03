@@ -9,7 +9,6 @@ from collections.abc import Sequence
 from datetime import datetime
 
 from sqlalchemy import Text, and_, case, cast, func, literal, or_, select
-from sqlalchemy import text as text_
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
@@ -680,26 +679,6 @@ class HistoryStore:
         }
         return {thread for thread in sent | remembered if thread}
 
-    def dm_thread(self, person_id: str) -> str:
-        """The one direct thread a person holds, or `""` (ADR-0010 §4.7 question target).
-
-        A DM is a `threads.kind='dm'` row whose `thread_people` membership is exactly this person.
-        The body sets `kind`; the core never parses a transport address to decide.
-        """
-        who = str(person_id or "").strip()
-        if not who:
-            return ""
-        found = self.db.fetch_one(
-            text_(
-                "SELECT t.thread_id FROM threads AS t "
-                "JOIN thread_people AS p ON p.thread_id = t.thread_id "
-                "WHERE t.kind = 'dm' AND p.person_id = :person "
-                "GROUP BY t.thread_id HAVING count(*) = 1 LIMIT 1"
-            ),
-            {"person": who},
-        )
-        return str(found["thread_id"]) if found else ""
-
     def message_count(self) -> int:
         return int(self.db.scalar(select(func.count()).select_from(messages)) or 0)
 
@@ -729,6 +708,12 @@ class HistoryStore:
                     messages.c.outgoing.is_(False),
                     messages.c.text != "",
                     messages.c.ts >= cutoff,
+                    ~select(message_media.c.message_id)
+                    .where(
+                        message_media.c.thread_id == messages.c.thread_id,
+                        message_media.c.message_id == messages.c.msg_id,
+                    )
+                    .exists(),
                 )
             )
             .order_by(messages.c.ts.desc(), messages.c.id.desc())

@@ -439,6 +439,9 @@ class WhatsAppGateway:
     def chat_name(self, thread: str) -> str:
         return directory.chat_name(self.db, thread)
 
+    def private_thread(self, person_id: str) -> str:
+        return directory.private_thread(self.db, person_id)
+
     async def ensure_group_name(self, thread: str) -> None:
         if directory.chat_name(self.db, thread):
             return

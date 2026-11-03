@@ -38,6 +38,7 @@ from .inbound import (
     Receipt,
     StandbyError,
     action_json,
+    body_private_thread,
     prompt_section,
     refusal,
 )
@@ -323,6 +324,10 @@ class Agent:
             self.turns.finish(turn_id, planned=planned)
         except Exception:
             log.exception("failed to mark turn %s delivered", turn_id)
+
+    def private_thread(self, person_id: str) -> str:
+        """Ask the bodies for the one private thread a person holds (ADR-0033 §4.5)."""
+        return body_private_thread(self.gateways, person_id)
 
     def _step_recorder(self, turn_id: str, step: str):
         def record(

@@ -9,6 +9,8 @@ import uuid
 from dataclasses import replace
 from pathlib import Path
 
+from sqlalchemy import text
+
 from eidesoul.engine.access.roles import Role, RoleRegistry
 from eidesoul.engine.config import (
     AffectConfig,
@@ -198,13 +200,37 @@ class FakeGateway(CoreDefaults):
     name = "fake"
     backlog_seconds = 0.0
 
-    def __init__(self, *, name: str = "fake", backlog_seconds: float = 0.0, tools=(), commands=()):
+    def __init__(
+        self,
+        *,
+        name: str = "fake",
+        backlog_seconds: float = 0.0,
+        tools=(),
+        commands=(),
+        db=None,
+    ):
         self.name = name
         self.backlog_seconds = backlog_seconds
         self.sent: list[tuple[str, str, object]] = []
         self.dispatched: list[object] = []
         self._tools = list(tools)
         self._commands = list(commands)
+        self.db = db
+
+    def private_thread(self, person_id: str) -> str:
+        """The recorded direct thread this body owns; a real body queries its own store."""
+        if self.db is None or not str(person_id or "").strip():
+            return ""
+        found = self.db.fetch_one(
+            text(
+                "SELECT t.thread_id FROM threads AS t "
+                "JOIN thread_people AS p ON p.thread_id = t.thread_id "
+                "WHERE t.kind = 'dm' AND p.person_id = :person "
+                "GROUP BY t.thread_id HAVING count(*) = 1 LIMIT 1"
+            ),
+            {"person": str(person_id)},
+        )
+        return str(found["thread_id"]) if found else ""
 
     def tools(self):
         return list(self._tools)
@@ -502,7 +528,9 @@ def make_agent(
     config.workspace.mkdir(parents=True, exist_ok=True)
     (config.workspace / "public").mkdir(parents=True, exist_ok=True)
     (config.workspace / "scratch").mkdir(parents=True, exist_ok=True)
-    gateway = gateway or RichDirectoryFakeGateway()
+    gateway = gateway or RichDirectoryFakeGateway(db=db)
+    if getattr(gateway, "db", None) is None:
+        gateway.db = db
     history = HistoryStore(db, config.workspace, search=config.search)
     windows = WorkingMemory(store=history)
     ledger = ActionLedger(db)
@@ -652,7 +680,7 @@ def make_runtime(
     config.workspace.mkdir(parents=True, exist_ok=True)
     history = HistoryStore(db, config.workspace, search=config.search)
     windows = WorkingMemory(store=history)
-    gateway = FakeGateway()
+    gateway = FakeGateway(db=db)
     llm = FakeLLM()
     memory = FakeMemory()
     agent = Agent(

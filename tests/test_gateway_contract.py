@@ -23,7 +23,6 @@ from support import (
 
 from eidesoul.engine.config import ConfigError, GatewaySettings
 from eidesoul.engine.inbound import (
-    Chat,
     Directory,
     GatewayCore,
     Rich,
@@ -235,7 +234,11 @@ def test_build_gateways_logs_capabilities_and_refuses_a_broken_body(
     assert [item.name for item in found] == ["boot"]
     assert any("gateway_capabilities" in record.getMessage() for record in caplog.records)
     report = capability_report(found)
-    assert report["boot"] == {"chat": True, "rich": True, "directory": True}
+    assert report["boot"] == {
+        "rich": True,
+        "directory": True,
+        "private_thread": True,
+    }
 
     monkeypatch.setattr(gateway_package, "load_gateway", lambda name: Incomplete)
     with pytest.raises(ConfigError, match="self_handles"):
@@ -251,9 +254,9 @@ def test_capability_report_marks_the_optional_surfaces() -> None:
         ]
     )
     assert report == {
-        "core": {"chat": True, "rich": False, "directory": False},
-        "rich": {"chat": True, "rich": True, "directory": False},
-        "directory": {"chat": True, "rich": False, "directory": True},
+        "core": {"rich": False, "directory": False, "private_thread": True},
+        "rich": {"rich": True, "directory": False, "private_thread": True},
+        "directory": {"rich": False, "directory": True, "private_thread": True},
     }
 
 
@@ -283,7 +286,6 @@ def test_core_imports_without_neonize() -> None:
 
 def test_core_gateway_meets_only_core() -> None:
     assert isinstance(FakeGateway(), GatewayCore)
-    assert isinstance(FakeGateway(), Chat)
     assert not isinstance(FakeGateway(), Rich)
     assert not isinstance(FakeGateway(), Directory)
 

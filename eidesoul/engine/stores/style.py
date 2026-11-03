@@ -21,7 +21,6 @@ from ..schema import state as state_table
 
 log = logging.getLogger(__name__)
 
-PLACEHOLDERS = ("[Stiker]", "[Gambar]", "[Dokumen]", "[Video]", "[Audio]")
 MAX_LENGTHS = 200
 TOP = 20
 MAX_TEXT = 500
@@ -219,8 +218,6 @@ class StyleStore:
         body = str(text or "")
         if not body.strip() or body.startswith("/") or len(body) > MAX_TEXT:
             return
-        if any(marker in body for marker in PLACEHOLDERS):
-            return
         with self._lock:
             self._count(self._data["global"], body)
             if thread_id:
@@ -268,8 +265,6 @@ class StyleStore:
                 item = row if isinstance(row, dict) else {"text": row}
                 body = str(item.get("text") or "")
                 if not body.strip() or body.startswith("/") or len(body) > MAX_TEXT:
-                    continue
-                if any(marker in body for marker in PLACEHOLDERS):
                     continue
                 self._count(self._data["global"], body)
                 thread_id = str(item.get("thread_id") or "")

@@ -9,6 +9,7 @@ from collections.abc import Awaitable, Callable
 from pathlib import Path
 
 from sqlalchemy import and_, func, select, update
+from sqlalchemy import text as text_
 
 from ...engine.db import Database
 from ...engine.schema import messages, person_links, threads
@@ -319,3 +320,20 @@ def label(thread_id: str, name: str) -> str:
 
 def message_jid(message: Message) -> str:
     return message.sender_address
+
+
+def private_thread(db, person_id: str) -> str:
+    """The one direct thread this person holds, or "" (ADR-0033 §4.5: a body fact)."""
+    who = str(person_id or "").strip()
+    if not who:
+        return ""
+    found = db.fetch_one(
+        text_(
+            "SELECT t.thread_id FROM threads AS t "
+            "JOIN thread_people AS p ON p.thread_id = t.thread_id "
+            "WHERE t.kind = 'dm' AND p.person_id = :person "
+            "GROUP BY t.thread_id HAVING count(*) = 1 LIMIT 1"
+        ),
+        {"person": who},
+    )
+    return str(found["thread_id"]) if found else ""

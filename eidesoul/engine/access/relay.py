@@ -5,10 +5,10 @@ One row per `(task_id, from_person, to_person)` in `relay_grants`; the row recor
 never holds the message content. `mode='none'` is a stored decision, so a refusal stays auditable
 and the default is safe: no answer means status only, never content.
 
-The question itself uses the existing approval path: an `approvals` row of kind `consent` (the
-class from ADR-0007 §4.7) bound to the content owner's DM. `/approve <id> <mode>` records the
-grant, `/deny` leaves it at `none`. Only `from_person` may decide or revoke; neither the requester
-nor an administrator can answer in someone else's name.
+The question itself uses the existing approval path: an `approvals` row of kind `consent`
+(the class from ADR-0007 §4.7) bound to the content owner's private thread.
+`/approve <id> <mode>` records the grant, `/deny` leaves it at `none`. Only `from_person` may
+decide or revoke; neither the requester nor an administrator can answer in someone else's name.
 """
 
 

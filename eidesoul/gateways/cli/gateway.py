@@ -121,3 +121,7 @@ class CliGateway(CoreDefaults):
 
     def chat_name(self, thread: str) -> str:
         return self.settings.chat_name
+
+    def private_thread(self, person_id: str) -> str:
+        """The console has exactly one thread; it is this person's private thread."""
+        return self.settings.thread_id

@@ -73,12 +73,12 @@ def test_render_is_identity_and_hints_are_plain(tmp_path) -> None:
 
 
 def test_the_cli_is_core_only(tmp_path) -> None:
-    from eidesoul.engine.inbound import Chat, Directory, GatewayCore, Rich
+    from eidesoul.engine.inbound import Directory, GatewayCore, PrivateThread, Rich
 
     gateway = make_cli(tmp_path)
 
     assert isinstance(gateway, GatewayCore)
-    assert isinstance(gateway, Chat)
+    assert isinstance(gateway, PrivateThread)
     assert not isinstance(gateway, Rich)
     assert not isinstance(gateway, Directory)
     for absent in ("send_file", "send_sticker", "typing", "prepare_media", "participants"):

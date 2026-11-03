@@ -456,6 +456,17 @@ async def selftest(config: Config) -> int:
         passed = "How people chat here" in text and "particles:" in text
         results.append(_report("style", "PASS" if passed else "FAIL", "" if passed else text[:120]))
 
+        from .engine import guard as safety_guard
+
+        if safety_guard.has_pack(config.soul.language):
+            results.append(_report("safety", "PASS", ""))
+        elif config.safety.allow_degraded:
+            results.append(_report("safety", "DEGRADED", "the English net only"))
+        else:
+            results.append(
+                _report("safety", "FAIL", f"no pack for '{config.soul.language}'")
+            )
+
         for name in config.mcp:
             prefix = f"mcp__{name}__"
             found = [spec.name for spec in hub.specs((role,)) if spec.name.startswith(prefix)]

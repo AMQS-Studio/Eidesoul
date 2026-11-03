@@ -30,7 +30,8 @@ BUDGET_TEXT = (
 )
 USER_AGENT = "eidesoul"
 IMAGE_LOST = "[Image could not be attached to the model; use the path above with sandbox.]"
-DIGEST_PROMPT = """You summarize a chat group. Summarize the topic and extract explicit facts.
+DIGEST_PROMPT = """You summarize a conversation thread. Summarize the topic and extract
+facts.
 Reply ONLY with JSON:
 {"topic":"<=200 chars","keywords":["..."],
  "facts":[{"kind":"fact|preference|rule","text":"...","person":"name or empty"}],
@@ -648,12 +649,12 @@ class LLM:
             )
         return text
 
-    async def digest(self, chat_name: str, transcript: str, topic: str, people: str) -> dict:
+    async def digest(self, thread_name: str, transcript: str, topic: str, people: str) -> dict:
         """Summarise the topic and extract explicit facts from the last 30 messages."""
         user = "\n\n".join(
             part
             for part in (
-                f"Group: {chat_name or '-'}",
+                f"Thread: {thread_name or '-'}",
                 f"Current topic: {topic}" if topic.strip() else "",
                 f"Known people: {people}" if people.strip() else "",
                 f"Recent conversation:\n{transcript}",

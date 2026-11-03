@@ -65,6 +65,10 @@ def test_prompt_case(tmp_path, case) -> None:
         assert fragment in system, (case["id"], fragment)
     for fragment in case.get("expect_absent") or ():
         assert fragment not in system, (case["id"], fragment)
+    recorded = case.get("stable_prefix_hash")
+    if recorded:
+        stable = prompt.stable.replace(str(tmp_path), "<root>")
+        assert prompt_prefix_hash(stable, []) == recorded, case["id"]
 
 
 def test_the_stable_prefix_survives_a_new_day(tmp_path) -> None:

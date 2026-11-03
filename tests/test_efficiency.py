@@ -139,6 +139,7 @@ def engine(tmp_path, db, llm=None, *, skills=None) -> CognitionWorker:
         MemoryStore(db, config),
         skills=skills or SkillStore(db, config.skills),
         llm=llm,
+        private_thread=lambda person: THREAD,
     )
 
 

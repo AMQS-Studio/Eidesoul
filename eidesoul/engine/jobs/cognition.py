@@ -376,6 +376,7 @@ class CognitionWorker:
         lease=None,
         ask_dispute=None,
         propose=None,
+        private_thread=None,
     ) -> None:
         self.db = db
         self.config = config
@@ -389,6 +390,7 @@ class CognitionWorker:
         self.lease = lease
         self.ask_dispute = ask_dispute
         self.propose = propose
+        self.private_thread = private_thread
         self.queue = CognitionQueue(db, config)
         self.worker_id = str(worker_id or f"{uuid.uuid4().hex[:8]}")
         self.running = False
@@ -1005,8 +1007,8 @@ class CognitionWorker:
             return
         person = found.person_ids[0] if found.person_ids else ""
         thread = ""
-        if person and self.history is not None:
-            thread = await io.run(self.history.dm_thread, person)
+        if person and self.private_thread is not None:
+            thread = await io.run(self.private_thread, person)
         if not thread:
             await io.run(self.skills.record_notice, skill, "proposal skipped (no dm)")
             return

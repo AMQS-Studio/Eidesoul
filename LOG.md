@@ -33,8 +33,12 @@ vendor names outside the allowlist, and clock reads outside `clock.py`. `tests/d
 plus `tests/test_prompt_contract.py` pin prompt properties per body (empty section, CLI, shared
 thread) and per behavior (crisis, register, missing catalog), never wording.
 
-Still open from ADR-0033 §4.5: the relay/`dm_thread` seam, the `Chat` protocol, the group digest,
-quote rendering, and the media placeholders in `stores/style.py`.
+**The last transport seam moved.** `HistoryStore.dm_thread` and its three callers became
+`PrivateThread.private_thread(person_id)`: the CLI, harness, and WhatsApp body answer it, and the
+engine reads no thread kind or address. The `Chat` protocol is gone (the door is `dispatch`), the
+digest prompt names a thread instead of a chat group, style sampling skips media rows at the query
+instead of matching body placeholders, and the relay question names a private thread. ADR-0033 is
+`implemented`.
 
 ## 2026-11-04 — ADR-0033 decides a neutral core
 

@@ -34,11 +34,10 @@ def test_seed_profile_mentions_short_style(tmp_path) -> None:
     store.close()
 
 
-def test_learn_ignores_commands_and_media(tmp_path) -> None:
+def test_learn_ignores_commands_and_empty_text(tmp_path) -> None:
     store = make_store(tmp_path)
 
     store.learn("/help")
-    store.learn("[Stiker]")
     store.learn("   ")
     assert store.stats()["global"] == 0
 

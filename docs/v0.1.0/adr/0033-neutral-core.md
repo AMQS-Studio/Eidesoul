@@ -6,7 +6,7 @@
 - **Context:** follows ADR-0000 (surface shape and language data), ADR-0009 (the ADR home and its gate), ADR-0018 (gateway contract), ADR-0027 (clean by default), ADR-0028 (plugin unit), ADR-0031 (layout, growth budget, gates), ADR-0032 (one door)
 - **Supersedes:** —
 - **Related:** ADR-0006 (privacy ceiling), ADR-0007 (approval classes), ADR-0014 (automation), ADR-0019 (`/status`), ADR-0022 (role), ADR-0025 (stable prompt prefix)
-- **Implementation:** partial — §4.2-§4.4, §4.6, §4.7, §4.9, §4.11-§4.13 have landed with their gates (`scripts/neutral.py --check`, the prompt contract suite, migrations 0014-0016). Still open from §4.5: the relay/`dm_thread` seam, the `Chat` protocol, the group digest, quote rendering, and the media placeholders in `stores/style.py`.
+- **Implementation:** implemented — every section has landed with its gate (`scripts/neutral.py --check`, the prompt contract suite, migrations 0014-0016); the last transport seam moved to the body in the same wave.
 - **Location note:** cross-cutting (it constrains every engine surface), so it sits at the ADR home root. The Indonesian copy is `docs/v0.1.0/adr/id/0033-neutral-core.md`.
 
 ---
@@ -120,7 +120,7 @@ An automation manifest must state `event.tz`; a missing `tz` is a `ManifestError
 
 `dm_thread`, the `Chat` protocol, `digest`, group summaries, sticker and reaction semantics, quote rendering, media placeholders, message ids, delivery state, and "the model lives in chat" leave the engine's own vocabulary. Where the engine needs "the private thread with this person", the body answers through the inbound seam (ADR-0018, ADR-0032).
 
-Transport facts reach the prompt from the body, never from a core branch. `CoreDefaults` gains `prompt_section() -> str`, returning the body's own text: how it addresses people, what a mention is here, quoting, view-once or undecryptable markers, stickers, and which targets its tools can reach. The engine assembles `neutral base + body section`, so the CLI and WhatsApp describe themselves, and a body with no rooms — a robot with one thread per sensor, an email body — returns nothing and gets a neutral prompt. The section is static per boot, English, capped at 1200 characters, may not interpolate user data, secrets, or runtime values, and joins the system prompt, so `prompt_prefix_hash` (ADR-0025) covers it and the prefix cache stays correct.
+Transport facts reach the prompt from the body, never from a core branch. `CoreDefaults` gains `prompt_section() -> str`, returning the body's own text: how it addresses people, what a mention is here, quoting, view-once or undecryptable markers, stickers, and which targets its tools can reach. The engine assembles `neutral base + body section`, so the CLI and WhatsApp describe themselves, and a body with no rooms — a robot with one thread per sensor, an email body — returns nothing and gets a neutral prompt. The section is static per boot, English, capped at 1200 characters, may not interpolate user data, secrets, or runtime values, and joins the system prompt, so `prompt_prefix_hash` (ADR-0025) covers it and the prefix cache stays correct. Quote rendering is core formatting from body-supplied quote data (sender, time, text); the body decides whether it supplies a quote at all, and its dialect lives in its section. The private thread a person holds is a body fact too: `PrivateThread` answers it, the engine never reads a thread kind or a transport address.
 
 ### 4.6 Vendor names are absent from core, spine excepted
 

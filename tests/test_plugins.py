@@ -278,6 +278,26 @@ def test_enable_disable_remove(tmp_path: Path) -> None:
     assert "demo" not in (stored.get("plugins") or {})
 
 
+def test_a_plugin_tool_declares_its_own_family_and_target() -> None:
+    from eidesoul.engine.registry import Handler, validate
+
+    handler = Handler(
+        name="robot_arm",
+        description="Move one joint on the robot's arm.",
+        family="robot",
+        target="process",
+        approval_class="authorization",
+        scan=("command",),
+        fn=_async_noop,
+        parameters={"type": "object", "properties": {}},
+    )
+    assert validate(handler, "robot_arm", "tool") == []
+
+
+async def _async_noop(args: dict, ctx) -> str:
+    return ""
+
+
 def test_google_is_a_plugin_and_not_a_core_tool() -> None:
     assert "google" not in CORE_TOOLS.names()
     with pytest.raises(ModuleNotFoundError):

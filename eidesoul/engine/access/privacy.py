@@ -183,7 +183,7 @@ class PrivacyService:
         budget = int(getattr(agent.config.reflection, "questions_per_day", 1))
         if budget <= 0:
             return "skipped: questions are off"
-        thread = str(agent.history.dm_thread(subject) or "")
+        thread = str(agent.private_thread(subject) or "")
         if not thread:
             log.info("dispute question skipped: no dm for %s", subject)
             return "skipped: no dm"

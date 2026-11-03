@@ -6,9 +6,9 @@ engine addresses an `Address`, the body routes the `Action` to its own handler b
 `action.capability`, and answers with a `Receipt`.
 
 * `GatewayCore` — mandatory: lifecycle, `dispatch`, display, and its own catalog.
-* `Chat` — optional: a body that can carry chat text (`render`, `send_text`).
-* `Rich` — optional: files, stickers, typing, media preparation.
+* `Rich` — optional: files, media preparation, presence.
 * `Directory` — optional: target resolution and thread membership.
+* `PrivateThread` — optional: the one private thread a person holds.
 
 `Percept` carries body facts, never transport rules. `hints` is an open mapping; the engine reads
 `dm`, `mention`, `reply`, `group`, `presence` only where a decision needs them and never requires
@@ -206,6 +206,17 @@ class GatewayCore(Protocol):
 PROMPT_SECTION_MAX = 1200
 
 
+def body_private_thread(gateways, person_id: str) -> str:
+    """The one private thread a body reports for a person; "" when none answers."""
+    for gateway in gateways:
+        grab = getattr(gateway, "private_thread", None)
+        if callable(grab):
+            found = str(grab(str(person_id or "")) or "")
+            if found:
+                return found
+    return ""
+
+
 def prompt_section(gateway) -> str:
     """The body's own prompt text, capped; a body without one contributes nothing."""
     grab = getattr(gateway, "prompt_section", None)
@@ -215,17 +226,6 @@ def prompt_section(gateway) -> str:
             f"prompt_section is {len(text)} chars; the cap is {PROMPT_SECTION_MAX}"
         )
     return text
-
-
-@runtime_checkable
-class Chat(Protocol):
-    """Optional body surface: a body that carries chat text, and the dialect it renders in."""
-
-    def render(self, text: str) -> str: ...
-
-    async def send_text(
-        self, thread: str, text: str, *, reply: Percept | None = None
-    ) -> str: ...
 
 
 @runtime_checkable
@@ -241,6 +241,13 @@ class Rich(Protocol):
     async def typing(self, thread: str, composing: bool) -> None: ...
 
     async def prepare_media(self, thread: str, message: Message) -> None: ...
+
+
+@runtime_checkable
+class PrivateThread(Protocol):
+    """Optional body surface: the one private thread a person holds, or "" (ADR-0033 §4.5)."""
+
+    def private_thread(self, person_id: str) -> str: ...
 
 
 @runtime_checkable
@@ -289,9 +296,9 @@ def ensure_core(gateway: object) -> None:
 def capabilities(gateway: object) -> dict[str, bool]:
     """Presence of the optional surfaces, for the one boot log line."""
     return {
-        "chat": isinstance(gateway, Chat),
         "rich": isinstance(gateway, Rich),
         "directory": isinstance(gateway, Directory),
+        "private_thread": isinstance(gateway, PrivateThread),
     }
 
 
