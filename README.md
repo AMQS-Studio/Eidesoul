@@ -78,7 +78,7 @@ properties of that store, not of a prompt.
 
 ## What it tries to solve
 
-Most agent products hit the same eleven walls. Each paragraph says what usually happens, then what this
+Most agent products hit the same twelve walls. Each paragraph says what usually happens, then what this
 engine does instead.
 
 **An assistant that forgets.** The usual build starts every session from an empty prompt: history is a
@@ -113,6 +113,19 @@ action passes a deterministic guard first; only what that layer cannot classify 
 model. The target decides the class: own scope asks the requester, shared or outside scope asks an
 approver role, and the scope proof is recomputed at execution, so a role that widened reopens the
 approval.
+
+**Roles that are a spreadsheet of allow and deny.** The usual build has a role table with an admin flag,
+a default role broad enough to work, and a check at login. Here a role is a document in the database
+with a mirror on disk, and it grants capabilities by name — a tool or a command that is not listed is
+denied, never inherited. Three classes stay apart: some things are capability (recalling your own
+memory, automatic capture, the crisis path always runs), some are consent (the person a fact is about can
+veto it; forgetting your own memory needs you, not a role), and some are authorization (a tool grant plus
+approval). Approval is not a way to gain permission: it continues a permission that was already granted,
+recomputed against the sender's current role, so a widened role reopens the question instead of
+inheriting an old yes. A few actions are forbidden to everyone, the top role included. Roles bind to
+people rather than to chats, so the same person keeps their rights across bodies; memory administration
+is its own capability, separate from being an operator; and the top role is protected — it cannot be
+deleted or renamed, only its address changes, through a reviewed import.
 
 **Two instances, one soul.** The usual deployment scales to two replicas, both answer, both write, and
 the last writer wins. Here a lease row in Postgres decides: the holder is primary, every other instance

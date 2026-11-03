@@ -84,7 +84,7 @@ berbasis role adalah sifat store itu, bukan sifat prompt.
 <a id="apa-yang-coba-diselesaikan"></a>
 ## Apa yang coba diselesaikan
 
-Hampir semua produk agent menabrak sebelas dinding yang sama. Tiap paragraf menyebut apa yang biasanya
+Hampir semua produk agent menabrak dua belas dinding yang sama. Tiap paragraf menyebut apa yang biasanya
 terjadi, lalu apa yang dilakukan engine ini.
 
 **Asisten yang lupa.** Bangunan biasanya memulai setiap sesi dari prompt kosong: riwayat adalah transkrip
@@ -119,6 +119,20 @@ dan aksi sensitif melewati guard deterministik lebih dulu; hanya yang tak bisa d
 yang sampai ke model kecil dan cepat. Target menentukan kelasnya: lingkup sendiri meminta persetujuan
 peminta, lingkup bersama atau luar meminta role approver, dan bukti lingkup dihitung ulang saat eksekusi
 sehingga role yang melebar membuka ulang approval.
+
+**Role yang sebenarnya spreadsheet izin.** Bangunan biasanya punya tabel role dengan flag admin, role
+default yang cukup luas supaya jalan, dan pemeriksaan saat login. Di sini role adalah dokumen di database
+dengan cermin di disk, dan ia memberi kapabilitas berdasarkan nama — tool atau command yang tidak
+tercantum ditolak, tidak pernah diwarisi. Tiga kelas dijaga terpisah: sebagian adalah kapabilitas
+(memanggil kembali memori sendiri, penangkapan otomatis, jalur krisis selalu jalan), sebagian adalah
+consent (orang yang menjadi subjek fakta bisa memvetonya; melupakan memori sendiri butuh Anda, bukan
+role), dan sebagian adalah otorisasi (izin tool plus approval). Approval bukan cara mendapatkan izin: ia
+melanjutkan izin yang sudah diberikan, dihitung ulang terhadap role pengirim saat itu, jadi role yang
+melebar membuka ulang pertanyaannya alih-alih mewarisi "ya" yang lama. Beberapa aksi terlarang untuk
+semua orang, termasuk role tertinggi. Role terikat pada orang, bukan pada chat, jadi orang yang sama
+membawa haknya lintas tubuh; administrasi memori adalah kapabilitas tersendiri, terpisah dari menjadi
+operator; dan role tertinggi dilindungi — tidak bisa dihapus atau diganti nama, hanya alamatnya yang
+berubah, lewat import yang ditinjau.
 
 **Dua instance, satu jiwa.** Deployment biasanya naik ke dua replika, keduanya menjawab, keduanya
 menulis, dan penulis terakhir menang. Di sini satu baris lease di Postgres yang memutuskan: pemegangnya
