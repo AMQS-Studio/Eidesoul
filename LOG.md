@@ -1,5 +1,19 @@
 # LOG
 
+## 2026-11-03 — ADR truth audit before implementation
+
+All 31 ADRs were re-read against the code before any of them was implemented. The recorded split
+holds: 1 `implemented` (ADR-0009), 9 `partial`, 21 `draft`; no ADR claimed a mechanism the code does
+not have, so none was overstated. Three were **understated**: ADR-0000 still said "no engine change
+yet" although `send` already left the core for
+`eidesoul/gateways/whatsapp/tools/send.py`; ADR-0020 already had `skills`/`skill_files`/`skill_usage`
+and the `skill` tool; ADR-0018 already had `Gateway`/`GatewayError` in `inbound.py`. Stale §10 paths
+were corrected: ADR-0000 and ADR-0023 now name the gateway `send.py`, ADR-0027 names
+`eidesoul/engine/stores/documents.py`, and ADR-0027 §5's row key is `components.root`. The
+Indonesian copies were edited on the same lines and re-stamped.
+**Verification** — `scripts/adr.py --check` 31/31 (implemented=1 partial=9 draft=21);
+`--translate-check` 31 files, 0 issues; `pytest -q` 541 passed before the audit (documentation only).
+
 ## 2026-11-03 — The voice layer is on, and switchable (ADR-0027 amendment)
 
 ADR-0027 §4.3 listed what is off by default but was silent about the parts that shape the voice, so

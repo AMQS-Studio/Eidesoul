@@ -1,4 +1,4 @@
-> Terjemahan turunan — jangan sunting; sumber: engine/0023-relay-consent.md (sha256: 5813ce3feb47)
+> Terjemahan turunan — jangan sunting; sumber: engine/0023-relay-consent.md (sha256: 9a94f802eccc)
 > Teks ini ditulis manusia; baris yang tidak bisa diterjemahkan mesin disalin apa adanya ke sumber English, jadi sumber bercampur dua bahasa.
 
 # ADR-0023: Relay Consent — Meneruskan Jawaban Pribadi ke Pihak Lain
@@ -147,7 +147,7 @@ relay:
 
 - `eidesoul/engine/approvals.py` — jalur `consent` yang dipakai pertanyaan relay (kelas dari ADR-0007 §4.7).
 - `eidesoul/engine/agent.py:311` — `send_text` (jalur kirim yang mencatat ke `outbound_messages`).
-- `eidesoul/engine/tools/send.py` — tool `send` (reminder dan laporan relay memakai jalur yang sama).
+- `eidesoul/gateways/whatsapp/tools/send.py` — tool `send` (reminder dan laporan relay memakai jalur yang sama).
 - `eidesoul/engine/schema.py` — tabel `approvals` (pola TTL/binding) sebagai acuan bentuk `relay_grants`.
 - `eidesoul/engine/prompts.py:141-147` — blok role/label (relay menyebut `label` administrator/manajer bila ada).
 

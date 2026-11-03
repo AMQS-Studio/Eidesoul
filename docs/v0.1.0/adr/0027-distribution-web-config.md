@@ -167,7 +167,7 @@ same path (§4.2).
 | `web.enabled` | `true` once finished, `false` while unfinished | the panel process |
 | `web.host` | `127.0.0.1` | bind address; anything else needs `web.remote_ack: true` and an `.env` secret |
 | `web.port` | operator-chosen at first run | panel listener |
-| `codex` of fetched code (`components.root`) | `<workspace>/components` | where fetched gateway/plugin code lands (§ADR-0028) |
+| `components.root` | `<workspace>/components` | where fetched gateway/plugin code lands (§ADR-0028) |
 | `components.fetch` | `true` | allow fetching code on enable; `false` = offline installs only |
 | `image.tag` | unset while unreleased | the running image tag, reported by `eidesoul selftest` |
 
@@ -236,7 +236,7 @@ Secrets live in `.env` only (`WEB_TOKEN`, provider keys); YAML carries names, ne
 - `eidesoul/admin/templates.py:1,151,253` — the single default source for the four host files.
 - `eidesoul/admin/init.py:26-46` — the only writer (`0600` for `.env`/`roles.yaml`, `--force` to overwrite).
 - `compose.yaml`, `.dockerignore` — the real deployment default, kept out of the image.
-- `eidesoul/engine/config.py`, `eidesoul/engine/documents.py` — the configuration path the panel reuses.
+- `eidesoul/engine/config.py`, `eidesoul/engine/stores/documents.py` — the configuration path the panel reuses.
 - `eidesoul/engine/schema.py` — `config_changes` ledger.
 - `panel/` — new tree at the repository root (proposal, not created yet).
 

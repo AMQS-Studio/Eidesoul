@@ -1,4 +1,4 @@
-> Terjemahan turunan — jangan sunting; sumber: 0027-distribution-web-config.md (sha256: 9539287755c6)
+> Terjemahan turunan — jangan sunting; sumber: 0027-distribution-web-config.md (sha256: 404c5985800f)
 > Ditulis tangan (bukan mesin), mengikuti sumber English baris demi baris.
 
 # ADR-0027: Distribusi dan Konfigurasi Web-First — Satu Image Core, Kapabilitas Clean by Default
@@ -232,7 +232,7 @@ Rahasia hanya di `.env` (`WEB_TOKEN`, kunci provider); YAML memuat nama, bukan n
 - `pyproject.toml` `[project.optional-dependencies]` — extra `whatsapp`, `google`, `dev`.
 - `eidesoul/engine/tools/google.py`, `eidesoul/engine/tools/chat_history.py` — kapabilitas yang akan keluar dari core.
 - `eidesoul/__main__.py` — `init`, `models`, `config import`, `selftest` (permukaan CLI yang setara).
-- `eidesoul/engine/config.py`, `eidesoul/engine/documents.py` — jalur konfigurasi yang dipakai ulang panel.
+- `eidesoul/engine/config.py`, `eidesoul/engine/stores/documents.py` — jalur konfigurasi yang dipakai ulang panel.
 - `eidesoul/engine/schema.py` — ledger `config_changes`.
 - `panel/` — tree baru di akar repo (usulan, belum dibuat).
 
