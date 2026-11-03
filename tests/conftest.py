@@ -8,7 +8,9 @@ Embedder: a deterministic 384-dimension stub, so no test loads or downloads a mo
 from __future__ import annotations
 
 import os
+import sys
 from collections.abc import Iterator
+from pathlib import Path
 
 import pytest
 from sqlalchemy import text
@@ -16,6 +18,11 @@ from support import StubEncoder, test_dsn
 
 from eidesoul.engine import embed
 from eidesoul.engine.db import SCHEMA_VERSION, Database
+
+# The plugin tree at the repo root is importable by tests (`plugins.google...`).
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
 
 # mem0 reads this at import time; a test run never phones home (ADR-0029 §4.3).
 os.environ["MEM0_TELEMETRY"] = "false"

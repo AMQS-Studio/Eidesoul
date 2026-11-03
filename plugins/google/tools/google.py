@@ -1,7 +1,7 @@
 """Google Workspace through one service account, identity per sender.
 
 A plugin tool (ADR-0028): the engine loads this module only when the `google` component is
-enabled and its manifest digest verifies. The vendor service stays lazy so a host without the
+enabled and its manifest digest verifies. The plugin service stays lazy so a host without the
 plugin dependencies keeps the module importable and inert instead of failing at import time.
 """
 
@@ -22,7 +22,7 @@ _SERVICES: weakref.WeakKeyDictionary = weakref.WeakKeyDictionary()
 def _module():
     """The vendored Google service, or None when this build does not carry it."""
     try:
-        from eidesoul.vendor.google_workspace import service
+        from ..google_workspace import service
     except ImportError:
         return None
     return service

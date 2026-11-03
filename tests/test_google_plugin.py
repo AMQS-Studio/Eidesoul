@@ -17,7 +17,7 @@ from eidesoul.engine.roles import Role
 from eidesoul.engine.schema import google_identity
 from eidesoul.engine.tools import REGISTRY as CORE_TOOLS
 from eidesoul.engine.tools import ToolContext
-from eidesoul.vendor.google_workspace.service import (
+from plugins.google.google_workspace.service import (
     DOC_MIME,
     SHEET_MIME,
     GoogleError,

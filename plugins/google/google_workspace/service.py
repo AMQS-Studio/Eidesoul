@@ -17,7 +17,7 @@ from pathlib import Path
 import httpx
 from sqlalchemy import delete, select
 
-from ...engine.schema import google_device, google_identity
+from eidesoul.engine.schema import google_device, google_identity
 
 log = logging.getLogger(__name__)
 
