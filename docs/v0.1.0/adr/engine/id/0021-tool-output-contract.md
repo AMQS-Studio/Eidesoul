@@ -1,10 +1,10 @@
-> Terjemahan turunan — jangan sunting; sumber: engine/0021-tool-output-contract.md (sha256: df797ea31362)
+> Terjemahan turunan — jangan sunting; sumber: engine/0021-tool-output-contract.md (sha256: 1acb7429e5db)
 > Teks ini ditulis manusia; baris yang tidak bisa diterjemahkan mesin disalin apa adanya ke sumber English, jadi sumber bercampur dua bahasa.
 
 # ADR-0021: Kontrak Keluaran Tool, `grep`, dan `fetch`
 
 - **Status:** accepted
-- **Implementasi:** draft — `grep`/`fetch` belum ada; cap keluaran masih global 40 000
+- **Implementasi:** implemented — bukti: `registry.Handler.max_output_chars`, cap per tool + penanda paging `next:`, `tools/grep.py`, `tools/fetch.py` (pin SSRF, whitelist konten, header untrusted), budget balasan 10k di `reply.split_text`, `tests/test_tools_grep.py`, `tests/test_tools_fetch.py`
 - **Tanggal:** 2026-11-03
 - **Deciders:** Muqsith (owner), omp (reviewer)
 - **Konteks:** permukaan tool tidak punya cara mencari isi berkas maupun membaca halaman; `read` harus menebak berkas (default 400 baris), `shell` tidak diberikan ke `member`, `web_search` hanya mengembalikan snippet, dan satu cap global 40 000 karakter di `execute` terlalu longgar untuk tool pencarian

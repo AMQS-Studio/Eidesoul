@@ -6,9 +6,9 @@
 - **Context:** follows ADR-0027 (distribution and web-first configuration), ADR-0007 (approval classes), ADR-0016 (migration), ADR-0022 (the protected `administrator` role), ADR-0029 (the test store)
 - **Supersedes:** —
 - **Related:** ADR-0009 (the document home), ADR-0015 (capability manifest), ADR-0019 (observability), ADR-0028 (plugins)
-- **Implementation:** draft — nothing is written yet: no installer, no interactive `init`, no panel. This ADR is the plan of record for the onboarding path.
+- **Implementation:** partial — present: `install.sh` (no sudo, pinned uv digest, `--dry-run`, log, signals, both stacks), interactive/fail-closed `eidesoul init` with review/receipt and `--non-interactive`, `tests/test_init.py`, `tests/test_install.py`; remaining: the panel branch of the finish screen waits for `panel/` (ADR-0027); `--label`/`--stack` need an ADR amendment
 - **Location note:** this ADR binds every surface (it decides how a host is born), so it sits at the root of the ADR home. The Indonesian copy is `docs/v0.1.0/adr/id/0030-install-and-init.md`.
-- **Amendments:** 2026-11-03 — first version. 2026-11-03 — the wizard asks the voice layer once (keep-on is the default answer) and carries `--voice-layer on|off` for headless parity (ADR-0027 §4.3).
+- **Amendments:** 2026-11-03 — first version. 2026-11-03 — the wizard asks the voice layer once (keep-on is the default answer) and carries `--voice-layer on|off` for headless parity (ADR-0027 §4.3). 2026-11-03 — `--label` (administrator address) and `--stack native|compose` join the flag table: §6's "steps without a flag equivalent = 0" requires them.
 
 ---
 

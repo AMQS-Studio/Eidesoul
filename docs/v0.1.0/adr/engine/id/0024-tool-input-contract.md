@@ -1,10 +1,10 @@
-> Terjemahan turunan — jangan sunting; sumber: engine/0024-tool-input-contract.md (sha256: 371af5d9f5e5)
+> Terjemahan turunan — jangan sunting; sumber: engine/0024-tool-input-contract.md (sha256: 0db96db87443)
 > Teks ini ditulis manusia; baris yang tidak bisa diterjemahkan mesin disalin apa adanya ke sumber English, jadi sumber bercampur dua bahasa.
 
 # ADR-0024: Kontrak Input Tool — Validasi Argumen, Handler Async, dan `env` Shell
 
 - **Status:** accepted
-- **Implementasi:** draft — validasi argumen, pemeriksaan coroutine, dan `shell.env` belum ada
+- **Implementasi:** implemented — bukti: subset keyword skema di `registry` + validasi coroutine, `argument_errors`/urutan nama→izin→argumen→safety di `tools/__init__.py`, whitelist `shell.env` terhitung, `tests/test_tools_contract.py`
 - **Tanggal:** 2026-11-03
 - **Deciders:** Muqsith (owner), omp (reviewer)
 - **Konteks:** satu pintu eksekusi tool memeriksa nama, izin, dan safety, tetapi argumen diteruskan apa adanya ke handler; handler sinkron tidak ditolak saat boot; dan `shell` mewarisi seluruh environment proses — termasuk API key dan DSN.

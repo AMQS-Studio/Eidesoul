@@ -1,10 +1,10 @@
-> Terjemahan turunan — jangan sunting; sumber: engine/0026-search.md (sha256: 7799daa2c8b9)
+> Terjemahan turunan — jangan sunting; sumber: engine/0026-search.md (sha256: 1e4b12f76330)
 > Teks ini ditulis manusia; baris yang tidak bisa diterjemahkan mesin disalin apa adanya ke sumber English, jadi sumber bercampur dua bahasa.
 
 # ADR-0026: Pencarian — Full-Text Pesan, Trigram, dan Scope
 
 - **Status:** accepted
-- **Implementasi:** draft — pencarian masih `ILIKE`; belum ada `text_tsv`/trigram
+- **Implementasi:** implemented — bukti: `messages.text_tsv` + index GIN/trigram (revisi 9), FTS di `stores/history.py` dengan fallback trigram + paging eksklusif, `stores/knowledge.py`, backend di `/status`, `tests/test_search.py`
 - **Tanggal:** 2026-11-03
 - **Deciders:** Muqsith (owner), omp (reviewer)
 - **Konteks:** pencarian arsip pesan hanya `ILIKE` per term tanpa index teks, sehingga biayanya tumbuh linear terhadap jumlah pesan dan recall-nya bergantung persis pada substring; jalur memori punya mesinnya sendiri (Mem0), dan scope baca tetap dibatasi keanggotaan room.

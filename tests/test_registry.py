@@ -55,7 +55,10 @@ def test_builtin_handlers_discovered() -> None:
         "whoami",
     }
     assert set(TOOLS.names()) == {
+        "fetch",
         "google",
+        "grep",
+        "info",
         "mcp",
         "memory",
         "read",

@@ -45,7 +45,7 @@ async def _recipe(args: dict, ctx: ToolContext) -> str:
                 str(args.get("kind") or ""),
                 str(args.get("description") or ""),
                 usage=str(args.get("usage") or ""),
-                roles=args.get("roles") or ("owner", "member"),
+                roles=args.get("roles") or ("administrator", "member"),
                 steps=args.get("steps") or (),
                 prompt=str(args.get("prompt") or ""),
                 overwrite=bool(args.get("overwrite", False)),

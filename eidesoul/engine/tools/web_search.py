@@ -105,6 +105,7 @@ TOOL = Handler(
     description="Search the web and return titles, URLs, and snippets.",
     fn=_web_search,
     aliases=("search", "cari"),
+    max_output_chars=4_000,
     parameters={
         "type": "object",
         "properties": {

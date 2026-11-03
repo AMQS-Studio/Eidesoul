@@ -34,6 +34,8 @@ def test_cross_chat_leak_ignores_a_paraphrase() -> None:
 def archive_env(tmp_path):
     gateway = make_gateway(tmp_path)
     directory._upsert_contact(gateway.db, TARGET, "Budi", "")
+    # ADR-0007 §4.5: the requester must be provable in the target room.
+    gateway.participants = lambda thread: {"628111"} if thread == TARGET else None
     env = make_agent(
         tmp_path,
         gateway=gateway,

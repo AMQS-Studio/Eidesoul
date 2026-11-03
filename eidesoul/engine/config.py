@@ -157,6 +157,8 @@ class LLMConfig:
     timeout_seconds: float = 120.0
     temperature: float = 0.9
     run_budget_seconds: int = 240
+    max_calls_per_turn: int = 6  # decision + reply loop + polish (ADR-0025 §4.4)
+    prompt_cache: bool = True  # two system messages: stable prefix then volatile (ADR-0025 §4.1)
     retry: RetryConfig = field(default_factory=RetryConfig)
 
     def session_headers(self, session: str) -> dict[str, str]:
@@ -198,9 +200,95 @@ class SandboxConfig:
 
 
 @dataclass(frozen=True)
+class FetchConfig:
+    """ADR-0021 §4.3: `fetch` reads the public internet; the SSRF rule lives in code."""
+
+    enabled: bool = True
+    max_output_chars: int = 12_000
+    timeout_seconds: float = 8.0
+    max_redirects: int = 3
+    allow_ports: tuple[int, ...] = (80, 443)
+    deny_hosts: tuple[str, ...] = ()  # operator additions; never a way to loosen the rule
+
+
+@dataclass(frozen=True)
 class WebSearchConfig:
     base_url: str = ""  # empty = only the ddgs backend
     timeout_seconds: float = 10.0
+    fetch: FetchConfig = field(default_factory=FetchConfig)
+
+
+@dataclass(frozen=True)
+class GrepConfig:
+    """ADR-0021 §4.2: file-content search under the same roots as `read`."""
+
+    max_matches: int = 60
+    max_output_chars: int = 4_000
+    max_file_bytes: int = 2_000_000
+
+
+@dataclass(frozen=True)
+class ReadConfig:
+    grep: GrepConfig = field(default_factory=GrepConfig)
+
+
+@dataclass(frozen=True)
+class ToolsConfig:
+    """ADR-0024 §5: validation is not optional; only the error budget is tunable."""
+
+    args: str = "strict"
+    max_errors: int = 5
+    hot: tuple[str, ...] = ("read", "chat_history", "memory", "info")
+    activate_on_demand: bool = True
+
+
+@dataclass(frozen=True)
+class ShellConfig:
+    """ADR-0024 §4.6: the child sees a computed environment, never the process one."""
+
+    env: tuple[str, ...] = (
+        "PATH",
+        "HOME",
+        "LANG",
+        "TZ",
+        "XDG_RUNTIME_DIR",
+        "TMPDIR",
+        "TERM",
+    )
+
+
+@dataclass(frozen=True)
+class SearchConfig:
+    """ADR-0026 §5: FTS first, trigram as the second net; scope is unchanged."""
+
+    fts: bool = True
+    lang: str = "simple"
+    trgm: bool = True
+    trgm_threshold: float = 0.3
+    max_results: int = 50
+    snippet_chars: int = 240
+
+
+@dataclass(frozen=True)
+class MetricsConfig:
+    """ADR-0016 §4.6: `llm_calls` retention, removed by the ADR-0005 job."""
+
+    retention_days: int = 90
+
+
+@dataclass(frozen=True)
+class SelfKnowledgeConfig:
+    """ADR-0015 §4.8: generated-first self knowledge, on by default, disableable."""
+
+    enabled: bool = True
+    capability_index: bool = True
+    topics: tuple[str, ...] = ("ruangan", "ingatan", "izin", "inisiatif", "gagal", "batas")
+    coarse_buckets: bool = True
+    topology: bool = True
+    max_chars_per_topic: int = 1200
+    forbidden_token_check: bool = True
+    docs: tuple[str, ...] = ("README.md",)
+    docs_max_chars: int = 4000
 
 
 @dataclass(frozen=True)
@@ -266,6 +354,16 @@ class ReflectionConfig:
 
 
 @dataclass(frozen=True)
+class RoomConfig:
+    """ADR-0007 §4.5: the recall ladder's deterministic limits; membership is fail-closed."""
+
+    max_rooms_per_turn: int = 2
+    max_messages: int = 20
+    require_membership: bool = True
+    source: str = "gateway_first"  # gateway_first | recorded
+
+
+@dataclass(frozen=True)
 class MemoryConfig:
     auto_capture: bool = True
     capture: CaptureConfig = field(default_factory=CaptureConfig)
@@ -276,6 +374,7 @@ class MemoryConfig:
     telemetry: bool = False
     privacy: PrivacyConfig = field(default_factory=PrivacyConfig)
     worker: CognitionConfig = field(default_factory=CognitionConfig)
+    rooms: RoomConfig = field(default_factory=RoomConfig)
 
 
 @dataclass(frozen=True)
@@ -285,6 +384,7 @@ class ApprovalConfig:
     sensitive_commands: tuple[str, ...] = DEFAULT_SENSITIVE_COMMANDS
     settings: bool = True
     ttl_seconds: int = 900
+    consent_max_per_hour: int = 20  # self-confirmation anti-spam, not a permission grant
 
 
 @dataclass(frozen=True)
@@ -305,6 +405,12 @@ class PromptConfig:
     salience: bool = True
     max_chars: int = 9000
     thread_chars: int = 4000
+    pinned_blocks: tuple[str, ...] = ("base", "self", "roles", "away")
+    capability_index: bool = True
+    capability_index_max_chars: int = 1200
+    capability_index_two_level_at: int = 150
+    prefix_hash: bool = True
+    redact_infra: str = "non_administrator"  # non_administrator | never | always
 
 
 @dataclass(frozen=True)
@@ -374,6 +480,7 @@ class GuardConfig:
     model: str = ""
     timeout_seconds: float = 6.0
     max_command_chars: int = 4000
+    credential_patterns: tuple[str, ...] = ()  # ADR-0007 §4.8 additions only
 
 
 @dataclass(frozen=True)
@@ -466,6 +573,12 @@ class Config:
     worker: WorkerConfig = field(default_factory=WorkerConfig)
     io: IOConfig = field(default_factory=IOConfig)
     concurrency: ConcurrencyConfig = field(default_factory=ConcurrencyConfig)
+    tools: ToolsConfig = field(default_factory=ToolsConfig)
+    shell: ShellConfig = field(default_factory=ShellConfig)
+    read: ReadConfig = field(default_factory=ReadConfig)
+    search: SearchConfig = field(default_factory=SearchConfig)
+    metrics: MetricsConfig = field(default_factory=MetricsConfig)
+    self_knowledge: SelfKnowledgeConfig = field(default_factory=SelfKnowledgeConfig)
 
     def api_key(self) -> str:
         """The key for this provider; a local endpoint accepts any non-empty string."""
@@ -669,6 +782,108 @@ def _sandbox(raw: Mapping, base: Path) -> SandboxConfig:
     )
 
 
+REDACT_MODES = frozenset({"non_administrator", "never", "always"})
+
+
+def _redact_mode(raw: Mapping) -> str:
+    """`engine.prompt.self_block.redact_infra` (ADR-0015 §4.5)."""
+    value = str(raw.get("redact_infra") or "non_administrator").strip().lower()
+    if value not in REDACT_MODES:
+        raise ConfigError(
+            "engine.prompt.self_block.redact_infra must be one of "
+            f"{sorted(REDACT_MODES)}"
+        )
+    return value
+
+
+def _fetch_config(raw: Mapping) -> FetchConfig:
+    """`web_search.fetch` (ADR-0021 §4.3); the SSRF ranges are code, never config."""
+    ports: list[int] = []
+    for item in raw.get("allow_ports") or ():
+        try:
+            port = int(item)
+        except (TypeError, ValueError):
+            continue
+        if 0 < port < 65536:
+            ports.append(port)
+    return FetchConfig(
+        enabled=_bool(raw.get("enabled"), True),
+        max_output_chars=_clamped(raw.get("max_output_chars"), 12_000, 200, 12_000),
+        timeout_seconds=_num_clamped(raw.get("timeout_seconds"), 8.0, 0.5, 60.0),
+        max_redirects=_clamped(raw.get("max_redirects"), 3, 0, 10),
+        allow_ports=tuple(ports) or (80, 443),
+        deny_hosts=tuple(item.strip().lower() for item in _str_tuple(raw.get("deny_hosts"))),
+    )
+
+
+def _read_config_section(raw: Mapping) -> ReadConfig:
+    """`read.grep` (ADR-0021 §4.2)."""
+    grep_raw = _section(raw, "grep")
+    return ReadConfig(
+        grep=GrepConfig(
+            max_matches=_clamped(grep_raw.get("max_matches"), 60, 1, 200),
+            max_output_chars=_clamped(grep_raw.get("max_output_chars"), 4_000, 200, 20_000),
+            max_file_bytes=_clamped(grep_raw.get("max_file_bytes"), 2_000_000, 1_024, 20_000_000),
+        )
+    )
+
+
+def _tools_config(raw: Mapping) -> ToolsConfig:
+    """`engine.tools` (ADR-0024 §5): validation has no `off`."""
+    body = _section(raw, "tools")
+    mode = str(body.get("args") or "strict").strip().lower()
+    if mode != "strict":
+        raise ConfigError("engine.tools.args must be 'strict'; validation cannot be disabled")
+    hot = _str_tuple(body.get("hot")) or ToolsConfig().hot
+    return ToolsConfig(
+        args=mode,
+        max_errors=_clamped(body.get("max_errors"), 5, 1, 50),
+        hot=tuple(hot),
+        activate_on_demand=_bool(body.get("activate_on_demand"), True),
+    )
+
+
+def _shell_config(raw: Mapping) -> ShellConfig:
+    """`engine.shell.env` (ADR-0024 §4.6): a wildcard is a boot failure, not a shortcut."""
+    body = _section(raw, "shell")
+    if "env" not in body:
+        return ShellConfig()
+    names = _str_tuple(body.get("env"))
+    if "*" in names:
+        raise ConfigError("engine.shell.env must name variables; the wildcard '*' is refused")
+    return ShellConfig(env=names)
+
+
+def _search_config(raw: Mapping) -> SearchConfig:
+    """`engine.search` (ADR-0026 §5)."""
+    return SearchConfig(
+        fts=_bool(raw.get("fts"), True),
+        lang=str(raw.get("lang") or "simple").strip() or "simple",
+        trgm=_bool(raw.get("trgm"), True),
+        trgm_threshold=_num_clamped(raw.get("trgm_threshold"), 0.3, 0.0, 1.0),
+        max_results=_clamped(raw.get("max_results"), 50, 1, 50),
+        snippet_chars=_clamped(raw.get("snippet_chars"), 240, 60, 2000),
+    )
+
+
+def _self_knowledge_config(raw: Mapping) -> SelfKnowledgeConfig:
+    """`engine.self_knowledge` (ADR-0015 §4.8/§5)."""
+    defaults = SelfKnowledgeConfig()
+    topics = _str_tuple(raw.get("topics")) or defaults.topics
+    docs = _str_tuple(raw.get("docs"))
+    return SelfKnowledgeConfig(
+        enabled=_bool(raw.get("enabled"), True),
+        capability_index=_bool(raw.get("capability_index"), True),
+        topics=topics,
+        coarse_buckets=_bool(raw.get("coarse_buckets"), True),
+        topology=_bool(raw.get("topology"), True),
+        max_chars_per_topic=_clamped(raw.get("max_chars_per_topic"), 1200, 200, 8000),
+        forbidden_token_check=_bool(raw.get("forbidden_token_check"), True),
+        docs=docs if "docs" in raw else defaults.docs,
+        docs_max_chars=_clamped(raw.get("docs_max_chars"), 4000, 200, 20_000),
+    )
+
+
 def load_host(path: str | Path | None = None) -> tuple[HostConfig, Paths]:
     """Read config.yaml without creating directories or touching the DB."""
     target = Path(path or os.environ.get("EIDESOUL_CONFIG") or "config.yaml")
@@ -692,6 +907,7 @@ def load_host(path: str | Path | None = None) -> tuple[HostConfig, Paths]:
         web_search=WebSearchConfig(
             base_url=str(search_raw.get("base_url") or "").strip().rstrip("/"),
             timeout_seconds=_num(search_raw.get("timeout_seconds"), 10.0),
+            fetch=_fetch_config(_section(search_raw, "fetch")),
         ),
         mcp=_mcp_servers(raw.get("mcp")),
         roles_file=roles_file,
@@ -846,6 +1062,8 @@ def _llm_config(
         timeout_seconds=_num(llm_raw.get("timeout_seconds"), 120.0),
         temperature=_num(llm_raw.get("temperature"), 0.9),
         run_budget_seconds=int(_num(llm_raw.get("run_budget_seconds"), 240)),
+        max_calls_per_turn=max(1, int(_num(llm_raw.get("max_calls_per_turn"), 6))),
+        prompt_cache=_bool(llm_raw.get("prompt_cache"), True),
         retry=_retry_config(_section(llm_raw, "retry")),
     )
 
@@ -1081,6 +1299,17 @@ def load_config(
     cognition = _cognition_config(_section(memory_raw, "worker"))
     reflection = _reflection_config(_section(engine, "reflection"))
     skills = _skills_config(skills_raw)
+    tools_config = _tools_config(engine)
+    shell_config = _shell_config(engine)
+    search_config = _search_config(_section(engine, "search"))
+    self_knowledge = _self_knowledge_config(_section(engine, "self_knowledge"))
+    two_level_at = int(_num(prompt_raw.get("capability_index_two_level_at"), 150))
+    if two_level_at < 0:
+        raise ConfigError("engine.prompt.capability_index_two_level_at cannot be negative")
+    rooms_raw = _section(memory_raw, "rooms")
+    rooms_source = str(rooms_raw.get("source") or "gateway_first").strip().lower()
+    if rooms_source not in {"gateway_first", "recorded"}:
+        raise ConfigError("memory.rooms.source must be 'gateway_first' or 'recorded'")
 
     return Config(
         paths=paths,
@@ -1098,6 +1327,9 @@ def load_config(
             ),
             settings=_bool(approval_raw.get("settings"), True),
             ttl_seconds=int(_num(approval_raw.get("ttl_seconds"), 900)),
+            consent_max_per_hour=_clamped(
+                approval_raw.get("consent_max_per_hour"), 20, 0, 1000
+            ),
         ),
         roles=roles,
         default_role=default_role,
@@ -1117,6 +1349,14 @@ def load_config(
             telemetry=_bool(memory_raw.get("telemetry"), False),
             privacy=privacy,
             worker=cognition,
+            rooms=RoomConfig(
+                max_rooms_per_turn=_clamped(
+                    rooms_raw.get("max_rooms_per_turn"), 2, 0, 20
+                ),
+                max_messages=_clamped(rooms_raw.get("max_messages"), 20, 1, 200),
+                require_membership=_bool(rooms_raw.get("require_membership"), True),
+                source=rooms_source,
+            ),
         ),
         skills=skills,
         reflection=reflection,
@@ -1124,6 +1364,15 @@ def load_config(
             salience=_bool(prompt_raw.get("salience"), True),
             max_chars=int(_num(prompt_raw.get("max_chars"), 9000)),
             thread_chars=int(_num(prompt_raw.get("thread_chars"), 4000)),
+            pinned_blocks=_str_tuple(prompt_raw.get("pinned_blocks"))
+            or PromptConfig().pinned_blocks,
+            capability_index=_bool(prompt_raw.get("capability_index"), True),
+            capability_index_max_chars=int(
+                _num(prompt_raw.get("capability_index_max_chars"), 1200)
+            ),
+            capability_index_two_level_at=two_level_at,
+            prefix_hash=_bool(prompt_raw.get("prefix_hash"), True),
+            redact_infra=_redact_mode(_section(prompt_raw, "self_block")),
         ),
         humanize=HumanizeConfig(
             enabled=_bool(humanize_raw.get("enabled"), False),
@@ -1183,6 +1432,7 @@ def load_config(
             model=str(guard_raw.get("model") or "").strip(),
             timeout_seconds=_num_clamped(guard_raw.get("timeout_seconds"), 6.0, 0.5, 60.0),
             max_command_chars=_clamped(guard_raw.get("max_command_chars"), 4000, 200, 100_000),
+            credential_patterns=_str_tuple(guard_raw.get("credential_patterns")),
         ),
         language=language,
         turns=_turn_config(_section(engine, "turns"), _section(engine, "turn")),
@@ -1193,4 +1443,14 @@ def load_config(
                 1, int(_num(_section(engine, "concurrency").get("max_chat_locks"), 256))
             )
         ),
+        tools=tools_config,
+        shell=shell_config,
+        read=_read_config_section(_section(raw, "read")),
+        search=search_config,
+        metrics=MetricsConfig(
+            retention_days=_clamped(
+                _section(engine, "metrics").get("retention_days"), 90, 1, 3650
+            )
+        ),
+        self_knowledge=self_knowledge,
     )

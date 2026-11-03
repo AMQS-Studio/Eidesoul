@@ -26,7 +26,7 @@ log = logging.getLogger(__name__)
 
 KINDS = ("recipe", "prompt")
 MAX_STEPS = 10
-DEFAULT_ROLES = ("owner", "member")
+DEFAULT_ROLES = ("administrator", "member")
 
 
 def _clip(text: str, limit: int) -> str:

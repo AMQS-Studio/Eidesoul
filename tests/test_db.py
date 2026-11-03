@@ -94,7 +94,7 @@ def test_upsert_chunks_postgres_parameter_limit() -> None:
 
     assert total == 5500
     assert len(seen) == 11
-    assert max(seen) == len(messages.columns) * 500
+    assert max(seen) == sum(1 for c in messages.columns if c.computed is None) * 500
     assert max(seen) <= 65535
 
 

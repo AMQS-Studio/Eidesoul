@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import fnmatch
 import importlib
+import inspect
 import pkgutil
 import re
 from collections.abc import Awaitable, Callable, Sequence
@@ -32,6 +33,7 @@ class Handler:
     pattern: str = ""
     hidden: bool = False
     family: str = ""
+    max_output_chars: int = 20_000  # ADR-0021 §4.1: per tool, cut by `execute`
 
     @property
     def perm(self) -> str:
@@ -40,6 +42,58 @@ class Handler:
 
 def allows(patterns: tuple[str, ...], name: str) -> bool:
     return any(fnmatch.fnmatchcase(name, pattern) for pattern in patterns)
+
+
+# ADR-0024 §4.2: the validator's whole vocabulary. `description`/`title` are annotations, not
+# assertions, so they are allowed everywhere; anything else is a boot failure, never ignored.
+KEYWORDS = frozenset(
+    {
+        "type",
+        "properties",
+        "required",
+        "enum",
+        "items",
+        "minimum",
+        "maximum",
+        "minLength",
+        "maxLength",
+        "pattern",
+        "additionalProperties",
+        "description",
+        "title",
+    }
+)
+TYPES = frozenset({"string", "integer", "number", "boolean", "array", "object", "null"})
+
+
+def _keyword_errors(schema: dict, label: str) -> list[str]:
+    """A keyword outside the supported subset must fail boot, not be silently ignored."""
+    errors: list[str] = []
+    unknown = sorted(set(schema) - KEYWORDS)
+    if unknown:
+        errors.append(f"{label}: unsupported keyword(s): {', '.join(unknown)}")
+    kind = schema.get("type")
+    if kind is not None and kind not in TYPES:
+        errors.append(f"{label}.type must be one of: {', '.join(sorted(TYPES))}")
+    enum = schema.get("enum")
+    if enum is not None and (not isinstance(enum, list) or not enum):
+        errors.append(f"{label}.enum must be a non-empty list")
+    for key in ("minimum", "maximum", "minLength", "maxLength"):
+        value = schema.get(key)
+        if value is not None and (isinstance(value, bool) or not isinstance(value, (int, float))):
+            errors.append(f"{label}.{key} must be a number")
+    pattern = schema.get("pattern")
+    if pattern is not None:
+        if not isinstance(pattern, str):
+            errors.append(f"{label}.pattern must be a string")
+        else:
+            try:
+                re.compile(pattern)
+            except re.error as exc:
+                errors.append(f"{label}.pattern is not a valid regex: {exc}")
+    if schema.get("type") == "array" and not isinstance(schema.get("items"), dict):
+        errors.append(f"{label}.items must be an object schema for type 'array'")
+    return errors
 
 
 def _schema_errors(parameters: object) -> list[str]:
@@ -52,9 +106,17 @@ def _schema_errors(parameters: object) -> list[str]:
     if not isinstance(properties, dict):
         errors.append("parameters.properties must be an object")
         properties = {}
+    errors.extend(_keyword_errors(parameters, "parameters"))
     for key, value in properties.items():
         if not isinstance(value, dict):
             errors.append(f"parameters.properties['{key}'] must be an object")
+            continue
+        errors.extend(_keyword_errors(value, f"parameters.properties['{key}']"))
+        items = value.get("items")
+        if isinstance(items, dict):
+            errors.extend(
+                _keyword_errors(items, f"parameters.properties['{key}'].items")
+            )
     required = parameters.get("required")
     if required is not None:
         if not isinstance(required, list) or not all(isinstance(item, str) for item in required):
@@ -64,6 +126,9 @@ def _schema_errors(parameters: object) -> list[str]:
             if unknown:
                 joined = ", ".join(unknown)
                 errors.append(f"parameters.required contains unknown properties: {joined}")
+    additional = parameters.get("additionalProperties")
+    if additional is not None and not isinstance(additional, bool):
+        errors.append("parameters.additionalProperties must be a boolean")
     return errors
 
 
@@ -92,6 +157,11 @@ def validate(
             add(f"alias '{alias}' matches the handler name")
     if handler.fn is not None and not callable(handler.fn):
         add("fn must be callable")
+    if handler.fn is not None and callable(handler.fn) and not inspect.iscoroutinefunction(
+        handler.fn
+    ):
+        # ADR-0024 §4.5: both callers `await` the handler; a sync one is a boot-time bug.
+        add("fn must be async")
     if handler.fn is None:
         if kind == "command":
             add("command requires fn")

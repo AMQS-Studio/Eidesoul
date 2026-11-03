@@ -3,16 +3,45 @@
 from __future__ import annotations
 
 import logging
+import re
+from datetime import datetime
 
 from ....engine.inbound import Directory, directory_refusal
 from ....engine.registry import Handler
 from ....engine.relay import RelayStore
-from ....engine.tools import ToolContext, _resolve
+from ....engine.tools import ToolContext, _resolve, cross_refusal
 from .. import directory
 
 log = logging.getLogger(__name__)
 
 LIST_LIMIT = 20
+ATTRIBUTION_MARK = "[attribution]"
+FAKE_ATTRIBUTION = re.compile(
+    r"(?mi)^\s*\[?(author|reason|sent_at|destination|via|attribution)\]?\s*:"
+)
+FIELD_MAX = 200
+
+
+def _field(value: object) -> str:
+    text = " ".join(str(value or "").split())
+    return text[:FIELD_MAX]
+
+
+def _attribution(ctx: ToolContext, reason: str, extra: str, target: str) -> str:
+    """ADR-0007 §4.5: the engine builds the block from data; the model writes only the body."""
+    person = _field(ctx.person_id or ctx.sender)
+    lines = [
+        ATTRIBUTION_MARK,
+        f"author: {person}",
+        f"reason: {_field(reason)}",
+        f"sent_at: {datetime.now().isoformat(timespec='seconds')}",
+        f"destination: {_field(target)}",
+        f"via: {_field(getattr(ctx.gateway, 'name', '') or '-')}",
+    ]
+    if extra:
+        lines.append(f"note: {_field(extra)}")
+    lines.append("[/attribution]")
+    return "\n".join(lines)
 
 
 def _known(ctx: ToolContext) -> str:
@@ -51,6 +80,9 @@ def _record(
         )
     elif ctx.thread_id == target:
         return
+    elif kind in {"text", "file"}:
+        # ADR-0007 §4.5: the ledger keeps send.class, so cross sends are countable.
+        kind = "cross_send"
     try:
         source_name = ctx.gateway.chat_name(ctx.thread_id) if ctx.gateway else ""
         ctx.ledger.log_action(
@@ -147,9 +179,16 @@ def _target(ctx: ToolContext, raw_chat: str) -> tuple[tuple[str, str] | None, st
     return None, f'error: target "{raw_chat}" is not in the archive.\n{_known(ctx)}'
 
 
-def _cross_refusal(ctx: ToolContext, thread_id: str, name: str, raw_chat: str) -> str:
+def _cross_refusal(
+    ctx: ToolContext, thread_id: str, name: str, raw_chat: str, *, grant=None
+) -> str:
     if thread_id == ctx.thread_id:
         return ""
+    if grant is None:
+        # ADR-0023: a relay grant is the door for forwarding another person's answer.
+        denial = cross_refusal(ctx, thread_id)
+        if denial:
+            return denial
     if not ctx.trusted:
         return "error: cross-chat send is only for trusted roles"
     if thread_id not in ctx.reads:
@@ -190,13 +229,27 @@ async def _send_to(args: dict, ctx: ToolContext) -> str:
     grant, refusal = _relay(ctx, thread_id, args, text)
     if refusal:
         return refusal
-    cross = _cross_refusal(ctx, thread_id, name, raw_chat)
+    cross = _cross_refusal(ctx, thread_id, name, raw_chat, grant=grant)
     if cross:
         return cross
+    is_cross = thread_id != ctx.thread_id
+    why = str(args.get("reason") or "").strip()
+    extra = str(args.get("extra") or "").strip()
+    if is_cross and grant is None and (text or raw_path):
+        if not why:
+            return "denied: cross_send needs a reason from the requester"
+        if ATTRIBUTION_MARK in text or FAKE_ATTRIBUTION.search(text):
+            return "denied: the attribution block is built by the engine; do not write it"
+        block = _attribution(ctx, why, extra, directory.label(thread_id, name))
+        if text:
+            text = f"{block}\n\n{text}"
     path, path_error = _workspace_path(ctx, raw_path)
     if path_error:
         return path_error
     caption = str(args.get("caption") or "").strip()[:1024]
+    if is_cross and grant is None and path is not None and why:
+        caption = f"{_attribution(ctx, why, extra, directory.label(thread_id, name))}\n\n{caption}"
+        caption = caption[:1024]
     results: list[str] = []
     entries: list[dict | None] = []
     if text:
@@ -245,6 +298,17 @@ TOOL = Handler(
                 "description": "File path inside the workspace (optional).",
             },
             "caption": {"type": "string", "description": "Optional file caption."},
+            "reason": {
+                "type": "string",
+                "description": (
+                    "Why the requester wants this sent; required for a cross-room send, "
+                    "rendered by the engine in the attribution block."
+                ),
+            },
+            "extra": {
+                "type": "string",
+                "description": "One extra data field the requester asked for, rendered in the block.",
+            },
             "relay_task": {
                 "type": "string",
                 "description": (

@@ -1,7 +1,7 @@
 # ADR-0024: Tool Input Contract — Argument Validation, Async Handlers, and Shell `env`
 
 - **Status:** accepted
-- **Implementation:** draft — argument validation, coroutine checks, and `shell.env` do not exist yet
+- **Implementation:** implemented — evidence: `registry` schema keyword subset + coroutine validation, `tools/__init__.py` `argument_errors`/order name→permission→args→safety, computed `shell.env` whitelist, `tests/test_tools_contract.py`
 - **Date:** 2026-11-03
 - **Deciders:** Muqsith (owner), omp (reviewer)
 - **Context:** the single execution door checked names, permissions, and safety, but arguments were passed on as they were to the handler; synchronous handlers were not rejected at boot; and `shell` inherited the entire environment of the API process — including the API key and the DSN.

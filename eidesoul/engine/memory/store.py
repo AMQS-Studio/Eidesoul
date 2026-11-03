@@ -1544,7 +1544,9 @@ class MemoryStore:
                     )
                 )
                 purged += 1
-            self._purge_metrics(conn, moment)
+        # Metrics retention runs in its own transaction: a stale/absent llm_calls must never
+        # roll back the canonical deletes above (Postgres aborts the whole transaction).
+        self._purge_metrics_only_sync(moment)
         return purged
 
     def _purge_metrics(self, conn, now: float) -> int:

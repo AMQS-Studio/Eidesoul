@@ -7,24 +7,52 @@ import difflib
 import os
 import re
 import time
-from dataclasses import fields, is_dataclass
 from pathlib import Path
 
 import yaml
 
 from ..config import ConfigError, load_config
 from ..db import redact_dsn
+from ..guard import ActionRequest, scope_proof
 from ..registry import Handler
 from ..roles import NAME as ROLE_NAME
 from ..schema import config_changes
-from . import ToolContext
+from . import ToolContext, workspace_roots
 
 MAX_CONTENT = 64 * 1024
 SECRET = re.compile(r"(api_key|password|secret|token)", re.IGNORECASE)
+USERINFO = re.compile(r"(://[^/@\s:]+):([^/@\s]+)@")
 FILES = ("engine", "host", "gateway", "soul", "role")
 DOC_FILES = ("engine", "soul", "role")
 RESERVED_SECTIONS = ("engine", "gateways")
 MIRRORS = ("config.yaml", "roles.yaml", "soul.yaml")  # the only files allowed as mirrors
+RAW_FILES = ("engine", "host", "gateway")  # a whole-file read is refused for these
+
+
+def _strip_userinfo(text: str) -> str:
+    return USERINFO.sub(r"\1:***@", str(text))
+
+
+def _redact(value, path: str = ""):
+    """ADR-0015 §4.7: a secret key -> `***`, `database.url` -> `redact_dsn`, userinfo stripped."""
+    if isinstance(value, dict):
+        return {
+            key: (
+                "***"
+                if SECRET.search(str(key)) and str(key) != "api_key_env"
+                else _redact(item, f"{path}.{key}" if path else str(key))
+            )
+            for key, item in value.items()
+        }
+    if isinstance(value, list):
+        return [_redact(item, path) for item in value]
+    leaf = str(path or "").split(".")[-1]
+    if SECRET.search(leaf) and leaf != "api_key_env":
+        return "***"
+    text = str(value)
+    if str(path or "").endswith("database.url") or str(path or "") == "database.url":
+        return redact_dsn(text)
+    return _strip_userinfo(text)
 
 
 # --------------------------------------------------------------- yaml util
@@ -82,20 +110,10 @@ def _diff(old: str, new: str, label: str) -> str:
     return text if len(text) <= 4000 else text[:3999] + "…"
 
 
-def _schema_paths(prefix: str, body, depth: int = 0) -> list[str]:
-    found: list[str] = []
-    if not is_dataclass(body) or depth > 2:
-        return found
-    for item in fields(body):
-        path = f"{prefix}.{item.name}" if prefix else item.name
-        default = item.default if item.default is not item.default_factory else None
-        found.append(f"{path} = {default!r}")
-        value = getattr(body, item.name, None)
-        if is_dataclass(value):
-            found.extend(_schema_paths(path, value, depth + 1))
-        elif isinstance(value, dict) and value and depth < 2:
-            found.extend(_schema_paths(path, value, depth + 1))
-    return found
+def _schema_lines(config) -> list[str]:
+    from ..self_knowledge import schema_paths
+
+    return [f"- {line}" for line in schema_paths("engine", config)]
 
 
 # ------------------------------------------------------------------ state
@@ -362,13 +380,18 @@ async def _settings(args: dict, ctx: ToolContext) -> str:
     if action == "schema":
         lines = [f"Files: {', '.join(FILES)}"]
         lines.append("Engine dot-paths:")
-        lines.extend(f"- engine.{line}" for line in _schema_paths("engine", ctx.config))
+        lines.extend(_schema_lines(ctx.config))
         return "\n".join(lines)
 
     if action == "reload":
         return await agent.reload()
 
     if action == "get":
+        if not path and file in RAW_FILES:
+            return (
+                "error: a path is required; use schema for the structure and get <path> "
+                "for one value (a whole configuration file is never returned)"
+            )
         kind, name, text = _read(agent, file, role_name)
         body = yaml.safe_load(text) if text.strip() else {}
         if path:
@@ -376,10 +399,11 @@ async def _settings(args: dict, ctx: ToolContext) -> str:
                 value = deep_get(body, path)
             except KeyError as exc:
                 return f"error: {exc}"
+            value = _redact(value, path)
             if isinstance(value, (dict, list)):
                 return dump(value).strip()
             return str(value)
-        return text or "(empty)"
+        return _strip_userinfo(text or "(empty)")
 
     if action not in {"set", "unset", "write"}:
         return "error: action must be schema, get, set, unset, write, or reload"
@@ -395,18 +419,35 @@ async def _settings(args: dict, ctx: ToolContext) -> str:
     if path == "database.url" and new_text:
         display = redact_dsn(new_text)
     if _requires_approval(ctx, action):
+        request = ActionRequest(
+            tool="settings",
+            args={"file": file, "path": path},
+            thread_id=ctx.thread_id,
+            sender=ctx.sender,
+            gateway=getattr(ctx.gateway, "name", "") or "",
+            roles=tuple(role.name for role in ctx.roles),
+            workspace=str(ctx.config.workspace),
+            roots=tuple(
+                str(root)
+                for root in workspace_roots(ctx.config, ctx.roles, ctx.thread_id)
+            ),
+        )
+        proof = scope_proof(request, extra=ctx.config.guard.credential_patterns)
         approval = await agent.approvals.create(
             kind="settings",
             thread_id=ctx.thread_id,
             sender=ctx.sender,
             gateway=getattr(ctx.gateway, "name", "") or "",
             tool="settings",
+            args={"file": file, "path": path},
             payload=_payload(
                 file, role_name, action, path, args.get("value"), str(args.get("content") or ""), actor
             ),
             summary=f"settings {action} {name}{(' ' + path) if path else ''}",
             diff=diff,
             roles=tuple(role.name for role in ctx.roles),
+            approval_class=str(proof["class"]),
+            scope_proof=proof,
         )
         return (
             f"pending approval #{approval.id}: settings {action} {name}. "

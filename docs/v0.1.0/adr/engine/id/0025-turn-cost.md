@@ -1,10 +1,10 @@
-> Terjemahan turunan — jangan sunting; sumber: engine/0025-turn-cost.md (sha256: b5825ba2eb37)
+> Terjemahan turunan — jangan sunting; sumber: engine/0025-turn-cost.md (sha256: 1b57f7086169)
 > Teks ini ditulis manusia; baris yang tidak bisa diterjemahkan mesin disalin apa adanya ke sumber English, jadi sumber bercampur dua bahasa.
 
 # ADR-0025: Biaya Turn — Prefix Stabil, Gating `polish`, dan Anggaran Panggilan
 
 - **Status:** accepted
-- **Implementasi:** draft — prompt masih satu pesan sistem; belum ada `max_calls_per_turn`
+- **Implementasi:** implemented — bukti: satu baris `llm_calls` per percobaan di `llm.py` (revisi 8), `max_calls_per_turn` dengan notice wrap-up, dua pesan sistem + hash prefix dengan fallback merge, bagian prompt stabil/volatil, `tests/test_cost.py`
 - **Tanggal:** 2026-11-03
 - **Deciders:** Muqsith (owner), omp (reviewer)
 - **Konteks:** satu turn memanggil LLM beberapa kali (decision, lingkar balasan, `polish`/`regulate`) dan seluruh blok prompt — termasuk blok yang berubah tiap menit (`self` memuat mode, uptime, lease; ditambah `memory`, `emotion`, `topic`, `currents`) — dirangkai ulang menjadi satu pesan sistem; tidak ada batas jumlah panggilan per turn selain `run_budget_seconds` (240 s).

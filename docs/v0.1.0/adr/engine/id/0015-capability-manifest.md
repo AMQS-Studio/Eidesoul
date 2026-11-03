@@ -1,10 +1,10 @@
-> Terjemahan turunan — jangan sunting; sumber: engine/0015-capability-manifest.md (sha256: fd1f6c274a7f)
+> Terjemahan turunan — jangan sunting; sumber: engine/0015-capability-manifest.md (sha256: 6c1fdaac0c58)
 > Teks ini ditulis manusia; baris yang tidak bisa diterjemahkan mesin disalin apa adanya ke sumber English, jadi sumber bercampur dua bahasa.
 
 # ADR-0015: Payload Bertingkat & Manifest Kapabilitas
 
 - **Status:** accepted
-- **Implementasi:** draft — belum ada index kapabilitas/`self_knowledge` di engine
+- **Implementasi:** implemented — bukti: `eidesoul/engine/self_knowledge.py` (katalog/konfigurasi/perilaku/topologi), `tools/info.py`, `scripts/selfcheck.py --check`, allowlist dokumen default `README.md`, baca konfigurasi teredaksi, `tests/test_self_knowledge.py`; hasil gate: `selfcheck: ok — behaviors=6`
 - **Tanggal:** 2026-11-02
 - **Deciders:** Muqsith (owner), omp (reviewer)
 - **Konteks:** lanjutan ADR-0006 (privasi grup), ADR-0007 (capability vs authorization), ADR-0008 (integritas & karantina), ADR-0014 (automation)

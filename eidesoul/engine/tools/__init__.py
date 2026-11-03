@@ -7,16 +7,19 @@ import re
 from pathlib import Path
 
 from ..config import Config
+from ..inbound import Directory
 from ..permissions import command_allowed
 from ..registry import Handler, Registry, allows, discover
 from ..roles import Role
-from ..guard import ActionRequest
+from ..guard import CONSENT, ActionRequest, approval_summary, scope_proof
 
 log = logging.getLogger(__name__)
 
-MAX_OUTPUT = 40_000
+DEFAULT_OUTPUT = 20_000
 MAX_ERROR = 500
-TRUNCATED = "\n...[truncated: output exceeds 40000 chars; narrow the query/read range or ask for the rest]"
+TRUNCATED = "\n...[truncated: output exceeds {limit} chars; {hint}]"
+DEFAULT_HINT = "next: narrow the query/read range or ask for the rest"
+INVALID_ARGS = "error: invalid arguments for {tool}: {detail}"
 
 FAMILIES = frozenset({"shell", "read", "write", "web_search", "sandbox", "mcp"})
 
@@ -47,6 +50,7 @@ class ToolContext:
         approval_id: str = "",
         person_id: str = "",
         direct: bool = False,
+        turn_id: str = "",
     ):
         self.config = config
         self.roles = tuple(roles) if isinstance(roles, (tuple, list)) else (roles,)
@@ -66,11 +70,13 @@ class ToolContext:
         self.approval_id = approval_id
         self.person_id = person_id or sender
         self.direct = bool(direct)
+        self.turn_id = str(turn_id or "")
         self.used: list[str] = []
         self.sent: list[dict] = []
         self.reads: set[str] = set()
         self.cross_reads: list[str] = []
         self.memory_hits: list = []
+        self.activated: set[str] = set()
 
     @property
     def role(self) -> Role | None:
@@ -175,12 +181,145 @@ def _resolve_write(ctx: ToolContext, raw: str) -> Path:
     return path
 
 
-def truncate(text: str) -> str:
-    return text if len(text) <= MAX_OUTPUT else text[:MAX_OUTPUT] + TRUNCATED
+def truncate(text: str, limit: int = DEFAULT_OUTPUT, *, hint: str = "") -> str:
+    """Cut to the tool's cap with an explicit marker and a continuation hint (ADR-0021 §4.1)."""
+    size = max(200, int(limit or DEFAULT_OUTPUT))
+    body = str(text)
+    if len(body) <= size:
+        return body
+    marker = TRUNCATED.format(limit=size, hint=hint or DEFAULT_HINT)
+    return body[: max(0, size - len(marker))] + marker
 
+
+# --------------------------------------------------------------- arguments
+
+def _type_ok(value: object, kind: str) -> bool:
+    if kind == "string":
+        return isinstance(value, str)
+    if kind == "integer":
+        return isinstance(value, int) and not isinstance(value, bool)
+    if kind == "number":
+        return isinstance(value, (int, float)) and not isinstance(value, bool)
+    if kind == "boolean":
+        return isinstance(value, bool)
+    if kind == "array":
+        return isinstance(value, list)
+    if kind == "object":
+        return isinstance(value, dict)
+    if kind == "null":
+        return value is None
+    return True
+
+
+def _value_errors(label: str, value: object, schema: dict) -> list[str]:
+    kind = str(schema.get("type") or "")
+    if kind and not _type_ok(value, kind):
+        return [f"{label} must be {kind}"]
+    errors: list[str] = []
+    enum = schema.get("enum")
+    if isinstance(enum, list) and value not in enum:
+        errors.append(f"{label} must be one of: {', '.join(str(item) for item in enum)}")
+    if kind in {"integer", "number"} and not isinstance(value, bool):
+        low, high = schema.get("minimum"), schema.get("maximum")
+        if isinstance(low, (int, float)) and value < low:
+            errors.append(f"{label} must be >= {low}")
+        if isinstance(high, (int, float)) and value > high:
+            errors.append(f"{label} must be <= {high}")
+    if kind == "string":
+        low, high = schema.get("minLength"), schema.get("maxLength")
+        if isinstance(low, int) and len(value) < low:
+            errors.append(f"{label} must be at least {low} characters")
+        if isinstance(high, int) and len(value) > high:
+            errors.append(f"{label} must be at most {high} characters")
+        pattern = schema.get("pattern")
+        if isinstance(pattern, str) and not re.search(pattern, value):
+            errors.append(f"{label} must match {pattern}")
+    if kind == "array" and isinstance(schema.get("items"), dict):
+        for index, item in enumerate(value):
+            errors.extend(_value_errors(f"{label}[{index}]", item, schema["items"]))
+    if kind == "object":
+        errors.extend(_object_errors(value, schema, prefix=label))
+    return errors
+
+
+def _object_errors(args: dict, schema: dict, *, prefix: str = "") -> list[str]:
+    properties = schema.get("properties") if isinstance(schema.get("properties"), dict) else {}
+    required = schema.get("required") if isinstance(schema.get("required"), list) else []
+    errors: list[str] = []
+    for field in required:
+        if field not in args:
+            errors.append(f"{field} is required")
+    if not schema.get("additionalProperties", False):
+        for key in args:
+            if key not in properties:
+                errors.append(f"unexpected field {key}")
+    for key, value in args.items():
+        schema_value = properties.get(key)
+        if isinstance(schema_value, dict):
+            label = f"{prefix}.{key}" if prefix else key
+            errors.extend(_value_errors(label, value, schema_value))
+    return errors
+
+
+def argument_errors(parameters: dict, args: object, limit: int = 5) -> list[str]:
+    """ADR-0024 §4.4: deterministic, field-named, bounded; never an exception."""
+    if not isinstance(args, dict):
+        return ["arguments must be an object"]
+    if not isinstance(parameters, dict) or not parameters:
+        return []
+    errors = _object_errors(args, parameters)
+    return errors[: max(1, int(limit or 5))]
+
+
+def invalid_arguments(tool: str, errors: list[str]) -> str:
+    return INVALID_ARGS.format(tool=tool, detail="; ".join(errors))[:MAX_ERROR]
+
+
+# ---------------------------------------------------------------- rooms
+
+def rooms_of(ctx: ToolContext) -> set[str]:
+    """Recorded presence (ADR-0007 §4.5 layer 2); empty when no archive is wired."""
+    if ctx.history is None or not (ctx.person_id or ctx.sender):
+        return set()
+    try:
+        return set(ctx.history.rooms_of(ctx.person_id or ctx.sender))
+    except Exception:
+        log.exception("rooms_of failed for %s", ctx.person_id or ctx.sender)
+        return set()
+
+
+def cross_refusal(ctx: ToolContext, thread_id: str) -> str:
+    """`""` when the requester may read that room, `denied: room` otherwise.
+
+    Gateway facts are authoritative; recorded presence is the fallback, and every unproven
+    case is refused (fail closed, ADR-0007 §4.5). The signal carries no content.
+    """
+    if not thread_id or thread_id == ctx.thread_id:
+        return ""
+    rooms = ctx.config.memory.rooms
+    if not rooms.require_membership:
+        return ""
+    requester = ctx.person_id or ctx.sender
+    gateway = ctx.gateway
+    if rooms.source != "recorded" and isinstance(gateway, Directory):
+        members = gateway.participants(thread_id)
+        if members is not None:
+            return "" if requester and requester in members else "denied: room"
+        # The gateway cannot prove membership: fall through to the recorded layer.
+    elif rooms.source != "recorded" and gateway is not None:
+        return "denied: room"
+    if requester and thread_id in rooms_of(ctx):
+        known = set(ctx.reads) - {ctx.thread_id}
+        if thread_id not in known and len(known) >= int(rooms.max_rooms_per_turn):
+            return "denied: room"
+        return ""
+    return "denied: room"
+
+
+# ---------------------------------------------------------------- execute
 
 async def execute(specs: dict[str, Handler], name: str, args: dict, ctx: ToolContext) -> str:
-    """Single entry point: permission, safety/approval, run, catch errors, truncate output."""
+    """Single entry point: name, permission, arguments, safety/approval, run, cap output."""
     spec = specs.get(name) or next((item for item in specs.values() if name in item.aliases), None)
     if spec is None:
         return f"error: unknown tool: {name}"
@@ -188,17 +327,29 @@ async def execute(specs: dict[str, Handler], name: str, args: dict, ctx: ToolCon
         return f"error: tool '{name}' is not allowed for role '{ctx.role_names()}'"
     if spec.fn is None:
         return f"error: tool '{name}' has no implementation"
+    errors = argument_errors(spec.parameters, args, ctx.config.tools.max_errors)
+    if errors:
+        return invalid_arguments(spec.name, errors)
     if ctx.agent is not None and not ctx.approved:
-        decision = ctx.agent.safety.check(
-            ActionRequest(
-                tool=spec.name,
-                args=dict(args),
-                thread_id=ctx.thread_id,
-                sender=ctx.sender,
-                gateway=getattr(ctx.gateway, "name", "") or "",
-                roles=tuple(role.name for role in ctx.roles),
-            )
+        resolved: tuple[str, ...] = ()
+        raw_path = args.get("path") if isinstance(args, dict) else None
+        if isinstance(raw_path, str) and raw_path.strip():
+            try:
+                resolved = (str(_resolve(ctx, raw_path)),)
+            except PermissionError:
+                resolved = ()
+        request = ActionRequest(
+            tool=spec.name,
+            args=dict(args),
+            thread_id=ctx.thread_id,
+            sender=ctx.sender,
+            gateway=getattr(ctx.gateway, "name", "") or "",
+            roles=tuple(role.name for role in ctx.roles),
+            workspace=str(ctx.config.workspace),
+            roots=tuple(str(root) for root in ctx.roots),
+            paths=resolved,
         )
+        decision = ctx.agent.safety.check(request)
         if spec.name == "sandbox" and decision.verdict == "allow":
             guard = getattr(ctx.agent, "sandbox_guard", None)
             if guard is not None:
@@ -215,6 +366,14 @@ async def execute(specs: dict[str, Handler], name: str, args: dict, ctx: ToolCon
                     f"pending approval #{ctx.approval_id} already waiting; "
                     "ask the sender to /approve it."
                 )
+            proof = scope_proof(request, extra=ctx.config.guard.credential_patterns)
+            if proof["class"] == CONSENT and not ctx.agent.approvals.consent_allowed(
+                ctx.sender
+            ):
+                return (
+                    "error: too many consent approvals in the last hour; "
+                    "wait or ask the approver"
+                )
             approval = await ctx.agent.approvals.create(
                 kind="tool",
                 thread_id=ctx.thread_id,
@@ -222,8 +381,10 @@ async def execute(specs: dict[str, Handler], name: str, args: dict, ctx: ToolCon
                 gateway=getattr(ctx.gateway, "name", "") or "",
                 tool=spec.name,
                 args=dict(args),
-                summary=f"{spec.name} {str(args)[:160]}",
+                summary=approval_summary(spec.name, request, proof),
                 roles=tuple(role.name for role in ctx.roles),
+                approval_class=str(proof["class"]),
+                scope_proof=proof,
             )
             ctx.approval_id = str(approval.id)
             return (
@@ -238,7 +399,7 @@ async def execute(specs: dict[str, Handler], name: str, args: dict, ctx: ToolCon
     except Exception as exc:  # no tool may take the process down
         log.exception("tool %s failed", name)
         result = f"error: {type(exc).__name__}: {exc}"[:MAX_ERROR]
-    return truncate(str(result))
+    return truncate(str(result), spec.max_output_chars)
 
 
 REGISTRY = Registry(

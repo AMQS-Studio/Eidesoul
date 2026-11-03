@@ -1,7 +1,7 @@
 # ADR-0015: Layered Payload & Capability Manifest
 
 - **Status:** accepted
-- **Implementation:** draft — there is no capability index/`self_knowledge` in the engine yet
+- **Implementation:** implemented — evidence: `eidesoul/engine/self_knowledge.py` (catalog/config/behavior/topology), `tools/info.py`, `scripts/selfcheck.py --check`, docs allowlist default `README.md`, redacted config reads, `tests/test_self_knowledge.py`; gate result: `selfcheck: ok — behaviors=6`
 - **Date:** 2026-11-02
 - **Deciders:** Muqsith (owner), omp (reviewer)
 - **Context:** follows ADR-0006 (group privacy), ADR-0007 (capability vs authority), ADR-0008 (integrity & quarantine), ADR-0014 (automation)

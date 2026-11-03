@@ -85,6 +85,9 @@ class Database:
     # ------------------------------------------------------------- schema
 
     def create_all(self) -> None:
+        # ADR-0026 §4.6: the trigram indexes need the extension before the tables are created.
+        with self.engine.connect().execution_options(isolation_level="AUTOCOMMIT") as conn:
+            conn.execute(text("CREATE EXTENSION IF NOT EXISTS pg_trgm"))
         metadata.create_all(self.engine)
         with self.connect() as conn:
             # ADR-0004 §5.3: the one readable path. Migrations create the same view.
@@ -252,7 +255,7 @@ class Database:
                 conflict = {
                     column.name: statement.excluded[column.name]
                     for column in table.columns
-                    if column.name not in index_elements
+                    if column.name not in index_elements and column.computed is None
                 }
             elif callable(update):
                 conflict = update(statement)

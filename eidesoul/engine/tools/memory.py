@@ -200,6 +200,7 @@ TOOL = Handler(
     ),
     fn=_memory,
     aliases=("memori",),
+    max_output_chars=8_000,
     parameters={
         "type": "object",
         "properties": {

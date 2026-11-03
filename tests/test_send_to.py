@@ -61,6 +61,8 @@ def cross_env(tmp_path, role_tools=("send_to", "chat_history", "*")):
 
     gateway = make_gateway(tmp_path)
     directory._upsert_contact(gateway.db, TARGET, "Budi", "")
+    # ADR-0007 §4.5: the requester must be provable in the target room before a cross send.
+    gateway.participants = lambda thread: {"628111"} if thread == TARGET else None
     env = make_agent(
         tmp_path,
         gateway=gateway,
@@ -106,12 +108,18 @@ def test_cross_chat_send_works_after_reading_the_target(tmp_path) -> None:
 
     read = asyncio.run(execute(env.agent.tools.by_name, "chat_history", {"chat": "budi"}, ctx))
     result = asyncio.run(
-        execute(env.agent.tools.by_name, "send_to", {"chat": "budi", "text": "halo"}, ctx)
+        execute(
+            env.agent.tools.by_name,
+            "send_to",
+            {"chat": "budi", "text": "halo", "reason": "jawab budi"},
+            ctx,
+        )
     )
 
     assert "halo dari budi" in read
     assert result.startswith("ok: sent to Budi")
     assert [call[0] for call in env.gateway.client.calls] == ["message"]
+    assert "cross_send" in env.agent.ledger.actions_context()
 
 
 def test_failed_cross_chat_send_is_logged_as_failure(tmp_path) -> None:
@@ -120,7 +128,12 @@ def test_failed_cross_chat_send_is_logged_as_failure(tmp_path) -> None:
     ctx.reads.add(TARGET)
 
     result = asyncio.run(
-        execute(env.agent.tools.by_name, "send_to", {"chat": "budi", "text": "halo"}, ctx)
+        execute(
+            env.agent.tools.by_name,
+            "send_to",
+            {"chat": "budi", "text": "halo", "reason": "jawab budi"},
+            ctx,
+        )
     )
 
     assert result.startswith("error: sending to Budi (628999999999@s.whatsapp.net) failed:")

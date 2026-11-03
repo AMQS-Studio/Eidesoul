@@ -243,11 +243,14 @@ ROLES: dict[str, dict] = {
         "users": [],
         "tools": [
             "read",
+            "grep",
+            "fetch",
             "web_search",
             "chat_history",
             "memory",
             "recipe",
             "google",
+            "info",
         ],
         "commands": [
             "help",
@@ -274,7 +277,7 @@ ROLES: dict[str, dict] = {
         "description": "Unknown sender",
         "priority": 0,
         "users": [],
-        "tools": ["read", "web_search", "chat_history", "memory"],
+        "tools": ["read", "grep", "fetch", "web_search", "chat_history", "memory", "info"],
         "commands": [
             "help",
             "ping",

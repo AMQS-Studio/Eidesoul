@@ -1,7 +1,7 @@
 # ADR-0026: Full-Text Search of Messages, Trigrams, and Scope
 
 - **Status:** accepted
-- **Implementation:** draft — search still uses `ILIKE`; there is no `text_tsv`/trigram
+- **Implementation:** implemented — evidence: `messages.text_tsv` + GIN/trigram indexes (revision 9), `stores/history.py` FTS with trigram fallback + exclusive paging, `stores/knowledge.py`, `/status` backend, `tests/test_search.py`
 - **Date:** 2026-11-03
 - **Deciders:** Muqsith (owner), omp (reviewer)
 - **Context:** message archive search is only `ILIKE` per term with no text index, so its cost grows linearly with the number of messages and recall depends exactly on substrings; the memory path has its own engine (Mem0), and the read scope stays restricted to room membership.

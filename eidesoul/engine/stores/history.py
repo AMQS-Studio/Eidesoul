@@ -23,8 +23,9 @@ from ..context import (
 )
 from ..db import Database
 from ..memory import CaptureJobSink
+from ..config import SearchConfig
 from ..memory.store import MemoryStore
-from ..schema import messages, threads, turns
+from ..schema import memories_readable, messages, threads, turns
 
 log = logging.getLogger(__name__)
 
@@ -107,11 +108,13 @@ class HistoryStore:
         *,
         memories: MemoryStore | None = None,
         job_sink: CaptureJobSink | None = None,
+        search: SearchConfig | None = None,
     ):
         self.db = db
         self.workspace = workspace
         self.memories = memories or MemoryStore(db)
         self.job_sink = job_sink
+        self.search_config = search or SearchConfig()
 
     # ------------------------------------------------------------ write
 
@@ -421,13 +424,19 @@ class HistoryStore:
         if after is not None:
             clauses.append(messages.c.ts >= float(after))
         if before is not None:
-            clauses.append(messages.c.ts <= float(before))
-        if query.strip():
-            for term in _like_terms(query):
-                like = f"%{term}%"
-                clauses.append(
-                    messages.c.text.ilike(like) | messages.c.sender_name.ilike(like)
-                )
+            clauses.append(messages.c.ts < float(before))
+        if not query.strip():
+            return self._latest(clauses, limit)
+        for rows in (
+            self._fts(query, clauses, limit),
+            self._trgm(query, clauses, limit),
+            self._like(query, clauses, limit),
+        ):
+            if rows:
+                return rows
+        return []
+
+    def _latest(self, clauses: list, limit: int) -> list[Message]:
         statement = (
             select(messages)
             .where(and_(*clauses))
@@ -435,6 +444,104 @@ class HistoryStore:
             .limit(limit)
         )
         return [self._decode(row) for row in self.db.fetch_all(statement)]
+
+    def _fts(self, query: str, clauses: list, limit: int) -> list[Message]:
+        """ADR-0026 §4.1: `websearch_to_tsquery('simple')`, ranked, deterministic tiebreak."""
+        if not self.search_config.fts:
+            return []
+        tsquery = func.websearch_to_tsquery(self.search_config.lang, query)
+        rank = func.ts_rank_cd(messages.c.text_tsv, tsquery)
+        statement = (
+            select(messages)
+            .where(and_(*clauses, messages.c.text_tsv.op("@@")(tsquery)))
+            .order_by(rank.desc(), messages.c.ts.desc(), messages.c.id.desc())
+            .limit(limit)
+        )
+        return [self._decode(row) for row in self.db.fetch_all(statement)]
+
+    def _trgm(self, query: str, clauses: list, limit: int) -> list[Message]:
+        """ADR-0026 §4.3: the second net for affixes and typos, only when FTS found nothing."""
+        if not self.search_config.trgm:
+            return []
+        terms = _like_terms(query)
+        threshold = float(self.search_config.trgm_threshold)
+        scores = [
+            func.greatest(
+                func.word_similarity(term, func.coalesce(messages.c.text, "")),
+                func.word_similarity(term, func.coalesce(messages.c.sender_name, "")),
+            )
+            for term in terms
+        ]
+        best = func.greatest(*scores) if len(scores) > 1 else scores[0]
+        statement = (
+            select(messages)
+            .where(and_(*clauses, best >= threshold))
+            .order_by(best.desc(), messages.c.ts.desc(), messages.c.id.desc())
+            .limit(limit)
+        )
+        return [self._decode(row) for row in self.db.fetch_all(statement)]
+
+    def _like(self, query: str, clauses: list, limit: int) -> list[Message]:
+        """Only when the operator disabled both nets (ADR-0026 §6 `search_backend=like`)."""
+        if self.search_config.fts or self.search_config.trgm:
+            return []
+        terms = [f"%{term}%" for term in _like_terms(query)]
+        statement = (
+            select(messages)
+            .where(
+                and_(
+                    *clauses,
+                    *[
+                        messages.c.text.ilike(term) | messages.c.sender_name.ilike(term)
+                        for term in terms
+                    ],
+                )
+            )
+            .order_by(messages.c.ts.desc(), messages.c.id.desc())
+            .limit(limit)
+        )
+        return [self._decode(row) for row in self.db.fetch_all(statement)]
+
+    def search_backend(self) -> str:
+        """The active backend for `/status` (ADR-0026 §6); never a silent fallback."""
+        if self.search_config.fts:
+            return "fts+trgm" if self.search_config.trgm else "fts"
+        return "trgm" if self.search_config.trgm else "like"
+
+    def rooms_of(self, person_id: str) -> set[str]:
+        """Rooms where the person is recorded as present (ADR-0007 §4.5 layer 2).
+
+        The intersection of `messages.sender_id` and `memories.owner_id/subject_id`; a weaker
+        fallback than the gateway's `participants`, used only when the body cannot answer.
+        """
+        who = str(person_id or "").strip()
+        if not who:
+            return set()
+        sent = {
+            str(row["thread_id"])
+            for row in self.db.fetch_all(
+                select(messages.c.thread_id)
+                .where(and_(messages.c.sender_id == who, messages.c.thread_id != ""))
+                .distinct()
+            )
+        }
+        remembered = {
+            str(row["thread_id"])
+            for row in self.db.fetch_all(
+                select(memories_readable.c.thread_id)
+                .where(
+                    and_(
+                        or_(
+                            memories_readable.c.owner_id == who,
+                            memories_readable.c.subject_id == who,
+                        ),
+                        memories_readable.c.thread_id != "",
+                    )
+                )
+                .distinct()
+            )
+        }
+        return {thread for thread in sent | remembered if thread}
 
     def message_count(self) -> int:
         return int(self.db.scalar(select(func.count()).select_from(messages)) or 0)

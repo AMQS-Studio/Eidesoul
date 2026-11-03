@@ -1,32 +1,39 @@
-"""Global-workspace style prompt block competition: mandatory blocks win, the rest compete."""
+"""Global-workspace style prompt block competition: pinned blocks win, references compete.
+
+ADR-0015 §4.1: only the reference blocks compete for the character budget. The pinned blocks
+(`base`, `self`, `roles`, `away`) and the Layer 2 capability index skip the selection.
+"""
 
 from __future__ import annotations
 
 from . import lexicon
 from .context import keyword_set
 
-MANDATORY = (
-    "base",
-    "character",
-    "research",
-    "self",
-    "roles",
-    "safety",
-    "away",
+PINNED = ("base", "self", "roles", "away", "capabilities")
+MANDATORY = PINNED  # the historical name; pinned is the contract
+COMPETING = (
+    "topic",
+    "currents",
     "emotion",
     "vibe",
+    "style",
+    "person_style",
     "memory",
     "actions",
-)
-COMPETING = ("topic", "currents", "style", "person_style", "skills")
-ORDER = (
-    "base",
+    "skills",
     "character",
     "research",
+    "safety",
+)
+ORDER = (
+    "base",
     "self",
     "roles",
-    "safety",
     "away",
+    "capabilities",
+    "character",
+    "research",
+    "safety",
     "emotion",
     "vibe",
     "topic",
@@ -63,7 +70,13 @@ def select(
     present = {name: text for name, text in blocks.items() if text.strip()}
     kept = [name for name in ORDER if name in present]
     dropped: list[str] = []
-    if not enabled or int(max_chars) <= 0:
+    if not enabled:
+        return [(name, present[name]) for name in kept], dropped
+    budget = int(max_chars)
+    if budget <= 0:
+        # A zero/negative budget keeps the pinned blocks only; it never means "no limit".
+        dropped = [name for name in kept if name in COMPETING]
+        kept = [name for name in kept if name not in dropped]
         return [(name, present[name]) for name in kept], dropped
     scored = lexicon.load(language).ok
     bonus_map = bonuses or {}
@@ -76,10 +89,10 @@ def select(
         )
         return (score, ORDER.index(name))
 
-    while len(JOIN.join(present[name] for name in kept)) > int(max_chars):
+    while len(JOIN.join(present[name] for name in kept)) > budget:
         candidates = [name for name in kept if name in COMPETING]
         if not candidates:
-            break  # mandatory blocks are never dropped
+            break  # pinned blocks are never dropped
         weakest = min(candidates, key=weight)
         kept.remove(weakest)
         dropped.append(weakest)

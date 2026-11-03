@@ -1,7 +1,7 @@
 # ADR-0021: Tool Output Contract, `grep`, and `fetch`
 
 - **Status:** accepted
-- **Implementation:** draft — `grep`/`fetch` do not exist yet; the output cap is still the global 40 000
+- **Implementation:** implemented — evidence: `registry.Handler.max_output_chars`, per-tool caps + `next:` paging marker, `tools/grep.py`, `tools/fetch.py` (SSRF pins, content whitelist, untrusted header), 10k reply budget in `reply.split_text`, `tests/test_tools_grep.py`, `tests/test_tools_fetch.py`
 - **Date:** 2026-11-03
 - **Deciders:** Muqsith (owner), omp (reviewer)
 - **Context:** the tool surface has no way to search file contents or read a page; `read` must guess the file (default 400 lines), `shell` is not given to `member`, `web_search` returns only snippets, and one global cap of 40 000 characters in `execute` is too loose for a search tool

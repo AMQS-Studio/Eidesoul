@@ -4,10 +4,12 @@ from __future__ import annotations
 
 import time
 
+from ..guard import ActionRequest, recheck_scope, scope_proof
 from ..i18n import t
+from ..permissions import command_allowed, tool_allowed
 from ..registry import Handler
 from ..relay import MODES, RelayRefused, RelayStore
-from ..tools import execute
+from ..tools import execute, resolve_for
 from . import CommandContext
 
 CLIP = 8000
@@ -68,26 +70,71 @@ async def _approve(ctx: CommandContext) -> str:
     if approval.tool == "relay":
         return _relay_decision(ctx, approval, extra)
 
-    roles = tuple(
-        role for name in approval.roles if (role := agent.config.roles.get(name)) is not None
+    current = tuple(ctx.roles)
+    snapshot = set(approval.roles)
+    if snapshot and not {role.name for role in current} <= snapshot:
+        # ADR-0007 §4.2: the stored role is an upper bound, never a source of permission.
+        agent.approvals.mark(approval.id, "denied", ctx.sender, "role changed")
+        return t("command.approve.denied", lang, id=approval.id, reason="role changed")
+    if approval.tool and not tool_allowed(current, approval.tool):
+        agent.approvals.mark(approval.id, "denied", ctx.sender, "tool no longer allowed")
+        return t(
+            "command.approve.denied",
+            lang,
+            id=approval.id,
+            reason=f"tool '{approval.tool}' is no longer allowed for this role",
+        )
+    tool_ctx = agent.tool_context(
+        ctx.thread_id,
+        ctx.sender,
+        current,
+        ctx.gateway,
+        approved=True,
+        approval_id=str(approval.id),
     )
-    if not roles:
-        agent.approvals.mark(approval.id, "denied", ctx.sender, "role missing")
-        return t("command.approve.role_missing", lang)
+    resolved: tuple[str, ...] = ()
+    raw_path = approval.args.get("path") if isinstance(approval.args, dict) else None
+    if isinstance(raw_path, str) and raw_path.strip():
+        try:
+            resolved = (
+                str(resolve_for(agent.config, raw_path, current, ctx.thread_id)),
+            )
+        except PermissionError:
+            resolved = ()
+    request = ActionRequest(
+        tool=approval.tool or approval.kind,
+        args=dict(approval.args),
+        thread_id=ctx.thread_id,
+        sender=ctx.sender,
+        gateway=getattr(ctx.gateway, "name", "") or "",
+        roles=tuple(role.name for role in current),
+        workspace=str(agent.config.workspace),
+        roots=tuple(str(root) for root in tool_ctx.roots),
+        paths=resolved,
+    )
+    proof = scope_proof(request, extra=agent.config.guard.credential_patterns)
+    if approval.scope_proof:
+        reason = recheck_scope(approval.scope_proof, proof)
+        if reason:
+            agent.approvals.mark(approval.id, "denied", ctx.sender, reason)
+            return t("command.approve.scope_changed", lang, id=approval.id, reason=reason)
+    elif approval.kind == "tool":
+        agent.approvals.mark(approval.id, "denied", ctx.sender, "no scope proof")
+        return t(
+            "command.approve.denied",
+            lang,
+            id=approval.id,
+            reason="the approval has no scope proof; request it again",
+        )
+    if proof["class"] == "authorization" and not command_allowed(current, "approve"):
+        agent.approvals.mark(approval.id, "denied", ctx.sender, "approver role required")
+        return t("command.approve.class_denied", lang, id=approval.id)
     if approval.kind == "settings":
         return await _settings_decision(ctx, approval)
 
     specs = {handler.name: handler for handler in agent.tools.by_name.values()}
     if agent.hub is not None:
-        specs.update({handler.name: handler for handler in agent.hub.specs(roles)})
-    tool_ctx = agent.tool_context(
-        ctx.thread_id,
-        ctx.sender,
-        roles,
-        ctx.gateway,
-        approved=True,
-        approval_id=str(approval.id),
-    )
+        specs.update({handler.name: handler for handler in agent.hub.specs(current)})
     result = await execute(specs, approval.tool, approval.args, tool_ctx)
     agent.approvals.mark(approval.id, "approved", ctx.sender, result[:2000])
     try:

@@ -1,10 +1,10 @@
-> Terjemahan turunan — jangan sunting; sumber: engine/0007-capability-authorization.md (sha256: a4ba3d8ba7e0)
+> Terjemahan turunan — jangan sunting; sumber: engine/0007-capability-authorization.md (sha256: bee8b3bf95ee)
 > Teks ini ditulis manusia; baris yang tidak bisa diterjemahkan mesin disalin apa adanya ke sumber English, jadi sumber bercampur dua bahasa.
 
 # ADR-0007: Capability vs Authorization — Tiga Kelas Izin dan Approval sebagai Kelanjutan Izin Tool
 
 - **Status:** accepted
-- **Implementasi:** sebagian — ada: satu pintu `execute`, `command_allowed`, tabel `approvals`; sisa: kelas `consent`/`authorization`, `scope_proof`, `rooms_of`, pola kredensial
+- **Implementasi:** implemented — bukti: `guard/policy.py` (`consent`/`authorization`, `scope_proof`, `recheck_scope`, `credential_read`), kolom `approval_class`/`scope_proof` di `approvals` (revisi 7), cek ulang saat eksekusi di `commands/approve.py`, `memory_admin`, penolakan keanggotaan di `chat_history`/`send_to`, `tests/test_safety.py`; hasil gate: `pytest -q` 753 lulus
 - **Tanggal:** 2026-11-02
 - **Deciders:** Muqsith (owner), omp (reviewer)
 - **Konteks:** lanjutan ADR-0001 (canonical), ADR-0002 (gate capture), ADR-0004 (labeling), ADR-0005 (retention), ADR-0006 (privasi grup)

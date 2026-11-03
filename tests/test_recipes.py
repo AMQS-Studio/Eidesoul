@@ -47,7 +47,7 @@ def test_store_round_trip_and_persistence(tmp_path: Path) -> None:
 
     recipe = store.get("rekap")
     assert recipe is not None and recipe.kind == "recipe"
-    assert recipe.roles == ("owner", "member")
+    assert recipe.roles == ("administrator", "member")
     assert recipe.steps[0]["args"] == {"q": "x {{args}}"}
     assert "- /rekap [divisi] — Rekap mingguan." in store.index()
 

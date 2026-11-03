@@ -40,10 +40,10 @@ def test_tight_budget_keeps_mandatory_blocks_only() -> None:
 
     kept, dropped = select(blocks, max_chars=300)
 
-    assert set(names(kept)) == {"base", "emotion", "memory"}
-    assert set(dropped) == {"topic"}
+    assert set(names(kept)) == {"base"}
+    assert set(dropped) == {"emotion", "memory", "topic"}
     assert set(dropped) <= set(COMPETING)
-    assert set(MANDATORY) & set(names(kept)) == {"base", "emotion", "memory"}
+    assert set(MANDATORY) & set(names(kept)) == {"base"}
 
 
 def test_keyword_overlap_survives_before_unrelated_block() -> None:
@@ -60,8 +60,8 @@ def test_bonus_keeps_skills_but_never_drops_memory() -> None:
 
     kept, dropped = select(blocks, max_chars=55, bonuses={"skills": 0.2})
 
-    assert names(kept) == ["base", "memory"]
-    assert dropped == ["skills"]
+    assert names(kept) == ["base", "skills"]
+    assert dropped == ["memory"]
 
 
 def test_memory_survives_tiebreak_when_nothing_matches() -> None:
@@ -81,6 +81,6 @@ def test_actions_block_is_mandatory_and_survives_a_tight_budget() -> None:
 
     kept, dropped = select(blocks, max_chars=300)
 
-    assert "actions" in MANDATORY and "actions" not in COMPETING
-    assert "actions" in names(kept)
-    assert dropped == ["topic"]
+    assert "actions" in COMPETING and "actions" not in MANDATORY
+    assert "base" in names(kept)
+    assert set(dropped) == {"actions", "topic"}

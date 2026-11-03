@@ -1,7 +1,7 @@
 # ADR-0025: Turn Cost — Stable Prefix, Gating `polish`, and Call Budgets
 
 - **Status:** accepted
-- **Implementation:** draft — the prompt is still one system message; there is no `max_calls_per_turn`
+- **Implementation:** implemented — evidence: `llm.py` one `llm_calls` row per attempt (revision 8), `max_calls_per_turn` with wrap-up notice, two system messages + prefix hash with merge fallback, stable/volatile prompt sections, `tests/test_cost.py`
 - **Date:** 2026-11-03
 - **Deciders:** Muqsith (owner), omp (reviewer)
 - **Context:** one turn calls the LLM several times (decision, reply loop, `polish`/`regulate`) and the whole prompt block — including the blocks that change every turn (`self` holds mode, uptime, lease; plus `memory`, `emotion`, `topic`, `currents`) — is reassembled into one system message; there is no limit on the number of calls per turn other than `run_budget_seconds` (240 s).

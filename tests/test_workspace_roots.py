@@ -24,7 +24,10 @@ SEND_TO = Handler(
     family="write",
     description="test",
     fn=_send_to,
-    parameters={"type": "object", "properties": {"chat": {"type": "string"}}},
+    parameters={
+        "type": "object",
+        "properties": {"chat": {"type": "string"}, "text": {"type": "string"}},
+    },
 )
 
 
@@ -133,7 +136,7 @@ def test_member_cannot_send_to_another_chat(tmp_path) -> None:
 
     result = call(env, "send_to", {"chat": "budi", "text": "halo"}, ctx)
 
-    assert result == "error: cross-chat send is only for trusted roles"
+    assert result == "denied: room"
 
 
 def test_trusted_role_keeps_full_workspace(tmp_path) -> None:

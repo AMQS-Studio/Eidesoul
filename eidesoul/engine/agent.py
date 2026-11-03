@@ -1583,6 +1583,7 @@ class Agent:
                             specs,
                             tool_ctx,
                             session=f"eidesoul-{thread_id}",
+                            turn_id=turn_id,
                             deadline=deadline,
                             min_call_seconds=min_call,
                             on_step=self._step_recorder(turn_id, "drafted"),
@@ -1908,7 +1909,7 @@ class Agent:
         self.config = loaded
         self.soul = loaded.soul
         if self.llm is not None and loaded.llm != old_llm:
-            self.llm = LLM(loaded)
+            self.llm = LLM(loaded, db=self.db)
         if self.skills is not None:
             self.skills.config = loaded.skills
         if self.style is not None:

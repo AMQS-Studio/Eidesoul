@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from sqlalchemy import select, update
 
@@ -32,6 +32,8 @@ class Approval:
     decided_by: str
     decided_at: float | None
     result: str
+    approval_class: str = "authorization"
+    scope_proof: dict = field(default_factory=dict)
 
     @property
     def roles(self) -> tuple[str, ...]:
@@ -65,6 +67,8 @@ class ApprovalStore:
             decided_by=str(row["decided_by"]),
             decided_at=float(row["decided_at"]) if row["decided_at"] else None,
             result=str(row["result"]),
+            approval_class=str(row.get("approval_class") or "authorization"),
+            scope_proof=row["scope_proof"] if isinstance(row.get("scope_proof"), dict) else {},
         )
 
     @staticmethod
@@ -89,6 +93,8 @@ class ApprovalStore:
         summary: str = "",
         diff: str = "",
         roles: tuple[str, ...] = (),
+        approval_class: str = "authorization",
+        scope_proof: dict | None = None,
     ) -> Approval:
         return await io.run(
             self._create_sync,
@@ -102,6 +108,8 @@ class ApprovalStore:
             summary=summary,
             diff=diff,
             roles=roles,
+            approval_class=approval_class,
+            scope_proof=dict(scope_proof or {}),
         )
 
     def _create_sync(
@@ -117,6 +125,8 @@ class ApprovalStore:
         summary: str,
         diff: str,
         roles: tuple[str, ...],
+        approval_class: str,
+        scope_proof: dict,
     ) -> Approval:
         self.expire()
         if roles:
@@ -145,6 +155,8 @@ class ApprovalStore:
             "decided_by": "",
             "decided_at": None,
             "result": "",
+            "approval_class": "consent" if approval_class == "consent" else "authorization",
+            "scope_proof": scope_proof,
         }
         with self.db.connect() as conn:
             result = conn.execute(approvals.insert().values(row))
@@ -153,6 +165,21 @@ class ApprovalStore:
         if found is None:  # pragma: no cover - a new row is always readable
             raise RuntimeError("the new approval could not be read back")
         return found
+
+    def consent_allowed(self, sender: str) -> bool:
+        """ADR-0007 §5: `consent_max_per_hour` bounds self-confirmation, never a permission."""
+        limit = int(self.config.consent_max_per_hour)
+        if limit <= 0:
+            return True
+        since = time.time() - 3600
+        found = self.db.fetch_all(
+            select(approvals.c.id).where(
+                approvals.c.sender == sender,
+                approvals.c.approval_class == "consent",
+                approvals.c.created_at >= since,
+            )
+        )
+        return len(found) < limit
 
     def get(self, approval_id: int | str) -> Approval | None:
         try:

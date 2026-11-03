@@ -55,10 +55,12 @@ def build(tmp_path):
     return env, ctx
 
 
-def send(env, ctx, *, relay=True, text=ANSWER):
+def send(env, ctx, *, relay=True, text=ANSWER, reason=""):
     args = {"chat": "A", "text": text}
     if relay:
         args.update({"relay_task": TASK, "relay_from": FROM})
+    elif reason:
+        args["reason"] = reason
     return asyncio.run(execute(env.agent.tools.by_name, "send_to", args, ctx))
 
 
@@ -295,8 +297,11 @@ def test_anonymous_hides_the_source_name(tmp_path) -> None:
 
 def test_a_plain_cross_send_needs_no_grant(tmp_path) -> None:
     env, ctx = build(tmp_path)
+    # ADR-0007 §4.5: the requester must be provable in the target room; the grant is the
+    # ADR-0023 concern this test is about.
+    env.gateway.participants = lambda thread: {FROM, TO} if thread == TARGET else None
 
-    result = send(env, ctx, relay=False, text="halo dari B")
+    result = send(env, ctx, relay=False, text="halo dari B", reason="menjawab A")
 
     assert result.startswith("ok: sent to A")
     assert [call[0] for call in env.gateway.client.calls] == ["message"]

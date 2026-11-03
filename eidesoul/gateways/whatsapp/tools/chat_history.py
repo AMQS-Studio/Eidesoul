@@ -10,7 +10,7 @@ from datetime import datetime, timedelta
 from ....engine.context import body_note, entry_tag
 from ....engine.inbound import directory_refusal
 from ....engine.registry import Handler
-from ....engine.tools import ToolContext, _int
+from ....engine.tools import ToolContext, _int, cross_refusal
 
 BODY_LIMIT = 600
 CANDIDATE_LIMIT = 20
@@ -67,6 +67,11 @@ def _target(raw: str, ctx: ToolContext) -> str | tuple[str, str]:
         return f'error: several threads match "{raw}"; use the full name or id:\n{listing}'
     if target is None:
         return f'error: chat "{raw}" is not in the archive.'
+    thread_id, name = target
+    denial = cross_refusal(ctx, thread_id)
+    if denial:
+        # ADR-0007 §4.6: an information-free signal, never an `error:` sentence.
+        return denial
     return target
 
 
@@ -99,7 +104,14 @@ async def _search(args: dict, ctx: ToolContext) -> str:
     except ValueError as exc:
         return f"error: {exc}"
     query = str(args.get("query") or "").strip()
-    limit = max(1, min(_int(args, "limit", 20), 50))
+    limit = max(
+        1,
+        min(
+            _int(args, "limit", 20),
+            50,
+            int(ctx.config.memory.rooms.max_messages),
+        ),
+    )
     results = ctx.history.search(thread_id, query, before=before, after=after, limit=limit)
     cross = thread_id != ctx.thread_id
     title = name or ctx.history.chat_name(thread_id) or thread_id

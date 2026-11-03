@@ -64,7 +64,7 @@ def test_self_block_reports_runtime_facts(tmp_path) -> None:
         pending_approvals=2,
         gateways=("whatsapp", "cli"),
     )
-    block = self_block(runtime, (Role("owner"),), env.config)
+    block = self_block(runtime, (Role("administrator", protected=True),), env.config)
     assert "Mode: primary" in block
     assert "Surface: whatsapp, cli" in block
     assert "Pending approvals: 2" in block

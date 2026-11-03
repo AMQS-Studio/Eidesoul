@@ -66,6 +66,9 @@ async def status(ctx: CommandContext) -> str:
             total = store.message_count()
             window = len(agent.windows.get(ctx.thread_id))
             lines.append(t("command.status.archive", lang, total=total, window=window))
+            lines.append(
+                t("command.status.search", lang, value=store.search_backend())
+            )
         except Exception:
             lines.append(t("command.status.archive_unreadable", lang))
     from ..memory import memory_status

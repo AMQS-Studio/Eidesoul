@@ -30,6 +30,8 @@ def message(mid: str, text: str, **kwargs) -> Message:
 def env(tmp_path):
     gateway = make_gateway(tmp_path)
     directory._upsert_contact(gateway.db, TARGET, "Budi", "")
+    # ADR-0007 §4.5: the requester must be provable in the target room before a cross read.
+    gateway.participants = lambda thread: {"628111"} if thread == TARGET else None
     return make_agent(
         tmp_path,
         gateway=gateway,

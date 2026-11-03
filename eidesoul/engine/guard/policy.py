@@ -7,12 +7,40 @@ import os
 import re
 import shlex
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Protocol
 
 from ..config import ApprovalConfig
 from ..registry import allows
 
 READ_ONLY = frozenset({"read", "memory", "skill", "chat_history", "web_search"})
+
+# ADR-0007 §4.7: the target, not the tool, decides who approves.
+AUTHORIZATION_TOOLS = frozenset({"shell", "sandbox", "settings", "send", "send_to"})
+CONSENT = "consent"
+AUTHORIZATION = "authorization"
+CLASSES = frozenset({CONSENT, AUTHORIZATION})
+# ADR-0007 §4.8: reading a host secret is authorization, whatever the requester's role.
+CREDENTIAL_PATTERNS = (
+    "env",
+    "printenv",
+    "export -p",
+    "set",
+    "*.env",
+    ".env",
+    "*.pem",
+    "*.key",
+    "id_rsa",
+    "id_ed25519",
+    ".aws/credentials",
+    ".netrc",
+    "/proc/*/environ",
+    "/proc/*/cmdline",
+)
+SECRET_FILE = re.compile(
+    r"(^|/)(\.env(\.[^/]*)?|[^/]*\.env|[^/]*\.pem|[^/]*\.key|id_rsa|id_ed25519|"
+    r"credentials|\.netrc)$"
+)
 
 SHELL_TOOL = "shell"
 SHELL_WRAPPERS = frozenset(
@@ -95,6 +123,9 @@ class ActionRequest:
     sender: str
     gateway: str
     roles: tuple[str, ...]
+    workspace: str = ""
+    roots: tuple[str, ...] = ()
+    paths: tuple[str, ...] = ()  # already resolved by the caller, never re-derived here
 
 
 @dataclass(frozen=True)
@@ -188,6 +219,187 @@ def _scan(text: str, patterns: tuple[str, ...], depth: int = 0) -> bool:
 def scan_command(text: str, patterns: tuple[str, ...]) -> bool:
     """Public wrapper over the deterministic shell scanner used by the approval policy."""
     return _scan(str(text or ""), tuple(patterns))
+
+
+def credential_read(text: str, extra: tuple[str, ...] = ()) -> bool:
+    """Does this raw command/path read a host secret? (ADR-0007 §4.8)
+
+    Deterministic and conservative: a bare `env`/`printenv`, `export -p`, a secret file, or a
+    `/proc/*/environ` read is a credential read. `env VAR=x cmd` is a wrapper, not a dump.
+    """
+    body = str(text or "")
+    additions = tuple(str(item) for item in extra if str(item).strip())
+    for line in body.splitlines() or [body]:
+        stripped = line.strip()
+        if not stripped:
+            continue
+        try:
+            tokens = shlex.split(stripped, posix=True)
+        except ValueError:
+            tokens = stripped.split()
+        if not tokens:
+            continue
+        head = os.path.basename(tokens[0])
+        rest = [token for token in tokens[1:] if not _ASSIGNMENT.fullmatch(token)]
+        if _dump_command(head, tokens, rest):
+            return True
+        if any(_secret_token(token, additions) for token in tokens):
+            return True
+    return False
+
+
+def _dump_command(head: str, tokens: list[str], rest: list[str]) -> bool:
+    """One of the commands whose whole purpose is printing the environment."""
+    if head == "printenv":
+        return True
+    if head == "env" and not rest:
+        return True
+    if head == "export" and "-p" in tokens:
+        return True
+    if head == "set" and len(tokens) == 1:
+        return True
+    return head == "docker" and (
+        tokens[1:2] == ["inspect"] or tokens[1:3] == ["compose", "config"]
+    )
+
+
+def _secret_token(token: str, additions: tuple[str, ...]) -> bool:
+    """A path that names a secret file, a proc env dump, or an operator-listed path."""
+    if token.startswith("/proc/") and token.endswith(("environ", "cmdline")):
+        return True
+    if SECRET_FILE.search(token):
+        return True
+    return any(fnmatch.fnmatchcase(token, pattern) for pattern in additions)
+
+
+def _absolute(request: ActionRequest, raw: str) -> str:
+    text = str(raw or "").strip()
+    if not text:
+        return ""
+    path = Path(text).expanduser()
+    if not path.is_absolute():
+        path = Path(request.workspace or ".").expanduser() / path
+    return str(path)
+
+
+def action_targets(request: ActionRequest) -> list[dict]:
+    """The deterministic target list stored in `scope_proof` (path, room, column, host)."""
+    args = request.args if isinstance(request.args, dict) else {}
+    targets: list[dict] = []
+    if request.tool != "settings":
+        if request.paths:
+            targets.extend({"kind": "path", "value": str(item)} for item in request.paths)
+        else:
+            path = _absolute(request, str(args.get("path") or ""))
+            if path:
+                targets.append({"kind": "path", "value": path})
+    if request.tool in {"send", "send_to"}:
+        room = str(args.get("chat") or "").strip()
+        targets.append({"kind": "room", "value": room or request.thread_id})
+    if request.tool == "settings":
+        value = f"{args.get('file') or ''}:{args.get('path') or ''}"
+        targets.append({"kind": "config", "value": value})
+    if request.tool == "memory":
+        targets.append(
+            {
+                "kind": "column",
+                "value": f"memory:{args.get('action') or ''}:{args.get('scope') or ''}",
+            }
+        )
+    if request.tool in {"shell", "sandbox"}:
+        targets.append({"kind": "host", "value": request.tool})
+    url = str(args.get("url") or "").strip()
+    if url:
+        targets.append({"kind": "url", "value": url})
+    return targets
+
+
+def _inside(value: str, roots: tuple[str, ...]) -> bool:
+    if not value or not roots:
+        return False
+    path = Path(value)
+    for root in roots:
+        try:
+            if path.is_relative_to(Path(root)):
+                return True
+        except (OSError, ValueError):
+            continue
+    return False
+
+
+def approval_class(request: ActionRequest, *, extra: tuple[str, ...] = ()) -> str:
+    """`consent` when every target is inside the requester's scope, else `authorization`."""
+    args = request.args if isinstance(request.args, dict) else {}
+    if request.tool in AUTHORIZATION_TOOLS:
+        return AUTHORIZATION
+    command = " ".join(
+        str(args.get(key) or "") for key in ("command", "text", "query")
+    )
+    if credential_read(command, extra):
+        return AUTHORIZATION
+    if request.tool == "memory":
+        action = str(args.get("action") or "").strip().lower()
+        scope = str(args.get("scope") or "").strip().lower()
+        if scope == "global" and action in {"add", "forget", "veto"}:
+            return AUTHORIZATION
+    for target in action_targets(request):
+        kind = target["kind"]
+        value = str(target["value"])
+        if kind in {"config", "host"}:
+            return AUTHORIZATION
+        if kind == "path" and not _inside(value, request.roots):
+            return AUTHORIZATION
+        if kind == "path" and request.tool == "write" and _inside(
+            value, (str(Path(request.workspace) / "public"),)
+        ):
+            return AUTHORIZATION
+        if kind == "room" and value not in {"", request.thread_id}:
+            return AUTHORIZATION
+    return CONSENT
+
+
+def scope_proof(request: ActionRequest, *, extra: tuple[str, ...] = ()) -> dict:
+    """The proof computed at request time and re-checked at execution (ADR-0007 §4.7)."""
+    return {
+        "targets": action_targets(request),
+        "roots": list(request.roots),
+        "class": approval_class(request, extra=extra),
+    }
+
+
+def approval_summary(tool: str, request: ActionRequest, proof: dict) -> str:
+    """The request summary: resolved targets for consent, requester + artifacts for authority."""
+    targets = proof.get("targets") if isinstance(proof, dict) else None
+    where = ", ".join(
+        f"{item.get('kind')}={item.get('value')}"
+        for item in (targets or [])
+        if isinstance(item, dict)
+    )
+    where = where or "no explicit target"
+    if proof.get("class") == CONSENT:
+        text = f"{tool} inside your scope: {where}"
+    else:
+        who = " ".join(str(request.sender or "").split()) or "the sender"
+        text = f"{who} wants to use {tool} outside their scope: {where}"
+    return text[:400]
+
+
+def recheck_scope(stored: object, current: dict) -> str:
+    """`""` when the stored proof still holds; a reason when it does not (ADR-0007 §4.7)."""
+    if not isinstance(stored, dict) or not stored:
+        return "the approval has no scope proof; it is refused"
+    if stored.get("class") != current.get("class"):
+        return (
+            "the approval class changed: "
+            f"{stored.get('class')} -> {current.get('class')}"
+        )
+    if stored.get("targets") != current.get("targets"):
+        return "the targets changed since the approval was requested"
+    old = set(stored.get("roots") or [])
+    new = set(current.get("roots") or [])
+    if new - old:
+        return "the requester's reach widened since the approval was requested"
+    return ""
 
 
 class ApprovalPolicy:

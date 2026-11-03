@@ -1,7 +1,7 @@
 # ADR-0007: Capability vs Authorization — Three Permission Classes and Approval as a Continuation of Tool Permissions
 
 - **Status:** accepted
-- **Implementation:** partial — exists: one door `execute`, `command_allowed`, the `approvals` table; remaining: the `consent`/`authorization` classes, `scope_proof`, `rooms_of`, the credential pattern
+- **Implementation:** implemented — evidence: `guard/policy.py` (`consent`/`authorization`, `scope_proof`, `recheck_scope`, `credential_read`), `approvals` `approval_class`/`scope_proof` (revision 7), execution re-check in `commands/approve.py`, `memory_admin`, membership refusal in `chat_history`/`send_to`, `tests/test_safety.py`; gate result: `pytest -q` 753 passed
 - **Date:** 2026-11-02
 - **Deciders:** Muqsith (owner), omp (reviewer)
 - **Context:** follows from ADR-0001 (canonical), ADR-0002 (gate capture), ADR-0004 (labeling), ADR-0005 (retention), ADR-0006 (group privacy)

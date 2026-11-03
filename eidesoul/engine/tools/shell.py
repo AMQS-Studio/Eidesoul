@@ -3,9 +3,16 @@
 from __future__ import annotations
 
 import asyncio
+import os
 
+from ..config import ShellConfig
 from ..registry import Handler
 from . import ToolContext, _int
+
+
+def child_env(config: ShellConfig) -> dict[str, str]:
+    """ADR-0024 §4.6: a computed environment; the process one (keys, DSN) never travels."""
+    return {name: os.environ[name] for name in config.env if name in os.environ}
 
 
 async def _shell(args: dict, ctx: ToolContext) -> str:
@@ -14,6 +21,7 @@ async def _shell(args: dict, ctx: ToolContext) -> str:
     proc = await asyncio.create_subprocess_shell(
         command,
         cwd=str(ctx.config.workspace),
+        env=child_env(ctx.config.shell),
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.STDOUT,
     )
@@ -30,9 +38,13 @@ async def _shell(args: dict, ctx: ToolContext) -> str:
 TOOL = Handler(
     name="shell",
     family="shell",
-    description="Run a shell command on the host in the workspace directory.",
+    description=(
+        "Run a shell command on the host in the workspace directory. The child sees only "
+        "the configured environment names; secrets and the database URL are not passed."
+    ),
     fn=_shell,
     aliases=("bash", "exec"),
+    max_output_chars=8_000,
     parameters={
         "type": "object",
         "properties": {

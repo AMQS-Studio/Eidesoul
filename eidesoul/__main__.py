@@ -6,6 +6,7 @@ import argparse
 import asyncio
 import contextlib
 import logging
+import os
 import sys
 from datetime import datetime
 from pathlib import Path
@@ -99,7 +100,7 @@ async def build_runtime(config_path: str | None, *, console: bool = False):
         vibe = VibeRunner(db, config.affect.vibe)
     hub = Hub(config.mcp)
     await hub.start()
-    llm = LLM(config)
+    llm = LLM(config, db=db)
     force = ("cli",) if console else ()
     only = ("cli",) if console else ()
     gateways = build_gateways(
@@ -318,6 +319,17 @@ async def selftest(config: Config) -> int:
             commands = [handler.name for handler in commands_for(COMMANDS, (item,))]
             print(f"role {name}: command={', '.join(commands) or '-'} | tool={', '.join(tools) or '-'}", flush=True)
 
+        from .engine.self_knowledge import check as selfcheck
+
+        problems = selfcheck(config)
+        results.append(
+            _report(
+                "selfcheck",
+                "PASS" if not problems else "FAIL",
+                "" if not problems else "; ".join(problems[:3]),
+            )
+        )
+
         config.workspace.mkdir(parents=True, exist_ok=True)
         ctx = ToolContext(config, role, tool_patterns((role,)), memory=memory, skills=skills)
         specs = {handler.name: handler for handler in REGISTRY.by_name.values() if not handler.hidden}
@@ -428,7 +440,7 @@ async def selftest(config: Config) -> int:
         passed = bool(search.strip()) and not search.startswith("error:")
         results.append(_report("web_search", "PASS" if passed else "FAIL", "" if passed else search[:200]))
 
-        llm = LLM(config)
+        llm = LLM(config, db=db)
         answer = await llm.run("Reply with: ok", "ping", [], ctx, session="eidesoul-selftest")
         passed = bool(answer.strip()) and answer != t("agent.api_error", config.soul.language)
         results.append(_report("llm", "PASS" if passed else "FAIL", "" if passed else answer[:200]))
@@ -607,17 +619,57 @@ def _library_resolve(args: argparse.Namespace) -> int:
 def _init(args: argparse.Namespace) -> int:
     from .admin import init as admin_init
 
-    try:
-        written, skipped = admin_init.init(
-            args.dir, force=args.force, provider=args.provider, model=args.model
+    interactive = sys.stdin.isatty() and not args.non_interactive
+    if not interactive and not args.provider:
+        print(
+            "eidesoul: no terminal for the interactive setup and no --provider given.\n"
+            "  pass: --provider <name>  (required)\n"
+            "        --model <id> --database-url <url> --label <text> --voice-layer on|off\n"
+            "  or run `eidesoul init` on a terminal.",
+            file=sys.stderr,
+            flush=True,
         )
+        return 2
+    color = bool(sys.stdout.isatty() and not args.no_color and not os.environ.get("NO_COLOR"))
+    try:
+        if interactive:
+            written, skipped = admin_init.wizard(
+                args.dir,
+                provider=args.provider,
+                model=args.model,
+                database_url=args.database_url,
+                label=args.label,
+                voice_layer=args.voice_layer,
+                force=args.force,
+                color=color,
+            )
+        else:
+            written, skipped = admin_init.init(
+                args.dir,
+                force=args.force,
+                provider=args.provider,
+                model=args.model or "",
+                database_url=args.database_url or "",
+                label=args.label or "",
+                voice_layer=args.voice_layer or "on",
+            )
+    except admin_init.InitCancelled as exc:
+        print(f"eidesoul: {exc}", file=sys.stderr, flush=True)
+        return 130
     except ValueError as exc:
         print(f"eidesoul: {exc}", file=sys.stderr, flush=True)
         return 2
-    print(
-        admin_init.report(args.dir, written, skipped, provider=args.provider, model=args.model),
-        flush=True,
-    )
+    if not interactive:
+        print(
+            admin_init.report(
+                args.dir,
+                written,
+                skipped,
+                provider=args.provider or "",
+                model=args.model or "",
+            ),
+            flush=True,
+        )
     return 0
 
 
@@ -754,13 +806,35 @@ def build_parser() -> argparse.ArgumentParser:
     )
     sub.add_parser("selftest", help="quick check of stores, tools, and the LLM")
     sub.add_parser("backfill", help="pull old history through a throwaway device")
-    init = sub.add_parser("init", help="scaffold config.yaml, roles.yaml, soul.yaml, and .env")
+    init = sub.add_parser("init", help="write config.yaml, roles.yaml, soul.yaml, and .env")
     init.add_argument("--dir", default=".", help="target directory")
-    init.add_argument("--force", action="store_true", help="overwrite existing files")
-    init.add_argument("--provider", required=True, help="provider name")
+    init.add_argument("--force", action="store_true", help="replace existing files without asking")
     init.add_argument(
-        "--model", default="", help="model id to write; omitted leaves it for the operator"
+        "--provider", default=None, help="provider name (asked on a terminal; required when piped)"
     )
+    init.add_argument(
+        "--model", default=None, help="model id to write; omitted leaves it for the operator"
+    )
+    init.add_argument(
+        "--database-url",
+        default=None,
+        help="Postgres URL; written to .env, never to YAML",
+    )
+    init.add_argument(
+        "--label", default=None, help="label for the first administrator (roles.yaml)"
+    )
+    init.add_argument(
+        "--voice-layer",
+        choices=("on", "off"),
+        default=None,
+        help="keep emotion, humanize, and character on (default) or turn all three off",
+    )
+    init.add_argument(
+        "--non-interactive",
+        action="store_true",
+        help="never prompt; fail when --provider is missing",
+    )
+    init.add_argument("--no-color", action="store_true", help="plain output (also via NO_COLOR)")
     sub.add_parser("models", help="list the model ids the configured provider serves")
     config = sub.add_parser("config", help="config operations")
     config_sub = config.add_subparsers(dest="config_command")

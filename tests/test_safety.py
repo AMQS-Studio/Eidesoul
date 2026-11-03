@@ -5,7 +5,59 @@ from __future__ import annotations
 import pytest
 
 from eidesoul.engine.config import DEFAULT_SENSITIVE_COMMANDS, ApprovalConfig
-from eidesoul.engine.guard import ActionRequest, ApprovalPolicy, build_safety, scan_command
+from eidesoul.engine.guard import (
+    ActionRequest,
+    ApprovalPolicy,
+    approval_class,
+    build_safety,
+    credential_read,
+    recheck_scope,
+    scan_command,
+    scope_proof,
+)
+
+
+def scoped(tool: str, *, roots=("/w/public", "/w/scratch/c"), roles=("member",), **args):
+    return ActionRequest(
+        tool=tool,
+        args=args,
+        thread_id="c",
+        sender="p",
+        gateway="g",
+        roles=roles,
+        workspace="/w",
+        roots=roots,
+    )
+
+
+def test_consent_inside_the_requester_scope() -> None:
+    request = scoped("write", path="/w/scratch/c/note.txt")
+
+    proof = scope_proof(request)
+
+    assert proof["class"] == "consent"
+    assert proof["targets"] == [{"kind": "path", "value": "/w/scratch/c/note.txt"}]
+
+
+def test_authorization_outside_the_scope_or_on_the_host() -> None:
+    assert approval_class(scoped("write", path="/w/scratch/other/x")) == "authorization"
+    assert approval_class(scoped("shell", command="ls")) == "authorization"
+    assert approval_class(scoped("settings", file="engine", path="llm.model")) == "authorization"
+
+
+def test_credentials_are_always_authorization() -> None:
+    for command in ("env", "printenv", "cat .env", "cat /proc/self/environ"):
+        assert credential_read(command) is True, command
+        request = scoped("shell", command=command, roots=("/w",), roles=("administrator",))
+        assert approval_class(request) == "authorization"
+
+
+def test_a_widened_reach_cancels_the_proof() -> None:
+    before = scope_proof(scoped("write", path="/w/scratch/c/x"))
+    after = scope_proof(scoped("write", path="/w/scratch/c/x", roots=("/w",)))
+
+    assert recheck_scope(before, after) != ""
+    assert recheck_scope(before, before) == ""
 
 
 def request(tool: str, **args) -> ActionRequest:

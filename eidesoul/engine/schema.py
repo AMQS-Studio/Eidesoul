@@ -7,6 +7,7 @@ from sqlalchemy import (
     Boolean,
     CheckConstraint,
     Column,
+    Computed,
     Date,
     Float,
     ForeignKey,
@@ -25,7 +26,7 @@ from sqlalchemy import (
     table,
     text,
 )
-from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.dialects.postgresql import JSONB, TSVECTOR
 
 metadata = MetaData()
 
@@ -64,10 +65,26 @@ messages = Table(
     Column("data", JSONB, nullable=False, default=dict),
     Column("media_ref", LargeBinary, nullable=True),
     Column("quote_media_ref", LargeBinary, nullable=True),
+    # ADR-0026 §4.1: one generated column, no application-side write path.
+    Column(
+        "text_tsv",
+        TSVECTOR,
+        Computed(
+            "to_tsvector('simple', coalesce(text, '') || ' ' || coalesce(sender_name, ''))",
+            persisted=True,
+        ),
+    ),
     UniqueConstraint("thread_id", "msg_id", name="uq_messages_thread_msg"),
 )
 Index("ix_messages_thread_ts", messages.c.thread_id, messages.c.ts, messages.c.id)
 Index("ix_messages_sender", messages.c.sender_address)
+Index("ix_messages_text_tsv", messages.c.text_tsv, postgresql_using="gin")
+Index(
+    "ix_messages_text_trgm",
+    messages.c.text,
+    postgresql_using="gin",
+    postgresql_ops={"text": "gin_trgm_ops"},
+)
 
 threads = Table(
     "threads",
@@ -119,8 +136,41 @@ approvals = Table(
     Column("decided_by", String(160), nullable=False, default=""),
     Column("decided_at", Float, nullable=True),
     Column("result", Text, nullable=False, default=""),
+    # ADR-0007 §4.7 / ADR-0016 §4.8: the class is derived from the target, the proof is
+    # recomputed at execution; neither column grants a permission.
+    Column(
+        "approval_class",
+        String(20),
+        nullable=False,
+        default="authorization",
+        server_default="authorization",
+    ),
+    Column("scope_proof", JSONB, nullable=False, default=dict),
+    CheckConstraint(
+        "approval_class IN ('consent','authorization')", name="ck_approvals_class"
+    ),
 )
 Index("ix_approvals_status", approvals.c.status, approvals.c.created_at)
+
+# ADR-0019 / ADR-0016 §4.6: ids and numbers only, never prompt text; no FK so metrics never
+# block entity deletion, and a failure before a turn still leaves a row.
+llm_calls = Table(
+    "llm_calls",
+    metadata,
+    Column("id", BigInteger, primary_key=True, autoincrement=True),
+    Column("ts", Float, nullable=False),
+    Column("turn_id", String(120), nullable=True),
+    Column("job_id", BigInteger, nullable=True),
+    Column("run_id", String(120), nullable=True),
+    Column("purpose", String(40), nullable=False),
+    Column("model", String(120), nullable=False),
+    Column("tokens_in", Integer, nullable=True),
+    Column("tokens_out", Integer, nullable=True),
+    Column("latency_ms", Integer, nullable=False),
+    Column("ok", Boolean, nullable=False),
+)
+Index("ix_llm_calls_ts", llm_calls.c.ts)
+Index("ix_llm_calls_turn", llm_calls.c.turn_id)
 
 # ADR-0023 §4.1 / ADR-0016 §4.9: one row per (task, from, to); the row holds the decision and
 # never the message content. `mode='none'` is stored too, so a refusal stays auditable.
@@ -175,6 +225,13 @@ people = Table(
     Column("gender", String(12), nullable=False, default=""),
     Column("gender_confidence", Float, nullable=False, default=0.0),
     Column("gender_source", String(16), nullable=False, default=""),
+)
+# ADR-0026 §4.3: the trigram net for a person's display name (the column is `name`).
+Index(
+    "ix_people_name_trgm",
+    people.c.name,
+    postgresql_using="gin",
+    postgresql_ops={"name": "gin_trgm_ops"},
 )
 
 topics = Table(
