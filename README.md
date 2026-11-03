@@ -78,7 +78,7 @@ properties of that store, not of a prompt.
 
 ## What it tries to solve
 
-Most agent products hit the same ten walls. Each paragraph says what usually happens, then what this
+Most agent products hit the same eleven walls. Each paragraph says what usually happens, then what this
 engine does instead.
 
 **An assistant that forgets.** The usual build starts every session from an empty prompt: history is a
@@ -145,6 +145,23 @@ pulse over time, and a relationship per person that moves through stages with in
 The context engine selects character moves gated by register and harshness, and a humanize pass paces
 the reply. All of it is a switch — on by default, asked once during init — so a deployment that wants a
 flat voice can turn it off.
+
+**An automation that is really a cron job.** The usual build is a crontab line: a fixed time, a script,
+and no idea who asked, what they were allowed to read, or what happens after a restart. Here an
+automation is a declarative row owned by a person — event, condition, steps. The event is a time list
+(several times a day, chosen days, a count or an end date, a timezone) or a new message in a room, read
+from the gateway instead of a poller. The condition is typed filters with `all`/`any`/`not` and
+counters, decided by a deterministic layer first and a small model only for what that layer cannot read.
+The steps are a closed list: collect inside the owner's privacy ceiling, run one named program in the
+sandbox, search, compose, send, write, remember, queue reflection. Every occurrence is its own run keyed
+by a hash of the automation and the scheduled time, so a restart or a takeover never doubles it, and
+catch-up is per occurrence — outside its window the occurrence is missed, not silently replayed.
+Authority is checked twice: at creation, where a step beyond the owner's rights is rejected instead of
+stored half-way, and when due, where the role is recomputed and a revoked capability pauses the
+automation and tells the owner once. Quiet hours skip or defer, a daily budget and a maximum occurrence
+count bound the cost, and a kill switch is just a state change. The sandbox step executes only a named
+program reviewed once, in front of a human; logic may be free, the capability stays closed, and sending
+still goes through the same send capability as a normal turn.
 
 None of this is a prompt trick. Each one is a place where state lives, and a rule about who may change
 it.

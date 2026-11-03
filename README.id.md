@@ -84,7 +84,7 @@ berbasis role adalah sifat store itu, bukan sifat prompt.
 <a id="apa-yang-coba-diselesaikan"></a>
 ## Apa yang coba diselesaikan
 
-Hampir semua produk agent menabrak sepuluh dinding yang sama. Tiap paragraf menyebut apa yang biasanya
+Hampir semua produk agent menabrak sebelas dinding yang sama. Tiap paragraf menyebut apa yang biasanya
 terjadi, lalu apa yang dilakukan engine ini.
 
 **Asisten yang lupa.** Bangunan biasanya memulai setiap sesi dari prompt kosong: riwayat adalah transkrip
@@ -151,6 +151,24 @@ yang berdenyut seiring waktu, dan relasi per orang yang bergerak lewat tahap den
 laju. Engine konteks memilih gerakan karakter dengan gerbang register dan tingkat kasar, dan pass
 humanize mengatur pacing balasan. Semuanya sakelar — aktif default, ditanyakan sekali saat init — jadi
 deployment yang menginginkan suara datar bisa mematikannya.
+
+**Automation yang sebenarnya cron job.** Bangunan biasanya satu baris crontab: waktu tetap, sebuah
+skrip, dan tidak ada gagasan siapa yang meminta, apa yang boleh ia baca, atau apa yang terjadi setelah
+restart. Di sini automation adalah baris deklaratif milik seseorang — event, condition, steps. Event-nya
+daftar waktu (beberapa kali sehari, hari tertentu, jumlah atau tanggal akhir, zona waktu) atau pesan baru
+di sebuah ruangan, dibaca dari gateway alih-alih poller. Condition-nya filter bertipe dengan
+`all`/`any`/`not` dan counter, diputuskan lapisan deterministik lebih dulu dan model kecil hanya untuk
+yang tak bisa dibaca lapisan itu. Steps-nya daftar tertutup: collect di dalam plafon privasi pemilik,
+menjalankan satu program bernama di sandbox, search, compose, send, write, remember, queue reflection.
+Tiap occurrence adalah run sendiri yang di-key dari hash automation dan waktu terjadwal, jadi restart
+atau takeover tidak pernah menggandakannya, dan catch-up dihitung per occurrence — di luar jendelanya,
+occurrence itu `missed`, bukan diputar ulang diam-diam. Otoritas diperiksa dua kali: saat dibuat, di mana
+langkah di luar hak pemilik ditolak alih-alih tersimpan setengah, dan saat jatuh tempo, di mana role
+dihitung ulang dan kapabilitas yang dicabut menjeda automation lalu memberi tahu pemiliknya sekali. Jam
+tenang melewati atau menunda, budget harian dan batas jumlah occurrence membatasi biaya, dan kill switch
+cukup satu perubahan state. Langkah sandbox hanya menjalankan program bernama yang sudah ditinjau sekali
+di depan manusia; logika boleh bebas, kapabilitas tetap tertutup, dan pengiriman tetap lewat kapabilitas
+send yang sama seperti giliran biasa.
 
 Tidak satu pun dari ini trik prompt. Masing-masing adalah tempat state hidup, dan aturan siapa yang boleh
 mengubahnya.
