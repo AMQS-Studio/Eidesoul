@@ -33,9 +33,11 @@ file describes the target design; this section is the delta that runs today.
 
 - **one self** — one identity and one memory per soul, not a session. Restart the process, change the
   surface: the same self continues.
-- **always remembering** — what matters is written down: facts about people, and who the soul itself
-  is. Facts carry a privacy level and can be vetoed by the person they are about; identity lives in one
-  soul document, not in a prompt. Forgetting is a decision (retention, decay), never an accident.
+- **always remembering** — what matters is written down: facts about people, who the soul itself is,
+  the tasks it finished, and what it just did. Facts carry a privacy level and can be vetoed by the
+  person they are about, identity lives in one soul document rather than a prompt, and what the same
+  person discussed in one body can be picked up in another, because memory belongs to the soul and the
+  person, not to the transport. Forgetting is a decision (retention, decay), never an accident.
 - **always learning** — when a task finishes, a worker reads the episode and can write a reusable
   procedure with a reference to where it came from. Learning changes procedures, never rules, persona,
   or permissions — and it runs by default.

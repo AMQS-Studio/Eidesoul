@@ -35,9 +35,11 @@ target; bagian ini adalah selisih yang berjalan sekarang.
 
 - **satu diri** — satu identitas dan satu memori per jiwa, bukan sesi. Proses di-restart, permukaan
   diganti: diri yang sama tetap berlanjut.
-- **selalu ingat** — yang penting dicatat: fakta tentang orang, dan siapa diri jiwa itu sendiri. Fakta
-  membawa tingkat privasi dan bisa diveto oleh orang yang menjadi subjeknya; identitas hidup di satu
-  dokumen soul, bukan di prompt. Lupa adalah keputusan (retensi, decay), bukan kecelakaan.
+- **selalu ingat** — yang penting dicatat: fakta tentang orang, siapa diri jiwa itu sendiri, tugas yang
+  sudah selesai, dan apa yang baru saja dikerjakan. Fakta membawa tingkat privasi dan bisa diveto oleh
+  orang yang menjadi subjeknya, identitas hidup di satu dokumen soul alih-alih di prompt, dan yang
+  dibicarakan orang yang sama di satu tubuh bisa dilanjutkan di tubuh lain, karena memori milik jiwa dan
+  orangnya, bukan milik transport. Lupa adalah keputusan (retensi, decay), bukan kecelakaan.
 - **selalu belajar** — saat sebuah tugas selesai, worker membaca episode-nya dan bisa menulis prosedur
   yang bisa dipakai ulang dengan rujukan ke asalnya. Belajar mengubah prosedur, tidak pernah aturan,
   persona, atau izin — dan ia berjalan secara default.
