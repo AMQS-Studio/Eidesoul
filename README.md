@@ -78,103 +78,61 @@ properties of that store, not of a prompt.
 
 ## What it tries to solve
 
-Most agent products hit the same twelve walls. Each paragraph says what usually happens, then what this
-engine does instead.
+Twelve walls. Each paragraph names the usual build, then what this engine does instead.
 
-**An assistant that forgets.** The usual build starts every session from an empty prompt: history is a
-transcript you paste back, and "memory" is whatever still fits. Here each turn writes its candidate
-facts into Postgres, the model labels them with a numeric privacy level, an owner, and a subject, and
-the next turn retrieves them by vector search through pgvector and Mem0, scoped to the person, the
-thread, or the whole soul. A question about a decision from last month depends on what was stored, not
-on what the window still holds.
+**An assistant that forgets.** Usually every session starts from an empty prompt, and history is a
+transcript you paste back. Here facts go into Postgres with a privacy level, an owner, and a subject, and
+the next turn retrieves them through pgvector and Mem0 by person, thread, or soul — so a decision from
+last month depends on what was stored, not on what still fits.
 
-**A conversation that outgrows the window.** The usual answer is compaction: summarize the oldest turns,
-drop them, continue. What was dropped is gone, and the summary becomes the only trace. Here the archive
-is the record and the window is a view: every turn assembles a working set from the archive — the recent
-tail plus the quoted chain of the message being answered — under a character budget, then throws the
-working set away. A thread can run for months without the model holding all of it.
+**A conversation that outgrows the window.** Usually compaction summarizes the oldest turns and drops
+them for good. Here the archive is the record and the window is a view: each turn assembles a working set
+from the archive under a character budget, then throws it away, so a thread can run for months without
+the model holding all of it.
 
-**A character that drifts.** The usual build ships a system prompt per client: the WhatsApp bot has one
-personality, the web widget another, the CLI a third, each with its own history. Here one soul document
-is authoritative in the database and mirrored to disk; every body reads the same document and the same
-memory, so a terminal, a chat app, a device, and a robot speak as one person. A body adds a transport
-and its own actions; it never adds a personality.
+**A character that drifts.** Usually each client ships its own prompt and its own history. Here one soul
+document and one memory are read by every body — terminal, chat app, device, robot — so the same person
+answers everywhere, and a body adds a transport, never a personality.
 
-**A memory that leaks.** The usual vector store is one index per bot: retrieval returns whatever is most
-similar, including a private fact from another room. Here every entry carries a privacy level from 0 to
-4, the owner who stated it, and the subject it is about; retrieval queries only global, this person, and
-this thread; a group caps the level; the subject can veto an entry; and the disclosure decision is
-deterministic, made before any model sees the text. The model is asked only to label a provisional level
-and to phrase the confirmation question.
+**A memory that leaks.** Usually one vector index serves every room. Here retrieval touches only global,
+this person, and this thread; a group caps the level; the subject can veto; and the disclosure decision
+is deterministic, made before any model sees the text.
 
-**An agent that acts without authority.** The usual loop either auto-approves everything or drowns the
-operator in prompts. Here permissions come only from roles — a missing entry denies — and a sensitive
-action passes a deterministic guard first; only what that layer cannot classify reaches a small, fast
-model. The target decides the class: own scope asks the requester, shared or outside scope asks an
-approver role, and the scope proof is recomputed at execution, so a role that widened reopens the
-approval.
+**An agent that acts without authority.** Usually the loop auto-approves everything or asks constantly.
+Here roles grant by name, a deterministic guard runs first, and the target decides consent versus
+authorization — own scope asks the requester, shared or outside asks an approver role — recomputed at
+execution, so a widened role reopens the question.
 
-**Roles that are a spreadsheet of allow and deny.** The usual build has a role table with an admin flag,
-a default role broad enough to work, and a check at login. Here a role is a document in the database
-with a mirror on disk, and it grants capabilities by name — a tool or a command that is not listed is
-denied, never inherited. Three classes stay apart: some things are capability (recalling your own
-memory, automatic capture, the crisis path always runs), some are consent (the person a fact is about can
-veto it; forgetting your own memory needs you, not a role), and some are authorization (a tool grant plus
-approval). Approval is not a way to gain permission: it continues a permission that was already granted,
-recomputed against the sender's current role, so a widened role reopens the question instead of
-inheriting an old yes. A few actions are forbidden to everyone, the top role included. Roles bind to
-people rather than to chats, so the same person keeps their rights across bodies; memory administration
-is its own capability, separate from being an operator; and the top role is protected — it cannot be
-deleted or renamed, only its address changes, through a reviewed import.
+**Roles that are a spreadsheet.** Usually an admin flag, a default role broad enough to work, and a check
+at login. Here a missing entry denies, capability, consent, and authorization stay apart, approval only
+continues an existing grant, memory administration is its own capability, and the top role cannot be
+deleted or renamed.
 
-**Two instances, one soul.** The usual deployment scales to two replicas, both answer, both write, and
-the last writer wins. Here a lease row in Postgres decides: the holder is primary, every other instance
-is standby and frozen, and a takeover is a database event with an audit trail instead of a deployment
-accident.
+**Two instances, one soul.** Usually two replicas answer and the last write wins. Here a lease row in
+Postgres makes one primary; every other instance stays standby and frozen, and a takeover is a database
+event with an audit trail.
 
-**A turn that dies halfway.** The usual loop runs a tool, crashes, and the restart repeats the side
-effect. Here the message and its turn are enqueued in one transaction, the turn is a row with a step
-checkpoint, and delivery is recorded per chunk. A restart resumes from the checkpoint, resends only what
-was not sent, re-runs a tool only when it is idempotent, and marks a non-idempotent action that already
-executed as interrupted instead of repeating it. A failed archive write fails the turn loudly; nothing
-is reported as saved when it is not.
+**A turn that dies halfway.** Usually a restart repeats the side effect. Here the message and its turn are
+enqueued in one transaction, the turn is a row with a step checkpoint, and delivery is recorded per chunk:
+resume resends only what was not sent, and a non-idempotent action that already ran is marked interrupted
+instead of repeated.
 
-**A guess that becomes a rule.** The usual memory feature lets the agent write notes into its own
-prompt, and next turn those notes read like the operator's instructions. Here a derived write must carry
-references to its source, derivation is limited to one level, and a rule can only be extracted from the
-soul document. New memory starts quarantined, needs corroboration before it is readable, and never
-changes a permission.
+**A guess that becomes a rule.** Usually the agent's own notes come back as instructions. Here derived
+writes carry references, derivation is one level deep, rules come only from the soul document, and new
+memory stays quarantined until corroborated.
 
-**A reply that invents what it does not know.** The usual model answers from the prompt and fills gaps
-confidently. Here a knowledge layer selects vetted facts per turn — embedding similarity over curated
-packs, with a keyword fallback when vectors are absent — so the prompt carries sourced facts instead of
-guesses. The character pass may rewrite the tone; it may not change facts, numbers, names, or tool
-results, and when the rewrite looks suspicious the original draft is used.
+**A reply that invents what it does not know.** Usually the model fills gaps confidently. Here a knowledge
+layer selects vetted facts per turn, with a keyword fallback when vectors are absent, and the character
+pass may change tone but never facts, numbers, or tool results.
 
-**A reply that sounds like a machine.** The usual fix is a system prompt that says "be friendly", which
-produces the same flat paragraph for everyone. Here emotion is its own engine: a PAD state with a
-personality baseline that decays between turns, drives such as energy, boredom, and loneliness that
-pulse over time, and a relationship per person that moves through stages with inertia and a rate limit.
-The context engine selects character moves gated by register and harshness, and a humanize pass paces
-the reply. All of it is a switch — on by default, asked once during init — so a deployment that wants a
-flat voice can turn it off.
+**A reply that sounds like a machine.** Usually a prompt says "be friendly". Here emotion is its own
+engine — a PAD state with a decaying baseline, drives, and a relationship per person — the context engine
+picks character moves gated by register and harshness, and a humanize pass paces the reply; all of it is a
+switch.
 
-**An automation that is really a cron job.** The usual build is a crontab line: a fixed time, a script,
-and no idea who asked, what they were allowed to read, or what happens after a restart. Here an
-automation is a declarative row owned by a person — event, condition, steps. The event is a time list
-(several times a day, chosen days, a count or an end date, a timezone) or a new message in a room, read
-from the gateway instead of a poller. The condition is typed filters with `all`/`any`/`not` and
-counters, decided by a deterministic layer first and a small model only for what that layer cannot read.
-The steps are a closed list: collect inside the owner's privacy ceiling, run one named program in the
-sandbox, search, compose, send, write, remember, queue reflection. Every occurrence is its own run keyed
-by a hash of the automation and the scheduled time, so a restart or a takeover never doubles it, and
-catch-up is per occurrence — outside its window the occurrence is missed, not silently replayed.
-Authority is checked twice: at creation, where a step beyond the owner's rights is rejected instead of
-stored half-way, and when due, where the role is recomputed and a revoked capability pauses the
-automation and tells the owner once. Quiet hours skip or defer, a daily budget and a maximum occurrence
-count bound the cost, and a kill switch is just a state change. The sandbox step executes only a named
-program reviewed once, in front of a human; logic may be free, the capability stays closed, and sending
-still goes through the same send capability as a normal turn.
+**An automation that is really a cron job.** Usually a crontab line with no owner, no permission, and no
+dedupe. Here event, condition, and a closed list of steps; one run per occurrence keyed by the schedule;
+authority checked twice; quiet hours, a daily budget, and a kill switch.
 
 None of this is a prompt trick. Each one is a place where state lives, and a rule about who may change
 it.

@@ -84,105 +84,61 @@ berbasis role adalah sifat store itu, bukan sifat prompt.
 <a id="apa-yang-coba-diselesaikan"></a>
 ## Apa yang coba diselesaikan
 
-Hampir semua produk agent menabrak dua belas dinding yang sama. Tiap paragraf menyebut apa yang biasanya
-terjadi, lalu apa yang dilakukan engine ini.
+Dua belas dinding. Tiap baris menyebut bangunan biasanya, lalu apa yang dilakukan engine ini.
 
-**Asisten yang lupa.** Bangunan biasanya memulai setiap sesi dari prompt kosong: riwayat adalah transkrip
-yang Anda tempel kembali, dan "memori" adalah apa pun yang masih muat. Di sini setiap giliran menulis
-kandidat fakta ke Postgres, model memberi label berupa tingkat privasi numerik, pemilik, dan subjek, dan
-giliran berikutnya mengambilnya lewat pencarian vektor pgvector melalui Mem0, dibatasi pada orang,
-thread, atau seluruh jiwa. Pertanyaan tentang keputusan bulan lalu bergantung pada apa yang tersimpan,
-bukan pada apa yang masih muat di window.
+**Asisten yang lupa.** Biasanya setiap sesi mulai dari prompt kosong, dan riwayat adalah transkrip yang
+Anda tempel kembali. Di sini fakta masuk Postgres dengan tingkat privasi, pemilik, dan subjek, dan
+giliran berikutnya mengambilnya lewat pgvector dan Mem0 per orang, thread, atau jiwa — jadi keputusan
+bulan lalu bergantung pada apa yang tersimpan, bukan pada apa yang masih muat.
 
-**Percakapan yang melampaui window.** Jawaban biasanya pemadatan: ringkas giliran tertua, buang, lanjut.
-Yang dibuang hilang, dan ringkasan menjadi satu-satunya jejak. Di sini arsip adalah rekamannya dan window
-adalah tampilan: tiap giliran menyusun working set dari arsip — ekor terbaru plus rantai kutipan pesan
-yang sedang dijawab — di bawah budget karakter, lalu membuang working set itu lagi. Satu thread bisa
-berjalan berbulan-bulan tanpa model memegang semuanya.
+**Percakapan yang melampaui window.** Biasanya pemadatan meringkas giliran tertua lalu membuangnya
+selamanya. Di sini arsip adalah rekamannya dan window adalah tampilan: tiap giliran menyusun working set
+dari arsip di bawah budget karakter, lalu membuangnya lagi, jadi satu thread bisa berjalan berbulan-bulan
+tanpa model memegang semuanya.
 
-**Karakter yang bergeser.** Bangunan biasanya mengirim system prompt per klien: bot WhatsApp punya satu
-kepribadian, widget web lain, CLI lain lagi, masing-masing dengan riwayatnya sendiri. Di sini satu dokumen
-soul berwenang di database dan dicerminkan ke disk; setiap tubuh membaca dokumen yang sama dan memori
-yang sama, jadi terminal, aplikasi chat, perangkat, dan robot berbicara sebagai satu orang. Tubuh
-menambah transport dan aksinya sendiri; ia tidak pernah menambah kepribadian.
+**Karakter yang bergeser.** Biasanya tiap klien membawa prompt dan riwayatnya sendiri. Di sini satu dokumen
+soul dan satu memori dibaca setiap tubuh — terminal, aplikasi chat, perangkat, robot — jadi orang yang
+sama menjawab di mana pun, dan tubuh hanya menambah transport, tidak pernah menambah kepribadian.
 
-**Memori yang bocor.** Vector store biasanya satu index per bot: pengambilan mengembalikan apa pun yang
-paling mirip, termasuk fakta privat dari ruangan lain. Di sini tiap entri membawa tingkat privasi 0
-sampai 4, pemilik yang menyatakannya, dan subjek yang dibicarakannya; pengambilan hanya menyentuh
-global, orang ini, dan thread ini; grup membatasi levelnya; subjek bisa memveto entri; dan keputusan
-pengungkapan bersifat deterministik, dibuat sebelum model mana pun melihat teksnya. Model hanya diminta
-memberi label sementara dan merangkai pertanyaan konfirmasi.
+**Memori yang bocor.** Biasanya satu index vektor melayani semua ruangan. Di sini pengambilan hanya
+menyentuh global, orang ini, dan thread ini; grup membatasi levelnya; subjek bisa memveto; dan keputusan
+pengungkapan bersifat deterministik, dibuat sebelum model mana pun melihat teksnya.
 
-**Agent yang bertindak tanpa otoritas.** Loop biasanya menyetujui semuanya otomatis, atau menenggelamkan
-operator dengan pertanyaan. Di sini izin hanya datang dari role — entri yang tidak ada berarti menolak —
-dan aksi sensitif melewati guard deterministik lebih dulu; hanya yang tak bisa diklasifikasi lapisan itu
-yang sampai ke model kecil dan cepat. Target menentukan kelasnya: lingkup sendiri meminta persetujuan
-peminta, lingkup bersama atau luar meminta role approver, dan bukti lingkup dihitung ulang saat eksekusi
-sehingga role yang melebar membuka ulang approval.
+**Agent yang bertindak tanpa otoritas.** Biasanya loop menyetujui semuanya atau bertanya terus. Di sini
+role memberi izin berdasarkan nama, guard deterministik jalan lebih dulu, dan target menentukan consent
+atau otorisasi — lingkup sendiri meminta peminta, lingkup bersama atau luar meminta role approver —
+dihitung ulang saat eksekusi, jadi role yang melebar membuka ulang pertanyaannya.
 
-**Role yang sebenarnya spreadsheet izin.** Bangunan biasanya punya tabel role dengan flag admin, role
-default yang cukup luas supaya jalan, dan pemeriksaan saat login. Di sini role adalah dokumen di database
-dengan cermin di disk, dan ia memberi kapabilitas berdasarkan nama — tool atau command yang tidak
-tercantum ditolak, tidak pernah diwarisi. Tiga kelas dijaga terpisah: sebagian adalah kapabilitas
-(memanggil kembali memori sendiri, penangkapan otomatis, jalur krisis selalu jalan), sebagian adalah
-consent (orang yang menjadi subjek fakta bisa memvetonya; melupakan memori sendiri butuh Anda, bukan
-role), dan sebagian adalah otorisasi (izin tool plus approval). Approval bukan cara mendapatkan izin: ia
-melanjutkan izin yang sudah diberikan, dihitung ulang terhadap role pengirim saat itu, jadi role yang
-melebar membuka ulang pertanyaannya alih-alih mewarisi "ya" yang lama. Beberapa aksi terlarang untuk
-semua orang, termasuk role tertinggi. Role terikat pada orang, bukan pada chat, jadi orang yang sama
-membawa haknya lintas tubuh; administrasi memori adalah kapabilitas tersendiri, terpisah dari menjadi
-operator; dan role tertinggi dilindungi — tidak bisa dihapus atau diganti nama, hanya alamatnya yang
-berubah, lewat import yang ditinjau.
+**Role yang sebenarnya spreadsheet.** Biasanya flag admin, role default yang lebar, dan pemeriksaan saat
+login. Di sini entri yang tidak ada berarti menolak, kapabilitas, consent, dan otorisasi dijaga terpisah,
+approval hanya melanjutkan izin yang sudah ada, administrasi memori adalah kapabilitas tersendiri, dan
+role tertinggi tidak bisa dihapus atau diganti nama.
 
-**Dua instance, satu jiwa.** Deployment biasanya naik ke dua replika, keduanya menjawab, keduanya
-menulis, dan penulis terakhir menang. Di sini satu baris lease di Postgres yang memutuskan: pemegangnya
-primary, instance lain standby dan beku, dan takeover adalah peristiwa database dengan jejak audit, bukan
-kecelakaan deployment.
+**Dua instance, satu jiwa.** Biasanya dua replika menjawab dan penulis terakhir menang. Di sini satu baris
+lease di Postgres menentukan satu primary; instance lain standby dan beku, dan takeover adalah peristiwa
+database dengan jejak audit.
 
-**Giliran yang mati di tengah.** Loop biasanya menjalankan tool, crash, dan restart mengulang efek
-sampingnya. Di sini pesan dan gilirannya masuk antrean dalam satu transaksi, giliran adalah baris dengan
-checkpoint langkah, dan pengiriman dicatat per potongan. Restart melanjutkan dari checkpoint, mengirim
-ulang hanya yang belum terkirim, menjalankan ulang tool hanya kalau ia idempoten, dan menandai aksi
-non-idempoten yang sudah dieksekusi sebagai interrupted alih-alih mengulanginya. Penulisan arsip yang
-gagal menggagalkan giliran secara terbuka; tidak ada yang dilaporkan tersimpan padahal tidak.
+**Giliran yang mati di tengah.** Biasanya restart mengulang efek samping. Di sini pesan dan gilirannya
+masuk antrean dalam satu transaksi, giliran adalah baris dengan checkpoint langkah, dan pengiriman dicatat
+per potongan: resume mengirim ulang hanya yang belum terkirim, dan aksi non-idempoten yang sudah jalan
+ditandai interrupted alih-alih diulang.
 
-**Tebakan yang menjadi aturan.** Fitur memori biasanya membiarkan agent menulis catatan ke promptnya
-sendiri, dan giliran berikutnya catatan itu terbaca seperti instruksi operator. Di sini tulisan turunan
-wajib membawa rujukan ke sumbernya, penurunan dibatasi satu tingkat, dan aturan hanya boleh diekstrak
-dari dokumen soul. Memori baru mulai dalam karantina, butuh korroborasi sebelum bisa dibaca, dan tidak
-pernah mengubah izin.
+**Tebakan yang menjadi aturan.** Biasanya catatan agent kembali sebagai instruksi. Di sini tulisan turunan
+wajib berujuk sumber, penurunan satu tingkat, aturan hanya dari dokumen soul, dan memori baru tetap dalam
+karantina sampai terkorroborasi.
 
-**Balasan yang mengarang apa yang tidak diketahuinya.** Model biasanya menjawab dari prompt dan mengisi
-celah dengan percaya diri. Di sini lapisan pengetahuan memilih fakta terkurasi tiap giliran — kemiripan
-embedding atas pack terkurasi, dengan fallback kata kunci saat vektor tidak ada — jadi prompt membawa
-fakta bersumber, bukan kira-kira. Pass karakter boleh menulis ulang nadanya; ia tidak boleh mengubah
-fakta, angka, nama, atau hasil tool, dan kalau hasilnya mencurigakan, draf aslinya yang dipakai.
+**Balasan yang mengarang apa yang tidak diketahuinya.** Biasanya model mengisi celah dengan percaya diri.
+Di sini lapisan pengetahuan memilih fakta terkurasi tiap giliran, dengan fallback kata kunci saat vektor
+tidak ada, dan pass karakter boleh mengubah nada tapi tidak fakta, angka, atau hasil tool.
 
-**Balasan yang terdengar seperti mesin.** Perbaikan biasanya system prompt "jadilah ramah", yang
-menghasilkan paragraf datar yang sama untuk semua orang. Di sini emosi adalah engine sendiri: state PAD
-dengan baseline kepribadian yang meluruh antar-giliran, drive seperti energi, kebosanan, dan kesepian
-yang berdenyut seiring waktu, dan relasi per orang yang bergerak lewat tahap dengan inersia dan batas
-laju. Engine konteks memilih gerakan karakter dengan gerbang register dan tingkat kasar, dan pass
-humanize mengatur pacing balasan. Semuanya sakelar — aktif default, ditanyakan sekali saat init — jadi
-deployment yang menginginkan suara datar bisa mematikannya.
+**Balasan yang terdengar seperti mesin.** Biasanya prompt "jadilah ramah". Di sini emosi adalah engine
+sendiri — state PAD dengan baseline yang meluruh, drive, dan relasi per orang — engine konteks memilih
+gerakan karakter bergerbang register dan tingkat kasar, dan pass humanize mengatur pacing; semuanya
+sakelar.
 
-**Automation yang sebenarnya cron job.** Bangunan biasanya satu baris crontab: waktu tetap, sebuah
-skrip, dan tidak ada gagasan siapa yang meminta, apa yang boleh ia baca, atau apa yang terjadi setelah
-restart. Di sini automation adalah baris deklaratif milik seseorang — event, condition, steps. Event-nya
-daftar waktu (beberapa kali sehari, hari tertentu, jumlah atau tanggal akhir, zona waktu) atau pesan baru
-di sebuah ruangan, dibaca dari gateway alih-alih poller. Condition-nya filter bertipe dengan
-`all`/`any`/`not` dan counter, diputuskan lapisan deterministik lebih dulu dan model kecil hanya untuk
-yang tak bisa dibaca lapisan itu. Steps-nya daftar tertutup: collect di dalam plafon privasi pemilik,
-menjalankan satu program bernama di sandbox, search, compose, send, write, remember, queue reflection.
-Tiap occurrence adalah run sendiri yang di-key dari hash automation dan waktu terjadwal, jadi restart
-atau takeover tidak pernah menggandakannya, dan catch-up dihitung per occurrence — di luar jendelanya,
-occurrence itu `missed`, bukan diputar ulang diam-diam. Otoritas diperiksa dua kali: saat dibuat, di mana
-langkah di luar hak pemilik ditolak alih-alih tersimpan setengah, dan saat jatuh tempo, di mana role
-dihitung ulang dan kapabilitas yang dicabut menjeda automation lalu memberi tahu pemiliknya sekali. Jam
-tenang melewati atau menunda, budget harian dan batas jumlah occurrence membatasi biaya, dan kill switch
-cukup satu perubahan state. Langkah sandbox hanya menjalankan program bernama yang sudah ditinjau sekali
-di depan manusia; logika boleh bebas, kapabilitas tetap tertutup, dan pengiriman tetap lewat kapabilitas
-send yang sama seperti giliran biasa.
+**Automation yang sebenarnya cron job.** Biasanya baris crontab tanpa pemilik, izin, atau dedupe. Di sini
+event, condition, dan daftar steps tertutup; satu run per occurrence di-key dari jadwal; otoritas
+diperiksa dua kali; jam tenang, budget harian, dan kill switch.
 
 Tidak satu pun dari ini trik prompt. Masing-masing adalah tempat state hidup, dan aturan siapa yang boleh
 mengubahnya.
