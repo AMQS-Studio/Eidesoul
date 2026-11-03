@@ -448,12 +448,12 @@ def test_a_dispute_question_goes_to_the_dm_once_per_day(tmp_path) -> None:
     ids = _dispute(store, "628111")
 
     pair = {"ids": ids, "first": "aku suka kopi", "second": "aku tidak suka kopi"}
-    assert asyncio.run(env.agent.ask_dispute("628111", pair)) == "ok: asked"
+    assert asyncio.run(env.agent.privacy.ask_dispute("628111", pair)) == "ok: asked"
     assert [item[0] for item in env.gateway.sent] == [DM]
     assert "kopi" in env.gateway.sent[0][1]
     assert store.disputes_asked_today("628111") == 1
 
-    assert asyncio.run(env.agent.ask_dispute("628111", pair)) == "skipped: budget"
+    assert asyncio.run(env.agent.privacy.ask_dispute("628111", pair)) == "skipped: budget"
     assert len(env.gateway.sent) == 1
 
 
@@ -465,7 +465,7 @@ def test_a_dispute_question_needs_a_single_member_dm(tmp_path) -> None:
     _dm(env, GROUP, "628111", kind="group", extra="628222")
 
     pair = {"ids": _dispute(store, "628111"), "first": "a", "second": "b"}
-    assert asyncio.run(env.agent.ask_dispute("628111", pair)) == "skipped: no dm"
+    assert asyncio.run(env.agent.privacy.ask_dispute("628111", pair)) == "skipped: no dm"
     assert env.gateway.sent == []
 
 
@@ -483,8 +483,8 @@ def test_questions_per_day_two_allows_two_pairs(tmp_path) -> None:
     second = _dispute(store, "628111", "aku suka kopi", "aku tidak suka kopi")
     one = {"ids": first, "first": "a", "second": "b"}
     two = {"ids": second, "first": "c", "second": "d"}
-    assert asyncio.run(env.agent.ask_dispute("628111", one)) == "ok: asked"
-    assert asyncio.run(env.agent.ask_dispute("628111", two)) == "ok: asked"
+    assert asyncio.run(env.agent.privacy.ask_dispute("628111", one)) == "ok: asked"
+    assert asyncio.run(env.agent.privacy.ask_dispute("628111", two)) == "ok: asked"
     assert len(env.gateway.sent) == 2
     assert store.disputes_asked_today("628111") == 2
 

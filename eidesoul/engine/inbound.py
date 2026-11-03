@@ -58,6 +58,10 @@ class GatewayError(RuntimeError):
     """Transport failure that is safe to show to the model or user."""
 
 
+class StandbyError(RuntimeError):
+    """A send was refused because this instance is not the primary (ADR-0017 §4.4)."""
+
+
 @dataclass(frozen=True, slots=True)
 class Percept:
     """One body-supplied event: who, where, what, and the facts the body can prove."""

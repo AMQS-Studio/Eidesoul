@@ -182,6 +182,74 @@ class PrivacyService:
             reason=str(body.get("reason") or "")[:120],
         )
 
+    # ------------------------------------------------------------- questions
+
+    async def ask_dispute(self, subject_id: str, pair: dict) -> str:
+        """ADR-0010 §4.7: one dispute question per subject per day, in that subject's DM.
+
+        The target is a real DM thread (`threads.kind='dm'`, single member); when the body cannot
+        prove one, or the daily budget is spent, nothing is sent and nothing is asked. The answer
+        arrives as an ordinary turn, so no approval row is created here.
+        """
+        agent = self.agent
+        subject = str(subject_id or "").strip()
+        ids = [str(item) for item in (pair.get("ids") or [])]
+        if not subject or not ids:
+            return "skipped: no subject"
+        budget = int(getattr(agent.config.reflection, "questions_per_day", 1))
+        if budget <= 0:
+            return "skipped: questions are off"
+        thread = str(agent.history.dm_thread(subject) or "")
+        if not thread:
+            log.info("dispute question skipped: no dm for %s", subject)
+            return "skipped: no dm"
+        if int(agent.memory.disputes_asked_today(subject)) >= budget:
+            log.info("dispute question skipped: daily budget for %s", subject)
+            return "skipped: budget"
+        text = t(
+            "memory.dispute_question",
+            self._lang,
+            first=str(pair.get("first") or "").strip()[:160],
+            second=str(pair.get("second") or "").strip()[:160],
+        )
+        sent = await agent.send_text(thread, text, gateway=agent._gateway_for(thread))
+        if not str(sent).startswith("ok:"):
+            return f"failed: {sent}"
+        agent.memory.mark_dispute_asked(ids)
+        log.info("dispute question asked thread=%s subject=%s", thread, subject)
+        return "ok: asked"
+
+    async def ask_memory(
+        self,
+        thread_id: str,
+        person_id: str,
+        memory_ids: list[str],
+        level: int,
+        question: str = "",
+    ) -> None:
+        """ADR-0004/0006: a DM confirmation for a memory the assess left unconfirmed."""
+        agent = self.agent
+        if not thread_id or not memory_ids:
+            return
+        gateway = agent._turn_gateways.get(thread_id) or (
+            agent.gateways[0] if agent.gateways else None
+        )
+        if gateway is None:
+            return
+        text = question or self._text("ask_level")
+        approval = await agent.approvals.create(
+            kind="privacy",
+            thread_id=thread_id,
+            sender=person_id,
+            gateway=getattr(gateway, "name", "") or "",
+            tool="memory",
+            args={"memory_ids": list(memory_ids)},
+            payload={"level": int(level), "question": text},
+            summary=text,
+        )
+        log.info("privacy pending thread=%s approval=%s", thread_id, approval.id)
+        await agent.send_text(thread_id, text, gateway=gateway)
+
     # ------------------------------------------------------------- pending
 
     async def handle_pending(self, inbound, gateway, sender: str) -> bool:

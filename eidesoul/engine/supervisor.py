@@ -58,9 +58,9 @@ class Supervisor:
             history=getattr(agent, "history", None),
             language=getattr(getattr(agent, "soul", None), "language", "id"),
             known_tools=tuple(getattr(getattr(agent, "tools", None), "by_name", {}) or ()),
-            ask=getattr(agent, "ask_memory", None),
+            ask=getattr(getattr(agent, "privacy", None), "ask_memory", None),
             lease=lease,
-            ask_dispute=getattr(agent, "ask_dispute", None),
+            ask_dispute=getattr(getattr(agent, "privacy", None), "ask_dispute", None),
             propose=(
                 self.automations.store.propose if self.automations is not None else None
             ),

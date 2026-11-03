@@ -2,9 +2,13 @@
 
 
 import time
+from contextvars import ContextVar
 from dataclasses import dataclass, field
 
 from .config import Paths
+
+# The generation a turn was claimed under; the send gate compares it with the live lease.
+ACTIVE_GENERATION: ContextVar[int] = ContextVar("turn_generation", default=0)
 
 
 def human_duration(seconds: float) -> str:
@@ -53,3 +57,24 @@ class RuntimeFacts:
 
     def surface(self) -> str:
         return ", ".join(self.gateways) or "-"
+
+    # Counters: one method per fact, so callers never edit a field inline (ADR-0031 §4.2).
+    def refuse_standby(self) -> None:
+        self.standby_refused += 1
+
+    def timeout_turn(self) -> None:
+        self.turn_timeout_total += 1
+
+    def fail_notice(self, reason: str = "") -> None:
+        self.notice_failed += 1
+        if reason:
+            self.last_notice_error = reason[:200]
+
+    def miss_rich(self) -> None:
+        self.rich_missing_total += 1
+
+    def miss_directory(self) -> None:
+        self.directory_missing_total += 1
+
+    def miss_participants(self) -> None:
+        self.participants_unknown_total += 1

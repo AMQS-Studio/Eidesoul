@@ -9,9 +9,7 @@ import time
 from collections import OrderedDict, deque
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
-from contextvars import ContextVar
 from dataclasses import asdict, replace
-from datetime import datetime
 from pathlib import Path
 
 from . import assembly, guard, io, observability, plugins
@@ -21,12 +19,9 @@ from .commands import REGISTRY as CORE_COMMANDS
 from .commands import CommandContext
 from .config import Config
 from .context import (
-    AUTHOR_BOT,
-    TEXT_EXT,
     Message,
     WorkingMemory,
     build_user_content,
-    clean,
     fallback_content,
     keyword_set,
     prompt_entry,
@@ -35,22 +30,19 @@ from .decision import (
     Appraisal,
     Decision,
     RelationshipDelta,
-    decide,
-    ensure_reply,
-    ground_tone,
+    decide_turn,
+    decision_from_row,
 )
 from .guard import SafetyPolicy, SandboxGuard, build_safety
 from .i18n import reload_catalogs, t
-from .identity import IdentityStore
+from .identity import IdentityStore, display_target
 from .inbound import (
-    AUTHORIZATION,
     CONSENT,
     MESSAGE,
     Action,
     GatewayCore,
-    GatewayError,
     Percept,
-    Rich,
+    StandbyError,
 )
 from .knowledge import select_facts
 from .llm import LLM, DeadlineExceeded
@@ -61,11 +53,11 @@ from .permissions import command_allowed, commands_for, tool_patterns, tools_for
 from .privacy import PrivacyService
 from .prompts import CRISIS_SAFETY, away_block, character_block, research_block, system_prompt
 from .registry import Handler, Registry
-from .reply import human_chunks, split_text, typing_delay
+from .reply import Delivery, plan_chunks
 from .roles import Role
+from .runtime import ACTIVE_GENERATION as runtime_generation
 from .runtime import RuntimeFacts
 from .stores.turns import SIDE_EFFECTING, TurnStore, args_hash
-from .target import classify, combine, score_style
 from .tools import REGISTRY as CORE_TOOLS
 from .tools import ToolContext
 
@@ -82,16 +74,11 @@ MAX_TEXT = 10_000
 MENTION_HEAD_RE = r"^@([^\s@]+)\s*"
 
 
-class StandbyError(RuntimeError):
-    """A send or intake was refused because this instance is not the primary (ADR-0017 §4.4)."""
-
-
 class SideEffectAlreadyRan(RuntimeError):
     """A side-effecting tool already executed; the turn is interrupted, never repeated."""
 
 
-# The generation a turn was claimed under; `_send_gate` compares it with the live lease.
-ACTIVE_GENERATION: ContextVar[int] = ContextVar("turn_generation", default=0)
+ACTIVE_GENERATION = runtime_generation
 TERMINAL_TURN = frozenset({"delivered", "interrupted", "expired"})
 
 
@@ -110,29 +97,6 @@ def command_body(text: str, bot_name: str, handles: set[str]) -> str:
         body = body[match.end() :]
         match = pattern.match(body)
     return body
-
-
-FILE_TEXT_SIZE = 512 * 1024
-FILE_TEXT_CHARS = 4000
-
-
-def file_fallback_text(path: Path, caption: str, language: str) -> str:
-    """What a body without `Rich` delivers instead of the file (ADR-0018 §4.2)."""
-    label = t(
-        "agent.file_fallback",
-        language,
-        name=path.name,
-        caption=f" — {caption}" if caption else "",
-    )
-    if path.suffix.lower() not in TEXT_EXT:
-        return label
-    try:
-        if not path.is_file() or path.stat().st_size > FILE_TEXT_SIZE:
-            return label
-        body = path.read_text(encoding="utf-8", errors="replace").strip()
-    except OSError:
-        return label
-    return f"{label}\n{body[:FILE_TEXT_CHARS]}" if body else label
 
 
 class Agent:
@@ -192,6 +156,7 @@ class Agent:
         self.tasks: set[asyncio.Task] = set()
         self.turns = TurnStore(db)
         self.outbox = OutboundLedger(db)
+        self.delivery = Delivery(self)
         self.backlog: dict[str, int] = {}
         self._thread_locks: OrderedDict[str, asyncio.Lock] = OrderedDict()
         self._lock_waiters: dict[str, int] = {}
@@ -273,7 +238,7 @@ class Agent:
         """Primary gate before every transport call (ADR-0017 §4.4, ADR-0012 §4.3)."""
         expected = int(ACTIVE_GENERATION.get() or 0)
         if self.mode != "primary":
-            self.runtime.standby_refused += 1
+            self.runtime.refuse_standby()
             raise StandbyError("this instance is standby")
         lease = self.lease
         if lease is not None:
@@ -281,7 +246,7 @@ class Agent:
             if live is None or live != int(lease.generation) or (
                 expected and int(expected) != int(live)
             ):
-                self.runtime.standby_refused += 1
+                self.runtime.refuse_standby()
                 log.warning(
                     "send refused: generation moved turn=%s live=%s owned=%s",
                     expected,
@@ -354,39 +319,6 @@ class Agent:
         except Exception:
             log.exception("failed to mark turn %s delivered", turn_id)
 
-    def _decision_from_row(self, row: dict) -> Decision | None:
-        raw = row.get("decision_json")
-        if not isinstance(raw, dict):
-            return None
-        try:
-            appraisal = raw.get("appraisal") if isinstance(raw.get("appraisal"), dict) else {}
-            relationship = (
-                raw.get("relationship") if isinstance(raw.get("relationship"), dict) else {}
-            )
-            return Decision(
-                addressed=str(raw.get("addressed") or "me"),
-                act=str(raw.get("act") or "reply"),
-                mode=str(raw.get("mode") or "daily"),
-                tone=str(raw.get("tone") or "neutral"),
-                bubbles=max(1, int(raw.get("bubbles") or 1)),
-                appraisal=Appraisal(
-                    label=str(appraisal.get("label") or "neutral"),
-                    dP=float(appraisal.get("dP") or 0.0),
-                    dA=float(appraisal.get("dA") or 0.0),
-                    dD=float(appraisal.get("dD") or 0.0),
-                    note=str(appraisal.get("note") or ""),
-                ),
-                relationship=RelationshipDelta(
-                    trust=float(relationship.get("trust") or 0.0),
-                    affection=float(relationship.get("affection") or 0.0),
-                    respect=float(relationship.get("respect") or 0.0),
-                    annoyance=float(relationship.get("annoyance") or 0.0),
-                ),
-                reason=str(raw.get("reason") or "resume"),
-            )
-        except (TypeError, ValueError):
-            return None
-
     def _step_recorder(self, turn_id: str, step: str):
         def record(tool, args, result, started, finished, status: str = "executed"):
             try:
@@ -430,81 +362,20 @@ class Agent:
         kind: str,
         params: dict | None = None,
     ) -> bool:
-        """One catalog notice, ledgered with its `kind`; it never marks a turn delivered."""
-        text = t(key, self.soul.language, **(params or {}))
-        retry = self.config.turns.shutdown.notice_retry
-        try:
-            status = self.outbox.begin(
-                scope_key,
-                0,
-                gateway=gateway.name,
-                thread_id=thread_id,
-                generation=ACTIVE_GENERATION.get(),
-            )
-        except Exception:
-            log.exception("failed to open the notice ledger chat=%s kind=%s", thread_id, kind)
-            self.runtime.notice_failed += 1
-            self.runtime.last_notice_error = "notice ledger unavailable"
-            return False
-        if status == "sent":
-            return False
-        if status == "unknown":
-            # It may already be visible; a notice must never duplicate (ADR-0013 §10).
-            return False
-        attempts = max(1, int(retry.attempts))
-        for attempt in range(attempts):
-            try:
-                message_id = await self.deliver_text(
-                    thread_id, text, gateway=gateway, kind=kind
-                )
-            except StandbyError:
-                self.outbox.forget(scope_key, 0)
-                return False
-            except GatewayError as exc:
-                self.runtime.notice_failed += 1
-                self.runtime.last_notice_error = f"{type(exc).__name__}: {exc}"[:200]
-                log.warning("notice failed chat=%s kind=%s: %s", thread_id, kind, exc)
-                if attempt < attempts - 1:
-                    await asyncio.sleep(
-                        min(
-                            max(0.0, float(retry.backoff_seconds)),
-                            max(0.0, float(self.config.llm.retry.retry_after_max_seconds)),
-                        )
-                    )
-                    continue
-                self.outbox.mark_unknown(scope_key, 0)
-                return False
-            except Exception as exc:
-                log.exception("notice send failed chat=%s kind=%s", thread_id, kind)
-                self.runtime.notice_failed += 1
-                self.runtime.last_notice_error = f"{type(exc).__name__}: {exc}"[:200]
-                with contextlib.suppress(Exception):
-                    self.outbox.mark_unknown(scope_key, 0)
-                return False
-            self.outbox.mark_sent(scope_key, 0, message_id)
-            return True
-        return False
-
-    async def _notice_timeout(self, thread_id: str, turn_id: str, gateway: GatewayCore) -> None:
-        self.runtime.turn_timeout_total += 1
-        await self._notice(
+        return await self.delivery.notice(
             thread_id,
             gateway,
-            "turn.notice.timeout",
-            scope_key=f"notice:{turn_id}:timeout",
-            kind="notice:timeout",
+            key,
+            scope_key=scope_key,
+            kind=kind,
+            params=params,
         )
+
+    async def _notice_timeout(self, thread_id: str, turn_id: str, gateway) -> None:
+        await self.delivery.notice_timeout(thread_id, turn_id, gateway)
 
     async def _notice_interrupted(self, turn_id: str, thread_id: str, gateway) -> None:
-        if gateway is None:
-            return
-        await self._notice(
-            thread_id,
-            gateway,
-            "turn.notice.interrupted",
-            scope_key=f"notice:{turn_id}:interrupted",
-            kind="notice:interrupted",
-        )
+        await self.delivery.notice_interrupted(turn_id, thread_id, gateway)
 
     # --------------------------------------------------------- shutdown
 
@@ -830,47 +701,6 @@ class Agent:
         payload = inbound.payload
         return payload.sender_id or payload.sender_address or inbound.thread
 
-    async def _target(
-        self, inbound: Percept, gateway: GatewayCore, messages, message
-    ) -> tuple[str, float, str]:
-        """Target gender: manual override, then typing style, avatar only when requested."""
-        recent = [
-            entry.text
-            for entry in messages[-8:]
-            if entry.sender_id == message.sender_id and entry.text.strip()
-        ]
-        style = score_style(recent)
-        stored = ("", 0.0, "")
-        if self.affect is not None:
-            try:
-                stored = self.affect.gender(inbound.actor)
-            except Exception:
-                log.debug("gender: failed to read the stored value", exc_info=True)
-        if stored[0] and stored[2] == "manual":
-            return stored
-        avatar = None
-        if style[0] == "unknown" and self.config.character.gender_avatar:
-            grab = getattr(gateway, "avatar", None)
-            if callable(grab):
-                try:
-                    shot = await grab(message.sender_address)
-                except Exception:
-                    log.debug("gender: avatar fetch failed", exc_info=True)
-                    shot = None
-                if shot:
-                    avatar = await classify(
-                        self.llm, shot[0], shot[1], locale=self.config.soul.locale
-                    )
-        target, confidence, source = combine(
-            style, avatar, gate=self.config.character.gender_gate
-        )
-        if self.affect is not None and (target, confidence, source) != tuple(stored):
-            try:
-                self.affect.set_gender(inbound.actor, target, confidence, source)
-            except Exception:
-                log.debug("gender: failed to save the label", exc_info=True)
-        return (target, confidence, source)
-
     def tool_context(
         self,
         thread_id: str,
@@ -951,9 +781,6 @@ class Agent:
 
     # ------------------------------------------------------------ outbound
 
-    def _self_sender_id(self, gateway: GatewayCore) -> str:
-        return next(iter(sorted(gateway.self_handles())), "")
-
     async def deliver_text(
         self,
         thread_id: str,
@@ -963,24 +790,9 @@ class Agent:
         reply: Percept | None = None,
         kind: str = "",
     ) -> str:
-        self._send_gate()
-        message_id = await gateway.send_text(thread_id, text, reply=reply)
-        self.windows.append(
-            thread_id,
-            Message(
-                id=message_id,
-                sender_name=self.soul.name,
-                sender_id=self._self_sender_id(gateway),
-                when=datetime.now(),
-                text=text,
-                outgoing=True,
-                author=AUTHOR_BOT,
-            ),
+        return await self.delivery.text(
+            thread_id, text, gateway=gateway, reply=reply, kind=kind
         )
-        if kind:
-            with contextlib.suppress(Exception):
-                self.history.add_notice(thread_id, text, kind=kind, message_id=message_id)
-        return message_id
 
     async def deliver_file(
         self,
@@ -991,167 +803,30 @@ class Agent:
         gateway: GatewayCore,
         reply: Percept | None = None,
     ) -> str:
-        path = Path(path)
-        if not isinstance(gateway, Rich):
-            self.runtime.rich_missing_total += 1
-            return await self.deliver_text(
-                thread_id,
-                file_fallback_text(path, caption, self.soul.language),
-                gateway=gateway,
-                reply=reply,
-            )
-        self._send_gate()
-        message_id = await gateway.send_file(thread_id, path, caption, reply=reply)
-        note = f"(file terkirim: {path.name}{f' — {caption}' if caption else ''})"
-        self.windows.append(
-            thread_id,
-            Message(
-                id=message_id,
-                sender_name=self.soul.name,
-                sender_id=self._self_sender_id(gateway),
-                when=datetime.now(),
-                text=note,
-                outgoing=True,
-                author=AUTHOR_BOT,
-            ),
+        return await self.delivery.file(
+            thread_id, path, caption, gateway=gateway, reply=reply
         )
-        return message_id
 
     async def deliver_sticker(
         self, thread_id: str, message_id: str, *, gateway: GatewayCore
     ) -> str | None:
-        if not isinstance(gateway, Rich):
-            self.runtime.rich_missing_total += 1
-            return None
-        self._send_gate()
-        label = await gateway.send_sticker(thread_id, message_id)
-        if label:
-            self.windows.append(
-                thread_id,
-                Message(
-                    id=f"sticker-{time.time_ns()}",
-                    sender_name=self.soul.name,
-                    sender_id=self._self_sender_id(gateway),
-                    when=datetime.now(),
-                    text=label,
-                    outgoing=True,
-                    author=AUTHOR_BOT,
-                ),
-            )
-        return label
+        return await self.delivery.sticker(thread_id, message_id, gateway=gateway)
 
     async def _typing(self, gateway: GatewayCore, thread_id: str, composing: bool) -> None:
-        """A body without `Rich` has no presence indicator; skip, never fail."""
-        if not isinstance(gateway, Rich):
-            self.runtime.rich_missing_total += 1
-            return
-        await gateway.typing(thread_id, composing)
+        await self.delivery.typing(gateway, thread_id, composing)
 
-    async def _prepare_media(self, gateway: GatewayCore, thread_id: str, entry: Message) -> None:
-        if not isinstance(gateway, Rich):
-            self.runtime.rich_missing_total += 1
-            return
-        await gateway.prepare_media(thread_id, entry)
+    async def _prepare_media(
+        self, gateway: GatewayCore, thread_id: str, entry: Message
+    ) -> None:
+        await self.delivery.prepare_media(gateway, thread_id, entry)
 
     async def send_text(self, thread_id: str, text: str, *, gateway: GatewayCore | None) -> str:
-        """Tool-facing: render the gateway dialect, split, send, return ok:/error:."""
-        if gateway is None:
-            return "error: gateway is not available"
-        body = clean(str(text or "")).strip()
-        if not body:
-            return "error: empty text"
-        chunks = split_text(gateway.render(body), limit=MAX_TEXT)
-        if not chunks:
-            return "error: empty text"
-        try:
-            for chunk in chunks:
-                await self.deliver_text(thread_id, chunk, gateway=gateway)
-        except StandbyError:
-            return "error: delivery refused"
-        except GatewayError as exc:
-            return f"error: failed to send text: {exc}"
-        name = gateway.chat_name(thread_id)
-        suffix = f" ({len(chunks)} parts)" if len(chunks) > 1 else ""
-        return f"ok: text sent to {name or thread_id}{suffix}"
-
-    async def ask_dispute(self, subject_id: str, pair: dict) -> str:
-        """ADR-0010 §4.7: one dispute question per subject per day, in that subject's DM.
-
-        The target is a real DM thread (`threads.kind='dm'`, single member); when the body cannot
-        prove one, or the daily budget is spent, nothing is sent and nothing is asked. The answer
-        arrives as an ordinary turn, so no approval row is created here.
-        """
-        subject = str(subject_id or "").strip()
-        ids = [str(item) for item in (pair.get("ids") or [])]
-        if not subject or not ids:
-            return "skipped: no subject"
-        budget = int(getattr(self.config.reflection, "questions_per_day", 1))
-        if budget <= 0:
-            return "skipped: questions are off"
-        thread = str(self.history.dm_thread(subject) or "")
-        if not thread:
-            log.info("dispute question skipped: no dm for %s", subject)
-            return "skipped: no dm"
-        if int(self.memory.disputes_asked_today(subject)) >= budget:
-            log.info("dispute question skipped: daily budget for %s", subject)
-            return "skipped: budget"
-        text = t(
-            "memory.dispute_question",
-            self.soul.language,
-            first=str(pair.get("first") or "").strip()[:160],
-            second=str(pair.get("second") or "").strip()[:160],
-        )
-        sent = await self.send_text(thread, text, gateway=self._gateway_for(thread))
-        if not str(sent).startswith("ok:"):
-            return f"failed: {sent}"
-        self.memory.mark_dispute_asked(ids)
-        log.info("dispute question asked thread=%s subject=%s", thread, subject)
-        return "ok: asked"
-
-    async def ask_memory(
-        self,
-        thread_id: str,
-        person_id: str,
-        memory_ids: list[str],
-        level: int,
-        question: str = "",
-    ) -> None:
-        """ADR-0004/0006: a DM confirmation for a memory the assess left unconfirmed."""
-        if not thread_id or not memory_ids:
-            return
-        gateway = self._turn_gateways.get(thread_id) or (
-            self.gateways[0] if self.gateways else None
-        )
-        if gateway is None:
-            return
-        text = question or t("privacy.ask_level", self.soul.language)
-        approval = await self.approvals.create(
-            kind="privacy",
-            thread_id=thread_id,
-            sender=person_id,
-            gateway=getattr(gateway, "name", "") or "",
-            tool="memory",
-            args={"memory_ids": list(memory_ids)},
-            payload={"level": int(level), "question": text},
-            summary=text,
-        )
-        log.info("privacy pending thread=%s approval=%s", thread_id, approval.id)
-        await self.send_text(thread_id, text, gateway=gateway)
+        return await self.delivery.send_text(thread_id, text, gateway=gateway)
 
     async def send_file(
         self, thread_id: str, path: Path, caption: str = "", *, gateway: GatewayCore | None
     ) -> str:
-        if gateway is None:
-            return "error: gateway is not available"
-        try:
-            await self.deliver_file(thread_id, Path(path), caption, gateway=gateway)
-        except StandbyError:
-            return "error: delivery refused"
-        except GatewayError as exc:
-            return f"error: failed to send file: {exc}"
-        except OSError as exc:
-            return f"error: {type(exc).__name__}: {exc}"
-        return f"ok: file sent: {Path(path).name}"
+        return await self.delivery.send_file(thread_id, path, caption, gateway=gateway)
 
     # ------------------------------------------------------------- turn
 
@@ -1235,7 +910,7 @@ class Agent:
             return []
         if not self._accepting():
             # A standby instance refuses intake and sends nothing (ADR-0017 §4.4).
-            self.runtime.standby_refused += 1
+            self.runtime.refuse_standby()
             log.info(
                 "intake refused chat=%s mode=%s draining=%s",
                 thread_id,
@@ -1449,7 +1124,7 @@ class Agent:
                 decision: Decision | None
                 safety = ""
                 if skip_decision:
-                    decision = self._decision_from_row(claimed)
+                    decision = decision_from_row(claimed)
                     if decision is None:
                         decision = Decision(
                             addressed="me" if direct else "unknown",
@@ -1491,7 +1166,22 @@ class Agent:
                         reason="group without a call",
                     )
                 else:
-                    decision = await decide(
+                    annoyance = 0.0
+                    if emotion is not None and self.affect is not None:
+                        try:
+                            annoyance = next(
+                                (
+                                    float(row["annoyance"])
+                                    for row in self.affect.known_people(thread_id, 20)
+                                    if row["person_id"] == inbound.actor
+                                ),
+                                0.0,
+                            )
+                        except Exception:
+                            log.debug(
+                                "failed to read annoyance chat=%s", thread_id, exc_info=True
+                            )
+                    decision = await decide_turn(
                         self.llm,
                         thread_id=thread_id,
                         chat_name=gateway.chat_name(thread_id),
@@ -1507,46 +1197,8 @@ class Agent:
                         soul=self.soul,
                         deadline=deadline,
                         min_call_seconds=min_call,
+                        annoyance=annoyance,
                     )
-                    if decision is None:
-                        log.warning("empty decision, continuing without a tone: %s", thread_id)
-                        decision = Decision(
-                            addressed="me" if direct else "unknown",
-                            act="reply" if direct else "ignore",
-                            mode="daily",
-                            tone="curt",
-                            bubbles=1,
-                            appraisal=Appraisal("neutral", 0.0, 0.0, 0.0),
-                            relationship=RelationshipDelta(),
-                            reason="model did not answer",
-                        )
-                    elif direct:
-                        decision = ensure_reply(decision)
-                    if emotion is not None:
-                        annoyed = 0.0
-                        if self.affect is not None:
-                            try:
-                                annoyed = next(
-                                    (
-                                        float(row["annoyance"])
-                                        for row in self.affect.known_people(thread_id, 20)
-                                        if row["person_id"] == inbound.actor
-                                    ),
-                                    0.0,
-                                )
-                            except Exception:
-                                log.debug(
-                                    "failed to read annoyance chat=%s", thread_id, exc_info=True
-                                )
-                        grounded = ground_tone(decision, emotion, annoyed)
-                        if grounded.tone != decision.tone:
-                            log.info(
-                                "tone %s->%s chat=%s: feeling does not match",
-                                decision.tone,
-                                grounded.tone,
-                                thread_id,
-                            )
-                        decision = grounded
 
                 if not is_command and self.affect is not None and not resuming:
                     try:
@@ -1694,8 +1346,8 @@ class Agent:
                         for entry in messages:
                             with contextlib.suppress(Exception):
                                 await self._prepare_media(gateway, thread_id, entry)
-                        target, confidence, _source = await self._target(
-                            inbound, gateway, messages, message
+                        target, confidence, _source = await display_target(
+                            self, inbound.actor, gateway=gateway, messages=messages, message=message
                         )
                         limits = effective_limits(self.config.character, target, confidence)
                         style = self.soul.style
@@ -1920,20 +1572,14 @@ class Agent:
                         decision is not None and decision.mode == "professional"
                     )
                     humanize = self.config.humanize
-                    if is_command or professional:
-                        chunks = split_text(gateway.render(reply or "")) or [
-                            t("agent.empty_reply", self.soul.language)
-                        ]
-                        pace = False
-                        quote_all = True
-                    else:
-                        planned = max(1, int(humanize.max_bubbles))
-                        chunks = [
-                            gateway.render(chunk)
-                            for chunk in human_chunks(reply or "", max_parts=planned)
-                        ] or [t("agent.empty_reply", self.soul.language)]
-                        pace = bool(humanize.enabled)
-                        quote_all = not pace
+                    chunks, pace, quote_all = plan_chunks(
+                        reply,
+                        gateway=gateway,
+                        language=self.soul.language,
+                        is_command=is_command,
+                        professional=professional,
+                        humanize=humanize,
+                    )
                     planned_chunks = int(claimed["planned_chunks"] or 0)
                     if resume_reply and planned_chunks and len(chunks) != planned_chunks:
                         # The stored chunk plan no longer matches: sending would duplicate.
@@ -1942,78 +1588,23 @@ class Agent:
                         )
                         await self._notice_interrupted(turn_id, thread_id, gateway)
                         return actions
-                    self.turns.plan_sending(turn_id, len(chunks))
-                    delivered = True
-                    sent_ids: list[str] = []
-                    partial = str(self.config.turns.partial_delivery or "skip")
-                    scope_key = self.outbox.turn_scope(turn_id)
-                    for index, chunk in enumerate(chunks):
-                        if pace:
-                            await self._typing(gateway, thread_id, True)
-                            await asyncio.sleep(typing_delay(chunk, humanize))
-                        state = self.outbox.begin(
-                            scope_key,
-                            index,
-                            gateway=gateway.name,
-                            thread_id=thread_id,
-                            generation=generation,
-                        )
-                        if state == "sent":
-                            continue
-                        if state == "unknown" and partial == "skip":
-                            log.info(
-                                "chunk %d of turn %s is unknown: skipped", index, turn_id
-                            )
-                            continue
-                        try:
-                            provider = await self.deliver_text(
-                                thread_id,
-                                chunk,
-                                gateway=gateway,
-                                reply=inbound if (quote_all or index == 0) else None,
-                            )
-                        except StandbyError:
-                            self.outbox.forget(scope_key, index)
-                            self._interrupt(turn_id, "superseded", force=True)
-                            return actions
-                        except GatewayError:
-                            log.exception("failed to send the reply to %s", thread_id)
-                            self.outbox.mark_unknown(scope_key, index)
-                            delivered = False
-                            break
-                        self.outbox.mark_sent(scope_key, index, provider)
-                        self.turns.chunk_sent(turn_id)
-                        sent_ids.append(provider)
-                        actions.append(
-                            Action(
-                                capability="send_text",
-                                target=thread_id,
-                                payload=chunk,
-                                approval_class=(
-                                    CONSENT
-                                    if thread_id == inbound.thread
-                                    else AUTHORIZATION
-                                ),
-                            )
-                        )
-                        if pace and index < len(chunks) - 1:
-                            await asyncio.sleep(
-                                max(0.0, float(humanize.between_delay))
-                                + random.uniform(0, 0.4)
-                            )
-                    if delivered:
-                        touch = getattr(self.memory, "record_uses", None)
-                        if touch is not None and memory_ctx.hits:
-                            try:
-                                await io.run(
-                                    touch, turn_id, [hit.id for hit in memory_ctx.hits]
-                                )
-                            except Exception:
-                                log.exception(
-                                    "failed to record memory use chat=%s", thread_id
-                                )
-                        self._finish(turn_id, planned=len(chunks))
-                    else:
+                    _sent_ids, sent_actions, stop = await self.delivery.send_reply(
+                        turn_id=turn_id,
+                        thread_id=thread_id,
+                        gateway=gateway,
+                        inbound=inbound,
+                        chunks=chunks,
+                        pace=pace,
+                        quote_all=quote_all,
+                        generation=generation,
+                        partial=str(self.config.turns.partial_delivery or "skip"),
+                        humanize=humanize,
+                    )
+                    actions.extend(sent_actions)
+                    if stop == "superseded":
+                        self._interrupt(turn_id, "superseded", force=True)
+                        return actions
+                    if stop == "failed":
                         self.turns.defer(
                             turn_id,
                             "send failed",
@@ -2026,12 +1617,20 @@ class Agent:
                                 * (2 ** max(0, attempt - 1))
                                 * (
                                     1.0
-                                    + random.uniform(
-                                        0.0, float(self.config.llm.retry.jitter)
-                                    )
+                                    + random.uniform(0.0, float(self.config.llm.retry.jitter))
                                 ),
                             ),
                         )
+                    else:
+                        touch = getattr(self.memory, "record_uses", None)
+                        if touch is not None and memory_ctx.hits:
+                            try:
+                                await io.run(
+                                    touch, turn_id, [hit.id for hit in memory_ctx.hits]
+                                )
+                            except Exception:
+                                log.exception("failed to record memory use chat=%s", thread_id)
+                        self._finish(turn_id, planned=len(chunks))
                     self.runtime.pending_approvals = self.approvals.count_pending()
                     self.approvals.expire()
                 finally:

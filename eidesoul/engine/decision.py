@@ -7,6 +7,7 @@ short word for a mention/DM that must be answered).
 
 
 import json
+import logging
 from dataclasses import dataclass, replace
 
 DECISION_PROMPT = """Your ONLY task is to decide what to do with the last message. Do not write a reply, do not explain
@@ -137,6 +138,42 @@ def _int(value, default: int, low: int, high: int) -> int:
 
 def _flat(value, limit: int) -> str:
     return " ".join(str(value or "").split())[:limit]
+
+
+log = logging.getLogger(__name__)
+
+
+def decision_from_row(row: dict) -> Decision | None:
+    """The decision a checkpointed turn stored, or None when the row carries none."""
+    raw = row.get("decision_json")
+    if not isinstance(raw, dict):
+        return None
+    try:
+        appraisal = raw.get("appraisal") if isinstance(raw.get("appraisal"), dict) else {}
+        relationship = raw.get("relationship") if isinstance(raw.get("relationship"), dict) else {}
+        return Decision(
+            addressed=str(raw.get("addressed") or "me"),
+            act=str(raw.get("act") or "reply"),
+            mode=str(raw.get("mode") or "daily"),
+            tone=str(raw.get("tone") or "neutral"),
+            bubbles=max(1, int(raw.get("bubbles") or 1)),
+            appraisal=Appraisal(
+                label=str(appraisal.get("label") or "neutral"),
+                dP=float(appraisal.get("dP") or 0.0),
+                dA=float(appraisal.get("dA") or 0.0),
+                dD=float(appraisal.get("dD") or 0.0),
+                note=str(appraisal.get("note") or ""),
+            ),
+            relationship=RelationshipDelta(
+                trust=float(relationship.get("trust") or 0.0),
+                affection=float(relationship.get("affection") or 0.0),
+                respect=float(relationship.get("respect") or 0.0),
+                annoyance=float(relationship.get("annoyance") or 0.0),
+            ),
+            reason=str(raw.get("reason") or "resume"),
+        )
+    except (TypeError, ValueError):
+        return None
 
 
 def parse_decision(raw: str) -> Decision | None:
@@ -381,3 +418,67 @@ async def decide(
         relationship=RelationshipDelta(),
         reason="invalid",
     )
+
+
+async def decide_turn(
+    llm,
+    *,
+    thread_id: str,
+    chat_name: str,
+    current: str,
+    transcript: str,
+    emotion=None,
+    relationship: str = "",
+    direct: bool = False,
+    mentioned: bool = False,
+    replied: bool = False,
+    away: str = "",
+    vibe: str = "",
+    soul=None,
+    deadline: float | None = None,
+    min_call_seconds: float = 0.0,
+    annoyance: float = 0.0,
+) -> Decision:
+    """One decision with the fallback and the feeling/tone grounding already applied."""
+    decision = await decide(
+        llm,
+        thread_id=thread_id,
+        chat_name=chat_name,
+        current=current,
+        transcript=transcript,
+        emotion=emotion,
+        relationship=relationship,
+        direct=direct,
+        mentioned=mentioned,
+        replied=replied,
+        away=away,
+        vibe=vibe,
+        soul=soul,
+        deadline=deadline,
+        min_call_seconds=min_call_seconds,
+    )
+    if decision is None:
+        log.warning("empty decision, continuing without a tone: %s", thread_id)
+        decision = Decision(
+            addressed="me" if direct else "unknown",
+            act="reply" if direct else "ignore",
+            mode="daily",
+            tone="curt",
+            bubbles=1,
+            appraisal=NEUTRAL,
+            relationship=RelationshipDelta(),
+            reason="model did not answer",
+        )
+    elif direct:
+        decision = ensure_reply(decision)
+    if emotion is None:
+        return decision
+    grounded = ground_tone(decision, emotion, annoyance)
+    if grounded.tone != decision.tone:
+        log.info(
+            "tone %s->%s chat=%s: feeling does not match",
+            decision.tone,
+            grounded.tone,
+            thread_id,
+        )
+    return grounded

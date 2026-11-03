@@ -53,8 +53,9 @@ def _who(entry) -> str:
 def _count_refusal(ctx: ToolContext) -> None:
     """Record that the body had no `Directory` to resolve a cross-room target (ADR-0014 §4.5)."""
     runtime = getattr(getattr(ctx, "agent", None), "runtime", None)
-    if runtime is not None and hasattr(runtime, "directory_missing_total"):
-        runtime.directory_missing_total = int(runtime.directory_missing_total or 0) + 1
+    method = getattr(runtime, "miss_directory", None) if runtime is not None else None
+    if callable(method):
+        method()
 
 
 def _target(raw: str, ctx: ToolContext) -> str | tuple[str, str]:
