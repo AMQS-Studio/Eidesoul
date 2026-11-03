@@ -286,3 +286,24 @@ def test_intake_hard_exclusion_keeps_the_archive_only(tmp_path) -> None:
     assert _count(store, "turns") == 1
     assert _count(store, "memories") == 0
     assert _count(store, "memory_events") == 0
+
+
+def test_a_second_body_cannot_claim_an_owned_thread(tmp_path) -> None:
+    """ADR-0032 §4.7: the route is claimed once; the second body writes nothing."""
+    import pytest
+    from sqlalchemy import select
+
+    from eidesoul.engine.schema import messages as messages_table
+    from eidesoul.engine.stores.history import RouteConflict
+
+    store = HistoryStore(database())
+    assert store.intake("chat", message("m1", "halo"), "628222", gateway="a") is True
+
+    with pytest.raises(RouteConflict):
+        store.intake("chat", message("m2", "halo lagi"), "628222", gateway="b")
+
+    found = store.db.fetch_all(
+        select(messages_table.c.msg_id).where(messages_table.c.thread_id == "chat")
+    )
+    assert [row["msg_id"] for row in found] == ["m1"]
+    assert store.gateway_of("chat") == "a"
