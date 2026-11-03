@@ -338,6 +338,10 @@ This table is the source, and a canonical term enters it in the same commit in w
 | `EIDESOL_TEST_DATABASE_URL` | DSN of the throwaway test database; unset means the suite fails with instructions | 0029 | `TEST_DB` (prosa), `DATABASE_URL_TEST` (prosa) |
 | `truncate per test` | isolation rule: one DDL per session, `TRUNCATE ... RESTART IDENTITY CASCADE` per test | 0029 | `rollback` (prosa, as the isolation rule), `recreate schema` (prosa) |
 | `stub embedder` | the deterministic 384-dimension embedder used inside tests only | 0029 | `fake model` (prosa), `dummy encoder` (prosa) |
+| `install.sh` | the one on-machine installer at the repo root: preflight, pinned `uv`, `uv sync --locked`, then hands over to `init` | 0030 | `bootstrap.sh` (prosa), `setup.sh` (prosa) |
+| `interactive init` | `eidesoul init` asks on a TTY and fails closed off one, naming the flags it needs | 0030 | `wizard command` (prosa), `setup` (prosa, as a separate command) |
+| `logo slot` | the reserved banner area for the product mark, filled later; never a config key | 0030 | `theme` (prosa), `branding config` (prosa) |
+| `dry run` | `--dry-run` prints every action and writes nothing | 0030 | `simulate` (prosa), `noop mode` (prosa) |
 | `rooms_of(person_id)` | the set of rooms in which the asker is a member; the basis of **read** permission (sending has its own class, §4.5) | 0007 | `user_rooms` |
 | `cross_send` | cross-room send class (`send.class=cross`); attribution is mandatory; the default in a room is `send.class=room` | 0007 | `blind_send`, `anonymous_send` |
 | `cross_read` | **invariant**: there is no cross-room read capability; `rooms_of` is rejected, with no override (enterprise privacy requirement) | 0007 | `allow_cross_read`, `cross_read_enabled` |

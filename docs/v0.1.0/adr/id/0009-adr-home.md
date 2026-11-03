@@ -1,4 +1,4 @@
-> Terjemahan turunan — jangan sunting; sumber: 0009-adr-home.md (sha256: f1173720a82d)
+> Terjemahan turunan — jangan sunting; sumber: 0009-adr-home.md (sha256: ecc9f5e231b3)
 > Teks ini ditulis manusia; baris yang tidak bisa diterjemahkan mesin disalin apa adanya ke sumber English, jadi sumber bercampur dua bahasa.
 
 # ADR-0009: Rumah ADR, Folder Dokumen Berversi & Penjaganya
@@ -341,6 +341,10 @@ Tabel ini sumbernya, dan istilah kanonik baru masuk di commit yang sama saat ia 
 | `EIDESOL_TEST_DATABASE_URL` | DSN database tes sekali pakai; kosong berarti suite gagal dengan instruksi | 0029 | `TEST_DB` (prosa), `DATABASE_URL_TEST` (prosa) |
 | `truncate per test` | aturan isolasi: satu DDL per sesi, `TRUNCATE ... RESTART IDENTITY CASCADE` per tes | 0029 | `rollback` (prosa, sebagai aturan isolasi), `recreate schema` (prosa) |
 | `stub embedder` | embedder deterministik 384 dimensi yang dipakai hanya di dalam tes | 0029 | `fake model` (prosa), `dummy encoder` (prosa) |
+| `install.sh` | installer on-machine tunggal di akar repo: preflight, `uv` yang dipin, `uv sync --locked`, lalu menyerahkan ke `init` | 0030 | `bootstrap.sh` (prosa), `setup.sh` (prosa) |
+| `interactive init` | `eidesoul init` bertanya di TTY dan gagal tertutup di luarnya, menyebut flag yang dibutuhkan | 0030 | `wizard command` (prosa), `setup` (prosa, sebagai perintah terpisah) |
+| `logo slot` | area banner yang dipesan untuk mark produk, diisi belakangan; tidak pernah jadi kunci config | 0030 | `theme` (prosa), `branding config` (prosa) |
+| `dry run` | `--dry-run` mencetak setiap aksi dan tidak menulis apa pun | 0030 | `simulate` (prosa), `noop mode` (prosa) |
 | `rooms_of(person_id)` | himpunan room tempat penanya menjadi anggota; dasar izin **baca** (kirim punya kelasnya sendiri, §4.5) | 0007 | `user_rooms` |
 | `cross_send` | kelas kiriman lintas room (`send.class=cross`); atribusi wajib; default di room bernilai `send.class=room` | 0007 | `blind_send`, `anonymous_send` |
 | `cross_read` | **invarian**: tidak ada kapabilitas baca lintas room; ditolak `rooms_of`, tanpa override (syarat privasi enterprise) | 0007 | `allow_cross_read`, `cross_read_enabled` |

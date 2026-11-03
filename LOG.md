@@ -1,5 +1,21 @@
 # LOG
 
+## 2026-11-03 — On-machine install and interactive init (ADR-0030)
+
+Onboarding had exactly one path and it started with `podman compose up -d postgres`, while
+`eidesoul init` demanded flags (`__main__.py:709-714`). New **ADR-0030** decides the path: one
+`install.sh` at the repository root serving both stacks (native and compose), which never runs `sudo`
+(a missing package is printed, not installed), pins `uv` by SHA-256 when it is absent, runs
+`uv sync --locked` inside its own directory, then hands over to `init`; `eidesoul init` becomes
+**interactive on a TTY** and **fails closed** off one, naming the flags it needs; the wizard carries
+**our own visual language** — a step rail, a review screen that shows every file and value (secrets as
+env names only), a receipt, and a reserved **logo slot** filled later. The studied Hermes bootstrap is a
+reference for discipline only (quiet output, install log, honest failures, idempotent repair), never a
+template: no stage protocol, no vendored package manager, no telemetry. The installer ends by
+**offering** the panel or the command line instead of choosing, and the container path keeps the same
+`init` inside the container. Implementation is `draft`: no installer, no interactive `init`, no panel
+yet. Gate 31/31, copies 31/31, ADR tests 16 passed; documentation only.
+
 ## 2026-11-03 — Test store is the real store (ADR-0029)
 
 The suite runs on SQLite today, so pgvector/Mem0, the dialect-specific upsert branch, real `db upgrade`
