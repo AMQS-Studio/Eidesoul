@@ -118,7 +118,9 @@ An automation manifest must state `event.tz`; a missing `tz` is a `ManifestError
 
 ### 4.5 Transport lives in the seam
 
-`dm_thread`, the `Chat` protocol, `digest`, group summaries, sticker and reaction semantics, quote rendering, media placeholders, message ids, delivery state, and "the model lives in chat" leave the engine's own vocabulary. The prompt names the body's declared acts and addressing hints; a body that has no rooms simply declares none. Where the engine needs "the private thread with this person", the body answers through the inbound seam (ADR-0018, ADR-0032).
+`dm_thread`, the `Chat` protocol, `digest`, group summaries, sticker and reaction semantics, quote rendering, media placeholders, message ids, delivery state, and "the model lives in chat" leave the engine's own vocabulary. Where the engine needs "the private thread with this person", the body answers through the inbound seam (ADR-0018, ADR-0032).
+
+Transport facts reach the prompt from the body, never from a core branch. `CoreDefaults` gains `prompt_section() -> str`, returning the body's own text: how it addresses people, what a mention is here, quoting, view-once or undecryptable markers, stickers, and which targets its tools can reach. The engine assembles `neutral base + body section`, so the CLI and WhatsApp describe themselves, and a body with no rooms — a robot with one thread per sensor, an email body — returns nothing and gets a neutral prompt. The section is static per boot, English, capped at 1200 characters, may not interpolate user data, secrets, or runtime values, and joins the system prompt, so `prompt_prefix_hash` (ADR-0025) covers it and the prefix cache stays correct.
 
 ### 4.6 Vendor names are absent from core, spine excepted
 
@@ -131,7 +133,7 @@ A plugin, gateway, or vendor identifier may appear only inside its own tree and 
 
 ### 4.7 Discovery over enumeration
 
-Metadata lives with the thing it describes: a tool declares `target` (`file`, `room`, `document`, `process`, or `""`) and keeps its `family`; a plugin declares `provides` and `secrets`; a pack declares `language`; a manifest declares `tz`; a handler declares its approval class (§4.11). No central name → kind table exists in core.
+Metadata lives with the thing it describes: a tool declares `target` (`file`, `room`, `document`, `process`, or `""`) and keeps its `family`; a plugin declares `provides` and `secrets`; a pack declares `language`; a manifest declares `tz`; a handler declares its approval class (§4.11); a body declares its `prompt_section()` (§4.5), empty by default. No central name → kind table exists in core.
 
 ### 4.8 Delete specialization; do not deprecate
 
@@ -229,6 +231,8 @@ The gate, `scripts/neutral.py --check` (new module), fails when:
 7. A shipped template has a non-empty `plugins:` map, names a plugin tool in a role seed, or writes plugin credentials into `.env`.
 8. `date.today()`, `time.localtime()`, or `time.gmtime()` appears in `eidesoul/engine/**` instead of the `now(tz)` helper; or a host `TZ`/`LANG` is forwarded to a child process.
 9. The neutral smoke fails: `pytest -q` and `eidesoul selftest` run with `plugins: {}`, `language: en`, no optional gateway, and an empty database.
+10. A body's `prompt_section()` is longer than 1200 characters, changes between two calls in one boot, or a body that returns an empty section still yields transport vocabulary in the assembled prompt.
+11. The prompt contract suite fails: `tests/data/prompt_cases.yaml` declares, per case, the required fragments, the forbidden tokens, and the expected `prompt_prefix_hash`, and `pytest -q` runs it against the real prompt builders. It pins properties, never wording, so a reworded sentence does not force a fixture edit but a leaked transport, culture, or language token does.
 
 It runs beside the existing gates: `pytest -q`, `ruff check eidesoul scripts tests plugins migrations`, `python -P scripts/types.py --check`, `python scripts/selfcheck.py --check`, `python scripts/adr.py --check`.
 
@@ -239,6 +243,9 @@ It runs beside the existing gates: `pytest -q`, `ruff check eidesoul scripts tes
 - A French soul is told to reply in French through the catalog, or refused; `language_line` carries no language branch in code.
 - A manifest without `tz` fails with `ManifestError`; no `Asia/` literal and no `TZ=` exist outside a deployment manifest.
 - `currents` is gone: no module, no command, no state key, no prose topic list in `turn/prompts.py`.
+- A body with an empty `prompt_section()` (the dispatch-only robot) produces a prompt with no transport vocabulary; the CLI and WhatsApp sections are their own text, each under 1200 characters, identical across two calls in one boot.
+- The prefix hash is recorded per body, so a change to a body's section is a deliberate diff, not a cache surprise.
+- The prompt contract suite carries one case per body (`cli`, a group thread, a dispatch-only robot) and per behavior (crisis, approval class, register, language refusal) and runs inside `pytest -q`.
 - `stores/style.py` carries no particle, laughter, emoji, or seed constant; a language without a style pack gets no style block.
 - One day boundary: the same `now(tz)` helper feeds prompts, automation budgets, ambient stamps, and memory buckets.
 - `days: "Mon"` and `days: ["mon"]` both parse; the week start is documented.
@@ -257,6 +264,8 @@ It runs beside the existing gates: `pytest -q`, `ruff check eidesoul scripts tes
 - **The gate becomes the enemy of prose.** Mitigation: it checks non-ASCII **letters**, not punctuation, so `§`, `—`, `→`, and `•` in docstrings stay legal while emoji and flags in user-visible strings do not.
 - **Spine allowlist drift.** Mitigation: the allowlist is one constant with an ADR citation per entry; the gate names the file and line of any addition.
 - **Clock migration.** Mitigation: one helper, one test that sets the host `TZ` to two different zones and expects identical day buckets.
+- **A body's prompt section becomes an injection surface.** Mitigation: it is operator-shipped code at plugin trust level, static per boot, capped at 1200 characters, and forbidden from interpolating user data, secrets, or runtime values; the suite asserts the cap and the static property, and the section never carries content from a message.
+- **A dynamic section breaks the prompt cache.** Mitigation: `prompt_section()` takes no argument, the test calls it twice in one boot and expects identical text, and per-turn facts stay in the volatile half of the prompt.
 - **Losing live context with `currents`.** Mitigation: `web_search` covers ad hoc lookups, facts packs cover durable knowledge, and a plugin can reintroduce a news feed without core changes.
 
 ## 9. Interaction with other ADRs
@@ -303,6 +312,9 @@ It runs beside the existing gates: `pytest -q`, `ruff check eidesoul scripts tes
 - `eidesoul/engine/memory/episodes.py:149-161` — `TARGET_TYPES` naming a plugin and gateway tools.
 - `eidesoul/engine/turn/prompts.py:61-84,121,138-159,178-191,239,247,309,319,329-332,347-350,360-372,379-384,408-412,427-432,441-449,498` — the chat vocabulary and the prose topic list.
 - `eidesoul/engine/turn/decision.py:13-51,343-345` — mentions, DMs, `ACTS`, `bubbles`, prompt labels.
+- `eidesoul/engine/inbound.py:168-176` — `CoreDefaults`, where `prompt_section()` lands with an empty default.
+- `eidesoul/engine/llm.py:138-145` — `prompt_prefix_hash`, which will cover the body section automatically.
+- `eidesoul/gateways/cli/gateway.py:91-106`, `eidesoul/gateways/whatsapp/gateway.py` — bodies that will carry their own section instead of teaching core their vocabulary.
 - `eidesoul/engine/turn/context.py:317,506-513` — language default and quote rendering.
 - `eidesoul/engine/access/relay.py:1-10,218`, `eidesoul/engine/stores/history.py:683,746` — the DM-bound relay, `dm_thread`, the compatibility hook.
 - `eidesoul/engine/llm.py:1,10,33,51,177,648-655` — the wire client, the digest prompt and method, the language default.
@@ -311,7 +323,8 @@ It runs beside the existing gates: `pytest -q`, `ruff check eidesoul scripts tes
 - `eidesoul/engine/access/roles.py:20`, `eidesoul/engine/memory/ledger.py:104` — the legacy markers.
 - `Dockerfile:5` — `TZ=Asia/Jakarta`.
 - `eidesoul/library/patterns/jawatimur.json`, `eidesoul/library/facts/indonesia.json` — the only shipped packs, both `language: id`.
-- Proposed, not code yet: `eidesoul/library/{safety,severity,style}/<lang>.json`, the `affirmations`/`level_words`/`laughter`/`particles` lexicon keys, `Handler.target`/`approval_class`/`destructive`/`path_arg`/`scan`, `now(tz)`, `soul.timezone`, and `scripts/neutral.py`.
+- `tests/support.py:66-120` — `default_soul`, `role`, and `build_config`, the helpers the prompt contract suite reuses instead of rebuilding a world.
+- Proposed, not code yet: `eidesoul/library/{safety,severity,style}/<lang>.json`, the `affirmations`/`level_words`/`laughter`/`particles` lexicon keys, `Handler.target`/`approval_class`/`destructive`/`path_arg`/`scan`, `now(tz)`, `soul.timezone`, `scripts/neutral.py`, and `tests/data/prompt_cases.yaml`.
 
 ---
 

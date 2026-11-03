@@ -41,6 +41,16 @@ gender gate in `character/patterns.py`, and §6's first check now reads "non-ASC
 than "non-ASCII character", because the old wording could never pass against `§`, `—`, `→`, and the
 emoji in command descriptions.
 
+**Prompt neutrality is delegated, and then tested.** Transport facts leave the core prompt and become
+a body-declared `prompt_section()` on `CoreDefaults`: empty by default, static per boot, English,
+capped at 1200 characters, no user data. The CLI and WhatsApp describe their own mentions, quotes,
+stickers, and reachable targets; a robot with one thread per sensor returns nothing and gets a
+neutral prompt. Because the section joins the system prompt, `prompt_prefix_hash` (ADR-0025)
+already covers it, so the cache stays correct. A prompt contract suite
+(`tests/data/prompt_cases.yaml`, run by `pytest -q`) pins properties — required fragments,
+forbidden tokens, expected prefix hash — per body and per behavior, never word-for-word text, so a
+rewording is free and a leaked transport or culture token fails.
+
 ## 2026-11-04 — Pyright is clean: zero errors, and the ratchet has nothing left to permit
 
 `pyright` over `eidesoul`, `admin`, `gateways`, and `scripts` reports **0 errors**, so

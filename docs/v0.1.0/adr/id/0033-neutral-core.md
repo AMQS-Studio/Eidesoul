@@ -1,4 +1,4 @@
-> Terjemahan turunan — jangan sunting; sumber: 0033-neutral-core.md (sha256: 345201d4d86a)
+> Terjemahan turunan — jangan sunting; sumber: 0033-neutral-core.md (sha256: 0e179829e53d)
 > Ditulis tangan (bukan mesin), mengikuti sumber English baris demi baris.
 
 # ADR-0033: Core Netral, Tepi Terspesialisasi — Tanpa Budaya, Transport, atau Vendor di Dalam Mekanisme
@@ -121,7 +121,9 @@ Manifest automation wajib menyatakan `event.tz`; `tz` yang hilang adalah `Manife
 
 ### 4.5 Transport hidup di seam
 
-`dm_thread`, protokol `Chat`, `digest`, ringkasan grup, semantik stiker dan reaksi, render kutipan, placeholder media, id pesan, status pengiriman, dan "model hidup di chat" keluar dari kosakata engine sendiri. Prompt menyebut aktus dan hint pengalamatan yang dideklarasikan body; body yang tidak punya ruang cukup mendeklarasikan tidak ada. Ketika engine membutuhkan "thread privat dengan orang ini", body menjawabnya lewat seam inbound (ADR-0018, ADR-0032).
+`dm_thread`, protokol `Chat`, `digest`, ringkasan grup, semantik stiker dan reaksi, render kutipan, placeholder media, id pesan, status pengiriman, dan "model hidup di chat" keluar dari kosakata engine sendiri. Ketika engine membutuhkan "thread privat dengan orang ini", body menjawabnya lewat seam inbound (ADR-0018, ADR-0032).
+
+Fakta transport mencapai prompt dari body, tidak pernah dari cabang core. `CoreDefaults` memperoleh `prompt_section() -> str`, yang mengembalikan teks milik body itu sendiri: bagaimana ia menyapa orang, apa arti mention di sini, kutipan, penanda view-once atau undecryptable, stiker, dan target mana yang bisa dijangkau tool-nya. Engine menyusun `neutral base + body section`, sehingga CLI dan WhatsApp mendeskripsikan dirinya sendiri, dan body tanpa ruang — robot dengan satu thread per sensor, body email — mengembalikan kosong dan mendapat prompt netral. Section itu statis per boot, berbahasa Inggris, dibatasi 1200 karakter, tidak boleh menginterpolasi data pengguna, secret, atau nilai runtime, dan ikut masuk system prompt, sehingga `prompt_prefix_hash` (ADR-0025) mencakupnya dan cache prefix tetap benar.
 
 ### 4.6 Nama vendor absen dari core, kecuali spine
 
@@ -134,7 +136,7 @@ Identitas plugin, gateway, atau vendor hanya boleh muncul di dalam pohonnya send
 
 ### 4.7 Discovery, bukan enumerasi
 
-Metadata hidup bersama hal yang dideskripsikannya: tool mendeklarasikan `target` (`file`, `room`, `document`, `process`, atau `""`) dan mempertahankan `family`; plugin mendeklarasikan `provides` dan `secrets`; pack mendeklarasikan `language`; manifest mendeklarasikan `tz`; handler mendeklarasikan kelas approval-nya (§4.11). Tidak ada tabel nama → jenis terpusat di core.
+Metadata hidup bersama hal yang dideskripsikannya: tool mendeklarasikan `target` (`file`, `room`, `document`, `process`, atau `""`) dan mempertahankan `family`; plugin mendeklarasikan `provides` dan `secrets`; pack mendeklarasikan `language`; manifest mendeklarasikan `tz`; handler mendeklarasikan kelas approval-nya (§4.11); body mendeklarasikan `prompt_section()`-nya (§4.5), kosong secara default. Tidak ada tabel nama → jenis terpusat di core.
 
 ### 4.8 Hapus spesialisasi; jangan deprecate
 
@@ -232,6 +234,8 @@ Gate-nya, `scripts/neutral.py --check` (modul baru), gagal ketika:
 7. Template yang dikirim punya peta `plugins:` tidak kosong, menyebut tool plugin di seed role, atau menulis kredensial plugin ke `.env`.
 8. `date.today()`, `time.localtime()`, atau `time.gmtime()` muncul di `eidesoul/engine/**` alih-alih helper `now(tz)`; atau `TZ`/`LANG` host diteruskan ke proses anak.
 9. Smoke netral gagal: `pytest -q` dan `eidesoul selftest` berjalan dengan `plugins: {}`, `language: en`, tanpa gateway opsional, dan database kosong.
+10. `prompt_section()` sebuah body lebih dari 1200 karakter, berubah antara dua pemanggilan dalam satu boot, atau body yang mengembalikan section kosong masih menghasilkan kosakata transport di prompt yang tersusun.
+11. Suite kontrak prompt gagal: `tests/data/prompt_cases.yaml` menyatakan, per kasus, fragmen yang wajib ada, token yang dilarang, dan `prompt_prefix_hash` yang diharapkan, dan `pytest -q` menjalankannya terhadap builder prompt yang asli. Ia mengunci properti, bukan kata-kata, sehingga kalimat yang diubah tidak memaksa suntingan fixture tetapi token transport, budaya, atau bahasa yang bocor akan gagal.
 
 Gate itu berjalan di samping gate yang sudah ada: `pytest -q`, `ruff check eidesoul scripts tests plugins migrations`, `python -P scripts/types.py --check`, `python scripts/selfcheck.py --check`, `python scripts/adr.py --check`.
 
@@ -242,6 +246,9 @@ Gate itu berjalan di samping gate yang sudah ada: `pytest -q`, `ruff check eides
 - Soul Prancis diberi tahu membalas dalam bahasa Prancis lewat katalog, atau ditolak; `language_line` tidak membawa cabang bahasa di kode.
 - Manifest tanpa `tz` gagal dengan `ManifestError`; tidak ada literal `Asia/` dan tidak ada `TZ=` di luar manifest deployment.
 - `currents` hilang: tidak ada modul, command, state key, maupun daftar topik prosa di `turn/prompts.py`.
+- Body dengan `prompt_section()` kosong (robot dispatch-only) menghasilkan prompt tanpa kosakata transport; section CLI dan WhatsApp adalah teks milik masing-masing, di bawah 1200 karakter, identik pada dua pemanggilan dalam satu boot.
+- Hash prefix dicatat per body, sehingga perubahan pada section sebuah body adalah diff yang disengaja, bukan kejutan cache.
+- Suite kontrak prompt membawa satu kasus per body (`cli`, thread grup, robot dispatch-only) dan per perilaku (krisis, kelas approval, register, penolakan bahasa) dan berjalan di dalam `pytest -q`.
 - `stores/style.py` tidak membawa konstanta partikel, tawa, emoji, atau seed; bahasa tanpa style pack tidak mendapat blok style.
 - Satu batas hari: helper `now(tz)` yang sama memberi makan prompt, anggaran automation, cap ambient, dan bucket memori.
 - `days: "Mon"` dan `days: ["mon"]` sama-sama diterima; awal minggu didokumentasikan.
@@ -260,6 +267,8 @@ Gate itu berjalan di samping gate yang sudah ada: `pytest -q`, `ruff check eides
 - **Gate menjadi musuh prosa.** Mitigasi: gate memeriksa **huruf** non-ASCII, bukan tanda baca, sehingga `§`, `—`, `→`, dan `•` di docstring tetap sah sementara emoji dan bendera di string yang terlihat pengguna tidak.
 - **Drift allowlist spine.** Mitigasi: allowlist adalah satu konstanta dengan kutipan ADR per entri; gate menyebut berkas dan baris penambahannya.
 - **Migrasi jam.** Mitigasi: satu helper, satu test yang menetapkan `TZ` host ke dua zona berbeda dan mengharapkan bucket hari yang identik.
+- **Section prompt sebuah body menjadi permukaan injeksi.** Mitigasi: itu kode yang dikirim operator pada tingkat kepercayaan plugin, statis per boot, dibatasi 1200 karakter, dan dilarang menginterpolasi data pengguna, secret, atau nilai runtime; suite memastikan batas dan sifat statisnya, dan section itu tidak pernah membawa isi pesan.
+- **Section dinamis merusak cache prompt.** Mitigasi: `prompt_section()` tidak menerima argumen, test memanggilnya dua kali dalam satu boot dan mengharapkan teks identik, dan fakta per-turn tetap di bagian volatil prompt.
 - **Kehilangan konteks langsung bersama `currents`.** Mitigasi: `web_search` menutup pencarian ad hoc, facts pack menutup pengetahuan tahan lama, dan plugin dapat mengembalikan feed berita tanpa perubahan core.
 
 ## 9. Interaksi dengan ADR lain
@@ -306,6 +315,9 @@ Gate itu berjalan di samping gate yang sudah ada: `pytest -q`, `ruff check eides
 - `eidesoul/engine/memory/episodes.py:149-161` — `TARGET_TYPES` yang menyebut plugin dan tool gateway.
 - `eidesoul/engine/turn/prompts.py:61-84,121,138-159,178-191,239,247,309,319,329-332,347-350,360-372,379-384,408-412,427-432,441-449,498` — kosakata chat dan daftar topik prosa.
 - `eidesoul/engine/turn/decision.py:13-51,343-345` — mention, DM, `ACTS`, `bubbles`, label prompt.
+- `eidesoul/engine/inbound.py:168-176` — `CoreDefaults`, tempat `prompt_section()` mendarat dengan default kosong.
+- `eidesoul/engine/llm.py:138-145` — `prompt_prefix_hash`, yang akan mencakup section body secara otomatis.
+- `eidesoul/gateways/cli/gateway.py:91-106`, `eidesoul/gateways/whatsapp/gateway.py` — body yang akan membawa section-nya sendiri alih-alih mengajari core kosakatanya.
 - `eidesoul/engine/turn/context.py:317,506-513` — default bahasa dan render kutipan.
 - `eidesoul/engine/access/relay.py:1-10,218`, `eidesoul/engine/stores/history.py:683,746` — relay terikat DM, `dm_thread`, compatibility hook.
 - `eidesoul/engine/llm.py:1,10,33,51,177,648-655` — klien wire, prompt dan metode digest, default bahasa.
@@ -314,7 +326,8 @@ Gate itu berjalan di samping gate yang sudah ada: `pytest -q`, `ruff check eides
 - `eidesoul/engine/access/roles.py:20`, `eidesoul/engine/memory/ledger.py:104` — penanda legacy.
 - `Dockerfile:5` — `TZ=Asia/Jakarta`.
 - `eidesoul/library/patterns/jawatimur.json`, `eidesoul/library/facts/indonesia.json` — satu-satunya pack yang dikirim, keduanya `language: id`.
-- Usulan, belum ada kode: `eidesoul/library/{safety,severity,style}/<lang>.json`, key lexicon `affirmations`/`level_words`/`laughter`/`particles`, `Handler.target`/`approval_class`/`destructive`/`path_arg`/`scan`, `now(tz)`, `soul.timezone`, dan `scripts/neutral.py`.
+- `tests/support.py:66-120` — `default_soul`, `role`, dan `build_config`, helper yang dipakai ulang suite kontrak prompt alih-alih membangun dunia sendiri.
+- Usulan, belum ada kode: `eidesoul/library/{safety,severity,style}/<lang>.json`, key lexicon `affirmations`/`level_words`/`laughter`/`particles`, `Handler.target`/`approval_class`/`destructive`/`path_arg`/`scan`, `now(tz)`, `soul.timezone`, `scripts/neutral.py`, dan `tests/data/prompt_cases.yaml`.
 
 ---
 
