@@ -1,28 +1,84 @@
-# Eidesoul
+<p align="center">
+  <img src="assets/logo.png" alt="Eidesoul" width="260">
+</p>
 
-mesin jiwa yang menetap: satu identitas, satu memori, tubuh apa pun
+<h1 align="center">Eidesoul</h1>
 
-[English](README.md) | [Bahasa Indonesia](README.id.md)
+<p align="center"><em>mesin jiwa: satu diri, selalu ingat, selalu belajar, orang yang sama di mana pun ia hidup.</em></p>
 
-[Arsitektur](#architecture) · [Mulai cepat](#quickstart) · [soul.yaml](#soulyaml) ·
-[Pustaka karakter](#character-library) · [Gateway yang didukung](#supported-gateways) ·
-[Peran dan izin](#roles-and-permissions) · [Keamanan](#safety) · [Kredit](#credits)
+<p align="center">
+  <a href="docs/v0.1.0/README.md"><img alt="Docs" src="https://img.shields.io/badge/docs-v0.1.0-111111?style=flat-square&labelColor=555555"></a>
+  <a href="LICENSE"><img alt="License" src="https://img.shields.io/badge/license-Apache--2.0-2ea043?style=flat-square&labelColor=555555"></a>
+  <a href="#status-hari-ini"><img alt="Status" src="https://img.shields.io/badge/status-pra--rilis-d4a017?style=flat-square&labelColor=555555"></a>
+  <a href="pyproject.toml"><img alt="Python" src="https://img.shields.io/badge/python-3.11%2B-3776ab?style=flat-square&labelColor=555555"></a>
+  <a href="#credits"><img alt="Built by AMQS Studio" src="https://img.shields.io/badge/built%20by-AMQS%20Studio-6f42c1?style=flat-square&labelColor=555555"></a>
+  <a href="README.md"><img alt="English" src="https://img.shields.io/badge/lang-EN-1f6feb?style=flat-square&labelColor=555555"></a>
+  <a href="README.id.md"><img alt="Bahasa Indonesia" src="https://img.shields.io/badge/lang-ID-d52b1e?style=flat-square&labelColor=555555"></a>
+</p>
 
-<a id="what-it-is"></a>
-## Apa ini
+<p align="center">
+  <a href="#architecture">Arsitektur</a> · <a href="#quickstart">Mulai cepat</a> ·
+  <a href="#soulyaml">soul.yaml</a> · <a href="#character-library">Pustaka karakter</a> ·
+  <a href="#supported-gateways">Gateway</a> · <a href="#roles-and-permissions">Peran dan izin</a> ·
+  <a href="#safety">Keamanan</a> · <a href="#credits">Kredit</a>
+</p>
 
-Eidesoul adalah mesin jiwa (soul engine). Ini bukan agent, bukan templat asisten, dan bukan
-kerangka kerja agent otonom.
+<a id="status-hari-ini"></a>
+## Status hari ini
 
-Sebuah mesin jiwa menyimpan satu identitas dan satu memori, lalu membiarkannya menghuni tubuh apa
-pun: terminal, aplikasi chat, perangkat, robot. Engine memegang giliran — ia membaca apa yang
-datang, mengingat apa yang ia tahu, memutuskan, lalu bicara — dan tidak lebih dari itu. Semua yang
-membawa pesan masuk dan keluar hanyalah tambahan di sekeliling giliran tersebut.
+Engine, konsol CLI, gateway WhatsApp (extra opsional), memori, affect, dan guard sudah jalan hari ini.
+Panel web dan installer on-machine masih rencana, belum dibangun. Sisa berkas ini menggambarkan desain
+target; bagian ini adalah selisih yang berjalan sekarang.
 
-Asisten adalah satu peran di antara peran pendamping, penasihat, dan perwujudan robot. Jiwa
-menyatakan peran aktif dan peran yang bisa ia ambil di `soul.yaml`; identitas, memori, dan suara
-yang sama ikut berpindah ke semuanya. Mengganti peran mengubah apa yang boleh dilakukan jiwa, bukan
-siapa dirinya.
+<a id="apa-arti-slogan-ini"></a>
+## Apa arti slogan ini
+
+- **satu diri** — satu identitas dan satu memori per jiwa, bukan sesi. Proses di-restart, permukaan
+  diganti: diri yang sama tetap berlanjut.
+- **selalu ingat** — yang penting dicatat, disimpan bersama tingkat privasi, dan bisa diveto oleh orang
+  yang menjadi subjeknya. Lupa adalah keputusan (retensi, decay), bukan kecelakaan.
+- **selalu belajar** — saat sebuah tugas selesai, worker membaca episode-nya dan bisa menulis prosedur
+  yang bisa dipakai ulang dengan rujukan ke asalnya. Belajar mengubah prosedur, tidak pernah aturan,
+  persona, atau izin — dan ia berjalan secara default.
+- **orang yang sama di mana pun ia hidup** — sebuah tubuh membawa giliran: terminal, aplikasi chat,
+  perangkat, robot. Chat adalah satu tubuh, bukan kelas dasar. Asisten adalah satu peran di antara
+  pendamping, penasihat, dan perwujudan robot; mengganti peran mengubah apa yang boleh dilakukan jiwa,
+  bukan siapa dirinya.
+
+<a id="di-mana-posisinya"></a>
+## Di mana posisinya di antara harness
+
+Agent adalah model plus harness. Harness adalah runtime di sekitar model: ia menjalankan pemanggilan
+tool, menjaga state dan konteks, menerapkan approval, dan menjaga pekerjaan tetap bergerak. Harness
+dinamai menurut tujuannya — autonomous harness agent berjalan tanpa pengawasan, developer harness agent
+mengubah sebuah repository — dan yang sudah matang sudah membawa memori, skill, todo, dan aturan
+approval.
+
+Eidesoul adalah **soul harness**: harness yang state-nya adalah diri. Ia mengingat lintas sesi, menjaga
+satu persona, dan berperilaku sebagai satu karakter yang meyakinkan lintas setiap embodiment.
+
+| | Di mana state hidup | Bagaimana satu giliran mendapat konteks | Dioptimalkan untuk |
+|---|---|---|---|
+| Autonomous harness agent | riwayat tugas dan workspace-nya, cukup untuk melanjutkan dari titik terakhir | context window, dipadatkan saat penuh | menyelesaikan pekerjaan tanpa pengawasan |
+| Developer harness agent | repository dan berkas-berkasnya | context window, diisi dari berkas dan keluaran tool | mengubah kode dengan benar |
+| Eidesoul (soul harness) | satu store kanonik — Postgres dengan index vektor — memuat memori, affect, dan transkrip | dibangun ulang setiap giliran dari store itu, dibatasi pada orang dan chat; window hanya working set, bukan memorinya | tetap orang yang sama, serba bisa — ingat, belajar, privasi, izin |
+
+Harness konvensional memperlakukan context window sebagai memori kerja lalu memadatkannya saat penuh. Di
+sini store adalah memorinya dan window hanya working set giliran ini, jadi percakapan panjang tidak
+bergantung pada apa yang masih muat. Tingkat privasi, veto oleh orang yang menjadi subjek fakta, dan izin
+berbasis role adalah sifat store itu, bukan sifat prompt.
+
+<a id="apa-yang-coba-diselesaikan"></a>
+## Apa yang coba diselesaikan
+
+- **Asisten yang lupa.** Anda menjelaskan hal yang sama lagi di setiap sesi baru.
+- **Karakter yang bergeser.** Orang yang sama berperilaku berbeda di tiap aplikasi, karena tiap aplikasi
+  menyimpan prompt dan riwayatnya sendiri.
+- **Agent yang bertindak tanpa otoritas.** Loop dengan tool bisa menyentuh hal yang tidak pernah
+  disetujui siapa pun.
+
+Kesinambungan, privasi, dan otoritas menjawab ketiganya; bagian sebelumnya menyebut di mana masing-masing
+berada.
 
 <a id="architecture"></a>
 ## Arsitektur

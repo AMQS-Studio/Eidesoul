@@ -1,26 +1,76 @@
-# Eidesoul
+<p align="center">
+  <img src="assets/logo.png" alt="Eidesoul" width="260">
+</p>
 
-a persistent soul engine: one identity, one memory, any body
+<h1 align="center">Eidesoul</h1>
 
-[English](README.md) | [Bahasa Indonesia](README.id.md)
+<p align="center"><em>a soul engine: one self, always remembering, always learning, the same person wherever it lives.</em></p>
 
-[Architecture](#architecture) · [Quickstart](#quickstart) · [soul.yaml](#soulyaml) ·
-[Character library](#character-library) · [Supported gateways](#supported-gateways) ·
-[Roles and permissions](#roles-and-permissions) · [Safety](#safety) · [Credits](#credits)
+<p align="center">
+  <a href="docs/v0.1.0/README.md"><img alt="Docs" src="https://img.shields.io/badge/docs-v0.1.0-111111?style=flat-square&labelColor=555555"></a>
+  <a href="LICENSE"><img alt="License" src="https://img.shields.io/badge/license-Apache--2.0-2ea043?style=flat-square&labelColor=555555"></a>
+  <a href="#status-today"><img alt="Status" src="https://img.shields.io/badge/status-pre--release-d4a017?style=flat-square&labelColor=555555"></a>
+  <a href="pyproject.toml"><img alt="Python" src="https://img.shields.io/badge/python-3.11%2B-3776ab?style=flat-square&labelColor=555555"></a>
+  <a href="#credits"><img alt="Built by AMQS Studio" src="https://img.shields.io/badge/built%20by-AMQS%20Studio-6f42c1?style=flat-square&labelColor=555555"></a>
+  <a href="README.md"><img alt="English" src="https://img.shields.io/badge/lang-EN-1f6feb?style=flat-square&labelColor=555555"></a>
+  <a href="README.id.md"><img alt="Bahasa Indonesia" src="https://img.shields.io/badge/lang-ID-d52b1e?style=flat-square&labelColor=555555"></a>
+</p>
 
-## What it is
+<p align="center">
+  <a href="#architecture">Architecture</a> · <a href="#quickstart">Quickstart</a> ·
+  <a href="#soulyaml">soul.yaml</a> · <a href="#character-library">Character library</a> ·
+  <a href="#supported-gateways">Gateways</a> · <a href="#roles-and-permissions">Roles and permissions</a> ·
+  <a href="#safety">Safety</a> · <a href="#credits">Credits</a>
+</p>
 
-Eidesoul is a soul engine. It is not an agent, not an assistant template, and not an
-autonomous-agent framework.
+## Status today
 
-A soul engine keeps one identity and one memory and lets them inhabit any embodiment: a terminal, a
-chat app, a device, a robot. The engine owns the turn — it reads what arrived, recalls what it
-knows, decides, speaks — and nothing else. Everything that carries messages in and out is an
-appendage around that turn.
+The engine, the CLI console, the WhatsApp gateway (an optional extra), memory, affect, and the guard
+run today. The web panel and the on-machine installer are planned, not built. Everything else in this
+file describes the target design; this section is the delta that runs today.
 
-Assistant is one role among companion, advisor, and robot embodiments. The soul declares its active
-role and the roles it can take in `soul.yaml`; the same identity, memory, and voice carry across all
-of them. Changing role changes what the soul is allowed to do, never who it is.
+## What the slogan means
+
+- **one self** — one identity and one memory per soul, not a session. Restart the process, change the
+  surface: the same self continues.
+- **always remembering** — what matters is written down, kept with a privacy level, and can be vetoed
+  by the person it is about. Forgetting is a decision (retention, decay), never an accident.
+- **always learning** — when a task finishes, a worker reads the episode and can write a reusable
+  procedure with a reference to where it came from. Learning changes procedures, never rules, persona,
+  or permissions — and it runs by default.
+- **the same person wherever it lives** — a body carries the turn: a terminal, a chat app, a device, a
+  robot. Chat is one body, not the base class. Assistant is one role among companion, advisor, and
+  robot embodiments; changing role changes what the soul may do, never who it is.
+
+## Where it sits among harnesses
+
+An agent is a model plus a harness. The harness is the runtime around the model: it drives tool calls,
+keeps state and context, applies approval, and keeps work moving. Harnesses are named by purpose — an
+autonomous harness agent runs unattended, a developer harness agent changes a repository — and the
+mature ones already ship memory, skills, todos, and approval rules.
+
+Eidesoul is a **soul harness**: a harness whose state is a self. It remembers across sessions, keeps one
+persona, and behaves as one believable character across every embodiment.
+
+| | Where state lives | How a turn gets its context | Optimizes for |
+|---|---|---|---|
+| Autonomous harness agent | the task's history and its workspace, enough to resume where it left off | the context window, compacted when it fills | finishing work unattended |
+| Developer harness agent | the repository and its files | the context window, filled from files and tool output | changing code correctly |
+| Eidesoul (soul harness) | one canonical store — Postgres with a vector index — holding memories, affect, and transcripts | rebuilt every turn from that store, scoped to the person and the chat; the window is a working set, not the memory | staying the same person, general-purpose — remembering, learning, privacy, permission |
+
+A conventional harness treats the context window as working memory and compacts it when it fills. Here
+the store is the memory and the window is only this turn's working set, so a long conversation does not
+depend on what still fits. Privacy levels, a veto by the person a fact is about, and role permissions are
+properties of that store, not of a prompt.
+
+## What it tries to solve
+
+- **An assistant that forgets.** You explain the same things again in every new session.
+- **A character that drifts.** The same person behaves differently in each app, because each app keeps
+  its own prompt and its own history.
+- **An agent that acts without authority.** A loop with tools can touch things nobody approved.
+
+Continuity, privacy, and authority answer those three; the previous section says where each one lives.
 
 ## Architecture
 
