@@ -13,7 +13,6 @@ redacts credentials and DSN passwords as a second net. `text` stays the default 
 is one object per line and is what an external monitor is expected to parse.
 """
 
-from __future__ import annotations
 
 import contextlib
 import json

@@ -1,6 +1,5 @@
 """Decision contract: strict parser, full context, and mentions always answered."""
 
-from __future__ import annotations
 
 import asyncio
 

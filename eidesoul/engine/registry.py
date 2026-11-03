@@ -1,6 +1,5 @@
 """Handler registry: metadata (name, aliases, description) plus folder auto-discovery."""
 
-from __future__ import annotations
 
 import fnmatch
 import importlib
@@ -20,7 +19,7 @@ class RegistryError(RuntimeError):
     """A handler breaks the contract, or a name/alias is duplicated. Every error is collected."""
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Handler:
     """One callable unit (command or tool) with its default permissions."""
 

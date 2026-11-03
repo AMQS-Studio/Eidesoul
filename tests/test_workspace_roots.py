@@ -1,6 +1,5 @@
 """Workspace roots contract per role: public read-only, scratch per chat, private trusted-only."""
 
-from __future__ import annotations
 
 import asyncio
 from pathlib import Path

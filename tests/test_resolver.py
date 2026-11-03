@@ -1,6 +1,5 @@
 """Resolver contract: the soul text picks packs, ties are refused, existing packs are kept."""
 
-from __future__ import annotations
 
 import json
 

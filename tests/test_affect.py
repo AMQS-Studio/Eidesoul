@@ -1,6 +1,5 @@
 """Emotion contract: emotion-engine state, per-person relationships, topics, and drives."""
 
-from __future__ import annotations
 
 import json
 import time

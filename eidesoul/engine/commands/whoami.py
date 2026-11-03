@@ -1,6 +1,5 @@
 """Command /whoami: sender identity, role, chat, and surface."""
 
-from __future__ import annotations
 
 from ..i18n import t
 from ..registry import Handler

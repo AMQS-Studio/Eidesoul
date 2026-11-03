@@ -1,6 +1,5 @@
 """Language catalog contract: YAML files are the only source of chat-visible strings."""
 
-from __future__ import annotations
 
 import pytest
 

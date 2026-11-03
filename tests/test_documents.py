@@ -1,6 +1,5 @@
 """Document mirror contract: seed from files, export/import, documents win, roles aggregate."""
 
-from __future__ import annotations
 
 import yaml
 from support import build_config, database

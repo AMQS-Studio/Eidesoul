@@ -7,7 +7,6 @@ harshness. The avatar is only read when the writing style gives no answer and th
 enables it.
 """
 
-from __future__ import annotations
 
 import re
 

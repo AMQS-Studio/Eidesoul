@@ -1,6 +1,5 @@
 """Per-chat conversation context: message window, attachments, and the payload for the LLM."""
 
-from __future__ import annotations
 
 import base64
 import logging

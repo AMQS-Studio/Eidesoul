@@ -1,6 +1,5 @@
 """Default text for `eidesoul init`; one source of truth, no separate example files."""
 
-from __future__ import annotations
 
 import copy
 

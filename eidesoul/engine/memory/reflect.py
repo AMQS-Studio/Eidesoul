@@ -7,7 +7,6 @@ commitment statuses. The LLM, when present, only rules on those candidates; it n
 rows. Every write goes through `MemoryStore.apply_reflection` with `refs` to its sources.
 """
 
-from __future__ import annotations
 
 import json
 import logging

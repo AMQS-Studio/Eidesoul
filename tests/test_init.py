@@ -4,7 +4,6 @@ ADR-0030 §4.3/§4.4/§7: on a terminal the wizard asks, reviews, then writes; p
 closed naming the flags; a secret stays in `.env` and never reaches the review or the log.
 """
 
-from __future__ import annotations
 
 import io
 import os

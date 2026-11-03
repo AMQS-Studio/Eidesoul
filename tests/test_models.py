@@ -1,6 +1,5 @@
 """`eidesoul models`: the provider lists its ids, the operator picks one."""
 
-from __future__ import annotations
 
 import json
 from dataclasses import replace

@@ -5,7 +5,6 @@ One recipe is one row of the `recipes` table, its body is YAML. Two kinds: `reci
 Strictly separate from the harness command registry: clashing names are rejected.
 """
 
-from __future__ import annotations
 
 import logging
 import time

@@ -5,7 +5,6 @@ Test: truncate every table (`RESTART IDENTITY CASCADE`) so no test sees another'
 Embedder: a deterministic 384-dimension stub, so no test loads or downloads a model.
 """
 
-from __future__ import annotations
 
 import os
 import sys

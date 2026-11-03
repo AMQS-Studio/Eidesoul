@@ -1,6 +1,5 @@
 """OpenAI-compatible LLM loop with tool calling and a work timeout."""
 
-from __future__ import annotations
 
 import hashlib
 import json

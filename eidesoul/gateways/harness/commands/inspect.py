@@ -1,6 +1,5 @@
 """Command /inspect: show the harness task and the actions its last turn produced."""
 
-from __future__ import annotations
 
 from ....engine.commands import CommandContext
 from ....engine.i18n import t

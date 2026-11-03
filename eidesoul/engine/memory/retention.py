@@ -5,7 +5,6 @@ the row's `expires_at`/`max_lifetime_at`, and a touch into a renewal. `MemorySto
 result; the nightly purge reads it. No model, no clock of its own: callers pass `now`.
 """
 
-from __future__ import annotations
 
 import time
 from dataclasses import dataclass, field

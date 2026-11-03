@@ -1,6 +1,5 @@
 """One MetaData for all soul state; Postgres types only (ADR-0029)."""
 
-from __future__ import annotations
 
 from sqlalchemy import (
     BigInteger,

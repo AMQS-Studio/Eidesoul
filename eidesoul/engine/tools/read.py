@@ -1,6 +1,5 @@
 """Tool read: read a text file in the workspace with line numbers."""
 
-from __future__ import annotations
 
 import re
 

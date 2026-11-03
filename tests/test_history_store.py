@@ -1,6 +1,5 @@
 """Database archive contract: rich upsert, windows, quotes, seeding, and the intake rows."""
 
-from __future__ import annotations
 
 from datetime import datetime
 

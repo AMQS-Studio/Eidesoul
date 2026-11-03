@@ -3,7 +3,6 @@
 The archive belongs to the body that owns one; the engine keeps no archive tool (ADR-0000 §4.5).
 """
 
-from __future__ import annotations
 
 from datetime import datetime, timedelta
 

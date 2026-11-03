@@ -4,7 +4,6 @@ ADR-0015 §4.1: only the reference blocks compete for the character budget. The 
 (`base`, `self`, `roles`, `away`) and the Layer 2 capability index skip the selection.
 """
 
-from __future__ import annotations
 
 from . import lexicon
 from .context import keyword_set

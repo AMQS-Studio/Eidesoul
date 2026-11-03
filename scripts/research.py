@@ -11,7 +11,6 @@ columns are fixed by the plan; the status is appended to the `model` cell and pr
 console.
 """
 
-from __future__ import annotations
 
 import argparse
 import asyncio

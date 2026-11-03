@@ -7,7 +7,6 @@ is skipped when `engine.guard.enabled` is false. A non-approver role never gets 
 verdict: anything the guard cannot clear is denied.
 """
 
-from __future__ import annotations
 
 import asyncio
 import json

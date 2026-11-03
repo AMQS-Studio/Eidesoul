@@ -1,6 +1,5 @@
 """Command /cari: search old messages in this chat archive without LLM."""
 
-from __future__ import annotations
 
 from ..i18n import t
 from ..registry import Handler

@@ -1,6 +1,5 @@
 """Command registry: one module per command with `COMMAND = Handler(...)`."""
 
-from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path

@@ -1,6 +1,5 @@
 """MCP client: one Hub for all stdio/HTTP servers, tools exposed fast and failure-tolerant."""
 
-from __future__ import annotations
 
 import asyncio
 import contextlib

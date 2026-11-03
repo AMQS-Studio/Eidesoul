@@ -5,7 +5,6 @@ so a single required dependency serves all three. When the model cannot load eve
 falls back to its keyword path; nothing raises.
 """
 
-from __future__ import annotations
 
 import logging
 import math

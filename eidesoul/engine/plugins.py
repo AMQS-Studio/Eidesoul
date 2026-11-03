@@ -10,7 +10,6 @@ bytes), excluding `plugin.yaml` itself, `deps/`, and bytecode. The same value is
 `plugins.<name>.digest`; an install is refused unless both match.
 """
 
-from __future__ import annotations
 
 import hashlib
 import importlib.metadata

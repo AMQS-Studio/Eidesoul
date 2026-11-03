@@ -5,7 +5,6 @@ The record deliberately carries no model: a model id is an operator choice made 
 per-provider branches elsewhere in the engine, so no module compares a provider name.
 """
 
-from __future__ import annotations
 
 from dataclasses import dataclass
 

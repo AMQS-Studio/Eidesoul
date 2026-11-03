@@ -5,7 +5,6 @@ store (roles, memory, affect, style, approvals) keys on that id. A second gatewa
 same person through the short code `/link` hands out.
 """
 
-from __future__ import annotations
 
 import base64
 import logging

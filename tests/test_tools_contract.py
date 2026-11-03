@@ -1,6 +1,5 @@
 """Tool contracts: argument validation (ADR-0024) and per-tool output caps (ADR-0021)."""
 
-from __future__ import annotations
 
 import asyncio
 

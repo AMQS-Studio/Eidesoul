@@ -1,6 +1,5 @@
 """fetch contract: the SSRF rule cannot be loosened, redirects are revalidated (ADR-0021)."""
 
-from __future__ import annotations
 
 import asyncio
 

@@ -1,6 +1,5 @@
 """Canonical memory contract: one write port, the readable view, states, retention, integrity."""
 
-from __future__ import annotations
 
 import asyncio
 import hashlib

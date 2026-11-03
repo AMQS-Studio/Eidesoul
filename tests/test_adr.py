@@ -5,7 +5,6 @@ The ADR sources are English; `adr/id/` holds the Indonesian copy. The tool is pu
 against a copy of the ADR home so a failure never edits the repository.
 """
 
-from __future__ import annotations
 
 import importlib.util
 import shutil

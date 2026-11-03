@@ -1,6 +1,5 @@
 """Guard: deterministic safety boundary, approval policy, and sandbox screening."""
 
-from __future__ import annotations
 
 from .patterns import (
     CRISIS,

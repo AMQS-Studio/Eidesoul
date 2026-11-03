@@ -1,6 +1,5 @@
 """Tool send: send a workspace file to the active chat."""
 
-from __future__ import annotations
 
 import logging
 

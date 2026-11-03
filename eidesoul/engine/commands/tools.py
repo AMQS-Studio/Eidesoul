@@ -1,6 +1,5 @@
 """Command /tools: list the tools allowed for the sender's role."""
 
-from __future__ import annotations
 
 from ..i18n import t
 from ..registry import Handler

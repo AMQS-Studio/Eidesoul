@@ -6,7 +6,6 @@ actually holds. Every write appends a `skill_revisions` row, so the previous ver
 restored; `global` is refused unless the source is T0 or an approval marked it.
 """
 
-from __future__ import annotations
 
 import logging
 import re

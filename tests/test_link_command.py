@@ -1,6 +1,5 @@
 """Command contract: /link and /unlink move one person between gateways."""
 
-from __future__ import annotations
 
 import asyncio
 import re

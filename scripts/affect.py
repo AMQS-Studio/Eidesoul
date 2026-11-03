@@ -7,7 +7,6 @@ A prototype is a short casual sentence, never a name, a URL, or a phone number. 
 eight labels in `EMOTION_VAD` are allowed, and each label needs at least `MIN_PROTOTYPES`.
 """
 
-from __future__ import annotations
 
 import argparse
 import json

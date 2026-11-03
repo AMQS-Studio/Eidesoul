@@ -1,6 +1,5 @@
 """Command /calmdown: the owner calms Eidesoul down after it was upset or hurt."""
 
-from __future__ import annotations
 
 from ..i18n import t
 from ..registry import Handler

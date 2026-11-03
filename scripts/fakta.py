@@ -8,7 +8,6 @@ domains back it. `eidesoul/library/facts/<pack>.json` holds the pack data and
 `eidesoul/library/facts/` (default `indonesia`).
 """
 
-from __future__ import annotations
 
 import argparse
 import json

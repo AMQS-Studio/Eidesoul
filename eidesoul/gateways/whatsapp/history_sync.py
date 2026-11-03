@@ -1,6 +1,5 @@
 """WhatsApp history sync: inline contacts, group names, and WebMessageInfo ingest."""
 
-from __future__ import annotations
 
 import hashlib
 import logging

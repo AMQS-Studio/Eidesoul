@@ -1,6 +1,5 @@
 """Command /konteks: show or refresh the Indonesia (+62) context."""
 
-from __future__ import annotations
 
 import time
 

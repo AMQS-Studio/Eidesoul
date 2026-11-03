@@ -5,7 +5,6 @@ Read-only harness: it sends no messages, never calls `handle`, and writes no sta
 Run from the repo root: `.venv/bin/python scripts/ablate.py --last 100`.
 """
 
-from __future__ import annotations
 
 import argparse
 import asyncio

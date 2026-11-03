@@ -1,6 +1,5 @@
 """ADR-0028 §7: plugin manifests, digest verification, one import, and the lifecycle."""
 
-from __future__ import annotations
 
 import asyncio
 import importlib
@@ -30,7 +29,6 @@ CREDITS = [
 ]
 
 TOOL = '''"""Fixture plugin tool."""
-from __future__ import annotations
 
 from eidesoul.engine.registry import Handler
 
@@ -83,7 +81,6 @@ def write_plugin(
     )
     entry = (
         '"""Fixture plugin entry."""\n'
-        "from __future__ import annotations\n\n"
         "from eidesoul.engine.registry import Handler\n\n"
         f"{imports}\n\n\n"
         "def register() -> dict[str, list[Handler]]:\n"

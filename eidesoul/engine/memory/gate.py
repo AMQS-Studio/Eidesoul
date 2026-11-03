@@ -7,7 +7,6 @@ assess call is made; when the embedder is unavailable it degrades to exact-text 
 instead of guessing a similarity.
 """
 
-from __future__ import annotations
 
 import hashlib
 import re

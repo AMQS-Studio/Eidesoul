@@ -1,6 +1,5 @@
 """Provider contract: a name fills the endpoint, the model is the operator's, unknown names fail."""
 
-from __future__ import annotations
 
 import pytest
 import yaml

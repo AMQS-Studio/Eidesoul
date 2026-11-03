@@ -4,7 +4,6 @@ Every test drives the real store: `turns`, `turn_steps`, and `outbound_messages`
 records, not an in-memory stand-in.
 """
 
-from __future__ import annotations
 
 import asyncio
 import time

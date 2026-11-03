@@ -7,7 +7,6 @@ shutdown. Only the result is stored (`episodes`), and only an episode with tool 
 correction becomes a `distill` job.
 """
 
-from __future__ import annotations
 
 import logging
 import re

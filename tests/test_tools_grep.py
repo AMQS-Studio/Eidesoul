@@ -1,6 +1,5 @@
 """grep contract: same roots as read, deterministic order, compact modes, caps (ADR-0021)."""
 
-from __future__ import annotations
 
 import asyncio
 from pathlib import Path

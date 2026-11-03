@@ -1,6 +1,5 @@
 """Cross-room guard contract: a verbatim quote from another room must never be sent."""
 
-from __future__ import annotations
 
 import asyncio
 from datetime import datetime

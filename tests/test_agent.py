@@ -1,6 +1,5 @@
 """Agent contract: one autonomous turn without transport, approvals, memory, or bubbles."""
 
-from __future__ import annotations
 
 import asyncio
 from dataclasses import replace

@@ -1,6 +1,5 @@
 """Turn cost: one `llm_calls` row per call, a call ceiling, and a stable prefix (ADR-0025)."""
 
-from __future__ import annotations
 
 import asyncio
 import json

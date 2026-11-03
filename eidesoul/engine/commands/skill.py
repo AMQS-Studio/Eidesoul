@@ -4,7 +4,6 @@ Members get nothing: a procedure enters their prompt only through retrieval. The
 inspect, pin, forget, restore a revision, and import a procedure file.
 """
 
-from __future__ import annotations
 
 from pathlib import Path
 

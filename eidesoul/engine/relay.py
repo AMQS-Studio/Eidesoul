@@ -11,7 +11,6 @@ grant, `/deny` leaves it at `none`. Only `from_person` may decide or revoke; nei
 nor an administrator can answer in someone else's name.
 """
 
-from __future__ import annotations
 
 import time
 from dataclasses import dataclass

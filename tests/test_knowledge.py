@@ -1,6 +1,5 @@
 """Knowledge layer contract: multi-source facts, picked semantically, separate from patterns."""
 
-from __future__ import annotations
 
 import sys
 from pathlib import Path

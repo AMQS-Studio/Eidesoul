@@ -1,6 +1,5 @@
 """Prompt scaffolding (English) + persona + the Self/roles/memory blocks that must stay visible."""
 
-from __future__ import annotations
 
 from datetime import date
 

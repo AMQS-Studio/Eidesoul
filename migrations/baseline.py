@@ -1,6 +1,5 @@
 """Frozen schema.py snapshot for the Alembic baseline (ADR-0016 revision 1) — do not edit."""
 
-from __future__ import annotations
 
 from sqlalchemy import (
     JSON,

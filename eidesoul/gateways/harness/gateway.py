@@ -1,6 +1,5 @@
 """Harness body: a non-chat task arrives as a percept and the turn's actions come back."""
 
-from __future__ import annotations
 
 import logging
 import time

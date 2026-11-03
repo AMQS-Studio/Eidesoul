@@ -1,6 +1,5 @@
 """Tool run: execute a shell command for the harness body through the same guard as `shell`."""
 
-from __future__ import annotations
 
 from ....engine.registry import Handler
 from ....engine.tools import ToolContext

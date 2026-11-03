@@ -1,6 +1,5 @@
 """Shared fixture builder for tests; not runtime behavior."""
 
-from __future__ import annotations
 
 import hashlib
 import math

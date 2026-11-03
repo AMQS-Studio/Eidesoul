@@ -4,7 +4,6 @@ This profile makes Eidesoul's replies follow the human rhythm in this chat (shor
 particles, the occasional emoji) without imitating anyone's opinions.
 """
 
-from __future__ import annotations
 
 import json
 import logging

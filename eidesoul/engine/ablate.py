@@ -4,7 +4,6 @@ This harness never calls `handle_message`, never sends a message, and never writ
 state. Every timestamp comes from `message.when` so the replay is deterministic.
 """
 
-from __future__ import annotations
 
 import dataclasses
 from dataclasses import dataclass

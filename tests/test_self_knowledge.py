@@ -1,6 +1,5 @@
 """Self knowledge: generated-first topics, info, documents, and the guard (ADR-0015)."""
 
-from __future__ import annotations
 
 import asyncio
 from dataclasses import replace

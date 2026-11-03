@@ -5,7 +5,6 @@ database created from revision 1 can be upgraded in place. `message_media` lands
 revision 12 because it moves bytes, not just declarations.
 """
 
-from __future__ import annotations
 
 from alembic import op
 

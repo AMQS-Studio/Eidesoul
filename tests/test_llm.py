@@ -1,6 +1,5 @@
 """parse_digest contract: normalized kinds, risky facts dropped, odd types ignored."""
 
-from __future__ import annotations
 
 import asyncio
 import json

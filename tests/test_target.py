@@ -1,6 +1,5 @@
 """Gender target contract: typing style first, avatar only as fallback, and manual override."""
 
-from __future__ import annotations
 
 from support import build_config, database
 

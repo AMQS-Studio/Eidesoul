@@ -5,7 +5,6 @@ Tools travel as `{"type": "function", "function": {...}}` and results come back 
 shape and nothing else: no model id is pinned, the operator chooses one at init time.
 """
 
-from __future__ import annotations
 
 from .base import ProviderDefaults
 

@@ -1,6 +1,5 @@
 """Cross-chat memory query: global + sender person + active chat, then render the prompt block."""
 
-from __future__ import annotations
 
 import asyncio
 import logging

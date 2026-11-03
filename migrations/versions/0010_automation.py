@@ -10,7 +10,6 @@ never a run; `automation_runs` is the run record and never holds another room's 
 block (ADR-0014 §5); the run row keeps the decision and its reason so a run can be audited.
 """
 
-from __future__ import annotations
 
 import sqlalchemy as sa
 from alembic import op

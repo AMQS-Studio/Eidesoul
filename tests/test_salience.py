@@ -1,6 +1,5 @@
 """Prompt block competition contract: mandatory always fits, optional ones compete when tight."""
 
-from __future__ import annotations
 
 from eidesoul.engine.context import keyword_set
 from eidesoul.engine.salience import COMPETING, MANDATORY, ORDER, select

@@ -8,7 +8,6 @@ The capture gate (ADR-0002), reflection (ADR-0010), and the worker are code, not
 dispute columns they write already exist in revision 4.
 """
 
-from __future__ import annotations
 
 import sqlalchemy as sa
 from alembic import op

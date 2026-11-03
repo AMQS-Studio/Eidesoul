@@ -1,6 +1,5 @@
 """Shutdown and boot validation (ADR-0011 §4.4, ADR-0013 §9)."""
 
-from __future__ import annotations
 
 import asyncio
 

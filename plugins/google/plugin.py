@@ -4,7 +4,6 @@ The manifest declares what this returns; the loader validates the names and hand
 to the normal tool/command registries. Permissions still come only from roles.
 """
 
-from __future__ import annotations
 
 from eidesoul.engine.registry import Handler
 

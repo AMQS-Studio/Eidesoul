@@ -1,6 +1,5 @@
 """Approval classification contract: only destructive shell and internal actions wait."""
 
-from __future__ import annotations
 
 import pytest
 

@@ -1,6 +1,5 @@
 """The soul: identity, roles, locale, and persona loaded from `soul.yaml`."""
 
-from __future__ import annotations
 
 import logging
 import re

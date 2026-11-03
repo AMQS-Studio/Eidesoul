@@ -6,7 +6,6 @@ shutdown of ADR-0011 §4.4. `turn_steps` is the canonical step log (ADR-0009/001
 carrying the columns ADR-0013 assigns to `turn_actions`.
 """
 
-from __future__ import annotations
 
 import sqlalchemy as sa
 from alembic import op

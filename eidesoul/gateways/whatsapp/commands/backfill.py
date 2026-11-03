@@ -1,6 +1,5 @@
 """Command /backfill: pair a temporary device to pull old history into the archive."""
 
-from __future__ import annotations
 
 import asyncio
 import io

@@ -1,6 +1,5 @@
 """WhatsApp gateway contract: protobuf ingress, mentions, rendering, and send routing."""
 
-from __future__ import annotations
 
 import asyncio
 import time

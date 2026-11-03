@@ -1,6 +1,5 @@
 """pgvector through the memory port: a real nearest neighbour and a real miss (ADR-0029)."""
 
-from __future__ import annotations
 
 import asyncio
 

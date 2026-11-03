@@ -1,6 +1,5 @@
 """CLI gateway: a local REPL that uses the same soul and DB."""
 
-from __future__ import annotations
 
 import asyncio
 import getpass

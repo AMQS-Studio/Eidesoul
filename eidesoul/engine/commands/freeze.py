@@ -1,6 +1,5 @@
 """Command /freeze: ask this instance to go standby; another instance can take over."""
 
-from __future__ import annotations
 
 from ..i18n import t
 from ..registry import Handler

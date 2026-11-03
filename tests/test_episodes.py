@@ -1,6 +1,5 @@
 """ADR-0020 episode contract: one closure, one distill job, one revision, scope stays put."""
 
-from __future__ import annotations
 
 import asyncio
 import time

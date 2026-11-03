@@ -5,7 +5,6 @@ enabled and its manifest digest verifies. The plugin service stays lazy so a hos
 plugin dependencies keeps the module importable and inert instead of failing at import time.
 """
 
-from __future__ import annotations
 
 import logging
 import weakref

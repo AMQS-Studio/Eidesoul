@@ -1,6 +1,5 @@
 """Command /pending: list approvals waiting in this chat."""
 
-from __future__ import annotations
 
 import time
 

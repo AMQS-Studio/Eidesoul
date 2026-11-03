@@ -1,6 +1,5 @@
 """Command /approve: run a pending approval without LLM, with the original role permissions."""
 
-from __future__ import annotations
 
 import time
 

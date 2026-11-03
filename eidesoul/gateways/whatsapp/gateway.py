@@ -1,6 +1,5 @@
 """WhatsApp gateway: Neonize lifecycle, sending/receiving, directory, and media."""
 
-from __future__ import annotations
 
 import asyncio
 import contextlib

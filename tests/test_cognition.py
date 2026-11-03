@@ -1,6 +1,5 @@
 """ADR-0002/0003 cognition contract: gate before the model, novelty, claim, retry, atomicity."""
 
-from __future__ import annotations
 
 import asyncio
 import json

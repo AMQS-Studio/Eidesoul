@@ -1,6 +1,5 @@
 """ADR-0020 §4.6 efficiency ladder: evidence, eligibility, actions, and the proposal cooldown."""
 
-from __future__ import annotations
 
 import asyncio
 import json

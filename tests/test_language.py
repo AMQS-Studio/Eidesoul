@@ -5,7 +5,6 @@ own every language-specific list, the engine holds no Indonesian literal from th
 pronoun resolves from the catalog, and a missing pack degrades without borrowing.
 """
 
-from __future__ import annotations
 
 import ast
 import asyncio

@@ -4,7 +4,6 @@ Mem0 entries are derived; their mapping is dropped so a reindex rebuilds them un
 identity. Veto, audience, level, confirmed, and the state machine are never touched.
 """
 
-from __future__ import annotations
 
 import logging
 

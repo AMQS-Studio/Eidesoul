@@ -1,6 +1,5 @@
 """ADR-0005 §4.6 intent hints: deterministic prototypes, the remember hint, and "forget that …"."""
 
-from __future__ import annotations
 
 import asyncio
 import math

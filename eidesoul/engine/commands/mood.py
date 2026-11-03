@@ -1,6 +1,5 @@
 """Command /mood: Eidesoul's current emotional state."""
 
-from __future__ import annotations
 
 from ..i18n import t
 from ..registry import Handler

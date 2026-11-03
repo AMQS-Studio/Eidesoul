@@ -1,6 +1,5 @@
 """Agent: orchestration of one conversation turn without any transport."""
 
-from __future__ import annotations
 
 import asyncio
 import contextlib

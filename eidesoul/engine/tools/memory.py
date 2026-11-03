@@ -1,6 +1,5 @@
 """Memory tool: one door to person/thread/global memory through Mem0 (async, cross-thread)."""
 
-from __future__ import annotations
 
 from ..memory import MemoryHit
 from ..memory.privacy import MAX_LEVEL, PrivacyPolicy, clamp_level

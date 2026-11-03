@@ -1,6 +1,5 @@
 """Gateway contract: three protocols, the boot check, degradation, and core isolation."""
 
-from __future__ import annotations
 
 import asyncio
 import subprocess

@@ -4,7 +4,6 @@ The guard is deliberately narrow: it checks the surfaces we ship (the repository
 documentation, script, test, and package trees) so it stays fast and never walks `.venv`.
 """
 
-from __future__ import annotations
 
 from pathlib import Path
 

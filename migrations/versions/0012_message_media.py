@@ -5,7 +5,6 @@
 revision still copies existing rows so an upgrade in place keeps the archive readable.
 """
 
-from __future__ import annotations
 
 import sqlalchemy as sa
 from alembic import op

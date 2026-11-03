@@ -1,6 +1,5 @@
 """Tool shell: run a shell command on the host in the workspace directory."""
 
-from __future__ import annotations
 
 import asyncio
 import os

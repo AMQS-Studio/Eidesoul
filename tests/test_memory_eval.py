@@ -5,7 +5,6 @@ scope isolation and veto/dispute exclusion. It is *not* a Mem0 semantic benchmar
 eval belongs beside the extractor, not over canonical search.
 """
 
-from __future__ import annotations
 
 import asyncio
 import json

@@ -6,7 +6,6 @@ means an empty list, not a crash. The prompt scaffolding is English, the fact co
 Indonesian per pack. Packs live under `library/facts` and are chosen by soul.yaml.
 """
 
-from __future__ import annotations
 
 import json
 import logging

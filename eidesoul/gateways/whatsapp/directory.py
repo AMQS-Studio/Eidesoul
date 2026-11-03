@@ -1,6 +1,5 @@
 """WhatsApp directory: contacts, LID, chat names, groups, and target resolution."""
 
-from __future__ import annotations
 
 import asyncio
 import logging

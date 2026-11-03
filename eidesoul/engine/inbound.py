@@ -35,7 +35,6 @@ Minimal body::
         # `chat_name` defaults to the thread id through `CoreDefaults`.
 """
 
-from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass, field
@@ -59,7 +58,7 @@ class GatewayError(RuntimeError):
     """Transport failure that is safe to show to the model or user."""
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Percept:
     """One body-supplied event: who, where, what, and the facts the body can prove."""
 
@@ -72,7 +71,7 @@ class Percept:
     raw: object = None  # transport event, used by the gateway for quotes
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Action:
     """One thing the turn did: a capability applied to a target under an approval class."""
 

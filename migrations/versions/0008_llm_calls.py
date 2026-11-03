@@ -7,7 +7,6 @@ and a row without a turn id (a failure before intake) is still useful. Prompt or
 never enters this table; retention is `engine.metrics.retention_days`.
 """
 
-from __future__ import annotations
 
 import sqlalchemy as sa
 from alembic import op

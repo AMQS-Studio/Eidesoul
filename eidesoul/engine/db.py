@@ -1,6 +1,5 @@
 """Single database: Postgres+pgvector through SQLAlchemy Core (ADR-0029)."""
 
-from __future__ import annotations
 
 import contextlib
 import logging

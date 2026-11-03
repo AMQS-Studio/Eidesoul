@@ -6,7 +6,6 @@ permission before any read/write; link-sharing (`anyone`/`domain`) is rejected o
 No token or email is ever logged.
 """
 
-from __future__ import annotations
 
 import asyncio
 import logging

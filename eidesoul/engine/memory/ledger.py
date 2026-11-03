@@ -1,6 +1,5 @@
 """Autographic action ledger: who sent what, so the self stays consistent across threads."""
 
-from __future__ import annotations
 
 import time
 

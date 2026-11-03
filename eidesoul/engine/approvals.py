@@ -1,6 +1,5 @@
 """Approval queue: sensitive actions wait for /approve, bound to chat+sender+TTL."""
 
-from __future__ import annotations
 
 import json
 import time

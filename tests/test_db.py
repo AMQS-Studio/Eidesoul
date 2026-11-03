@@ -1,6 +1,5 @@
 """Database contract: idempotent schema, upsert, state, and LIKE search."""
 
-from __future__ import annotations
 
 import time
 from datetime import datetime

@@ -9,7 +9,6 @@ The consent question itself is an `approvals` row of kind `consent` (ADR-0007 §
 DDL here.
 """
 
-from __future__ import annotations
 
 import sqlalchemy as sa
 from alembic import op

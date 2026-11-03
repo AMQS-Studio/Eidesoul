@@ -1,6 +1,5 @@
 """Tool info: the capability manifest as data, never an instruction (ADR-0015 §4.3)."""
 
-from __future__ import annotations
 
 from ..registry import Handler
 from ..self_knowledge import SelfKnowledge

@@ -1,6 +1,5 @@
 """Entrypoint: `eidesoul run|console|init|config|db|memory|plugins|selftest|backfill|library`."""
 
-from __future__ import annotations
 
 import argparse
 import asyncio

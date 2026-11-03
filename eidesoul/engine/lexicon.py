@@ -8,7 +8,6 @@ falls back to length-based selection, and prompt examples are omitted. One warni
 and kept for `/status` through `warnings()`.
 """
 
-from __future__ import annotations
 
 import json
 import logging

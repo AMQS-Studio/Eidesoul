@@ -1,6 +1,5 @@
 """Tool web_search: SearXNG when `web_search.base_url` is set, otherwise the ddgs backend."""
 
-from __future__ import annotations
 
 import asyncio
 import json

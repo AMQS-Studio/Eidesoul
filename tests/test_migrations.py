@@ -1,6 +1,5 @@
 """ADR-0016: the Alembic chain is the schema path, the primary is the only migrator."""
 
-from __future__ import annotations
 
 import time
 import uuid

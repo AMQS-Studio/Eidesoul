@@ -1,6 +1,5 @@
 """send_to contract: the target must be explicit; a single contact is never a fallback."""
 
-from __future__ import annotations
 
 import asyncio
 

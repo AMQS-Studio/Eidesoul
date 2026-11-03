@@ -1,6 +1,5 @@
 """Cross-chat memory contract through canonical reads: person follows, group secrets stay."""
 
-from __future__ import annotations
 
 import asyncio
 

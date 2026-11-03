@@ -9,7 +9,6 @@ The trigram index on `people.name` is the same net for a person's display name; 
 column `display_name`, the canonical schema names it `name` (ADR-0016 §4.1).
 """
 
-from __future__ import annotations
 
 import sqlalchemy as sa
 from alembic import op

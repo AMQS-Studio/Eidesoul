@@ -1,6 +1,5 @@
 """Gateways are appendages: transport in and out of the core, never leaking into the engine."""
 
-from __future__ import annotations
 
 import importlib
 import logging

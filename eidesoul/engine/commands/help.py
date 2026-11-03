@@ -1,6 +1,5 @@
 """Command /help: the command card or details for a single command."""
 
-from __future__ import annotations
 
 from ..i18n import t
 from ..registry import Handler

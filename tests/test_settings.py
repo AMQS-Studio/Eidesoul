@@ -1,6 +1,5 @@
 """Settings contract: read/change documents, validation, mirror, audit, approval, reload."""
 
-from __future__ import annotations
 
 import asyncio
 

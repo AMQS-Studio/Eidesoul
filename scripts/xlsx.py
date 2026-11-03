@@ -5,7 +5,6 @@ Enough for audit needs: several sheets, bold headers, column widths, inline text
 reading back human-typed comments (inline strings as well as sharedStrings).
 """
 
-from __future__ import annotations
 
 import re
 import zipfile

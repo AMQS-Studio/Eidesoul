@@ -5,7 +5,6 @@ against the private/loopback/link-local ranges, and the connection goes to the r
 with the Host header (and TLS SNI) preserved. No config, role, or `/approve` can loosen it.
 """
 
-from __future__ import annotations
 
 import asyncio
 import http.client

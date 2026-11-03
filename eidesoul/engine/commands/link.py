@@ -1,6 +1,5 @@
 """Command /link: attach another gateway account to the same person."""
 
-from __future__ import annotations
 
 import re
 import time

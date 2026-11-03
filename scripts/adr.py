@@ -30,7 +30,6 @@ carries the hash of its English source. There is no machine translator: the deri
 a person and the hash is the gate; the derivative header records the source hash.
 """
 
-from __future__ import annotations
 
 import argparse
 import hashlib

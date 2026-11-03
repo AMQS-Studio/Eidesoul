@@ -6,7 +6,6 @@ The emotion maths use the vendored `emotion-engine` (MIT) as-is in
 Every DB failure is caught by the caller; the store never kills the bot.
 """
 
-from __future__ import annotations
 
 import json
 import logging

@@ -1,6 +1,5 @@
 """Discovery contract: built-in handlers, drop-ins, error aggregation, and empty explicit grants."""
 
-from __future__ import annotations
 
 import sys
 from pathlib import Path

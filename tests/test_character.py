@@ -1,6 +1,5 @@
 """Character layer contract: lean triggers, and the original draft wins when unsure."""
 
-from __future__ import annotations
 
 import asyncio
 from dataclasses import replace

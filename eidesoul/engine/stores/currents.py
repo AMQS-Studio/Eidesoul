@@ -4,7 +4,6 @@ Stored under the `currents` key, the same pattern as the emotion document. It on
 summaries of the latest `web_search` results per topic; no numbers are invented here.
 """
 
-from __future__ import annotations
 
 import json
 import logging

@@ -1,6 +1,5 @@
 """Pattern catalog contract: level/target/register gates, deterministic order, fallback."""
 
-from __future__ import annotations
 
 import json
 from pathlib import Path

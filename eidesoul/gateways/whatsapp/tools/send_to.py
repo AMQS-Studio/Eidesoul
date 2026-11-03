@@ -1,6 +1,5 @@
 """Tool send_to: send text/files to a group or DM that already exists in the archive."""
 
-from __future__ import annotations
 
 import logging
 import re

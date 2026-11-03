@@ -1,6 +1,5 @@
 """Command /kirim: send a workspace file to this chat."""
 
-from __future__ import annotations
 
 from ..i18n import t
 from ..registry import Handler

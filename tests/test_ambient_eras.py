@@ -1,6 +1,5 @@
 """Capsule eras: a drifting digest archives the old topic instead of wiping it."""
 
-from __future__ import annotations
 
 import asyncio
 from datetime import datetime, timedelta

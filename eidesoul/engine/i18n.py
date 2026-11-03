@@ -1,6 +1,5 @@
 """Language catalogs: chat-visible strings live in `eidesoul/lang/<code>.yaml`."""
 
-from __future__ import annotations
 
 from functools import cache
 from pathlib import Path

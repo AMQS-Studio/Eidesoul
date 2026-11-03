@@ -5,7 +5,6 @@ key. The state machine only moves forward through `checkpoint`, so a resumed tur
 `turns.step` and never repeats an output that is already stored.
 """
 
-from __future__ import annotations
 
 import hashlib
 import json

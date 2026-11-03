@@ -1,6 +1,5 @@
 """Room vibe contract: VAD from Indonesian labels, attack/decay dynamics, and the prompt block."""
 
-from __future__ import annotations
 
 import asyncio
 import json

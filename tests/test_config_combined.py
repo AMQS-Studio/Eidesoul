@@ -1,6 +1,5 @@
 """Combined config contract: one config.yaml plus roles.yaml, DB documents override seeds."""
 
-from __future__ import annotations
 
 import os
 

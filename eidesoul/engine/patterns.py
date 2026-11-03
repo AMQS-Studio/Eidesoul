@@ -8,7 +8,6 @@ the model the keyword score still runs. No sampling and no network call on the k
 path.
 """
 
-from __future__ import annotations
 
 import json
 import logging

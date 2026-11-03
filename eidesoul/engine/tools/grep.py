@@ -1,6 +1,5 @@
 """Tool grep: file-content search under the same roots as `read` (ADR-0021 §4.2)."""
 
-from __future__ import annotations
 
 import fnmatch
 import re

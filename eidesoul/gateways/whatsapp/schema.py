@@ -1,6 +1,5 @@
 """WhatsApp-only gateway tables (contacts/LID), without importing Neonize."""
 
-from __future__ import annotations
 
 from sqlalchemy import Column, Float, MetaData, String, Table
 

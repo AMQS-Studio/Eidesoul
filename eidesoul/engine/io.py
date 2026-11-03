@@ -5,7 +5,6 @@ blocking Mem0 call on that loop turns latency into a takeover. Everything that b
 submitted here and awaited, never executed inline in an `async def`.
 """
 
-from __future__ import annotations
 
 import asyncio
 import functools

@@ -1,6 +1,5 @@
 """User recipe contract: store persisted in the database, validation, tool-chain executor."""
 
-from __future__ import annotations
 
 import asyncio
 from pathlib import Path

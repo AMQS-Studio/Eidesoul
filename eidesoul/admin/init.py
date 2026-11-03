@@ -6,7 +6,6 @@ Secrets never reach YAML: `.env` holds the names, and the database URL is the on
 there, at `0600`.
 """
 
-from __future__ import annotations
 
 import contextlib
 import os

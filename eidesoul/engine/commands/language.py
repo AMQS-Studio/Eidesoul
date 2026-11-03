@@ -4,7 +4,6 @@ The language lives in the `soul` document, whose mirror is soul.yaml; the catalo
 `eidesoul/lang/<code>.yaml` supplies every chat-visible string.
 """
 
-from __future__ import annotations
 
 import yaml
 

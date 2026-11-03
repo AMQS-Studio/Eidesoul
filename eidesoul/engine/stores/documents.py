@@ -5,7 +5,6 @@ whole soul.yaml body, the `engine` document holds the engine section of config.y
 every role lives in roles.yaml, so one config folder holds the whole soul.
 """
 
-from __future__ import annotations
 
 import contextlib
 import logging

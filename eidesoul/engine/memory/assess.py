@@ -5,7 +5,6 @@ any language and `subject` is returned as written. A single malformed item is dr
 the whole batch, and the caller labels the canonical row only from a valid item.
 """
 
-from __future__ import annotations
 
 import json
 import logging

@@ -4,7 +4,6 @@ Validation is strict and never touches the filesystem beyond reading; one file i
 source of truth for the host, and DB documents override its engine/soul/role seeds.
 """
 
-from __future__ import annotations
 
 import logging
 import os

@@ -1,6 +1,5 @@
 """Mem0 adapter contract: config, scope/metadata, infer, supersedes, privacy forget."""
 
-from __future__ import annotations
 
 import asyncio
 import re

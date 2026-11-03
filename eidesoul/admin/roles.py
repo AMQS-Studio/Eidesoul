@@ -6,7 +6,6 @@ writes a backup before touching the file, refuses a write that would delete or r
 protected role, and records the migration in `config_changes` as `role_rename`.
 """
 
-from __future__ import annotations
 
 import contextlib
 import os

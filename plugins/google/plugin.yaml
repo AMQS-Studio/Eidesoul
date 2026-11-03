@@ -2,7 +2,7 @@ name: google
 version: 1.0.0
 engine: ">=0.0.0,<1.0"
 entry: plugin.py:register
-digest: "sha256:24ea9d6c396a61d45186c4d0c214473ca187b5a8d1afb6aede630ceb4a42e943"
+digest: "sha256:87de5ac225c1db8193a6aff73b040ad0c8ecb305f2b813eb9234863c39b0d4f7"
 provides:
   tools: [google]
   commands: []

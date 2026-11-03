@@ -7,7 +7,6 @@ writes the `capture` job on the same connection as the message, the turn, and th
 the four rows commit or roll back together (ADR-0011 §4.1).
 """
 
-from __future__ import annotations
 
 import asyncio
 import json

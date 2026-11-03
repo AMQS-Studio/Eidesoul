@@ -1,6 +1,5 @@
 """Cross-room chat_history contract: read another chat's archive, mark it read, never leak."""
 
-from __future__ import annotations
 
 import asyncio
 from datetime import datetime

@@ -4,7 +4,6 @@ Deterministic, archive-backed, and never LLM-driven: the model sees the messages
 need to answer this one, not an arbitrary count of rows.
 """
 
-from __future__ import annotations
 
 import logging
 

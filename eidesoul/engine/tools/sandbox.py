@@ -1,6 +1,5 @@
 """Tool sandbox: run a command in a Podman/Docker container with the workspace mounted."""
 
-from __future__ import annotations
 
 import asyncio
 import os

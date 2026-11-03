@@ -1,6 +1,5 @@
 """Prompt/status contract: English scaffolding, language line, and the status card."""
 
-from __future__ import annotations
 
 import asyncio
 from dataclasses import replace

@@ -1,6 +1,5 @@
 """Discord-style permissions: roles from numbers, glob patterns, permissions per role."""
 
-from __future__ import annotations
 
 from .registry import Handler, Registry, allows
 

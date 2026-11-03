@@ -1,6 +1,5 @@
 """MCP tool family: the real tools are registered by eidesoul/mcp.py when Hub.start() runs."""
 
-from __future__ import annotations
 
 from ..registry import Handler
 

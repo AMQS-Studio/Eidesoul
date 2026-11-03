@@ -1,6 +1,5 @@
 """Command /unlink: detach one gateway account from this identity."""
 
-from __future__ import annotations
 
 from ..i18n import t
 from ..registry import Handler

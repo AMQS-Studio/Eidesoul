@@ -12,7 +12,6 @@ The genuinely separate mechanisms stay out of this revision: the labeling/assess
 not DDL. ADR-0010's dispute columns already live in §4.2 and are therefore created here.
 """
 
-from __future__ import annotations
 
 import sqlalchemy as sa
 from alembic import op

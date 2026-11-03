@@ -1,6 +1,5 @@
 """Observability: one turn id, a parseable JSON switch, cost rows, and `/status` (ADR-0019)."""
 
-from __future__ import annotations
 
 import asyncio
 import json

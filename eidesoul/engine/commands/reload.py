@@ -1,6 +1,5 @@
 """Command /reload: reload config/soul/role documents without a restart."""
 
-from __future__ import annotations
 
 from ..i18n import t
 from ..registry import Handler

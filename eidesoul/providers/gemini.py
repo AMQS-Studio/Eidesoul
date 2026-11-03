@@ -4,7 +4,6 @@ Google serves `/v1beta/openai/` with the OpenAI wire, so the same client works. 
 `generateContent` is a different protocol and would need an adapter, not an entry here.
 """
 
-from __future__ import annotations
 
 from .base import ProviderDefaults
 

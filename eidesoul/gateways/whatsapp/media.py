@@ -1,6 +1,5 @@
 """WhatsApp media: file content detection, attachment download, and message proto reads."""
 
-from __future__ import annotations
 
 import contextlib
 import logging

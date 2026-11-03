@@ -1,6 +1,5 @@
 """Privacy contract: level matrix, fluidity, audit gate, confirmations, veto, credentials."""
 
-from __future__ import annotations
 
 import asyncio
 import json

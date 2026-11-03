@@ -1,6 +1,5 @@
 """Runtime facts for the Self prompt block and /status."""
 
-from __future__ import annotations
 
 import time
 from dataclasses import dataclass, field

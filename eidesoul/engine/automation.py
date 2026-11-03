@@ -16,7 +16,6 @@ No step is free code. Unexpressible wishes are refused at authoring, not mapped 
 keywords.
 """
 
-from __future__ import annotations
 
 import asyncio
 import contextlib

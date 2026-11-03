@@ -1,6 +1,5 @@
 """Character library contract: opt-in packs, merging, register filters, soul-driven selection."""
 
-from __future__ import annotations
 
 import asyncio
 import json

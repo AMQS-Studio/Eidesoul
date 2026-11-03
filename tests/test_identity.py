@@ -1,6 +1,5 @@
 """Identity contract: `per_…` ids, gateway links, and the `/link` codes."""
 
-from __future__ import annotations
 
 import pytest
 from support import database

@@ -1,6 +1,5 @@
 """Catalog tool contract: schema rejected clearly, review workbook round-trips 1:1."""
 
-from __future__ import annotations
 
 import sys
 from pathlib import Path

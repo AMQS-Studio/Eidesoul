@@ -1,6 +1,5 @@
 """Style contract: reference profile, learned aggregate, short bubbles, and reply limits."""
 
-from __future__ import annotations
 
 from pathlib import Path
 

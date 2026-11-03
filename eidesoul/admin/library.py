@@ -7,7 +7,6 @@ A pack is only accepted with a clear winner; nothing is ever forced, and a kind 
 match keeps whatever the soul already selected.
 """
 
-from __future__ import annotations
 
 import re
 from dataclasses import dataclass

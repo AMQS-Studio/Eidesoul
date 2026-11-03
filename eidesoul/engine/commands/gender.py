@@ -1,6 +1,5 @@
 """Command /gender: manual target gender for toxicity rules and adult memes."""
 
-from __future__ import annotations
 
 from ..i18n import t
 from ..registry import Handler

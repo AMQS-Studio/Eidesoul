@@ -17,7 +17,6 @@ running it twice does not duplicate rows. Without Muse (`.env`/missing key, 429,
 `context`/`description`/`idiom` kind still land as they are, while pure style clusters are skipped.
 """
 
-from __future__ import annotations
 
 import argparse
 import asyncio

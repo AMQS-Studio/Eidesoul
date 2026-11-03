@@ -5,7 +5,6 @@ rejects it), every role may carry a display-only `label`, and only `roles.yaml` 
 may change the protected role.
 """
 
-from __future__ import annotations
 
 import asyncio
 from dataclasses import replace

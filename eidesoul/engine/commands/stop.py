@@ -6,7 +6,6 @@ answers with one catalog notice. It does not change `mode`/the lease (that is `/
 does not install a quiet period, and does not delete anything from the backlog.
 """
 
-from __future__ import annotations
 
 from ..i18n import t
 from ..registry import Handler

@@ -1,6 +1,5 @@
 """Reply text splitting; the transport dialect is handled by the gateway through `render`."""
 
-from __future__ import annotations
 
 import random
 import re

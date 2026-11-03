@@ -5,7 +5,6 @@ conversation into structured facts (`MemoryExtractor`) and writes/searches the d
 index (`MemoryIndex`). Its library cache (`mem0_history.db`) is derived and purgeable.
 """
 
-from __future__ import annotations
 
 import asyncio
 import inspect

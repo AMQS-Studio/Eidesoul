@@ -1,6 +1,5 @@
 """Sandbox tool contract: argv per runtime, runtime detection, timeout, output limits, env."""
 
-from __future__ import annotations
 
 import asyncio
 import os

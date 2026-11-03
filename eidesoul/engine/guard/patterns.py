@@ -6,7 +6,6 @@ missing, so they stay here. Injection phrases are language data and come from
 language-independent patterns run.
 """
 
-from __future__ import annotations
 
 import re
 from functools import lru_cache

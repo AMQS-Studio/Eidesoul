@@ -1,6 +1,5 @@
 """Command /ping: check that the bot is alive."""
 
-from __future__ import annotations
 
 from ..i18n import t
 from ..registry import Handler

@@ -5,7 +5,6 @@ decision is considered unclear: `decide` returns `None` so the caller picks sile
 short word for a mention/DM that must be answered).
 """
 
-from __future__ import annotations
 
 import json
 from dataclasses import dataclass, replace

@@ -6,7 +6,6 @@ instance that was replaced can never write again. Expiry is judged by the databa
 (`clock_timestamp()`), never by the application clock (ADR-0012).
 """
 
-from __future__ import annotations
 
 import logging
 import os

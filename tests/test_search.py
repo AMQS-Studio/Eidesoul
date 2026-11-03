@@ -1,6 +1,5 @@
 """Search: FTS first, trigram as the second net, scope unchanged (ADR-0026)."""
 
-from __future__ import annotations
 
 from datetime import datetime
 

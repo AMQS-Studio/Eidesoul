@@ -10,7 +10,6 @@ here speaks the OpenAI wire protocol; a different protocol needs its own adapter
 a seam in `eidesoul/engine/llm.py`, never a data entry.
 """
 
-from __future__ import annotations
 
 from .anthropic import ANTHROPIC
 from .base import ProviderDefaults

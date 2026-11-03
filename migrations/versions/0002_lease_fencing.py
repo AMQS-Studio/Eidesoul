@@ -4,7 +4,6 @@ Revision 2 raises the fencing token on every acquisition and pins the lease tabl
 row. ADR-0016 §4.5 owns the CHECK; ADR-0012 §5 owns the column and its default.
 """
 
-from __future__ import annotations
 
 import sqlalchemy as sa
 from alembic import op

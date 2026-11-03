@@ -6,7 +6,6 @@ first, `engine_control.shutting_down` is raised for every instance, in-flight tu
 gate lowered and the lease released (ADR-0017 §4.4: gate down before release).
 """
 
-from __future__ import annotations
 
 import asyncio
 import logging

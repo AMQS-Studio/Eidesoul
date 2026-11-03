@@ -1,6 +1,5 @@
 """Alembic environment: the revision chain is the only schema-change path (ADR-0016)."""
 
-from __future__ import annotations
 
 import pathlib
 import sys

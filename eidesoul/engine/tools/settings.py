@@ -1,6 +1,5 @@
 """Settings tool: read/change engine/soul/role documents and host config files."""
 
-from __future__ import annotations
 
 import contextlib
 import difflib

@@ -1,6 +1,5 @@
 """Operator contract: `people adopt` moves legacy addresses onto `per_…` identities."""
 
-from __future__ import annotations
 
 import asyncio
 import json

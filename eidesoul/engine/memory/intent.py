@@ -7,7 +7,6 @@ the configured margin, so a question ("do you remember…") or a negation never 
 a deletion. Nothing here calls a model and nothing here writes memory.
 """
 
-from __future__ import annotations
 
 import json
 import logging

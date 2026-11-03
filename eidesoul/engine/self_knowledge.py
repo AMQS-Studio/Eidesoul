@@ -12,7 +12,6 @@ stable per role) so the prompt prefix stays byte-identical (ADR-0025 §4.1). Tur
 off stops the index, the topics, `config`, and `topology`; the pinned Layer 1 block is untouched.
 """
 
-from __future__ import annotations
 
 import ast
 import difflib

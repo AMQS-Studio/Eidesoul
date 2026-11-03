@@ -1,6 +1,5 @@
 """MemoryBackend: semantic memory through Mem0, the action ledger, and the shared contract."""
 
-from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, field

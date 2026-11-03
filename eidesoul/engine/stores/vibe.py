@@ -6,7 +6,6 @@ prototype sentences on the shared embedder, so there is no second model to load.
 failure fails open.
 """
 
-from __future__ import annotations
 
 import asyncio
 import contextlib

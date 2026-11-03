@@ -12,7 +12,6 @@ output is a transcript plus a pass/fail summary in `workspace/replay-<id>.json`.
     python scripts/replay.py --export workspace/replay-all.json
 """
 
-from __future__ import annotations
 
 import argparse
 import asyncio

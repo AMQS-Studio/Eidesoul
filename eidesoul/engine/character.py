@@ -6,7 +6,6 @@ numbers, names, and tool results may not change; when the result looks suspiciou
 original draft is used.
 """
 
-from __future__ import annotations
 
 import re
 from functools import lru_cache

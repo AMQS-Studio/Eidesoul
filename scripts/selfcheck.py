@@ -9,7 +9,6 @@ runtime fact, and the engine imports no gateway (ADR-0015 §4.8). `eidesoul self
 same `check()` so a stale manifest fails the shipped smoke test too.
 """
 
-from __future__ import annotations
 
 import argparse
 import sys

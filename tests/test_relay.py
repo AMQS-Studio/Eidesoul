@@ -4,7 +4,6 @@ The grant row is keyed `(task, from, to)` and holds the decision only. The conse
 the existing approval path, and only the content owner may decide or revoke it.
 """
 
-from __future__ import annotations
 
 import asyncio
 import time

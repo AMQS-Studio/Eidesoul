@@ -5,7 +5,6 @@ unchanged; the script performs no `sudo` call; a marker password never reaches t
 the pinned uv archive is checked before anything else happens.
 """
 
-from __future__ import annotations
 
 import os
 import re

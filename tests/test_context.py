@@ -1,6 +1,5 @@
 """Payload contract: author role and visibility, not the transport `outgoing` flag."""
 
-from __future__ import annotations
 
 import asyncio
 from datetime import datetime

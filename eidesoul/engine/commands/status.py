@@ -5,7 +5,6 @@ counter whose table is empty or unreadable reports `0`, never an invented value.
 content, memory text, the DSN, and keys never appear here (ADR-0015 §4.7).
 """
 
-from __future__ import annotations
 
 import time
 from statistics import median

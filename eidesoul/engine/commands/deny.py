@@ -1,6 +1,5 @@
 """Command /deny: cancel a pending approval without running it."""
 
-from __future__ import annotations
 
 from ..i18n import t
 from ..registry import Handler

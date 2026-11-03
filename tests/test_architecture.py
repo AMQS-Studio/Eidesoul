@@ -1,6 +1,5 @@
 """ADR-0000 §4.7: the engine holds no transport vocabulary and imports no gateway package."""
 
-from __future__ import annotations
 
 import ast
 import re
@@ -127,6 +126,22 @@ def test_the_engine_tool_catalog_imports_no_gateway() -> None:
         elif isinstance(node, ast.Import):
             imported.extend((0, alias.name) for alias in node.names)
     assert all("gateway" not in module for _level, module in imported), imported
+
+
+FORBIDDEN_FUTURE = "from __future__ " + "import annotations"
+
+
+def test_no_module_relies_on_future_annotations() -> None:
+    """ADR-0031 §4.7: on 3.14 annotations are lazy, so the import is dead weight and banned."""
+    roots = [ROOT / name for name in ("eidesoul", "tests", "scripts", "plugins", "migrations")]
+    offenders = sorted(
+        path.relative_to(ROOT).as_posix()
+        for base in roots
+        for path in base.rglob("*.py")
+        if path.name != "test_architecture.py"
+        and FORBIDDEN_FUTURE in path.read_text(encoding="utf-8")
+    )
+    assert offenders == []
 
 
 def test_percept_is_exactly_the_seam() -> None:

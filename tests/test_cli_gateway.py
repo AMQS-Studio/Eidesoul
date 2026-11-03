@@ -1,6 +1,5 @@
 """CLI gateway contract: stdin -> Percept, output to stdout, /quit stops."""
 
-from __future__ import annotations
 
 import asyncio
 import io

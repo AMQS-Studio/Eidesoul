@@ -1,6 +1,5 @@
 """Action ledger contract: autographical, bounded, and secret-filtering."""
 
-from __future__ import annotations
 
 from support import database
 

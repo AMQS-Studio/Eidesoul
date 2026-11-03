@@ -1,6 +1,5 @@
 """Derived-procedure contract (ADR-0020): retrieval, revisions, scope, decay, owner command."""
 
-from __future__ import annotations
 
 import asyncio
 import time

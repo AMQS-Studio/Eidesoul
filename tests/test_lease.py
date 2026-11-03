@@ -1,6 +1,5 @@
 """Lease contract: CAS, fencing generation, database clock, freeze, and takeover."""
 
-from __future__ import annotations
 
 import inspect
 import threading

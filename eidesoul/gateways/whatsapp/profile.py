@@ -5,7 +5,6 @@ One download per person per 30 days, 2 MB at most, stored under `workspace/avata
 mode 0600. Every failure means "unknown".
 """
 
-from __future__ import annotations
 
 import asyncio
 import hashlib

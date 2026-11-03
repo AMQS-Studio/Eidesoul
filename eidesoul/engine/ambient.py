@@ -4,7 +4,6 @@ Every access outside the emotion effects is limited: the only tool is `web_searc
 limited to the same chat + global, and it never sends a message to any chat.
 """
 
-from __future__ import annotations
 
 import asyncio
 import logging

@@ -8,7 +8,6 @@ number, and each file needs at least `MIN_PROTOTYPES` entries. The vectors are c
 runtime, so there is no `--embed` step: nothing is stored.
 """
 
-from __future__ import annotations
 
 import argparse
 import json

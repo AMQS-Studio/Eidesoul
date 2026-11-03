@@ -4,7 +4,6 @@ Everything here runs outside the agent: it never touches the lease except to ref
 destructive operation while a primary is still alive.
 """
 
-from __future__ import annotations
 
 import logging
 import os

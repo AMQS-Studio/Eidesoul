@@ -15,7 +15,6 @@ One revision carries every column the remaining ADRs need, so the chain stays ap
 upgraded database while a fresh `create_all` database has it.
 """
 
-from __future__ import annotations
 
 import sqlalchemy as sa
 from alembic import op

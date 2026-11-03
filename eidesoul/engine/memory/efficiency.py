@@ -6,7 +6,6 @@ distinct argument shapes a run used, and whether the outcome left an artifact. N
 whether a signature is efficient; a model may only read this evidence and pick a ladder action.
 """
 
-from __future__ import annotations
 
 import logging
 import time

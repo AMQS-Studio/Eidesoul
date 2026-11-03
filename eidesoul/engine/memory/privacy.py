@@ -5,7 +5,6 @@ level 5/credentials are never stored. Owner means the speaker who stated the fac
 subject is the person the fact is about and only they may veto it.
 """
 
-from __future__ import annotations
 
 from dataclasses import dataclass
 

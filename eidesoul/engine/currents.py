@@ -4,7 +4,6 @@ Summaries are stored per topic with a timestamp; the prompt block disappears onc
 than the TTL, and the model is told to admit uncertainty instead of inventing numbers.
 """
 
-from __future__ import annotations
 
 import logging
 import time

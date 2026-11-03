@@ -1,6 +1,5 @@
 """Per-chat transcript archive in the Database; media is stored as metadata + bytes."""
 
-from __future__ import annotations
 
 import json
 import logging

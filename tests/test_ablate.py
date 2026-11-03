@@ -1,6 +1,5 @@
 """Ablation harness contract: replay gates from the archive without touching runtime."""
 
-from __future__ import annotations
 
 from datetime import datetime
 

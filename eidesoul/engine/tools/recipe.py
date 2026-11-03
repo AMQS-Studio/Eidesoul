@@ -1,6 +1,5 @@
 """Tool recipe: the agent's single entry point to register/edit/remove user recipes."""
 
-from __future__ import annotations
 
 from ..registry import Handler
 from . import ToolContext

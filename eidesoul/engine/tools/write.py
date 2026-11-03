@@ -1,6 +1,5 @@
 """Tool write: write a text file in the workspace."""
 
-from __future__ import annotations
 
 from ..registry import Handler
 from . import ToolContext, _resolve_write

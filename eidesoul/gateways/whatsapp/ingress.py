@@ -1,6 +1,5 @@
 """WhatsApp protobuf event -> Percept; the only place transport facts are read."""
 
-from __future__ import annotations
 
 import logging
 from datetime import datetime

@@ -6,7 +6,6 @@ mentions. Confirmation questions are phrased by the model in the soul's language
 short fallback when the LLM is unavailable.
 """
 
-from __future__ import annotations
 
 import json
 import logging

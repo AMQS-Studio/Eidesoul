@@ -5,7 +5,6 @@ rejects a role named `owner`), and every role may carry an optional `label` — 
 soul uses for its holder. The label is display-only: nothing compares it and it is never a key.
 """
 
-from __future__ import annotations
 
 import re
 from collections.abc import Iterable, Mapping

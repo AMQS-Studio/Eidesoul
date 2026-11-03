@@ -1,6 +1,5 @@
 """WhatsApp address identity: a JID compares by its digits, LID and PN alike."""
 
-from __future__ import annotations
 
 
 def normalize_jid(value: str) -> str:

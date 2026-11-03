@@ -17,7 +17,6 @@ review workbook that round-trips 1:1 with the pack file. `--pack` picks the pack
 valid and the runtime falls back to keyword selection.
 """
 
-from __future__ import annotations
 
 import argparse
 import json

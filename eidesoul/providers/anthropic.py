@@ -9,7 +9,6 @@ workspace additionally need an `anthropic-workspace-id` header, and no config kn
 that here. Native features need an adapter, not a data entry.
 """
 
-from __future__ import annotations
 
 from .base import ProviderDefaults
 

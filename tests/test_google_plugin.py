@@ -1,6 +1,5 @@
 """Google plugin contract: one service account, identity-linked, per-file permission (ADR-0028)."""
 
-from __future__ import annotations
 
 import asyncio
 import importlib

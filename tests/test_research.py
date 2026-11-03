@@ -1,6 +1,5 @@
 """Research collector contract: areas, evidence-based promotion, filtering, and audit workbook."""
 
-from __future__ import annotations
 
 import json
 import sys

@@ -1,6 +1,5 @@
 """Tool registry: one module per tool with `TOOL = Handler(...)`; a single execute door."""
 
-from __future__ import annotations
 
 import logging
 import re

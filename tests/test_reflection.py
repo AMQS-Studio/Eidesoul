@@ -1,6 +1,5 @@
 """ADR-0010 reflection contract: disputed rows hide, one T2 derivative, no chain, stale."""
 
-from __future__ import annotations
 
 import asyncio
 import time

@@ -10,7 +10,6 @@ The default `authorization` is the safe value for every row that predates this r
 consent approval must always be proven, never inherited.
 """
 
-from __future__ import annotations
 
 import sqlalchemy as sa
 from alembic import op

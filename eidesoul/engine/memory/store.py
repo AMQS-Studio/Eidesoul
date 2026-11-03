@@ -6,7 +6,6 @@ extractor and an index behind this port: it may fail without losing a fact, and 
 be rebuilt from canonical.
 """
 
-from __future__ import annotations
 
 import hashlib
 import inspect

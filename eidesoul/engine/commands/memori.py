@@ -1,6 +1,5 @@
 """Command /memori: add/search/list/delete person, thread, or global memory (no LLM)."""
 
-from __future__ import annotations
 
 import re
 

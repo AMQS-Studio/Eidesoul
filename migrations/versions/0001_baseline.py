@@ -5,7 +5,6 @@ Nothing is deployed at 0.0.0.devN, so this baseline is the frozen shape of
 ADR-0000 §4.4 rewrites this baseline rather than adding a revision.
 """
 
-from __future__ import annotations
 
 import baseline
 from alembic import op

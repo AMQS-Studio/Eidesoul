@@ -1,6 +1,5 @@
 """Ask a provider which model ids it serves; the operator picks one, the code does not."""
 
-from __future__ import annotations
 
 import json
 import urllib.error
