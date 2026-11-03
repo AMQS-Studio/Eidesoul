@@ -24,7 +24,7 @@ HOST: dict = {
     "sync_documents": True,
     "sandbox": {
         "runtime": "",
-        "image": "docker.io/library/python:3.12-slim",
+        "image": "docker.io/library/python:3.14-slim",
         "timeout_seconds": 120,
         "network": "eidesoul-sandbox",
         "host_workspace": None,

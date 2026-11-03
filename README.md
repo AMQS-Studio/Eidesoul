@@ -10,7 +10,7 @@
   <a href="docs/v0.1.0/README.md"><img alt="Docs" src="https://img.shields.io/badge/docs-v0.1.0-111111?style=flat-square&labelColor=555555"></a>
   <a href="LICENSE"><img alt="License" src="https://img.shields.io/badge/license-Apache--2.0-2ea043?style=flat-square&labelColor=555555"></a>
   <a href="#status-today"><img alt="Status" src="https://img.shields.io/badge/status-pre--release-d4a017?style=flat-square&labelColor=555555"></a>
-  <a href="pyproject.toml"><img alt="Python" src="https://img.shields.io/badge/python-3.11%2B-3776ab?style=flat-square&labelColor=555555"></a>
+  <a href="pyproject.toml"><img alt="Python" src="https://img.shields.io/badge/python-3.14%2B-3776ab?style=flat-square&labelColor=555555"></a>
   <a href="#credits"><img alt="Built by AMQS Studio" src="https://img.shields.io/badge/built%20by-AMQS%20Studio-6f42c1?style=flat-square&labelColor=555555"></a>
   <a href="README.md"><img alt="English" src="https://img.shields.io/badge/lang-EN-1f6feb?style=flat-square&labelColor=555555"></a>
   <a href="README.id.md"><img alt="Bahasa Indonesia" src="https://img.shields.io/badge/lang-ID-d52b1e?style=flat-square&labelColor=555555"></a>
@@ -196,8 +196,8 @@ and never hardcodes an agent loop: no planner to configure, no task graph to lau
 
 ## Quickstart
 
-Requirements: Python 3.12, Postgres 14+ with `pgvector`, and a reachable OpenAI-compatible LLM
-endpoint. The container image already pins Python 3.12; running from source on 3.11+ works too.
+Requirements: Python 3.14, Postgres 14+ with `pgvector`, and a reachable OpenAI-compatible LLM
+endpoint. The container image pins Python 3.14; running from source needs 3.14 or newer.
 
 The shortest path is the installer; it never runs `sudo`, pins `uv`, writes the four host files,
 and hands over to `eidesoul init`:

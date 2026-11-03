@@ -10,7 +10,7 @@
   <a href="docs/v0.1.0/README.md"><img alt="Docs" src="https://img.shields.io/badge/docs-v0.1.0-111111?style=flat-square&labelColor=555555"></a>
   <a href="LICENSE"><img alt="License" src="https://img.shields.io/badge/license-Apache--2.0-2ea043?style=flat-square&labelColor=555555"></a>
   <a href="#status-hari-ini"><img alt="Status" src="https://img.shields.io/badge/status-pra--rilis-d4a017?style=flat-square&labelColor=555555"></a>
-  <a href="pyproject.toml"><img alt="Python" src="https://img.shields.io/badge/python-3.11%2B-3776ab?style=flat-square&labelColor=555555"></a>
+  <a href="pyproject.toml"><img alt="Python" src="https://img.shields.io/badge/python-3.14%2B-3776ab?style=flat-square&labelColor=555555"></a>
   <a href="#credits"><img alt="Built by AMQS Studio" src="https://img.shields.io/badge/built%20by-AMQS%20Studio-6f42c1?style=flat-square&labelColor=555555"></a>
   <a href="README.md"><img alt="English" src="https://img.shields.io/badge/lang-EN-1f6feb?style=flat-square&labelColor=555555"></a>
   <a href="README.id.md"><img alt="Bahasa Indonesia" src="https://img.shields.io/badge/lang-ID-d52b1e?style=flat-square&labelColor=555555"></a>
@@ -209,8 +209,8 @@ satu giliran, dan kemampuan yang dipegang saat itu.
 <a id="quickstart"></a>
 ## Mulai cepat
 
-Kebutuhan: Python 3.12, Postgres 14+ dengan `pgvector`, dan endpoint LLM yang kompatibel dengan
-OpenAI. Image container sudah memakai Python 3.12; menjalankan dari source di 3.11+ juga bisa.
+Kebutuhan: Python 3.14, Postgres 14+ dengan `pgvector`, dan endpoint LLM yang kompatibel dengan
+OpenAI. Image container memakai Python 3.14; menjalankan dari source butuh 3.14 atau lebih baru.
 
 Jalur terpendek adalah installer; ia tidak pernah menjalankan `sudo`, mem-pin `uv`, menulis empat
 berkas host, lalu menyerahkan ke `eidesoul init`:

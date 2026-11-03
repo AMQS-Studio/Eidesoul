@@ -48,7 +48,7 @@ def run_script(args: list[str], env: dict[str, str]) -> subprocess.CompletedProc
 
 
 def stub_bin(tmp_path: Path) -> tuple[Path, Path]:
-    """A PATH with a no-op uv, a Python 3.12, and a sudo that shouts when it is called.
+    """A PATH with a no-op uv, a Python 3.14, and a sudo that shouts when it is called.
 
     `uv run eidesoul init` is delegated to the interpreter in `STUB_EIDESOUL_PYTHON` so the
     end-to-end test exercises the real init; every other child exits 0.
@@ -70,7 +70,7 @@ def stub_bin(tmp_path: Path) -> tuple[Path, Path]:
     python = folder / "python3"
     python.write_text(
         '#!/usr/bin/env bash\n'
-        'if [[ "${1:-}" == "-V" ]]; then echo "Python 3.12.0"; fi\n'
+        'if [[ "${1:-}" == "-V" ]]; then echo "Python 3.14.0"; fi\n'
         "exit 0\n",
         encoding="utf-8",
     )

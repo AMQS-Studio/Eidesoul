@@ -239,9 +239,9 @@ detect_arch() {
 
 find_python() {
     local candidate
-    for candidate in python3.13 python3.12 python3.11 python3; do
+    for candidate in python3.14 python3.13 python3.12 python3; do
         if command -v "$candidate" >/dev/null 2>&1; then
-            if "$candidate" -c 'import sys; raise SystemExit(0 if sys.version_info >= (3, 11) else 1)' \
+            if "$candidate" -c 'import sys; raise SystemExit(0 if sys.version_info >= (3, 14) else 1)' \
                 >/dev/null 2>&1; then
                 printf '%s' "$candidate"
                 return 0
@@ -319,12 +319,12 @@ stage_preflight() {
     stage "preflight"
     detail "platform: linux/$arch"
     if ! python_bin="$(find_python)"; then
-        warn "no Python 3.11+ interpreter found; the image keeps its own 3.12 pin."
+        warn "no Python 3.14+ interpreter found; the container image pins 3.14."
         warn "Install it, then re-run:"
-        warn "  dnf install python3"
-        die "Python 3.11+ is required"
+        warn "  dnf install python3.14"
+        die "Python 3.14+ is required"
     fi
-    detail "python: $python_bin ($("$python_bin" -V 2>&1)); the container image pins 3.12"
+    detail "python: $python_bin ($("$python_bin" -V 2>&1)); the container image pins 3.14"
     if uv_path="$(find_uv)" && [[ -n "$uv_path" ]]; then
         uv="$uv_path"
         detail "uv: $uv_path ($("$uv" --version 2>/dev/null || echo 'version unknown'))"
