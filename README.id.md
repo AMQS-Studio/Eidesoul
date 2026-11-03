@@ -97,8 +97,8 @@ berbasis role adalah sifat store itu, bukan sifat prompt.
   pertama.
 - **Giliran yang mati di tengah.** Proses berhenti antara panggilan tool dan balasan, dan tidak ada yang
   tahu apa yang sudah terjadi.
-- **Belajar yang meracuni dirinya.** Agent menulis instruksinya sendiri, lalu memercayainya di giliran
-  berikutnya.
+- **Tebakan yang menjadi aturan.** Satu inferensi dari satu giliran ditulis, lalu dibaca kembali di
+  giliran berikutnya seolah operator yang mengatakannya.
 - **Balasan yang mengarang apa yang tidak diketahuinya.** Tanpa lapisan pengetahuan, celah diisi
   tebakan yang percaya diri.
 - **Balasan yang terdengar seperti mesin.** Datar, formal, suara yang sama untuk semua orang — tanpa

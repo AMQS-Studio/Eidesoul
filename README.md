@@ -90,8 +90,8 @@ properties of that store, not of a prompt.
   one's work.
 - **A turn that dies halfway.** The process stops between the tool call and the reply, and nobody
   knows what already happened.
-- **Learning that poisons itself.** The agent writes its own instructions, then trusts them on the
-  next turn.
+- **A guess that becomes a rule.** A one-turn inference is written down, then read back next turn as if
+  the operator had said it.
 - **A reply that invents what it does not know.** Without a knowledge layer, gaps get filled with
   confident guesses.
 - **A reply that sounds like a machine.** Flat, formal, the same voice for everyone — no mood, no
