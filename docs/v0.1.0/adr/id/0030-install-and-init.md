@@ -1,4 +1,4 @@
-> Terjemahan turunan — jangan sunting; sumber: 0030-install-and-init.md (sha256: 2a934e3d9590)
+> Terjemahan turunan — jangan sunting; sumber: 0030-install-and-init.md (sha256: 71613bb76376)
 > Ditulis tangan (bukan mesin), mengikuti sumber English baris demi baris.
 
 # ADR-0030: Install On-Machine dan Init Interaktif — Wizard Kita Sendiri, Satu Installer, Dua Stack
@@ -11,7 +11,7 @@
 - **Terkait:** ADR-0009 (rumah dokumen), ADR-0015 (manifest kapabilitas), ADR-0019 (observability), ADR-0028 (plugin)
 - **Implementasi:** draft — belum ada yang ditulis: belum ada installer, belum ada `init` interaktif, belum ada panel. ADR ini rencana induk untuk jalur onboarding.
 - **Catatan lokasi:** ADR ini mengikat semua permukaan (ia menentukan bagaimana sebuah host lahir), jadi ia duduk di akar rumah ADR. Salinan Indonesia di `docs/v0.1.0/adr/id/0030-install-and-init.md`.
-- **Amandemen:** 2026-11-03 — versi pertama.
+- **Amandemen:** 2026-11-03 — versi pertama. 2026-11-03 — wizard menanyakan lapisan suara sekali (jawaban default tetap nyala) dan membawa `--voice-layer on|off` untuk paritas headless (ADR-0027 §4.3).
 
 ---
 
@@ -86,7 +86,7 @@ Setup interaktif dirancang di sini, bukan dipinjam. Yang dipinjam dari referensi
 
 ### 4.3 `eidesoul init` jadi interaktif di terminal
 
-- Di TTY, `init` menanyakan hal yang sama seperti yang dibawa flag-nya: provider, model (opsional), URL database, dan label administrator pertama. Berkas yang sudah ada ditawarkan sebagai `keep` / `change` / `replace`.
+- Di TTY, `init` menanyakan hal yang sama seperti yang dibawa flag-nya: provider, model (opsional), URL database, label administrator pertama, dan **lapisan suara** — tetap nyalakan emosi, humanize, dan karakter (jawaban default) atau matikan salah satunya. Berkas yang sudah ada ditawarkan sebagai `keep` / `change` / `replace`.
 - Di luar terminal (pipa, CI, `--non-interactive`), ia **gagal tertutup**: ia menyebut flag yang dibutuhkan alih-alih menunggu input yang tak mungkin datang.
 - Rahasia tidak pernah masuk YAML: wizard menulis **nama** env dan menaruh nilainya di `.env` (`0600`), tepat seperti jalur non-interaktif sekarang (`eidesoul/admin/init.py:14-20`).
 - Setiap nilai yang ditulisnya berasal dari `eidesoul/admin/templates.py` plus jawaban operator — wizard tidak memiliki default sendiri.
@@ -121,6 +121,7 @@ Banner memesan area logo sekarang supaya mark-nya bisa ditaruh tanpa menyentuh t
 | `--provider NAME` / `--model ID` | diteruskan ke `init` |
 | `--database-url URL` | diteruskan ke `init` dan ditulis ke `.env` sebagai nilai, tidak pernah ke YAML |
 | `--skip-selftest` | lewati self-test penutup (untuk otomasi yang menjalankannya terpisah) |
+| `--voice-layer on\|off` | tetap nyalakan emosi, humanize, dan karakter (default `on`) atau matikan ketiganya |
 | `--no-color` | keluaran polos (juga dihormati lewat `NO_COLOR`) |
 
 Tidak ada kunci yang ditambahkan ke `config.yaml` oleh ADR ini: perilaku installer adalah flag, dan konfigurasi host tetap seperti yang ditulis `init`.

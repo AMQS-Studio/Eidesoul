@@ -333,6 +333,7 @@ This table is the source, and a canonical term enters it in the same commit in w
 | `digest` | the pinned hash an installed component must match before anything is written | 0027 (rule: 0028) | `checksum` (prosa) |
 | `panel` | the web operator surface: a separate process at the repo root that reuses the config import path | 0027 | `dashboard` (prosa), `admin ui` (prosa) |
 | `clean by default` | gateway, tool, and plugin are each off until enabled; the spine is the only exception | 0027 | `opt-in` (prosa), `default off` (prosa) |
+| `voice layer` | emotion, humanize, and character: on by default, asked once at `init` with keep-on as the default answer, each one switchable off; not a capability category | 0027 | `persona layer` (prosa), `tone layer` (prosa) |
 | `operator action` | a human-initiated install/enable/disable/remove, recorded in `config_changes` and the ledger | 0027 | `manual step` (prosa) |
 | `test store` | the suite runs on the shipped store (Postgres+pgvector); SQLite is not a store | 0029 | `in-memory store` (prosa), `sqlite` (prosa) |
 | `EIDESOL_TEST_DATABASE_URL` | DSN of the throwaway test database; unset means the suite fails with instructions | 0029 | `TEST_DB` (prosa), `DATABASE_URL_TEST` (prosa) |

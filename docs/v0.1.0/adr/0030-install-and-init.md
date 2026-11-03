@@ -8,7 +8,7 @@
 - **Related:** ADR-0009 (the document home), ADR-0015 (capability manifest), ADR-0019 (observability), ADR-0028 (plugins)
 - **Implementation:** draft — nothing is written yet: no installer, no interactive `init`, no panel. This ADR is the plan of record for the onboarding path.
 - **Location note:** this ADR binds every surface (it decides how a host is born), so it sits at the root of the ADR home. The Indonesian copy is `docs/v0.1.0/adr/id/0030-install-and-init.md`.
-- **Amendments:** 2026-11-03 — first version.
+- **Amendments:** 2026-11-03 — first version. 2026-11-03 — the wizard asks the voice layer once (keep-on is the default answer) and carries `--voice-layer on|off` for headless parity (ADR-0027 §4.3).
 
 ---
 
@@ -86,7 +86,8 @@ The interactive setup is designed here, not borrowed. What it borrows from the r
 ### 4.3 `eidesoul init` becomes interactive on a terminal
 
 - On a TTY, `init` asks the same questions the flags carry: provider, model (optional), database URL,
-  and the first administrator's label. Existing files are offered as `keep` / `change` / `replace`.
+  the first administrator's label, and the **voice layer** — keep emotion, humanize, and character on
+  (the default answer) or turn any of them off. Existing files are offered as `keep` / `change` / `replace`.
 - Off a terminal (piped, CI, `--non-interactive`), it **fails closed**: it names the flags it needs
   instead of waiting for input that cannot arrive.
 - Secrets never reach YAML: the wizard writes env **names** and puts values in `.env` (`0600`), exactly
@@ -132,6 +133,7 @@ layout, and it is never a config key: the installer's appearance is code, not co
 | `--provider NAME` / `--model ID` | forwarded to `init` |
 | `--database-url URL` | forwarded to `init` and written to `.env` as a value, never into YAML |
 | `--skip-selftest` | skip the closing self-test (for automation that runs it separately) |
+| `--voice-layer on\|off` | keep emotion, humanize, and character on (default `on`) or turn all three off |
 | `--no-color` | plain output (also honoured via `NO_COLOR`) |
 
 No key is added to `config.yaml` by this ADR: the installer's behaviour is flags, and the host

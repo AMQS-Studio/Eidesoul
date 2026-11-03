@@ -8,7 +8,7 @@
 - **Related:** ADR-0009 (document home), ADR-0012 (lease), ADR-0019 (observability), ADR-0028 (the plugin unit that this ADR distributes)
 - **Implementation:** draft — the image exists as a build file, but nothing is published and no web surface exists yet. No engine change in this ADR.
 - **Location note:** this ADR is cross-cutting (it binds every surface and every deployment), so it sits at the root of the ADR home. The Indonesian copy is `docs/v0.1.0/adr/id/0027-distribution-web-config.md`.
-- **Amendments:** 2026-11-03 — first version.
+- **Amendments:** 2026-11-03 — first version. 2026-11-03 — the voice layer (emotion, humanize, character) is stated as on by default and switchable off per part; clean by default still covers only gateway, tool, and plugin.
 
 ---
 
@@ -95,6 +95,7 @@ plugin never turns into a core tool.
 | Layer | Category | Default | How it is turned on |
 |---|---|---|---|
 | Spine (Postgres+pgvector, Mem0, embedder, affect prototypes, guard, lease) | not a category — required | **on** | not optional |
+| Voice layer (emotion, humanize, character) | engine | **on by default** | `init` asks once, with keep-on as the default answer; each part is one switch, and turning one off is an operator action |
 | Core tools (`read`, `write`, `shell`, `sandbox`, `web_search`, `mcp`, `memory`, `recipe`, `skill`, `settings`) | tool | code in the image, **no grant** | role `tools` mapping (deny by default) |
 | Extra tool pack (capability outside the image) | tool | **off, not installed** | install the tool pack, then grant through roles |
 | Gateway (WhatsApp, future robot/harness/editor) | gateway | **off, not installed** | install the gateway, then enable it — its code is fetched |
@@ -102,6 +103,9 @@ plugin never turns into a core tool.
 | Web panel | operator surface | **on once finished** (§4.4) | — |
 | Automations | per person | off | authored explicitly (ADR-0014) |
 
+- The **voice layer** is not a capability category: emotion, humanize, and character are on by default,
+  and each is one switch. Turning one off changes the voice, never the identity, the memory, or the
+  permissions.
 - "Enabled" means two separate things and both are required: the code is present **and** a role grants
   the capability. Enabling without a grant leaves the capability inert; a grant without code is
   reported as unavailable, never as denied.

@@ -1,5 +1,18 @@
 # LOG
 
+## 2026-11-03 — The voice layer is on, and switchable (ADR-0027 amendment)
+
+ADR-0027 §4.3 listed what is off by default but was silent about the parts that shape the voice, so
+emotion, humanize, and character had no default anywhere. Amendment: a **voice layer** row — emotion,
+humanize, and character are **on by default**, `init` asks once with **keep on** as the answer that
+needs no input, each part is one switch, and turning one off is an operator action; clean by default
+still covers only gateway, tool, and plugin, and the spine stays required. ADR-0030 gains the question
+in the wizard and `--voice-layer on|off` for headless parity, so the interactive and piped paths stay
+equal. The ADR draws the boundary in one line: switching a part off changes the voice, never the
+identity, the memory, or the permissions. ADR-0009's register gains `voice layer` with its synonyms. The
+README (EN/ID) states the same rule instead of implying that every subsystem is optional. Documentation
+only; gate 31/31, copies 31/31.
+
 ## 2026-11-03 — On-machine install and interactive init (ADR-0030)
 
 Onboarding had exactly one path and it started with `podman compose up -d postgres`, while

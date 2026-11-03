@@ -1,4 +1,4 @@
-> Terjemahan turunan — jangan sunting; sumber: 0009-adr-home.md (sha256: ecc9f5e231b3)
+> Terjemahan turunan — jangan sunting; sumber: 0009-adr-home.md (sha256: 41d8b4fc9dfb)
 > Teks ini ditulis manusia; baris yang tidak bisa diterjemahkan mesin disalin apa adanya ke sumber English, jadi sumber bercampur dua bahasa.
 
 # ADR-0009: Rumah ADR, Folder Dokumen Berversi & Penjaganya
@@ -336,6 +336,7 @@ Tabel ini sumbernya, dan istilah kanonik baru masuk di commit yang sama saat ia 
 | `digest` | hash terpin yang harus cocok sebelum komponen terpasang menulis apa pun | 0027 (aturan: 0028) | `checksum` (prosa) |
 | `panel` | permukaan operator web: proses terpisah di akar repo yang memakai jalur import config | 0027 | `dashboard` (prosa), `admin ui` (prosa) |
 | `clean by default` | gateway, tool, dan plugin masing-masing mati sampai diaktifkan; spine satu-satunya pengecualian | 0027 | `opt-in` (prosa), `default off` (prosa) |
+| `voice layer` | emosi, humanize, dan karakter: aktif secara default, ditanyakan sekali saat `init` dengan jawaban default tetap nyala, masing-masing bisa dimatikan; bukan kategori kapabilitas | 0027 | `persona layer` (prosa), `tone layer` (prosa) |
 | `operator action` | install/enable/disable/remove yang dimulai manusia, tercatat di `config_changes` dan ledger | 0027 | `manual step` (prosa) |
 | `test store` | suite jalan di store yang dikirim (Postgres+pgvector); SQLite bukan store | 0029 | `in-memory store` (prosa), `sqlite` (prosa) |
 | `EIDESOL_TEST_DATABASE_URL` | DSN database tes sekali pakai; kosong berarti suite gagal dengan instruksi | 0029 | `TEST_DB` (prosa), `DATABASE_URL_TEST` (prosa) |

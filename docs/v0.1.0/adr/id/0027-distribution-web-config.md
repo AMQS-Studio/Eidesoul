@@ -1,4 +1,4 @@
-> Terjemahan turunan — jangan sunting; sumber: 0027-distribution-web-config.md (sha256: c4b52fc32a50)
+> Terjemahan turunan — jangan sunting; sumber: 0027-distribution-web-config.md (sha256: 9539287755c6)
 > Ditulis tangan (bukan mesin), mengikuti sumber English baris demi baris.
 
 # ADR-0027: Distribusi dan Konfigurasi Web-First — Satu Image Core, Kapabilitas Clean by Default
@@ -11,7 +11,7 @@
 - **Terkait:** ADR-0009 (rumah dokumen), ADR-0012 (lease), ADR-0019 (observability), ADR-0028 (unit plugin yang didistribusikan ADR ini)
 - **Implementasi:** draft — image sudah ada sebagai berkas build, tapi belum dipublikasikan dan belum ada permukaan web. Tidak ada perubahan engine di ADR ini.
 - **Catatan lokasi:** ADR ini lintas-potong (mengikat setiap permukaan dan setiap deployment), jadi ia duduk di akar rumah ADR. Salinan Indonesia di `docs/v0.1.0/adr/id/0027-distribution-web-config.md`.
-- **Amandemen:** 2026-11-03 — versi pertama.
+- **Amandemen:** 2026-11-03 — versi pertama. 2026-11-03 — lapisan suara (emosi, humanize, karakter) dinyatakan aktif secara default dan bisa dimatikan per bagian; clean by default tetap hanya mencakup gateway, tool, dan plugin.
 
 ---
 
@@ -98,6 +98,7 @@ plugin tidak pernah berubah menjadi tool core.
 | Layer | Kategori | Default | Cara menyalakan |
 |---|---|---|---|
 | Spine (Postgres+pgvector, Mem0, embedder, prototipe affect, guard, lease) | bukan kategori — wajib | **on** | tidak opsional |
+| Lapisan suara (emosi, humanize, karakter) | engine | **aktif secara default** | `init` bertanya sekali, dengan jawaban default tetap nyala; tiap bagian satu sakelar, dan mematikannya adalah operator action |
 | Tool core (`read`, `write`, `shell`, `sandbox`, `web_search`, `mcp`, `memory`, `recipe`, `skill`, `settings`) | tool | kode ada di image, **tanpa izin** | pemetaan `tools` di role (deny by default) |
 | Paket tool tambahan (kapabilitas di luar image) | tool | **mati, belum dipasang** | pasang paket tool, lalu beri izin lewat role |
 | Gateway (WhatsApp, robot/harness/editor nanti) | gateway | **mati, belum dipasang** | pasang gateway, lalu aktifkan — kodenya diunduh |
@@ -105,6 +106,9 @@ plugin tidak pernah berubah menjadi tool core.
 | Panel web | permukaan operator | **on begitu selesai** (§4.4) | — |
 | Automation | per orang | mati | ditulis eksplisit (ADR-0014) |
 
+- **Lapisan suara** bukan kategori kapabilitas: emosi, humanize, dan karakter aktif secara default, dan
+  masing-masing satu sakelar. Mematikan satu bagian mengubah suara, tidak pernah identitas, memori, atau
+  izin.
 - "Aktif" berarti dua hal terpisah dan keduanya wajib: kodenya ada **dan** ada role yang memberi
   kapabilitasnya. Aktif tanpa izin membuatnya inert; izin tanpa kode dilaporkan `unavailable`, bukan
   `denied`.
