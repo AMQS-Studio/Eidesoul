@@ -16,7 +16,7 @@ import uuid
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 
-from sqlalchemy import String, and_, case, cast, delete, func, or_, select, text, update
+from sqlalchemy import delete, select, text
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from .. import io
@@ -27,14 +27,10 @@ from ..lease import Superseded
 from ..schema import (
     memories,
     memories_readable,
-    memory_events,
     memory_index,
     memory_tombstones,
-    memory_uses,
-    messages,
-    thread_people,
 )
-from . import MemoryContext, MemoryHit, gate
+from . import MemoryContext, MemoryHit, gate, queries
 from . import context as memory_context
 from .integrity import (
     RULE_MIN_CORROBORATION_DAYS,
@@ -273,20 +269,10 @@ class MemoryStore:
     def _quota_counts(self, *, person_id: str, thread_id: str, now: float) -> tuple[int, int, int]:
         if self.db is None:
             return (0, 0, 0)
-        hour = now - 3600.0
-        day = now - DAY
-        live = memories.c.state.in_(("ok", "staged"))
-
-        def count(*clauses) -> int:
-            statement = select(func.count()).select_from(memories).where(live, *clauses)
-            return int(self.db.scalar(statement) or 0)
-
-        person_hour = count(memories.c.person_id == person_id, memories.c.created_at >= hour)
-        person_day = count(memories.c.person_id == person_id, memories.c.created_at >= day)
-        thread_hour = count(
-            memories.c.thread_id == thread_id, memories.c.created_at >= hour
-        ) if thread_id else 0
-        return person_hour, person_day, thread_hour
+        with self.db.connect() as conn:
+            return queries.quota_counts(
+                conn, person_id=person_id, thread_id=thread_id, now=now
+            )
 
     def _state_after_quota(
         self,
@@ -663,18 +649,10 @@ class MemoryStore:
             old = self._superseded(conn, params)
             if old is not None:
                 values["supersedes"] = str(old["id"])
-            conn.execute(pg_insert(memories).values(**values))
+            queries.insert_memory(conn, values)
             if old is not None:
-                conn.execute(
-                    memories.update()
-                    .where(memories.c.id == old["id"])
-                    .values(
-                        state="superseded",
-                        superseded_by=memory_id,
-                        pinned=False,
-                        expires_at=self._policy.superseded_expiry(now),
-                        updated_at=now,
-                    )
+                queries.supersede_row(
+                    conn, str(old["id"]), memory_id, self._policy.superseded_expiry(now), now
                 )
             if params.external_id:
                 self._link(conn, memory_id, params.external_id)
@@ -729,60 +707,33 @@ class MemoryStore:
         memory_id = str(uuid.uuid4())
         event_id = str(uuid.uuid4())
         refs = [f"message:{_flat(message_id, 160)}"] if message_id else []
-        conn.execute(
-            pg_insert(memories).values(
-                id=memory_id,
-                scope="person",
+        queries.insert_candidate_row(
+            conn,
+            queries.candidate_values(
+                memory_id=memory_id,
+                body=body,
                 person_id=str(person_id or ""),
                 thread_id=str(thread_id or ""),
                 kind=str(kind or "fact"),
-                text=body,
-                state="pending",
-                level=None,
-                confirmed=None,
-                owner_id=str(person_id or ""),
-                subject_id=str(person_id or ""),
-                via="turn",
-                refs=refs,
-                trust=TRUST_UNLABELED,
                 audience=self._audience("person", audience),
-                source="turn",
-                vetoed=False,
-                vetoed_by="",
-                vetoed_at=0.0,
-                pinned=False,
-                durability="normal",
-                category="general",
-                use_count=0,
-                distinct_use_days=0,
-                last_used_at=0.0,
-                max_lifetime_at=None,
-                expires_at=self._policy.unlabeled_expiry(now),
-                supersedes=None,
-                superseded_by=None,
-                due_at=None,
-                task_status=None,
-                dispute_state="none",
-                disputed_with=None,
-                dispute_reason="",
-                disputed_at=0.0,
+                refs=refs,
                 asserted_at=float(asserted_at if asserted_at is not None else now),
-                created_at=now,
-                updated_at=now,
-            )
+                now=now,
+                expires_at=self._policy.unlabeled_expiry(now),
+            ),
         )
-        conn.execute(
-            pg_insert(memory_events).values(
-                id=event_id,
+        queries.insert_event_row(
+            conn,
+            queries.event_values(
+                event_id=event_id,
                 memory_id=memory_id,
                 thread_id=str(thread_id or ""),
                 person_id=str(person_id or ""),
                 message_id=str(message_id or ""),
-                kind="message",
-                content=body,
-                content_hash=digest,
-                created_at=now,
-            )
+                body=body,
+                digest=digest,
+                now=now,
+            ),
         )
         return MemoryCandidate(
             memory_id=memory_id,
@@ -802,8 +753,8 @@ class MemoryStore:
         resolved = self._resolve_id(memory_id)
         if not resolved:
             return None
-        found = self.db.fetch_one(select(memories).where(memories.c.id == resolved))
-        return found
+        with self.db.connect() as conn:
+            return queries.base_row(conn, resolved)
 
     def _resolve_id(self, memory_id: str) -> str:
         raw = str(memory_id or "").strip().lstrip("#").strip().lower()
@@ -815,12 +766,8 @@ class MemoryStore:
             return ""
         if len(raw) == 32:
             return f"{raw[:8]}-{raw[8:12]}-{raw[12:16]}-{raw[16:20]}-{raw[20:]}"
-        rows = self.db.fetch_all(
-            select(cast(memories.c.id, String).label("id"))
-            .where(cast(memories.c.id, String).like(f"{raw}%"))
-            .limit(2)
-        )
-        return str(rows[0]["id"]) if len(rows) == 1 else ""
+        with self.db.connect() as conn:
+            return queries.resolve_id(conn, raw)
 
     def _pending_ids(self, conn, thread_id: str, refs: Sequence[str]) -> list[str]:
         statement = select(memories.c.id).where(
@@ -910,17 +857,13 @@ class MemoryStore:
             return False
         with self.db.connect() as conn:
             self._fence(conn, "transition")
-            row = (
-                conn.execute(select(memories).where(memories.c.id == resolved).with_for_update())
-                .mappings()
-                .first()
-            )
+            row = queries.locked(conn, resolved)
             if row is None:
                 return False
             values = self._transition_values(
                 row, to_state, level=level, confirmed=confirmed, reason=reason
             )
-            conn.execute(memories.update().where(memories.c.id == resolved).values(**values))
+            queries.update_memory(conn, resolved, values)
         return True
 
     def label(
@@ -942,11 +885,7 @@ class MemoryStore:
             return False
         with self.db.connect() as conn:
             self._fence(conn, "label")
-            row = (
-                conn.execute(select(memories).where(memories.c.id == resolved).with_for_update())
-                .mappings()
-                .first()
-            )
+            row = queries.locked(conn, resolved)
             if row is None:
                 return False
             extra: dict = {}
@@ -963,10 +902,8 @@ class MemoryStore:
                 merged, "ok", level=level, confirmed=confirmed, reason=""
             )
             if extra:
-                conn.execute(
-                    memories.update().where(memories.c.id == resolved).values(**extra)
-                )
-            conn.execute(memories.update().where(memories.c.id == resolved).values(**values))
+                queries.update_memory(conn, resolved, extra)
+            queries.update_memory(conn, resolved, values)
         return True
 
     async def promote(self, memory_id: str) -> bool:
@@ -1008,23 +945,13 @@ class MemoryStore:
             self._fence(conn, "_discard")
             ids = self._pending_ids(conn, thread_id, refs)
             for memory_id in ids:
-                row = (
-                    conn.execute(
-                        select(memories).where(memories.c.id == memory_id).with_for_update()
-                    )
-                    .mappings()
-                    .first()
-                )
+                row = queries.locked(conn, memory_id)
                 if row is None:
                     continue
                 values = self._transition_values(
                     row, state, level=None, confirmed=None, reason=reason, now=now
                 )
-                conn.execute(
-                    memories.update()
-                    .where(memories.c.id == memory_id)
-                    .values(**values, label_attempts=memories.c.label_attempts + 1)
-                )
+                queries.update_memory(conn, memory_id, values, bump_label_attempts=True)
         return len(ids)
 
     async def drop_candidate(
@@ -1053,13 +980,7 @@ class MemoryStore:
             self._fence(conn, "_label_pending")
             ids = self._pending_ids(conn, thread_id, refs)
             for memory_id in ids:
-                row = (
-                    conn.execute(
-                        select(memories).where(memories.c.id == memory_id).with_for_update()
-                    )
-                    .mappings()
-                    .first()
-                )
+                row = queries.locked(conn, memory_id)
                 if row is None:
                     continue
                 merged = {
@@ -1071,16 +992,12 @@ class MemoryStore:
                 values = self._transition_values(
                     merged, "ok", level=int(level), confirmed=bool(confirmed), reason="", now=now
                 )
-                conn.execute(
-                    memories.update()
-                    .where(memories.c.id == memory_id)
-                    .values(
-                        **values,
-                        subject_id=merged["subject_id"],
-                        category=merged["category"],
-                        durability=merged["durability"],
-                    )
+                values.update(
+                    subject_id=merged["subject_id"],
+                    category=merged["category"],
+                    durability=merged["durability"],
                 )
+                queries.update_memory(conn, memory_id, values)
         return ids
 
     # ------------------------------------------------------------ capture
@@ -1262,12 +1179,7 @@ class MemoryStore:
             return
         with self.db.connect() as conn:
             self._fence(conn, "_raise_visibility")
-            conn.execute(
-                update(messages)
-                .where(messages.c.msg_id.in_([str(item) for item in refs]))
-                .where(messages.c.visibility < int(level))
-                .values(visibility=int(level))
-            )
+            queries.raise_visibility(conn, refs, level)
 
     def _drop_pending(
         self,
@@ -1284,19 +1196,13 @@ class MemoryStore:
             self._fence(conn, "_drop_pending")
             ids = self._pending_ids(conn, thread_id, refs)
             for memory_id in ids:
-                row = (
-                    conn.execute(
-                        select(memories).where(memories.c.id == memory_id).with_for_update()
-                    )
-                    .mappings()
-                    .first()
-                )
+                row = queries.locked(conn, memory_id)
                 if row is None:
                     continue
                 values = self._transition_values(
                     row, state, level=None, confirmed=None, reason=reason, now=now
                 )
-                conn.execute(memories.update().where(memories.c.id == memory_id).values(**values))
+                queries.update_memory(conn, memory_id, values)
         return len(ids)
 
     # ------------------------------------------------------------ use / renewal
@@ -1325,33 +1231,14 @@ class MemoryStore:
         with self.db.connect() as conn:
             self._fence(conn, "record_uses")
             for memory_id in wanted:
-                inserted = conn.execute(
-                    pg_insert(memory_uses)
-                    .values(memory_id=memory_id, day=func.current_date(), turn_id=str(turn_id))
-                    .on_conflict_do_nothing(
-                        index_elements=["memory_id", "day", "turn_id"]
-                    )
-                    .returning(memory_uses.c.memory_id)
-                ).scalar()
-                if inserted is None:
+                if not queries.record_use(conn, memory_id, str(turn_id)):
                     continue
-                row = (
-                    conn.execute(
-                        select(memories).where(memories.c.id == memory_id).with_for_update()
-                    )
-                    .mappings()
-                    .first()
-                )
+                row = queries.locked(conn, memory_id)
                 if row is None or str(row.get("state") or "") != "ok":
                     continue
-                distinct = conn.execute(
-                    select(func.count(func.distinct(memory_uses.c.day))).where(
-                        memory_uses.c.memory_id == memory_id
-                    )
-                ).scalar()
                 values: dict = {
                     "use_count": memories.c.use_count + 1,
-                    "distinct_use_days": int(distinct or 1),
+                    "distinct_use_days": queries.distinct_use_days(conn, memory_id),
                     "last_used_at": now,
                     "updated_at": now,
                 }
@@ -1366,7 +1253,7 @@ class MemoryStore:
                 )
                 if renewed is not None:
                     values["expires_at"] = renewed
-                conn.execute(memories.update().where(memories.c.id == memory_id).values(**values))
+                queries.update_memory(conn, memory_id, values)
                 touched += 1
         return touched
 
@@ -1375,16 +1262,14 @@ class MemoryStore:
     def _mapping_external_sync(self, memory_id: str) -> str:
         if self.db is None:
             return ""
-        found = self.db.fetch_one(
-            select(memory_index.c.external_id).where(memory_index.c.memory_id == memory_id)
-        )
-        return str(found["external_id"]) if found else ""
+        with self.db.connect() as conn:
+            return queries.mapping_external(conn, memory_id)
 
     def _unlink_sync(self, memory_id: str) -> None:
         if self.db is None:
             return
         with self.db.connect() as conn:
-            conn.execute(memory_index.delete().where(memory_index.c.memory_id == memory_id))
+            queries.unlink_index(conn, memory_id)
 
     def _link_sync(self, memory_id: str, external_id: str) -> None:
         if self.db is None:
@@ -1489,6 +1374,10 @@ class MemoryStore:
         await self._drop_index(row)
         return await io.run(self._forget_sync, row)
 
+    def _forget_candidates_sync(self, owner_id: str, thread_id: str) -> list[dict]:
+        with self.db.connect() as conn:
+            return queries.forget_candidates(conn, owner_id, thread_id)
+
     async def forget_by_intent(
         self, text: str, *, person_id: str, thread_id: str
     ) -> list[str]:
@@ -1504,17 +1393,9 @@ class MemoryStore:
         who = str(person_id or "").strip()
         if not wanted or not who:
             return []
-        rows = self.db.fetch_all(
-            select(memories_readable).where(
-                memories_readable.c.owner_id == who,
-                or_(
-                    memories_readable.c.scope == "global",
-                    memories_readable.c.thread_id == str(thread_id or ""),
-                ),
-            )
-        )
+        found = await io.run(self._forget_candidates_sync, who, str(thread_id or ""))
         matches = [
-            str(row["id"]) for row in rows if wanted & _tokens(str(row.get("text") or ""))
+            str(row["id"]) for row in found if wanted & _tokens(str(row.get("text") or ""))
         ]
         if len(matches) != 1:
             log.info("forget intent ambiguous: %d candidates", len(matches))
@@ -1574,16 +1455,8 @@ class MemoryStore:
         return PurgeReport(selected=len(rows), purged=purged, dry_run=False)
 
     def _purge_candidates_sync(self, cutoff: float, limit: int) -> list[dict]:
-        return self.db.fetch_all(
-            select(memories)
-            .where(
-                memories.c.expires_at.is_not(None),
-                memories.c.expires_at <= cutoff,
-                memories.c.pinned.is_(False),
-            )
-            .order_by(memories.c.expires_at)
-            .limit(max(1, int(limit)))
-        )
+        with self.db.connect() as conn:
+            return queries.purge_candidates(conn, cutoff, limit)
 
     def _purge_metrics_only_sync(self, now: float) -> int:
         with self.db.connect() as conn:
@@ -1594,16 +1467,7 @@ class MemoryStore:
         with self.db.connect() as conn:
             self._fence(conn, "_purge_rows_sync")
             for row in rows:
-                removed = conn.execute(
-                    delete(memories)
-                    .where(
-                        memories.c.id == str(row["id"]),
-                        memories.c.pinned.is_(False),
-                        memories.c.expires_at <= cutoff,
-                    )
-                    .returning(memories.c.id)
-                ).scalar()
-                if removed is None:
+                if not queries.delete_row(conn, str(row["id"]), cutoff):
                     continue
                 reason = (
                     "vetoed"
@@ -1612,16 +1476,17 @@ class MemoryStore:
                     if str(row.get("state") or "") == "superseded"
                     else "expired"
                 )
-                conn.execute(
-                    pg_insert(memory_tombstones).values(
-                        id=str(row["id"]),
-                        kind=str(row.get("kind") or "fact"),
-                        level=row.get("level"),
-                        scope=str(row.get("scope") or "person"),
-                        content_hash=_digest(str(row.get("text") or "")),
-                        reason=reason,
-                        deleted_at=moment,
-                    )
+                queries.insert_tombstone(
+                    conn,
+                    {
+                        "id": str(row["id"]),
+                        "kind": str(row.get("kind") or "fact"),
+                        "level": row.get("level"),
+                        "scope": str(row.get("scope") or "person"),
+                        "content_hash": _digest(str(row.get("text") or "")),
+                        "reason": reason,
+                        "deleted_at": moment,
+                    },
                 )
                 purged += 1
         # Metrics retention runs in its own transaction: a stale/absent llm_calls must never
@@ -1632,16 +1497,7 @@ class MemoryStore:
     def _purge_metrics(self, conn, now: float) -> int:
         """ADR-0005 §4.7 / ADR-0019: cost rows expire by `engine.metrics.retention_days`."""
         try:
-            if conn.execute(text("SELECT to_regclass('llm_calls')")).scalar() is None:
-                return 0
-            days = retention_days_from(self.config)
-            return int(
-                conn.execute(
-                    text("DELETE FROM llm_calls WHERE ts < :cutoff"),
-                    {"cutoff": float(now) - days * DAY},
-                ).rowcount
-                or 0
-            )
+            return queries.purge_metrics(conn, now, retention_days_from(self.config))
         except Exception as exc:  # a metrics table problem never blocks memory retention
             log.warning("metrics purge skipped: %s", exc)
             return 0
@@ -1734,7 +1590,7 @@ class MemoryStore:
             values["vetoed_at"] = time.time() if vetoed else 0.0
         with self.db.connect() as conn:
             self._fence(conn, "_set_privacy_sync")
-            conn.execute(memories.update().where(memories.c.id == str(row["id"])).values(**values))
+            queries.update_memory(conn, str(row["id"]), values)
         return True
 
     # ------------------------------------------------------------ rekey
@@ -1749,124 +1605,45 @@ class MemoryStore:
         return await io.run(self._rekey_update_sync, old_id, new_id)
 
     def _rekey_rows_sync(self, old_id: str) -> list[dict]:
-        return self.db.fetch_all(
-            select(memories).where(
-                or_(
-                    memories.c.person_id == old_id,
-                    memories.c.owner_id == old_id,
-                    memories.c.subject_id == old_id,
-                )
-            )
-        )
+        with self.db.connect() as conn:
+            return queries.rekey_rows(conn, old_id)
 
     def _rekey_update_sync(self, old_id: str, new_id: str) -> int:
         with self.db.connect() as conn:
             self._fence(conn, "_rekey_update_sync")
-            result = conn.execute(
-                memories.update()
-                .where(
-                    or_(
-                        memories.c.person_id == old_id,
-                        memories.c.owner_id == old_id,
-                        memories.c.subject_id == old_id,
-                    )
-                )
-                .values(
-                    person_id=case(
-                        (memories.c.person_id == old_id, new_id),
-                        else_=memories.c.person_id,
-                    ),
-                    owner_id=case(
-                        (memories.c.owner_id == old_id, new_id),
-                        else_=memories.c.owner_id,
-                    ),
-                    subject_id=case(
-                        (memories.c.subject_id == old_id, new_id),
-                        else_=memories.c.subject_id,
-                    ),
-                    updated_at=time.time(),
-                )
-            )
-        return int(result.rowcount or 0)
+            return queries.rekey_update(conn, old_id, new_id)
 
     # ------------------------------------------------------------ reads (view only)
 
     def readable(self, limit: int = 200) -> list[MemoryHit]:
         if self.db is None:
             return []
-        rows = self.db.fetch_all(
-            select(memories_readable)
-            .where(memories_readable.c.dispute_state != "open")
-            .order_by(memories_readable.c.created_at.desc())
-            .limit(max(1, int(limit)))
-        )
-        return [_hit(row) for row in rows]
+        with self.db.connect() as conn:
+            found = queries.readable_rows(conn, limit)
+        return [_hit(row) for row in found]
 
     def admin(self, *, state: str | None = None, limit: int = 200) -> list[MemoryHit]:
         """Worker/admin read of the base table (ADR-0004 §5.3); never for prompts."""
         if self.db is None:
             return []
-        statement = select(memories).order_by(memories.c.created_at.desc()).limit(
-            max(1, int(limit))
-        )
-        if state:
-            statement = statement.where(memories.c.state == str(state))
-        return [_hit(row) for row in self.db.fetch_all(statement)]
+        with self.db.connect() as conn:
+            found = queries.admin_rows(conn, state, limit)
+        return [_hit(row) for row in found]
 
     def backlog(self) -> dict[str, int]:
         if self.db is None:
             return {}
-        rows = self.db.fetch_all(
-            select(memories.c.state, func.count().label("count")).group_by(memories.c.state)
-        )
-        return {str(row["state"]): int(row["count"]) for row in rows}
-
-    def _scope_filter(self, scope: str, person_id: str, thread_id: str):
-        if scope == "global":
-            return memories_readable.c.scope == "global"
-        if scope == "person":
-            if not person_id:
-                return None
-            return and_(
-                memories_readable.c.scope == "person",
-                memories_readable.c.person_id == person_id,
-                or_(
-                    memories_readable.c.audience != "group",
-                    memories_readable.c.thread_id == thread_id,
-                ),
-            )
-        if scope == "thread":
-            if not thread_id:
-                return None
-            return and_(
-                memories_readable.c.scope == "thread",
-                memories_readable.c.thread_id == thread_id,
-            )
-        return None
+        with self.db.connect() as conn:
+            return queries.backlog_rows(conn)
 
     def _rows(
         self, scope: str, query: str, person_id: str, thread_id: str, limit: int
     ) -> list[MemoryHit]:
         if self.db is None:
             return []
-        clause = self._scope_filter(scope, person_id, thread_id)
-        if clause is None:
-            return []
-        statement = select(memories_readable).where(clause)
-        statement = statement.where(memories_readable.c.dispute_state != "open")
-        for term in re.findall(r"\w+", str(query or ""), re.UNICODE):
-            pattern = f"%{term}%"
-            statement = statement.where(
-                or_(
-                    memories_readable.c.text.ilike(pattern),
-                    memories_readable.c.kind.ilike(pattern),
-                )
-            )
-        statement = statement.order_by(
-            memories_readable.c.last_used_at.desc(),
-            memories_readable.c.created_at.desc(),
-        ).limit(max(1, int(limit)))
-        return [_hit(row) for row in self.db.fetch_all(statement)]
+        with self.db.connect() as conn:
+            found = queries.match_rows(conn, scope, query, person_id, thread_id, limit)
+        return [_hit(row) for row in found]
 
     async def _search_scope(
         self, scope: str, query: str, person_id: str, thread_id: str, limit: int
@@ -1907,12 +1684,8 @@ class MemoryStore:
         resolved = self._resolve_readable(memory_id)
         if not resolved:
             return None
-        found = self.db.fetch_one(
-            select(memories_readable).where(
-                memories_readable.c.id == resolved,
-                memories_readable.c.dispute_state != "open",
-            )
-        )
+        with self.db.connect() as conn:
+            found = queries.get_view(conn, resolved)
         return _hit(found) if found else None
 
     def _resolve_readable(self, memory_id: str) -> str:
@@ -1925,12 +1698,8 @@ class MemoryStore:
             return ""
         if len(raw) == 32:
             return f"{raw[:8]}-{raw[8:12]}-{raw[12:16]}-{raw[16:20]}-{raw[20:]}"
-        rows = self.db.fetch_all(
-            select(cast(memories_readable.c.id, String).label("id"))
-            .where(cast(memories_readable.c.id, String).like(f"{raw}%"))
-            .limit(2)
-        )
-        return str(rows[0]["id"]) if len(rows) == 1 else ""
+        with self.db.connect() as conn:
+            return queries.resolve_readable(conn, raw)
 
     async def context(
         self,
@@ -1975,27 +1744,16 @@ class MemoryStore:
         """The labeling queue for ADR-0002/0003 (worker); the base table, never the view."""
         if self.db is None:
             return []
-        statement = (
-            select(memories)
-            .where(memories.c.state.in_(("pending", "staged")))
-            .order_by(memories.c.created_at)
-            .limit(max(1, int(limit)))
-        )
-        if thread_id:
-            statement = statement.where(memories.c.thread_id == thread_id)
-        return self.db.fetch_all(statement)
+        with self.db.connect() as conn:
+            return queries.pending(conn, thread_id, limit)
     # ------------------------------------------------------------ cognition worker
 
     def candidate_by_event(self, event_id: str) -> dict | None:
         """The pending canonical row behind a `capture` job (`payload_ref` = event id)."""
         if self.db is None or not str(event_id or "").strip():
             return None
-        return self.db.fetch_one(
-            select(memories)
-            .join(memory_events, memory_events.c.memory_id == memories.c.id)
-            .where(memory_events.c.id == str(event_id))
-            .limit(1)
-        )
+        with self.db.connect() as conn:
+            return queries.event_candidate(conn, event_id)
 
     def fail_candidate(self, memory_id: str, reason: str = "labeling failed") -> bool:
         """A failed assess item drops its candidate; it never guesses a level (ADR-0004)."""
@@ -2025,13 +1783,8 @@ class MemoryStore:
     def count_staged(self, *, scope: str = "") -> int:
         if self.db is None:
             return 0
-        statement = (
-            select(func.count())
-            .select_from(memories)
-            .where(memories.c.state == "staged")
-        )
-        statement = self._apply_scope(statement, scope)
-        return int(self.db.scalar(statement) or 0)
+        with self.db.connect() as conn:
+            return queries.count_staged(conn, scope)
 
     def resolve_supersede_candidate(self, memory_id: str, source_id: str) -> bool:
         """The novelty stage said "same topic": the new statement replaces the old row."""
@@ -2080,33 +1833,24 @@ class MemoryStore:
         """Scopes that hold a live row: the reflection schedule input."""
         if self.db is None:
             return []
-        rows = self.db.fetch_all(
-            select(memories.c.scope, memories.c.person_id, memories.c.thread_id)
-            .where(memories.c.state.in_(("ok", "staged")))
-            .distinct()
-            .limit(max(1, int(limit)))
-        )
-        found: list[str] = []
-        for row in rows:
+        with self.db.connect() as conn:
+            found = queries.scopes(conn, limit)
+        live: list[str] = []
+        for row in found:
             scope = str(row["scope"] or "")
             if scope == "person" and row["person_id"]:
-                found.append(f"person:{row['person_id']}")
+                live.append(f"person:{row['person_id']}")
             elif scope == "thread" and row["thread_id"]:
-                found.append(f"thread:{row['thread_id']}")
+                live.append(f"thread:{row['thread_id']}")
             elif scope == "global":
-                found.append("global")
-        return sorted(set(found))
+                live.append("global")
+        return sorted(set(live))
 
     def count_rows_since(self, *, scope: str = "", after: float = 0.0) -> int:
         if self.db is None:
             return 0
-        statement = (
-            select(func.count())
-            .select_from(memories)
-            .where(memories.c.state == "ok", memories.c.created_at > float(after))
-        )
-        statement = self._apply_scope(statement, scope)
-        return int(self.db.scalar(statement) or 0)
+        with self.db.connect() as conn:
+            return queries.count_rows_since(conn, scope, after)
 
     def pending_candidates(
         self, *, scope: str = "", limit: int = 20, now: float | None = None
@@ -2115,28 +1859,9 @@ class MemoryStore:
         if self.db is None:
             return []
         moment = time.time() if now is None else float(now)
-        statement = (
-            select(memories)
-            .where(
-                memories.c.state == "pending",
-                memories.c.label_after <= moment,
-            )
-            .order_by(memories.c.created_at)
-            .limit(max(1, int(limit)))
-        )
-        statement = self._apply_scope(statement, scope)
-        rows = self.db.fetch_all(statement)
+        with self.db.connect() as conn:
+            rows = queries.pending_candidates(conn, scope, limit, moment)
         return [row for row in rows if not _marked_supersede(row)]
-
-    def _apply_scope(self, statement, scope: str):
-        kind, _, value = str(scope or "").partition(":")
-        if kind == "person" and value:
-            return statement.where(memories.c.scope == "person", memories.c.person_id == value)
-        if kind == "thread" and value:
-            return statement.where(memories.c.scope == "thread", memories.c.thread_id == value)
-        if kind == "global":
-            return statement.where(memories.c.scope == "global")
-        return statement
 
     def novelty_pool(
         self,
@@ -2149,33 +1874,8 @@ class MemoryStore:
         """Readable rows in the candidate's own scopes: global + person + this thread."""
         if self.db is None:
             return []
-        clauses = [memories_readable.c.scope == "global"]
-        if person_id:
-            clauses.append(
-                and_(
-                    memories_readable.c.scope == "person",
-                    memories_readable.c.person_id == person_id,
-                    or_(
-                        memories_readable.c.audience != "group",
-                        memories_readable.c.thread_id == thread_id,
-                    ),
-                )
-            )
-        if thread_id:
-            clauses.append(
-                and_(
-                    memories_readable.c.scope == "thread",
-                    memories_readable.c.thread_id == thread_id,
-                )
-            )
-        rows = self.db.fetch_all(
-            select(memories_readable.c.id, memories_readable.c.text)
-            .where(or_(*clauses))
-            .where(memories_readable.c.dispute_state != "open")
-            .order_by(memories_readable.c.created_at.desc())
-            .limit(max(1, int(limit)))
-        )
-        return [dict(row) for row in rows]
+        with self.db.connect() as conn:
+            return queries.novelty_pool(conn, person_id, thread_id, limit)
 
     def label_candidate(
         self,
@@ -2198,11 +1898,7 @@ class MemoryStore:
         now = time.time()
         with self.db.connect() as conn:
             self._fence(conn, "label_candidate")
-            row = (
-                conn.execute(select(memories).where(memories.c.id == resolved).with_for_update())
-                .mappings()
-                .first()
-            )
+            row = queries.locked(conn, resolved)
             if row is None or str(row.get("state") or "") != "pending":
                 return False
             route = via_of(str(row.get("source") or ""), fallback=str(row.get("via") or "turn"))
@@ -2238,20 +1934,15 @@ class MemoryStore:
                 return False
             if body:
                 extra["text"] = body
-            conn.execute(memories.update().where(memories.c.id == resolved).values(**extra))
-            conn.execute(memories.update().where(memories.c.id == resolved).values(**values))
+            queries.update_memory(conn, resolved, extra)
+            queries.update_memory(conn, resolved, values)
             refs = [
                 str(item).split(":", 1)[1]
                 for item in row.get("refs") or []
                 if str(item).startswith("message:") and ":" in str(item)
             ]
             if refs:
-                conn.execute(
-                    update(messages)
-                    .where(messages.c.msg_id.in_(refs))
-                    .where(messages.c.visibility < int(level))
-                    .values(visibility=int(level))
-                )
+                queries.raise_visibility(conn, refs, int(level))
         return True
 
     def mark_supersede_candidate(self, memory_id: str, source_id: str) -> bool:
@@ -2285,27 +1976,16 @@ class MemoryStore:
         """Pending rows marked by the novelty stage; reflection resolves them (ADR-0010)."""
         if self.db is None:
             return []
-        statement = (
-            select(memories)
-            .where(memories.c.state == "pending")
-            .order_by(memories.c.created_at)
-            .limit(max(1, int(limit)))
-        )
-        statement = self._apply_scope(statement, scope)
-        return [row for row in self.db.fetch_all(statement) if _marked_supersede(row)]
+        with self.db.connect() as conn:
+            rows = queries.supersede_candidates(conn, scope, limit)
+        return [row for row in rows if _marked_supersede(row)]
 
     def reflection_rows(self, *, scope: str = "global", limit: int = 200) -> list[dict]:
         """Worker read of the base table: only `ok`/`staged` rows of one scope."""
         if self.db is None:
             return []
-        statement = (
-            select(memories)
-            .where(memories.c.state.in_(("ok", "staged")))
-            .order_by(memories.c.created_at)
-            .limit(max(1, int(limit)))
-        )
-        statement = self._apply_scope(statement, scope)
-        return [dict(row) for row in self.db.fetch_all(statement)]
+        with self.db.connect() as conn:
+            return queries.reflection_rows(conn, scope, limit)
 
     # ------------------------------------------------------------ reflection
 
@@ -2417,31 +2097,23 @@ class MemoryStore:
         moment = time.time() if now is None else float(now)
         with self.db.connect() as conn:
             self._fence(conn, "mark_disputed")
-            rows = (
-                conn.execute(
-                    select(memories)
-                    .where(memories.c.id.in_((left, right)))
-                    .with_for_update()
-                )
-                .mappings()
-                .all()
-            )
+            rows = queries.pair_locked(conn, left, right)
             if len(rows) != 2 or any(str(row.get("state")) != "ok" for row in rows):
                 return False
             # Pair by id: `IN (left, right)` returns rows in no guaranteed order, so
             # positional pairing can point a row at itself and leave both sides unweakened.
             for row in rows:
                 other = right if str(row["id"]) == left else left
-                conn.execute(
-                    memories.update()
-                    .where(memories.c.id == row["id"])
-                    .values(
-                        dispute_state="open",
-                        disputed_with=other,
-                        dispute_reason=str(reason or "deterministic:contradiction")[:120],
-                        disputed_at=moment,
-                        updated_at=moment,
-                    )
+                queries.update_memory(
+                    conn,
+                    str(row["id"]),
+                    {
+                        "dispute_state": "open",
+                        "disputed_with": other,
+                        "dispute_reason": str(reason or "deterministic:contradiction")[:120],
+                        "disputed_at": moment,
+                        "updated_at": moment,
+                    },
                 )
         return True
 
@@ -2465,7 +2137,7 @@ class MemoryStore:
         now = time.time()
         with self.db.connect() as conn:
             self._fence(conn, "resolve_dispute")
-            for memory_id, _other in ((left, right), (right, left)):
+            for memory_id in (left, right):
                 values: dict = {
                     "dispute_state": "resolved",
                     "dispute_reason": str(reason or "dispute_resolved")[:120],
@@ -2478,9 +2150,7 @@ class MemoryStore:
                         pinned=False,
                         expires_at=self._policy.superseded_expiry(now),
                     )
-                conn.execute(
-                    memories.update().where(memories.c.id == memory_id).values(**values)
-                )
+                queries.update_memory(conn, memory_id, values)
         return True
 
     def stale_disputes(self, *, ttl_days: float = 30, now: float | None = None) -> int:
@@ -2491,28 +2161,11 @@ class MemoryStore:
         cutoff = moment - float(ttl_days) * DAY
         with self.db.connect() as conn:
             self._fence(conn, "stale_disputes")
-            rows = (
-                conn.execute(
-                    select(memories)
-                    .where(
-                        memories.c.dispute_state == "open",
-                        memories.c.disputed_at <= cutoff,
-                    )
-                    .with_for_update()
-                )
-                .mappings()
-                .all()
-            )
+            rows = queries.open_dispute_rows(conn, cutoff)
             for row in rows:
                 values: dict = {"dispute_state": "stale", "updated_at": moment}
                 partner = self._resolve_id(str(row.get("disputed_with") or ""))
-                other = None
-                if partner:
-                    other = (
-                        conn.execute(select(memories).where(memories.c.id == partner))
-                        .mappings()
-                        .first()
-                    )
+                other = queries.unlocked(conn, partner) if partner else None
                 if other is not None and int(row.get("trust") or 0) > int(
                     other.get("trust") or 0
                 ):
@@ -2522,9 +2175,7 @@ class MemoryStore:
                         pinned=False,
                         expires_at=self._policy.unlabeled_expiry(moment),
                     )
-                conn.execute(
-                    memories.update().where(memories.c.id == row["id"]).values(**values)
-                )
+                queries.update_memory(conn, str(row["id"]), values)
         return len(rows)
 
     # ----------------------------------------------------------- soul rules
@@ -2545,18 +2196,9 @@ class MemoryStore:
             body = _flat(rule)
             if not body or SENSITIVE.search(body):
                 continue
-            seen = self.db.fetch_one(
-                select(memories.c.id)
-                .where(
-                    memories.c.state == "ok",
-                    memories.c.via == "soul_doc",
-                    memories.c.text == body,
-                    memories.c.asserted_at >= day_start,
-                )
-                .limit(1)
-            )
-            if seen:
-                continue
+            with self.db.connect() as conn:
+                if queries.soul_rule_seen(conn, body, day_start):
+                    continue
             written.append(
                 self.write(
                     body,
@@ -2583,13 +2225,8 @@ class MemoryStore:
         if self.db is None:
             return 0
         moment = time.time() if now is None else float(now)
-        rows = self.db.fetch_all(
-            select(memories).where(
-                memories.c.state == "ok",
-                memories.c.via == "soul_doc",
-                memories.c.kind != "rule",
-            )
-        )
+        with self.db.connect() as conn:
+            rows = queries.soul_rule_rows(conn)
         groups: dict[str, list[dict]] = {}
         for row in rows:
             key = " ".join(str(row.get("text") or "").lower().split())
@@ -2609,15 +2246,13 @@ class MemoryStore:
             ids = [str(row["id"]) for row in group]
             with self.db.connect() as conn:
                 self._fence(conn, "promote_soul_rules")
-                conn.execute(
-                    memories.update()
-                    .where(memories.c.id.in_(ids))
-                    .values(
-                        kind="rule",
-                        pinned=plan.pinned,
-                        expires_at=plan.expires_at,
-                        updated_at=moment,
-                    )
+                queries.set_kind_and_expiry(
+                    conn,
+                    ids,
+                    kind="rule",
+                    pinned=plan.pinned,
+                    expires_at=plan.expires_at,
+                    moment=moment,
                 )
             digest = _digest(body)[:16]
             ActionLedger(self.db).log_action(
@@ -2637,12 +2272,8 @@ class MemoryStore:
         """
         if self.db is None:
             return []
-        rows = self.db.fetch_all(
-            select(memories)
-            .where(memories.c.dispute_state == "open")
-            .order_by(memories.c.disputed_at, memories.c.id)
-            .limit(max(1, int(limit)))
-        )
+        with self.db.connect() as conn:
+            rows = queries.open_disputes(conn, limit)
         found: dict[tuple[str, str], dict] = {}
         for row in rows:
             partner = self._base_row(str(row.get("disputed_with") or ""))
@@ -2674,20 +2305,8 @@ class MemoryStore:
         if self.db is None or not str(subject_id or "").strip():
             return 0
         moment = time.time() if now is None else float(now)
-        day_start = moment - (moment % DAY)
-        left = cast(memories.c.id, String)
-        right = cast(memories.c.disputed_with, String)
-        pair = func.concat(func.least(left, right), "|", func.greatest(left, right))
-        found = self.db.fetch_one(
-            select(func.count(func.distinct(pair)))
-            .select_from(memories)
-            .where(
-                memories.c.subject_id == str(subject_id),
-                memories.c.dispute_asked_at.is_not(None),
-                memories.c.dispute_asked_at >= day_start,
-            )
-        )
-        return int(next(iter(found.values()), 0) or 0) if found else 0
+        with self.db.connect() as conn:
+            return queries.disputes_asked_today(conn, subject_id, moment)
 
     def mark_dispute_asked(
         self, memory_ids: Sequence[str], *, now: float | None = None
@@ -2736,12 +2355,8 @@ class MemoryStore:
         """The threads a person is a member of: the membership source for group retrieval."""
         if self.db is None or not str(person_id or "").strip():
             return set()
-        rows = self.db.fetch_all(
-            select(thread_people.c.thread_id).where(
-                thread_people.c.person_id == str(person_id)
-            )
-        )
-        return {str(row["thread_id"]) for row in rows}
+        with self.db.connect() as conn:
+            return queries.threads_of(conn, person_id)
 
     def veto_subject(self, subject_id: str, *, by: str = "") -> int:
         """A subject veto wins across every scope: the rows disappear from retrieval."""
