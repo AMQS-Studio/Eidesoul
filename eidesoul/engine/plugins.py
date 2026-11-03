@@ -585,7 +585,7 @@ def _fetch_artifact(settings: PluginLoader, name: str) -> bytes:
     if "://" in source:
         url = f"{source}/{name}.tar.gz"
         try:
-            with urllib.request.urlopen(url, timeout=FETCH_TIMEOUT) as response:  # noqa: S310
+            with urllib.request.urlopen(url, timeout=FETCH_TIMEOUT) as response:
                 data = response.read(ARTIFACT_LIMIT + 1)
         except (urllib.error.URLError, OSError, ValueError) as exc:
             reason = getattr(exc, "reason", exc)

@@ -207,7 +207,8 @@ def test_missing_explicit_runtime_does_not_raise(tmp_path: Path, monkeypatch) ->
     result = run(make_ctx(tmp_path, runtime="docker"))
 
     assert calls == []
-    assert "docker" in result and "config.yaml" in result
+    assert "docker" in result
+    assert "config.yaml" in result
 
 
 def test_timeout_kills_process(tmp_path: Path, monkeypatch) -> None:

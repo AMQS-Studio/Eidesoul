@@ -190,7 +190,8 @@ def main() -> int:
                 "prompt_budget": budget,
                 "decision_shift": shift,
             }
-            args.json.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+            text = json.dumps(payload, ensure_ascii=False, indent=2)
+            args.json.write_text(text, encoding="utf-8")
             print(f"json    : {args.json}")
     finally:
         asyncio.run(memory.close())

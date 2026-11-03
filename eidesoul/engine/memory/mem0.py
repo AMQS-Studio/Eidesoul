@@ -12,7 +12,7 @@ import logging
 import os
 import re
 import time
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 from openai import OpenAI
@@ -90,7 +90,7 @@ def _created(item: dict) -> float | None:
     try:
         parsed = datetime.fromisoformat(str(raw).replace("Z", "+00:00"))
         if parsed.tzinfo is None:
-            parsed = parsed.replace(tzinfo=timezone.utc)
+            parsed = parsed.replace(tzinfo=UTC)
         return parsed.timestamp()
     except ValueError:
         return None

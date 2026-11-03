@@ -22,7 +22,7 @@ from eidesoul.engine.soul import Soul, language_line, normalize_language
 def test_language_line_variants() -> None:
     assert "Indonesian" in language_line(Soul(language="id"))
     assert language_line(Soul(language="en")) == "Reply in English."
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="available"):
         language_line(Soul(language="jv"))
 
 
@@ -32,7 +32,7 @@ def test_normalize_language_aliases() -> None:
     assert normalize_language("in") == "id"
     assert normalize_language("auto") == "id"
     assert normalize_language("") == "id"
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="available"):
         normalize_language("jv")
 
 
@@ -95,7 +95,8 @@ def test_status_and_whoami(tmp_path, monkeypatch) -> None:
     assert "Database:" in status
     assert "Memory:" in status
     assert "Approvals: 0 pending" in status
-    assert "Soul:" in status and "language id" in status
+    assert "Soul:" in status
+    assert "language id" in status
     assert "• Language: id" in status
     assert "Privacy: enabled=True" in status
 
@@ -144,8 +145,11 @@ def test_status_gives_a_non_administrator_only_rough_buckets(tmp_path, monkeypat
         )
     )
 
-    assert "• Mode:" in text and "• Uptime:" in text
-    assert "Database:" not in text and "Cost:" not in text and "Turn latency" not in text
+    assert "• Mode:" in text
+    assert "• Uptime:" in text
+    assert "Database:" not in text
+    assert "Cost:" not in text
+    assert "Turn latency" not in text
 
 
 def test_a_context_without_an_inbound_defaults_to_dm(tmp_path, monkeypatch) -> None:

@@ -66,7 +66,7 @@ def percentile(values: list[float], share: float) -> float:
     if not values:
         return 0.0
     ordered = sorted(float(value) for value in values)
-    index = min(len(ordered) - 1, max(0, int(round(share * (len(ordered) - 1)))))
+    index = min(len(ordered) - 1, max(0, round(share * (len(ordered) - 1))))
     return ordered[index]
 
 
@@ -75,8 +75,8 @@ def latency(values: list[float]) -> tuple[int, int, float]:
     if not values:
         return 0, 0, 0.0
     return (
-        int(round(percentile(values, 0.50))),
-        int(round(percentile(values, 0.95))),
+        round(percentile(values, 0.50)),
+        round(percentile(values, 0.95)),
         float(median(values)),
     )
 

@@ -72,7 +72,7 @@ def test_list_models_hints_when_the_provider_exposes_no_list(tmp_path, monkeypat
         error=models.urllib.error.HTTPError("http://x/models", 403, "Forbidden", None, None),
     )
 
-    with pytest.raises(ConfigError, match="set engine.llm.model from the provider's docs"):
+    with pytest.raises(ConfigError, match=r"set engine\.llm\.model from the provider's docs"):
         models.list_models(build_config(tmp_path))
 
 

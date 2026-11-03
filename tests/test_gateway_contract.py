@@ -76,7 +76,8 @@ def test_core_only_gateway_runs_a_full_text_turn(tmp_path) -> None:
 
     actions = asyncio.run(env.agent.handle(inbound_message("halo"), gateway))
 
-    assert gateway.sent and gateway.sent[0][1]
+    assert gateway.sent
+    assert gateway.sent[0][1]
     assert [action.capability for action in actions] == ["send_text"]
     assert actions[0].target == "chat"
     assert actions[0].approval_class == "consent"
@@ -100,13 +101,15 @@ def test_without_rich_typing_is_skipped_and_media_falls_back_to_text(tmp_path) -
     assert result == "ok: file sent: catatan.txt"
     assert not hasattr(gateway, "files")
     fallback = gateway.sent[-1][1]
-    assert "catatan.txt" in fallback and "isi laporan" in fallback
+    assert "catatan.txt" in fallback
+    assert "isi laporan" in fallback
 
 
 def test_with_rich_a_file_is_a_file_and_typing_is_real(tmp_path) -> None:
     gateway = RichFakeGateway()
     env = make_agent(tmp_path, gateway=gateway)
-    assert isinstance(gateway, Rich) and not isinstance(gateway, Directory)
+    assert isinstance(gateway, Rich)
+    assert not isinstance(gateway, Directory)
     (env.config.workspace / "public").mkdir(parents=True, exist_ok=True)
     note = env.config.workspace / "public" / "catatan.txt"
     note.write_text("isi laporan", encoding="utf-8")
@@ -114,7 +117,8 @@ def test_with_rich_a_file_is_a_file_and_typing_is_real(tmp_path) -> None:
     asyncio.run(env.agent.handle(inbound_message("halo"), gateway))
     asyncio.run(env.agent.send_file("chat", note, gateway=gateway))
 
-    assert gateway.files and gateway.files[0][1].name == "catatan.txt"
+    assert gateway.files
+    assert gateway.files[0][1].name == "catatan.txt"
     assert ("chat", True) in gateway.typing_events
     assert gateway.typing_events[-1] == ("chat", False)
 
@@ -299,7 +303,8 @@ def test_the_harness_body_completes_a_turn_and_returns_its_actions(tmp_path) -> 
 
     actions = asyncio.run(gateway.run(env.agent))
 
-    assert actions and actions[0].capability == "send_text"
+    assert actions
+    assert actions[0].capability == "send_text"
     assert gateway.actions == actions
     assert gateway.sent == [str(action.payload) for action in actions]
     assert "run" in env.agent.tools.names()

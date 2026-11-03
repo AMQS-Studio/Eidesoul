@@ -99,7 +99,12 @@ def pn_jid(db: Database, jid: str) -> str:
 
 def refresh_sender_names(db: Database) -> int:
     rows = db.fetch_all(
-        select(messages.c.id, messages.c.sender_address, messages.c.sender_name, messages.c.sender_id)
+        select(
+            messages.c.id,
+            messages.c.sender_address,
+            messages.c.sender_name,
+            messages.c.sender_id,
+        )
         .where(and_(messages.c.sender_address != "", messages.c.outgoing.is_(False)))
     )
     changed = 0
@@ -170,7 +175,14 @@ def set_chat_name(db: Database, thread_id: str, name: str) -> None:
         db.upsert(
             conn,
             threads,
-            [{"thread_id": thread_id, "name": value, "reset_ts": 0.0, "kind": "group" if thread_id.endswith("@g.us") else "dm"}],
+            [
+                {
+                    "thread_id": thread_id,
+                    "name": value,
+                    "reset_ts": 0.0,
+                    "kind": "group" if thread_id.endswith("@g.us") else "dm",
+                }
+            ],
             ["thread_id"],
             update={"name": value},
         )
@@ -279,12 +291,14 @@ def group_name(info) -> str:
     return " ".join(str(getattr(getattr(info, "GroupName", None), "Name", "") or "").split())
 
 
-async def sync_group_names(client, db: Database, timeout: float = GROUP_LIST_TIMEOUT) -> int:
+async def sync_group_names(
+    client, db: Database, timeout_seconds: float = GROUP_LIST_TIMEOUT
+) -> int:
     getter = getattr(client, "get_joined_groups", None)
     if not callable(getter):
         return 0
     try:
-        found = await asyncio.wait_for(getter(), timeout)
+        found = await asyncio.wait_for(getter(), timeout_seconds)
     except Exception:
         log.warning("failed to fetch the group list", exc_info=True)
         return 0

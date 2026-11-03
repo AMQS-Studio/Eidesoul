@@ -27,7 +27,9 @@ def _search(ctx: CommandContext):
             person_id=getattr(ctx.inbound, "actor", "") if ctx.inbound else "",
             direct=bool((getattr(ctx.inbound, "hints", None) or {}).get("dm", False)),
         )
-        return await execute(specs, "web_search", {"query": query, "max_results": int(results)}, tool_ctx)
+        return await execute(
+            specs, "web_search", {"query": query, "max_results": int(results)}, tool_ctx
+        )
 
     return search
 
@@ -55,7 +57,11 @@ async def konteks(ctx: CommandContext) -> str:
         block = currents.block(time.time(), 6)
         body = block or t("command.konteks.empty", lang)
         return "\n".join(
-            (t("command.konteks.header", lang), body, t("command.konteks.updated", lang, count=count))
+            (
+                t("command.konteks.header", lang),
+                body,
+                t("command.konteks.updated", lang, count=count),
+            )
         )
     block = currents.block(time.time(), 6)
     return block or t("command.konteks.empty", lang)

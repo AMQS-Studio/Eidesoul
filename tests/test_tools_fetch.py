@@ -2,6 +2,7 @@
 
 
 import asyncio
+from typing import ClassVar
 
 import pytest
 from support import build_config, role
@@ -49,7 +50,7 @@ def test_redirect_to_a_private_address_is_rejected(monkeypatch) -> None:
             return self.body[:size]
 
     class Connection:
-        responses: list[Response] = []
+        responses: ClassVar[list[Response]] = []
 
         def __init__(self, host, port, address, timeout, *, https):
             self.host = host
@@ -82,7 +83,9 @@ def test_untrusted_header_and_injection_flag(tmp_path, monkeypatch) -> None:
 
     class Response:
         status = 200
-        headers = {"Content-Type": "text/html; charset=utf-8"}
+        headers: ClassVar[dict[str, str]] = {
+            "Content-Type": "text/html; charset=utf-8"
+        }
 
         def getheader(self, name):
             return self.headers.get(name)

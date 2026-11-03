@@ -40,7 +40,8 @@ def searx_hits(payload: dict, limit: int) -> list[dict]:
 
 def _searx_sync(base_url: str, query: str, limit: int, timeout: float) -> list[dict]:
     url = f"{base_url}/search?" + urllib.parse.urlencode({"q": query, "format": "json"})
-    request = urllib.request.Request(url, headers={"User-Agent": USER_AGENT, "Accept": "application/json"})
+    headers = {"User-Agent": USER_AGENT, "Accept": "application/json"}
+    request = urllib.request.Request(url, headers=headers)
     with urllib.request.urlopen(request, timeout=timeout) as response:
         return searx_hits(json.load(response), limit)
 

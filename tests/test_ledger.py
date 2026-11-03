@@ -43,7 +43,8 @@ def test_actions_context_is_internal_and_hides_the_requester(tmp_path) -> None:
 
     assert lines[0].startswith("## Recent actions")
     assert "never reveal who requested them" in lines[0]
-    assert lines[1].startswith("- [") and lines[1].endswith("] teks -> chat: kirim stiker")
+    assert lines[1].startswith("- [")
+    assert lines[1].endswith("] teks -> chat: kirim stiker")
     assert "Grup A" not in text
     assert "kirim stiker dong" not in text
 
@@ -58,7 +59,8 @@ def test_actions_context_caps_lines_and_keeps_failures(tmp_path) -> None:
 
     assert len(lines) == 11  # header + at most 10 actions
     assert lines[1].startswith("- [")
-    assert "chat-x" in lines[1] and "gagal — error" in lines[1]
+    assert "chat-x" in lines[1]
+    assert "gagal — error" in lines[1]
     assert "chat-0" not in ledger.actions_context()
 
 

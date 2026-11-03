@@ -45,7 +45,10 @@ def sniff_mime(raw: bytes) -> str:
 
 def _fresh(path: Path, now: float) -> bool:
     try:
-        return path.is_file() and path.stat().st_size > 0 and now - path.stat().st_mtime < AVATAR_TTL
+        if not path.is_file():
+            return False
+        found = path.stat()
+        return found.st_size > 0 and now - found.st_mtime < AVATAR_TTL
     except OSError:
         return False
 

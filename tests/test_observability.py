@@ -57,9 +57,13 @@ def test_json_lines_have_the_mandatory_fields() -> None:
     finally:
         logging.getLogger().removeHandler(handler)
     found = next(line for line in lines if line["event"] == "turn.done")
-    assert found["ts"] and found["level"] == "INFO" and found["logger"] == "eidesoul.test"
-    assert found["turn_id"] == "t-1" and found["thread_id"] == "th-1"
-    assert found["gateway"] == "cli" and found["duration_ms"] == 12
+    assert found["ts"]
+    assert found["level"] == "INFO"
+    assert found["logger"] == "eidesoul.test"
+    assert found["turn_id"] == "t-1"
+    assert found["thread_id"] == "th-1"
+    assert found["gateway"] == "cli"
+    assert found["duration_ms"] == 12
     assert "prompt" not in json.dumps(found)
 
 
@@ -75,8 +79,10 @@ def test_json_formatter_redacts_credentials() -> None:
         found = handler.records()[0]
     finally:
         logging.getLogger().removeHandler(handler)
-    assert "supersecret" not in raw and "sk-abcdefghijkl" not in raw
-    assert found["level"] == "WARNING" and found["turn_id"] == "t-2"
+    assert "supersecret" not in raw
+    assert "sk-abcdefghijkl" not in raw
+    assert found["level"] == "WARNING"
+    assert found["turn_id"] == "t-2"
 
 
 def test_a_turn_logs_and_cost_rows_share_one_turn_id(tmp_path, monkeypatch) -> None:
@@ -112,7 +118,8 @@ def test_a_turn_logs_and_cost_rows_share_one_turn_id(tmp_path, monkeypatch) -> N
     assert secret not in raw
 
     rows = db.fetch_all(select(llm_calls).order_by(llm_calls.c.id))
-    assert rows and {row["turn_id"] for row in rows} == {turn_id}
+    assert rows
+    assert {row["turn_id"] for row in rows} == {turn_id}
     assert all(int(row["tokens_in"] or 0) > 0 for row in rows)
     assert {"decision", "reply"} <= {row["purpose"] for row in rows}
     assert db.fetch_one(select(turns).where(turns.c.id == turn_id)) is not None
@@ -120,7 +127,8 @@ def test_a_turn_logs_and_cost_rows_share_one_turn_id(tmp_path, monkeypatch) -> N
     observability.clear()
     asyncio.run(llm.complete("s", "u", purpose="digest"))
     background = db.fetch_all(select(llm_calls).order_by(llm_calls.c.id.desc()).limit(1))[0]
-    assert background["turn_id"] is None and background["purpose"] == "digest"
+    assert background["turn_id"] is None
+    assert background["purpose"] == "digest"
 
 
 class FakeClient:
@@ -231,15 +239,19 @@ def test_status_reports_real_counters_and_rough_buckets(tmp_path) -> None:
     assert "• Turn latency: p50 30 ms, p95 50 ms (5 turns)" in text
     assert "2 calls, 40 in / 20 out (24h), 30 per turn" in text
     assert "Corpus notices: 1 in 24h" in text
-    assert "Lease generation" in text and "Schema: version" in text
+    assert "Lease generation" in text
+    assert "Schema: version" in text
     assert "Automation: 0 active" in text
     assert "Lexicon: 0 warning(s)" in text
     assert "Search:" in text
 
     rough = asyncio.run(run((Role("member", tools=("read",), commands=("status",)),)))
-    assert "Activity:" in rough and "Uptime:" in rough
-    assert "Turn latency" not in rough and "• Turns:" not in rough
-    assert "Cost:" not in rough and "Database:" not in rough
+    assert "Activity:" in rough
+    assert "Uptime:" in rough
+    assert "Turn latency" not in rough
+    assert "• Turns:" not in rough
+    assert "Cost:" not in rough
+    assert "Database:" not in rough
 
 
 def test_latency_helpers_are_honest_when_empty() -> None:
@@ -279,5 +291,6 @@ def test_llm_calls_retention_deletes_old_rows(tmp_path) -> None:
     store = MemoryStore(db, config)
     asyncio.run(store.purge(now=now))
     remaining = db.fetch_all(select(llm_calls))
-    assert len(remaining) == 1 and float(remaining[0]["ts"]) >= now - 86400
+    assert len(remaining) == 1
+    assert float(remaining[0]["ts"]) >= now - 86400
 

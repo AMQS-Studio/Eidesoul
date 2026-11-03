@@ -47,9 +47,11 @@ def test_opposite_polarity_opens_a_dispute_and_hides_both(tmp_path) -> None:
 
     assert report.disputes == 1
     states = {str(row["id"]): row["dispute_state"] for row in rows(memory)}
-    assert states[left] == "open" and states[right] == "open"
+    assert states[left] == "open"
+    assert states[right] == "open"
     assert asyncio.run(memory.search("kopi", person_id=PERSON, thread_id=THREAD)) == []
-    assert memory.get(left) is None and memory.get(right) is None
+    assert memory.get(left) is None
+    assert memory.get(right) is None
 
 
 def test_duplicates_merge_into_one_t2_derivative_and_never_chain(tmp_path) -> None:
@@ -157,7 +159,8 @@ def test_a_pass_reports_the_pairs_it_opened(tmp_path) -> None:
     assert pair["subject_id"] == PERSON
 
     open_pairs = memory.open_disputes()
-    assert len(open_pairs) == 1 and set(open_pairs[0]["ids"]) == {left, right}
+    assert len(open_pairs) == 1
+    assert set(open_pairs[0]["ids"]) == {left, right}
     assert memory.disputes_asked_today(PERSON) == 0
     assert memory.mark_dispute_asked(pair["ids"]) == 2
     assert memory.disputes_asked_today(PERSON) == 1
@@ -191,5 +194,6 @@ def test_the_worker_asks_one_question_per_pass(tmp_path) -> None:
     )
 
     assert "disputes 1" in result
-    assert len(asked) == 1 and asked[0][0] == PERSON
+    assert len(asked) == 1
+    assert asked[0][0] == PERSON
     assert memory.disputes_asked_today(PERSON) == 0  # asking is the agent's side effect

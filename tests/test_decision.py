@@ -45,7 +45,9 @@ def test_parse_decision_valid() -> None:
     parsed = parse_decision(VALID)
 
     assert parsed is not None
-    assert parsed.addressed == "me" and parsed.act == "reply" and parsed.mode == "daily"
+    assert parsed.addressed == "me"
+    assert parsed.act == "reply"
+    assert parsed.mode == "daily"
     assert parsed.bubbles == 2
     assert parsed.appraisal.label == "warmth"
     assert parsed.appraisal.dP == 0.2
@@ -73,9 +75,11 @@ def test_parse_decision_clamps_and_truncates() -> None:
     assert parsed is not None
     assert parsed.bubbles == 3
     assert parsed.appraisal.label == "neutral"
-    assert parsed.appraisal.dP == -0.4 and parsed.appraisal.dA == 0.4
+    assert parsed.appraisal.dP == -0.4
+    assert parsed.appraisal.dA == 0.4
     assert len(parsed.appraisal.note) == 120
-    assert parsed.relationship.trust == -0.15 and parsed.relationship.annoyance == 0.15
+    assert parsed.relationship.trust == -0.15
+    assert parsed.relationship.annoyance == 0.15
     assert len(parsed.reason) == 80
 
 
@@ -106,10 +110,12 @@ def test_context_includes_emotion_relationship_and_transcript() -> None:
 
     assert "guarded, energized, balanced" in text
     assert "strong hostility pulse" in text
-    assert "P -0.3" in text and "trust New" in text
+    assert "P -0.3" in text
+    assert "trust New" in text
     assert "hostility: dihina (sakit)" in text
     assert "Fahri (member): baru, kesal 0.3" in text
-    assert "Fahri: halo" in text and "kamu (eidesoul): hai" in text
+    assert "Fahri: halo" in text
+    assert "kamu (eidesoul): hai" in text
     assert "Fahri: kamu culun" in text
     assert "real mention of you" in text
 
@@ -166,13 +172,16 @@ def test_decision_uses_one_llm_call_with_full_context() -> None:
         )
     )
 
-    assert parsed is not None and parsed.act == "ignore" and parsed.addressed == "other"
+    assert parsed is not None
+    assert parsed.act == "ignore"
+    assert parsed.addressed == "other"
     assert len(llm.calls) == 1
     call = llm.calls[0]
     assert call["session"] == "eidesoul-decision-120@g.us"
     assert "Kamu Eidesoul." in call["system"]
     assert "You are Eidesoul, a soul in chat." in call["system"]
-    assert "panitia" in call["user"] and "Fahri: besok rapat jam 3" in call["user"]
+    assert "panitia" in call["user"]
+    assert "Fahri: besok rapat jam 3" in call["user"]
 
 
 def test_decision_retries_once_when_empty_then_gives_up() -> None:
@@ -206,7 +215,8 @@ def test_invalid_json_falls_back_to_ignore_without_regex() -> None:
     )
 
     assert parsed is not None
-    assert parsed.act == "ignore" and parsed.addressed == "unknown"
+    assert parsed.act == "ignore"
+    assert parsed.addressed == "unknown"
     assert parsed.reason == "invalid"
 
 
@@ -241,7 +251,9 @@ def test_direct_mention_is_forced_reply() -> None:
             reason="",
         )
     )
-    assert cold.act == "reply" and cold.tone == "hurt" and cold.reason == "direct"
+    assert cold.act == "reply"
+    assert cold.tone == "hurt"
+    assert cold.reason == "direct"
 
 
 def test_no_regex_mode_override() -> None:
@@ -250,7 +262,8 @@ def test_no_regex_mode_override() -> None:
 
     parsed = parse_decision(raw)
 
-    assert parsed is not None and parsed.mode == "professional"
+    assert parsed is not None
+    assert parsed.mode == "professional"
 
 
 def test_ground_tone_softens_cold_tone_when_mood_is_calm() -> None:

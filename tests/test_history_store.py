@@ -72,9 +72,11 @@ def test_upsert_keeps_richer_fields(tmp_path) -> None:
 
     item = store.find("chat", "a")
     assert item.text == "teks asli"
-    assert item.media is not None and item.media.filename == "a.png"
+    assert item.media is not None
+    assert item.media.filename == "a.png"
     assert item.media.ref == b"abc"
-    assert item.quote is not None and item.quote.text == "halo"
+    assert item.quote is not None
+    assert item.quote.text == "halo"
     assert store.message_count() == 1
 
 
@@ -215,8 +217,10 @@ def test_view_once_and_unreadable_flags_roundtrip(tmp_path) -> None:
     once = store.find("chat", "a")
     blank = store.find("chat", "b")
 
-    assert once.view_once is True and once.unreadable is False
-    assert blank.unreadable is True and blank.view_once is False
+    assert once.view_once is True
+    assert once.unreadable is False
+    assert blank.unreadable is True
+    assert blank.view_once is False
 
 
 def test_real_message_merge_replaces_the_unreadable_placeholder(tmp_path) -> None:
@@ -262,8 +266,10 @@ def test_intake_writes_the_pending_candidate_and_event(tmp_path) -> None:
 
     candidate = store.db.fetch_one(sql_text("SELECT * FROM memories"))
     event = store.db.fetch_one(sql_text("SELECT * FROM memory_events"))
-    assert candidate["state"] == "pending" and candidate["level"] is None
-    assert candidate["trust"] == 3 and candidate["person_id"] == "628222"
+    assert candidate["state"] == "pending"
+    assert candidate["level"] is None
+    assert candidate["trust"] == 3
+    assert candidate["person_id"] == "628222"
     assert candidate["refs"] == ["message:m1"]
     assert event["memory_id"] == candidate["id"]
     assert event["content"] == "aku suka kopi"

@@ -172,7 +172,7 @@ def embed(body: dict, path: Path = VECTORS) -> dict:
     built = {
         "version": int(body.get("version") or 1),
         "model": model,
-        "dim": int(len(vectors[0])),
+        "dim": len(vectors[0]),
         "vectors": {
             row["id"]: [round(float(value), 6) for value in vector]
             for row, vector in zip(found, vectors, strict=True)

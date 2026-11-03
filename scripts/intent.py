@@ -18,7 +18,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from eidesoul.engine.memory.intent import (  # noqa: E402
+from eidesoul.engine.memory.intent import (
     KINDS,
     LIBRARY,
     MIN_PROTOTYPES,

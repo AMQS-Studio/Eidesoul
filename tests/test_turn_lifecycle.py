@@ -11,13 +11,12 @@ from dataclasses import replace
 
 import pytest
 from sqlalchemy import select
-
 from support import FakeGateway, FakeLLM, HumanizeConfig, inbound_message, make_agent
 
 from eidesoul.engine.config import TurnConfig
-from eidesoul.engine.schema import turns
 from eidesoul.engine.i18n import t
 from eidesoul.engine.memory.ledger import OutboundLedger
+from eidesoul.engine.schema import turns
 
 DM = "628111@s.whatsapp.net"
 OTHER = "628222@s.whatsapp.net"
@@ -239,7 +238,8 @@ def test_stop_cancels_only_the_running_turn(tmp_path) -> None:
     assert turn["status"] == "interrupted"
     assert turn["last_error"] == "user_stop"
     assert t("command.stop.cancelled", lang) in [text for _, text, _ in env.gateway.sent]
-    assert env.gateway.sent and all(thread == DM for thread, _, _ in env.gateway.sent)
+    assert env.gateway.sent
+    assert all(thread == DM for thread, _, _ in env.gateway.sent)
 
 
 def test_stop_without_a_running_turn_answers_briefly(tmp_path) -> None:

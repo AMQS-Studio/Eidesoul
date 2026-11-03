@@ -30,7 +30,8 @@ def test_vad_mapping_is_negative_for_anger() -> None:
     point = VibeRunner.vad({"anger": 0.9, "joy": 0.1})
 
     assert point is not None
-    assert point[0] < 0.3 and point[1] > 0.7
+    assert point[0] < 0.3
+    assert point[1] > 0.7
 
 
 def test_vad_below_the_floor_is_neutral() -> None:

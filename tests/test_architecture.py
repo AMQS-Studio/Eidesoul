@@ -52,7 +52,7 @@ def watched_texts(node: ast.AST):
             yield child.lineno, child.id
         elif isinstance(child, ast.Attribute):
             yield child.lineno, child.attr
-        elif isinstance(child, ast.arg) or isinstance(child, ast.keyword) and child.arg:
+        elif isinstance(child, ast.arg) or (isinstance(child, ast.keyword) and child.arg):
             yield child.lineno, child.arg
         elif isinstance(child, ast.alias):
             yield child.lineno, child.name.rsplit(".", 1)[-1]
@@ -149,7 +149,7 @@ def test_percept_is_exactly_the_seam() -> None:
     assert fields == ["source", "thread", "actor", "kind", "payload", "hints", "raw"]
     action = [item.name for item in Action.__dataclass_fields__.values()]
     assert action == ["capability", "target", "payload", "approval_class"]
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="approval_class must be one of"):
         Action(capability="send_text", target="t", payload="p", approval_class="magic")
 
 
@@ -158,14 +158,17 @@ def test_the_three_protocols_accept_the_right_fakes() -> None:
 
     core = FakeGateway()
     assert isinstance(core, GatewayCore)
-    assert not isinstance(core, Rich) and not isinstance(core, Directory)
+    assert not isinstance(core, Rich)
+    assert not isinstance(core, Directory)
     assert core.chat_name("thread") == "Chat"
 
     rich = RichFakeGateway()
-    assert isinstance(rich, Rich) and not isinstance(rich, Directory)
+    assert isinstance(rich, Rich)
+    assert not isinstance(rich, Directory)
 
     directory = DirectoryFakeGateway(members=None)
-    assert isinstance(directory, Directory) and not isinstance(directory, Rich)
+    assert isinstance(directory, Directory)
+    assert not isinstance(directory, Rich)
     assert directory.participants("thread") is None
 
 

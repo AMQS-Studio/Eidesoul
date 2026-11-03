@@ -306,7 +306,9 @@ TOOL = Handler(
             },
             "extra": {
                 "type": "string",
-                "description": "One extra data field the requester asked for, rendered in the block.",
+                "description": (
+                    "One extra data field the requester asked for, rendered in the block."
+                ),
             },
             "relay_task": {
                 "type": "string",

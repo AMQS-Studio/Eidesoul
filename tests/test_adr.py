@@ -6,7 +6,6 @@ against a copy of the ADR home so a failure never edits the repository.
 """
 
 
-import importlib.util
 import shutil
 import subprocess
 import sys

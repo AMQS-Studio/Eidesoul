@@ -55,7 +55,10 @@ TOOL = Handler(
         "type": "object",
         "properties": {
             "path": {"type": "string", "description": "File path inside the workspace."},
-            "caption": {"type": "string", "description": "Optional caption (ignored for stickers)."},
+            "caption": {
+                "type": "string",
+                "description": "Optional caption (ignored for stickers).",
+            },
         },
         "required": ["path"],
         "additionalProperties": False,

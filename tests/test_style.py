@@ -161,7 +161,8 @@ def test_person_profile_learns_individual_style(tmp_path) -> None:
     short = store.person_profile("628111")
     long = store.person_profile("628222")
 
-    assert "median" in short and "lowercase" in short
+    assert "median" in short
+    assert "lowercase" in short
     assert short != long
     assert store.person_profile("628999") == ""
     store.close()
@@ -174,7 +175,8 @@ def test_profile_uses_live_stats_after_enough_samples(tmp_path) -> None:
 
     text = store.profile("c@g.us")
 
-    assert "median" in text and "particles:" in text
+    assert "median" in text
+    assert "particles:" in text
     store.close()
 
 

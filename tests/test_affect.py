@@ -110,7 +110,9 @@ def test_turn_start_binds_state_and_applies_decay(tmp_path) -> None:
     assert saved["identity"]["character_id"] == "soul"
     assert saved["identity"]["relationship_id"] == "soul"  # one heart for every chat
     assert saved["volatility_profile"] == "expressive"
-    assert start["summary"] and start["pulse"] and start["trust_tier"]
+    assert start["summary"]
+    assert start["pulse"]
+    assert start["trust_tier"]
     assert -1.0 <= float(start["pleasure"]) <= 1.0
 
     saved["emotion"]["pleasure"] = -0.8
@@ -202,7 +204,8 @@ def test_prompt_log_names_person_and_skips_internal_decay(tmp_path) -> None:
     assert "[Fahri, other chat]: dasar sampah" in dm
     assert "quiet drift" not in group  # internal decay is not a trigger
     log = store.turn_start(OTHER, "B3")["log"]
-    assert log and all(entry.get("event_type") != "pre_turn_decay" for entry in log)
+    assert log
+    assert all(entry.get("event_type") != "pre_turn_decay" for entry in log)
     assert any(entry.get("other_chat") is True for entry in log)
     store.close()
 
@@ -256,10 +259,12 @@ def test_prompt_contains_relationship_and_log(tmp_path) -> None:
     text = store.prompt(CHAT, FRIEND)
 
     assert "Fahri" in text
-    assert "hostility" in text and "kamu culun" in text
+    assert "hostility" in text
+    assert "kamu culun" in text
     assert "dia menghina aku" in text
     assert "suka ngejailin" in text
-    assert "trust=" not in text and "valence=" not in text
+    assert "trust=" not in text
+    assert "valence=" not in text
     store.close()
 
 
@@ -282,7 +287,8 @@ def test_pulse_returns_status_and_keeps_state(tmp_path) -> None:
 
     data = store.pulse(CHAT)
 
-    assert data["summary"] and data["trust_tier"]
+    assert data["summary"]
+    assert data["trust_tier"]
     assert read_state(store)["identity"]["status"] == "bound"
     store.close()
 
@@ -296,7 +302,8 @@ def test_pulse_skips_write_inside_same_bucket(tmp_path) -> None:
     data = store.pulse(CHAT)  # the next tick in the same 5-minute bucket
 
     assert state_updated_at(store) == before
-    assert data["trust_tier"] and data["summary"]
+    assert data["trust_tier"]
+    assert data["summary"]
     store.close()
 
 

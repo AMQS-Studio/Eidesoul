@@ -592,7 +592,7 @@ def make_runtime(
         encoding="utf-8",
     )
 
-    host, paths = load_host(base / "config.yaml")
+    _host, paths = load_host(base / "config.yaml")
     db = database()
     documents = DocumentStore(db, paths)
     documents.seed()

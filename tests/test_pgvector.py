@@ -65,10 +65,12 @@ def test_pgvector_nearest_neighbour_and_miss(tmp_path) -> None:
                 confirmed=True,
             )
         )
-        assert coffee and meeting
+        assert coffee
+        assert meeting
 
         hits = asyncio.run(backend.search("kopi hitam", scopes=("global",)))
-        assert hits and hits[0].id == coffee[0]
+        assert hits
+        assert hits[0].id == coffee[0]
         assert hits[0].text == "kopi hitam tanpa gula"
 
         # The stub space is lexical: a disjoint query is orthogonal, so nothing passes the

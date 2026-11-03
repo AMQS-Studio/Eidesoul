@@ -74,7 +74,8 @@ def test_a_missing_pack_fails_open(tmp_path, monkeypatch) -> None:
 def test_the_shipped_packs_cover_every_language() -> None:
     for code in ("en", "id"):
         pack = intent.load(code)
-        assert len(pack["remember"]) >= 6 and len(pack["forget"]) >= 6
+        assert len(pack["remember"]) >= 6
+        assert len(pack["forget"]) >= 6
         assert len(pack["negative"]) >= 6
 
 
@@ -107,7 +108,8 @@ def test_the_remember_hint_forces_core_without_pinning_a_plain_category(
         candidate.memory_id, level=2, confirmed=True, category=category, durability=durability
     )
     found = memory._base_row(candidate.memory_id)
-    assert found["durability"] == "core" and found["pinned"] is False
+    assert found["durability"] == "core"
+    assert found["pinned"] is False
 
     query(monkeypatch, (DIAGONAL, DIAGONAL))
     assert asyncio.run(worker._remember_hint({"text": "halo"}, verdict)) == (

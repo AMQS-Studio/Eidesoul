@@ -151,7 +151,8 @@ def test_one_occurrence_is_one_run_and_a_duplicate_tick_never_doubles(tmp_path) 
     found = runs(env)
     assert len(found) == 1
     assert found[0]["status"] == "succeeded"
-    assert first.get("succeeded") == 1 and second.get("materialized", 0) == 0
+    assert first.get("succeeded") == 1
+    assert second.get("materialized", 0) == 0
     assert [item[0] for item in env.gateway.sent] == [OWNER]
     assert occurrence_key(1, at(10)) == occurrence_key(1, at(10))
     delivered = env.db.fetch_all(select(outbound_messages))
@@ -180,7 +181,8 @@ def test_quiet_hours_skip_records_skipped_and_sends_nothing(tmp_path) -> None:
     asyncio.run(worker.run_once(now=at(23, 1)))
 
     found = runs(env)
-    assert found[0]["status"] == "skipped" and "quiet" in found[0]["detail"]
+    assert found[0]["status"] == "skipped"
+    assert "quiet" in found[0]["detail"]
     assert env.gateway.sent == []
 
 
@@ -193,7 +195,8 @@ def test_quiet_hours_defer_runs_once_at_the_window_end(tmp_path) -> None:
 
     asyncio.run(worker.run_once(now=at(23, 1)))
     deferred = runs(env)[0]
-    assert deferred["status"] == "queued" and deferred["deferred"] is True
+    assert deferred["status"] == "queued"
+    assert deferred["deferred"] is True
     assert deferred["scheduled_at"] == at(7, 0, day=2)
     assert env.gateway.sent == []
 
@@ -229,7 +232,8 @@ def test_global_kill_switch_stops_the_worker(tmp_path) -> None:
     report = asyncio.run(worker.run_once(now=at(10, 1)))
 
     assert report == {"reaped": 0, "materialized": 0, "missed": 0, "queued": 0, "skipped": 0}
-    assert runs(env) == [] and env.gateway.sent == []
+    assert runs(env) == []
+    assert env.gateway.sent == []
 
 
 def test_stopped_automation_cancels_a_queued_run(tmp_path) -> None:
@@ -273,11 +277,13 @@ def test_a_failing_step_retries_then_dead_letters(tmp_path) -> None:
     worker = AutomationWorker(env.agent, store=env.store)
 
     asyncio.run(worker.run_once(now=at(10, 1)))
-    assert runs(env)[0]["status"] == "queued" and runs(env)[0]["attempts"] == 1
+    assert runs(env)[0]["status"] == "queued"
+    assert runs(env)[0]["attempts"] == 1
 
     asyncio.run(worker.run_once(now=at(10, 1)))
     found = runs(env)[0]
-    assert found["status"] == "failed" and found["attempts"] == 2
+    assert found["status"] == "failed"
+    assert found["attempts"] == 2
     assert "attempts exhausted" in found["detail"]
 
 
@@ -293,12 +299,14 @@ def test_relay_asks_and_refuses_without_a_grant(tmp_path) -> None:
     asyncio.run(worker.run_once(now=at(10, 1)))
 
     found = runs(env)[0]
-    assert found["status"] == "skipped" and "consent asked" in found["detail"]
+    assert found["status"] == "skipped"
+    assert "consent asked" in found["detail"]
     grant, reason = RelayStore(env.db).check(
         task_id="task-1", from_person=OWNER, to_person="629999"
     )
     # The refused row is a real decision (`mode='none'`), so its reason is the honest one.
-    assert grant is None and reason
+    assert grant is None
+    assert reason
     assert env.agent.approvals.count_pending() == 1
     assert [item[0] for item in env.gateway.sent] == [OWNER]
 
@@ -342,7 +350,8 @@ def test_catch_up_window_missed_is_recorded_not_sent(tmp_path) -> None:
     asyncio.run(worker.run_once(now=at(10, 30)))
 
     found = runs(env)
-    assert len(found) == 1 and found[0]["status"] == "missed"
+    assert len(found) == 1
+    assert found[0]["status"] == "missed"
     assert "catch-up" in found[0]["detail"]
     assert found[0]["apology_sent_at"] is not None
     # The only outbound message is the owner apology, never the stale task itself.
@@ -387,7 +396,8 @@ def test_clean_shutdown_marks_interrupted_and_boot_resumes_it(tmp_path) -> None:
     row = env.store.get(automation_id)
     env.store._insert_run(row, at(10), "queued", "", at(9, 55))
     claimed = env.store.claim(at(10, 1), worker="w", limit=1)
-    assert claimed and runs(env)[0]["status"] == "claimed"
+    assert claimed
+    assert runs(env)[0]["status"] == "claimed"
 
     assert env.store.interrupt(now=at(10, 2)) == 1
     assert runs(env)[0]["status"] == "interrupted"
@@ -400,8 +410,10 @@ def test_describe_names_event_steps_and_policy(tmp_path) -> None:
     from eidesoul.engine.automation import validate_manifest
 
     described = describe(validate_manifest(manifest(), env.agent.config.automations))
-    assert "at 10:00" in described and "compose -> send" in described
-    assert "budget 4/day" in described and "owner 628111" in described
+    assert "at 10:00" in described
+    assert "compose -> send" in described
+    assert "budget 4/day" in described
+    assert "owner 628111" in described
 
 
 def test_next_after_handles_time_lists_and_day_filters() -> None:
@@ -423,15 +435,18 @@ def test_stats_counts_real_rows(tmp_path) -> None:
     asyncio.run(worker.run_once(now=at(10, 1)))
 
     stats = env.store.stats(at(10, 2))
-    assert stats["active"] == 1 and stats["runs_total"] == 1
-    assert stats["runs.succeeded"] == 1 and stats["missed"] == 0
+    assert stats["active"] == 1
+    assert stats["runs_total"] == 1
+    assert stats["runs.succeeded"] == 1
+    assert stats["missed"] == 0
 
 
 def test_a_row_survives_a_new_store_instance(tmp_path) -> None:
     env = build(tmp_path)
     automation_id = create(env, manifest(), now=at(9, 50))
     reloaded = AutomationStore(env.db, env.agent.config.automations).get(automation_id)
-    assert reloaded is not None and reloaded["state"] == "active"
+    assert reloaded is not None
+    assert reloaded["state"] == "active"
     assert reloaded["event"]["at"] == ["10:00"]
     assert float(reloaded["next_occurrence"]) == at(10)
 
@@ -440,7 +455,8 @@ def test_automation_tables_follow_the_migration(tmp_path) -> None:
     env = build(tmp_path)
     create(env, manifest(), now=at(9, 50))
     rows = env.db.fetch_all(select(automations))
-    assert len(rows) == 1 and rows[0]["owner"] == OWNER
+    assert len(rows) == 1
+    assert rows[0]["owner"] == OWNER
     assert rows[0]["owner_roles_at_creation"] == ["member"]
     assert time.time() > 0
 

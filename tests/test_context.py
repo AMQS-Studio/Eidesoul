@@ -232,7 +232,8 @@ def test_mark_deleted_falls_back_to_the_archive(tmp_path) -> None:
 
     assert windows.mark_deleted("chat", "a", "628999@s.whatsapp.net", "Ani") is True
     item = store.find("chat", "a")
-    assert item.deleted is True and item.deleted_admin is True
+    assert item.deleted is True
+    assert item.deleted_admin is True
     assert windows.mark_deleted("chat", "hilang", "628999@s.whatsapp.net", "Ani") is False
 
 

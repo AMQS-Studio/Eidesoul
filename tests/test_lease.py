@@ -22,7 +22,8 @@ def test_acquire_renew_release(tmp_path) -> None:
     db = database()
     first = lease(db, "a")
     holder = first.acquire()
-    assert holder is not None and holder.instance_id == "a"
+    assert holder is not None
+    assert holder.instance_id == "a"
     assert holder.generation == 1
     assert first.acquire() is not None
     assert first.generation == 2  # every acquisition raises the fencing token
@@ -42,7 +43,8 @@ def test_second_instance_stands_by_and_takeover(tmp_path) -> None:
     assert second.holder().instance_id == "a"
 
     taken = second.acquire(takeover=True)
-    assert taken is not None and taken.instance_id == "b"
+    assert taken is not None
+    assert taken.instance_id == "b"
     assert taken.generation == 2
     assert first.renew() is False
     first.release()  # only the generation owner may release: this is a no-op
@@ -101,7 +103,8 @@ def test_concurrent_acquire_has_exactly_one_winner(tmp_path) -> None:
     winners = [name for name, holder in results.items() if holder is not None]
     assert len(winners) == 1
     holder = lease(db, "observer").holder()
-    assert holder is not None and holder.instance_id == winners[0]
+    assert holder is not None
+    assert holder.instance_id == winners[0]
     assert holder.generation == 1
 
 
@@ -135,7 +138,8 @@ def test_two_standbys_on_an_expired_row_write_one_generation(tmp_path) -> None:
     winners = [name for name, holder in results.items() if holder is not None]
     assert len(winners) == 1
     holder = lease(db, "observer").holder()
-    assert holder is not None and holder.instance_id == winners[0]
+    assert holder is not None
+    assert holder.instance_id == winners[0]
     assert holder.generation == 2
 
 

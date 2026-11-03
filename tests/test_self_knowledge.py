@@ -42,8 +42,10 @@ def test_document_index_and_section_resolution(tmp_path, monkeypatch) -> None:
 
     index = found.doc_index("README.md")
 
-    assert "- same (2): Same" in index and "- same-2 (2): Same" in index
-    assert "soulyaml" in index and "fenced" not in index
+    assert "- same (2): Same" in index
+    assert "- same-2 (2): Same" in index
+    assert "soulyaml" in index
+    assert "fenced" not in index
     assert "child body" in found.doc_section("README.md", "nested")
     assert "after" not in found.doc_section("README.md", "nested")
     assert "settings" in found.doc_section("README.md", "soulyaml")

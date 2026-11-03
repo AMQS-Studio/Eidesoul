@@ -33,12 +33,12 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "scripts"))
 
-import fakta  # noqa: E402
-import patterns as cli  # noqa: E402
-import research  # noqa: E402
-from _paths import safe_path  # noqa: E402
+import fakta
+import patterns as cli
+import research
+from _paths import safe_path
 
-from eidesoul.engine.config import load_config  # noqa: E402
+from eidesoul.engine.config import load_config
 
 CORPUS = Path.home() / "eidesoul-research" / "20261031-korpus" / "items.jsonl"
 CORPUS_ROOT = CORPUS.parent.parent

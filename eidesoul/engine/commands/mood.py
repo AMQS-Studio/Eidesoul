@@ -58,7 +58,9 @@ async def mood(ctx: CommandContext) -> str:
     relation = str(data.get("relation") or "")
     if name and relation:
         annoyance = float(data.get("annoyance") or 0.0)
-        extra = t("command.mood.extra_annoyed", lang, annoyance=annoyance) if annoyance > 0.05 else ""
+        extra = ""
+        if annoyance > 0.05:
+            extra = t("command.mood.extra_annoyed", lang, annoyance=annoyance)
         lines.append(t("command.mood.relation", lang, name=name, relation=relation, extra=extra))
     return "\n".join(lines)
 

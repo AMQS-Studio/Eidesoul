@@ -68,7 +68,9 @@ class WhatsAppGateway:
         self._stopping = False
         base = Path(__file__).parent
         self._tools = discover(__package__ + ".tools", base / "tools", "TOOL", "tool", FAMILIES)
-        self._commands = discover(__package__ + ".commands", base / "commands", "COMMAND", "command")
+        self._commands = discover(
+            __package__ + ".commands", base / "commands", "COMMAND", "command"
+        )
 
     @property
     def enabled(self) -> bool:
@@ -298,7 +300,8 @@ class WhatsAppGateway:
     ) -> str:
         if self.client is None:
             raise GatewayError("WhatsApp client is not available")
-        target = Path(path).resolve()
+        # A local stat before an upload: microseconds, and the body has no io pool.
+        target = Path(path).resolve()  # noqa: ASYNC240
         if not target.is_file():
             raise GatewayError(f"file not found: {path}")
         if not target.is_relative_to(self.config.workspace.resolve()):
@@ -397,11 +400,11 @@ class WhatsAppGateway:
             "- Use WhatsApp formatting: *bold*, _italic_, ~strike~, ```mono```. No markdown "
             "headings, no tables.\n"
             "- Start list items with '• '; never use '- ' or numbers with dots for bullets.\n"
-            "- To mention someone, copy the `mention=@…` token from their payload line verbatim (no "
-            "'+', spaces, or punctuation); the runtime converts it into a real mention. Never invent "
-            "a number.\n"
-            f"- Your handles: {handles}. A mention of any of them is meant for you, not for another "
-            "person. When you refer to yourself, use those handles.\n"
+            "- To mention someone, copy the `mention=@…` token from their payload line verbatim "
+            "(no '+', spaces, or punctuation); the runtime converts it into a real mention. "
+            "Never invent a number.\n"
+            f"- Your handles: {handles}. A mention of any of them is meant for you, not for "
+            "another person. When you refer to yourself, use those handles.\n"
             "- Do not @mention someone in a DM unless it is genuinely necessary."
         )
 

@@ -105,7 +105,8 @@ def test_role_without_defaults_denies_tools() -> None:
     empty = Role("member")
     assert tool_patterns((empty,)) == ()
     assert tools_for(TOOLS, (empty,)) == []
-    assert len(TOOLS.by_name) > 0 and len(COMMANDS.by_name) > 0
+    assert len(TOOLS.by_name) > 0
+    assert len(COMMANDS.by_name) > 0
 
 
 # ------------------------------------------------------------ ADR-0022

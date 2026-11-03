@@ -164,7 +164,8 @@ def test_fluidity_level_0_2_never_calls_the_auditor(tmp_path) -> None:
 
     result = review(env, inbound, "kopi ya", [hit(0), hit(2)])
 
-    assert result.handled is False and result.reply == "kopi ya"
+    assert result.handled is False
+    assert result.reply == "kopi ya"
     assert env.agent.llm.decisions == 0
 
 
@@ -179,7 +180,8 @@ def test_group_level_3_without_audit_asks(tmp_path) -> None:
     assert env.gateway.sent
     assert "privat" in env.gateway.sent[0][1]
     approval = env.agent.approvals.latest("111@g.us", "628111")
-    assert approval is not None and approval.kind == "disclosure"
+    assert approval is not None
+    assert approval.kind == "disclosure"
     assert approval.payload["reply"] == "si budi pernah bilang begitu"
 
 
@@ -190,7 +192,8 @@ def test_dm_owner_level_3_stays_fluid(tmp_path) -> None:
 
     result = review(env, inbound, "ingat kopi kita", [hit(3)])
 
-    assert result.handled is False and result.reply == "ingat kopi kita"
+    assert result.handled is False
+    assert result.reply == "ingat kopi kita"
     assert env.agent.llm.decisions == 0
 
 
@@ -258,9 +261,13 @@ def test_capture_level_4_stores_unconfirmed_and_asks(tmp_path) -> None:
     capture(env, "aku pernah melakukan hal memalukan")
 
     found = row(env)
-    assert found["state"] == "ok" and int(found["level"]) == 4
-    assert found["confirmed"] is False and found["via"] == "turn"
-    assert asked and asked[0][1] == "628111" and asked[0][3] == 4
+    assert found["state"] == "ok"
+    assert int(found["level"]) == 4
+    assert found["confirmed"] is False
+    assert found["via"] == "turn"
+    assert asked
+    assert asked[0][1] == "628111"
+    assert asked[0][3] == 4
 
 
 def test_capture_level_3_is_stored_without_a_question(tmp_path) -> None:
@@ -269,7 +276,8 @@ def test_capture_level_3_is_stored_without_a_question(tmp_path) -> None:
     capture(env, "aku lagi banyak pikiran")
 
     found = row(env)
-    assert int(found["level"]) == 3 and found["confirmed"] is True
+    assert int(found["level"]) == 3
+    assert found["confirmed"] is True
 
 
 def test_capture_skips_credentials_before_the_journal(tmp_path) -> None:
@@ -303,7 +311,8 @@ def test_capture_retries_assess_with_a_bigger_budget(tmp_path) -> None:
     capture(env, "aku lagi banyak pikiran")
 
     found = row(env)
-    assert int(found["level"]) == 3 and found["confirmed"] is True
+    assert int(found["level"]) == 3
+    assert found["confirmed"] is True
     assert len(env.llm.calls) == 2
     first, retry = env.llm.calls
     assert first["max_tokens"] >= 800
@@ -316,7 +325,8 @@ def test_capture_is_dropped_when_assess_returns_nothing(tmp_path) -> None:
     capture(env, "halo apa kabar semuanya")
 
     found = row(env)
-    assert found["state"] == "failed" and found["level"] is None
+    assert found["state"] == "failed"
+    assert found["level"] is None
     assert len(env.llm.calls) == 2
 
 
@@ -348,7 +358,8 @@ def test_privacy_confirmation_sets_level_and_confirmation(tmp_path) -> None:
 
     assert handled is True
     hit_after = env.memory.hits["m1"]
-    assert hit_after.level == 4 and hit_after.confirmed is True
+    assert hit_after.level == 4
+    assert hit_after.confirmed is True
     assert env.agent.approvals.get(approval.id).status == "approved"
 
 

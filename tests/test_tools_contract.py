@@ -58,7 +58,8 @@ def test_wrong_type_and_foreign_key_are_rejected_before_the_handler(tmp_path) ->
 
     assert result.startswith("error: invalid arguments for probe:")
     assert "query must be string" in result
-    assert called == [] and ctx.used == []
+    assert called == []
+    assert ctx.used == []
 
 
 def test_foreign_key_rejected_and_additional_properties_can_open_it() -> None:
@@ -102,7 +103,8 @@ def test_truncate_always_carries_a_marker_and_a_next_hint() -> None:
     body = truncate("x" * 500, 200)
 
     assert len(body) <= 200
-    assert "truncated" in body and "next:" in body
+    assert "truncated" in body
+    assert "next:" in body
 
 
 def test_per_tool_cap_is_used_not_a_global_one(tmp_path) -> None:
@@ -115,7 +117,8 @@ def test_per_tool_cap_is_used_not_a_global_one(tmp_path) -> None:
 
     result = asyncio.run(execute({"probe": spec}, "probe", {"query": "ok"}, ctx))
 
-    assert len(result) <= 200 and "next:" in result
+    assert len(result) <= 200
+    assert "next:" in result
 
 
 def test_shell_env_is_a_whitelist(monkeypatch) -> None:

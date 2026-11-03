@@ -65,7 +65,8 @@ def test_one_row_per_call_with_purpose_and_usage(tmp_path, monkeypatch) -> None:
 
     assert len(found) == 1
     assert found[0]["purpose"] == "decision"
-    assert found[0]["tokens_in"] == 10 and found[0]["tokens_out"] == 5
+    assert found[0]["tokens_in"] == 10
+    assert found[0]["tokens_out"] == 5
     assert found[0]["ok"] is True
 
 
@@ -85,7 +86,8 @@ def test_failed_call_is_recorded_as_not_ok(tmp_path, monkeypatch) -> None:
     llm.client = Broken()
     assert asyncio.run(llm.complete("s", "u")) == ""
     found = rows()
-    assert len(found) == 1 and found[0]["ok"] is False
+    assert len(found) == 1
+    assert found[0]["ok"] is False
 
 
 def test_call_ceiling_stops_the_loop_with_a_notice(tmp_path, monkeypatch) -> None:
@@ -145,7 +147,8 @@ def test_merge_fallback_for_a_provider_without_two_system_messages(monkeypatch) 
     ]
 
     assert llm._merge_system(messages, SimpleNamespace(status_code=400)) is True
-    assert len(messages) == 2 and messages[0]["content"] == "a\n\nb"
+    assert len(messages) == 2
+    assert messages[0]["content"] == "a\n\nb"
 
 
 def test_system_prompt_keeps_date_out_of_the_stable_part(tmp_path) -> None:

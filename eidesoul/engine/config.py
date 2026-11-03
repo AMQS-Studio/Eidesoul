@@ -5,6 +5,7 @@ source of truth for the host, and DB documents override its engine/soul/role see
 """
 
 
+import contextlib
 import logging
 import os
 from collections.abc import Mapping
@@ -773,15 +774,11 @@ def load_env(path: str | Path = ".env") -> None:
 
 def secure_db(path: Path) -> None:
     """The session DB holds credentials; never leave it world-readable."""
-    try:
+    with contextlib.suppress(OSError):
         path.parent.chmod(0o700)
-    except OSError:
-        pass
     if path.exists():
-        try:
+        with contextlib.suppress(OSError):
             path.chmod(0o600)
-        except OSError:
-            pass
 
 
 def drop_session(path: Path) -> None:
@@ -907,7 +904,10 @@ def _database(raw: Mapping) -> DatabaseConfig:
     )
     return DatabaseConfig(
         url=str(body.get("url") or "").strip(),
-        url_env=str(body.get("url_env") or "EIDESOUL_DATABASE_URL").strip() or "EIDESOUL_DATABASE_URL",
+        url_env=(
+            str(body.get("url_env") or "EIDESOUL_DATABASE_URL").strip()
+            or "EIDESOUL_DATABASE_URL"
+        ),
         pool_size=max(1, int(_num(body.get("pool_size"), 5))),
         pool_timeout=_num(body.get("pool_timeout"), 30.0),
         migrations=migrations,

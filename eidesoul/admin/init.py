@@ -689,10 +689,10 @@ def wizard(
 
 __all__ = [
     "HOST_FILES",
-    "InitCancelled",
     "PRIVATE_FILES",
     "STEPS",
     "Answers",
+    "InitCancelled",
     "banner",
     "build",
     "init",

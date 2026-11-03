@@ -17,7 +17,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from eidesoul.engine.stores.vibe import EMOTION_VAD  # noqa: E402
+from eidesoul.engine.stores.vibe import EMOTION_VAD
 
 LIBRARY = ROOT / "eidesoul" / "library" / "affect"
 MIN_PROTOTYPES = 6

@@ -217,7 +217,7 @@ def test_write_then_rename_never_leaves_a_partial_file(tmp_path, monkeypatch):
         raise OSError("disk full")
 
     monkeypatch.setattr(os, "replace", boom)
-    with pytest.raises(OSError):
+    with pytest.raises(OSError, match="disk full"):
         admin_init._atomic_write(target, "database: {}\n", 0o644)
 
     assert not target.exists()

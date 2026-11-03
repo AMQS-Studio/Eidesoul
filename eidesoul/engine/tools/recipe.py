@@ -98,7 +98,10 @@ TOOL = Handler(
                 "description": "Tool steps [{tool, args}] for kind=recipe.",
             },
             "prompt": {"type": "string", "description": "One-turn instruction for kind=prompt."},
-            "overwrite": {"type": "boolean", "description": "Overwrite an existing recipe when saving."},
+            "overwrite": {
+                "type": "boolean",
+                "description": "Overwrite an existing recipe when saving.",
+            },
         },
         "additionalProperties": False,
     },

@@ -1,6 +1,7 @@
 """Command /approve: run a pending approval without LLM, with the original role permissions."""
 
 
+import contextlib
 import time
 
 from ..guard import ActionRequest, recheck_scope, scope_proof
@@ -163,7 +164,7 @@ async def _approve(ctx: CommandContext) -> str:
         specs.update({handler.name: handler for handler in agent.hub.specs(current)})
     result = await execute(specs, approval.tool, approval.args, tool_ctx)
     agent.approvals.mark(approval.id, "approved", ctx.sender, result[:2000])
-    try:
+    with contextlib.suppress(Exception):
         agent.ledger.log_action(
             ctx.thread_id,
             ctx.thread_id,
@@ -173,8 +174,6 @@ async def _approve(ctx: CommandContext) -> str:
             target_name=ctx.gateway.chat_name(ctx.thread_id) if ctx.gateway else "",
             request=approval.summary,
         )
-    except Exception:
-        pass
     return t("command.approve.ran", lang, id=approval.id, result=result)[:CLIP]
 
 

@@ -36,7 +36,26 @@ SEED = {
     "p90": 130,
     "lower": 0.86,
     "emoji": 0.20,
-    "particles": ("aja", "kok", "sih", "deh", "loh", "banget", "gitu", "gini", "kan", "nih", "tuh", "wkwk", "anjir", "jir", "wes", "iki", "iku", "yo"),
+    "particles": (
+        "aja",
+        "kok",
+        "sih",
+        "deh",
+        "loh",
+        "banget",
+        "gitu",
+        "gini",
+        "kan",
+        "nih",
+        "tuh",
+        "wkwk",
+        "anjir",
+        "jir",
+        "wes",
+        "iki",
+        "iku",
+        "yo",
+    ),
     "emojis": ("😭", "🗿", "🙏", "😹", "😂", "😊"),
 }
 SEED_MIN = 20
@@ -331,9 +350,8 @@ class StyleStore:
             p90 = _percentile(lengths, 0.9)
             total = max(1, int(bucket["n"]))
             lower = bucket["lower"] / total
-            particles = [
-                name for name, _ in sorted(bucket["particles"].items(), key=lambda item: -item[1])[:6]
-            ] or list(SEED["particles"][:6])
+            ranked = sorted(bucket["particles"].items(), key=lambda item: -item[1])
+            particles = [name for name, _ in ranked[:6]] or list(SEED["particles"][:6])
             emojis = [
                 name for name, _ in sorted(bucket["emojis"].items(), key=lambda item: -item[1])[:3]
             ] or list(SEED["emojis"][:3])

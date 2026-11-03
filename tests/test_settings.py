@@ -102,7 +102,8 @@ def test_settings_change_waits_for_approval(tmp_path, monkeypatch) -> None:
     assert env.agent.soul.language == "en"
     assert "reloaded" in summary
     rows = env.db.fetch_all(select(config_changes))
-    assert rows and rows[-1]["file"] == "soul"
+    assert rows
+    assert rows[-1]["file"] == "soul"
 
 
 def test_restart_only_key_reports_restart(tmp_path, monkeypatch) -> None:
@@ -124,7 +125,9 @@ def test_gateway_edit_updates_gateways_mapping(tmp_path, monkeypatch) -> None:
     assert result.startswith("ok:")
     raw = yaml.safe_load(env.paths.config.read_text(encoding="utf-8"))
     assert raw["gateways"]["cli"]["chat_name"] == "Terminal 2"
-    assert "engine" in raw and "soul_file" in raw and "soul" not in raw
+    assert "engine" in raw
+    assert "soul_file" in raw
+    assert "soul" not in raw
 
 
 def test_host_rejects_reserved_sections(tmp_path, monkeypatch) -> None:

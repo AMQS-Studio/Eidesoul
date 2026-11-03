@@ -93,9 +93,9 @@ def test_save_duplicate_and_overwrite(tmp_path: Path) -> None:
         store.save("deploy", "Lagi.", "# Lagi\n")
     store.save("deploy", "Versi dua.", "# Dua\n", overwrite=True)
     assert "Versi dua." in store.catalog()
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="skill name must be lowercase"):
         store.save("../escape", "x", "y")
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="never contains a secret"):
         store.save("secret", "api_key=abc", "# x\n")
 
 
@@ -135,7 +135,8 @@ def test_retrieval_is_scoped_and_updates_uses(tmp_path: Path) -> None:
     )
     assert "deploy" not in outside
     row = store.get("deploy")
-    assert row.uses >= 1 and row.last_used is not None
+    assert row.uses >= 1
+    assert row.last_used is not None
 
     assert store.retrieve(
         "deploy production",

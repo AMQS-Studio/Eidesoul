@@ -12,7 +12,7 @@ class WhatsAppSettings:
     backlog_seconds: float = 600.0
 
     @classmethod
-    def from_mapping(cls, enabled: bool, options: dict, base: Path) -> "WhatsAppSettings":
+    def from_mapping(cls, enabled: bool, options: dict, base: Path) -> WhatsAppSettings:
         raw = Path(str(options.get("session_db") or ".eidesoul/whatsapp.db")).expanduser()
         session = raw if raw.is_absolute() else Path(base) / raw
         try:

@@ -51,6 +51,8 @@ def test_missing_file_is_empty_not_crash(tmp_path: Path) -> None:
 
 def test_character_block_keeps_facts_separate_from_patterns() -> None:
     block = character_block((0, 0), "any", 0.9, patterns=["Pola satu."], facts=["Fakta satu."])
-    assert "## Room patterns" in block and "Pola satu." in block
-    assert "## Known facts" in block and "Fakta satu." in block
+    assert "## Room patterns" in block
+    assert "Pola satu." in block
+    assert "## Known facts" in block
+    assert "Fakta satu." in block
     assert block.index("## Room patterns") < block.index("## Known facts")

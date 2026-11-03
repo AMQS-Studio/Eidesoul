@@ -74,7 +74,7 @@ def _target(raw: str, ctx: ToolContext) -> str | tuple[str, str]:
         return f'error: several threads match "{raw}"; use the full name or id:\n{listing}'
     if target is None:
         return f'error: chat "{raw}" is not in the archive.'
-    thread_id, name = target
+    thread_id, _name = target
     denial = cross_refusal(ctx, thread_id)
     if denial:
         # ADR-0007 §4.6: an information-free signal, never an `error:` sentence.

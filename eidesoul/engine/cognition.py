@@ -677,7 +677,7 @@ class CognitionWorker:
                 rows.append((job, row))
             if not rows:
                 continue
-            kind, value = _scope_of(scope)
+            kind, _value = _scope_of(scope)
             person_id = str(rows[0][1].get("person_id") or "") if kind != "thread" else ""
             thread_id = str(rows[0][1].get("thread_id") or "")
             pool = await io.run(

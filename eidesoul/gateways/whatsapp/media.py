@@ -6,11 +6,11 @@ import logging
 import mimetypes
 from pathlib import Path
 
-from neonize.utils import extract_text
 from neonize.proto.waE2E.WAWebProtobufsE2E_pb2 import Message
+from neonize.utils import extract_text
 
-from ...engine.context import Media, Quote, clean, human_size
 from ...engine.config import Config
+from ...engine.context import Media, Quote, clean, human_size
 
 log = logging.getLogger(__name__)
 
@@ -221,7 +221,9 @@ def attachment_path(config: Config, thread_id: str, message_id: str, filename: s
     return folder / f"{sanitize(message_id, 60)}-{sanitize(filename, 80)}"
 
 
-async def download_media(client, config: Config, thread_id: str, message_id: str, media: Media) -> None:
+async def download_media(
+    client, config: Config, thread_id: str, message_id: str, media: Media
+) -> None:
     """Download an attachment once; failures land in `media.error` and are never raised."""
     if media.error:
         return
@@ -267,10 +269,10 @@ async def download_media(client, config: Config, thread_id: str, message_id: str
 
 __all__ = [
     "IMAGE_MIMES",
+    "INLINE_TEXT_BYTES",
     "MAX_IMAGES",
     "MAX_IMAGE_BYTES",
     "MAX_IMAGE_TOTAL",
-    "INLINE_TEXT_BYTES",
     "attachment_path",
     "contexts",
     "describe_media",

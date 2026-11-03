@@ -25,29 +25,29 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "scripts"))
 
-from _paths import safe_path  # noqa: E402
+from _paths import safe_path
 
-from eidesoul.engine.character import (  # noqa: E402
+from eidesoul.engine.character import (
     MARKDOWN,
     assistant_tell,
     effective_limits,
     regulate,
 )
-from eidesoul.engine.config import load_config, load_env  # noqa: E402
-from eidesoul.engine.context import (  # noqa: E402
+from eidesoul.engine.config import load_config, load_env
+from eidesoul.engine.context import (
     AUTHOR_BOT,
     AUTHOR_UNKNOWN,
     Message,
     build_user_content,
 )
-from eidesoul.engine.llm import LLM  # noqa: E402
-from eidesoul.engine.patterns import load_lexicon, room_register, select_patterns  # noqa: E402
-from eidesoul.engine.prompts import character_block, system_prompt  # noqa: E402
-from eidesoul.engine.reply import clean_prose, human_chunks, strip_blocks  # noqa: E402
-from eidesoul.engine.roles import Role  # noqa: E402
-from eidesoul.engine.runtime import RuntimeFacts  # noqa: E402
-from eidesoul.engine.target import combine, score_style  # noqa: E402
-from eidesoul.engine.tools import ToolContext  # noqa: E402
+from eidesoul.engine.llm import LLM
+from eidesoul.engine.patterns import load_lexicon, room_register, select_patterns
+from eidesoul.engine.prompts import character_block, system_prompt
+from eidesoul.engine.reply import clean_prose, human_chunks, strip_blocks
+from eidesoul.engine.roles import Role
+from eidesoul.engine.runtime import RuntimeFacts
+from eidesoul.engine.target import combine, score_style
+from eidesoul.engine.tools import ToolContext
 
 SCENARIOS = ROOT / "tests" / "data" / "scenarios.json"
 OUT = ROOT / "workspace"
@@ -57,7 +57,8 @@ BUBBLE_MAX = 240
 TURN_MAX = 400
 SHINGLE = 5
 JUDGE_SYSTEM = (
-    "You score one WhatsApp reply from Eidesoul, an Indonesian persona, against a rubric. Answer with "
+    "You score one WhatsApp reply from Eidesoul, an Indonesian persona, against a rubric. "
+    "Answer with "
     'one JSON object only: {"scores": {<dimension>: <1-5>}}.\n'
     "Score every dimension in the payload with an integer 1-5; 5 only when the reply is clearly "
     "good at that dimension. Hard fails are measured elsewhere, so do not report them. No prose."

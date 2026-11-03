@@ -52,7 +52,7 @@ def test_drift_needs_an_overlap_and_a_new_topic() -> None:
 
 def test_a_drifting_digest_archives_the_previous_topic(tmp_path) -> None:
     digest = {"topic": "jadwal puasa", "keywords": ["jadwal", "puasa"]}
-    db, affect, ambient = build(tmp_path, digest)
+    _db, affect, ambient = build(tmp_path, digest)
     affect.set_topic(CHAT, "rapat logistik gudang", ["rapat", "logistik"], ["siapa yang kirim?"])
     before = affect.topic(CHAT)
 
@@ -68,7 +68,7 @@ def test_a_drifting_digest_archives_the_previous_topic(tmp_path) -> None:
 
 
 def test_the_same_topic_keeps_the_era_count(tmp_path) -> None:
-    db, affect, ambient = build(
+    _db, affect, ambient = build(
         tmp_path, {"topic": "rapat logistik", "keywords": ["rapat", "logistik"]}
     )
     affect.set_topic(CHAT, "rapat logistik", ["rapat", "logistik"], [])

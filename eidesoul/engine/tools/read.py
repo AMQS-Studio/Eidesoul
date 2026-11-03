@@ -61,7 +61,10 @@ TOOL = Handler(
     parameters={
         "type": "object",
         "properties": {
-            "path": {"type": "string", "description": "File path inside the workspace (relative or absolute)."},
+            "path": {
+                "type": "string",
+                "description": "File path inside the workspace (relative or absolute).",
+            },
             "start": {"type": "integer", "description": "Start line (default 1)."},
             "limit": {"type": "integer", "description": "Number of lines (default 400)."},
         },

@@ -524,7 +524,7 @@ class Agent:
         self._shutdown_gateways = dict(self._turn_gateways)
         if not items:
             return pending
-        done, waiting = await asyncio.wait(
+        _done, waiting = await asyncio.wait(
             [task for _, task in items], timeout=max(0.0, float(seconds))
         )
         by_task = {task: thread for thread, task in items}
@@ -1299,12 +1299,12 @@ class Agent:
                 claimed=claimed,
             )
         )
-        setattr(task, "_eidesoul_turn_id", turn_id)
+        task._eidesoul_turn_id = turn_id
         if not is_command:
             self._pending_tasks[thread_id] = task
         try:
             return await asyncio.wait_for(task, timeout=timeout)
-        except (asyncio.TimeoutError, TimeoutError):
+        except TimeoutError:
             task.cancel()
             with contextlib.suppress(BaseException):
                 await task
@@ -1694,7 +1694,7 @@ class Agent:
                         for entry in messages:
                             with contextlib.suppress(Exception):
                                 await self._prepare_media(gateway, thread_id, entry)
-                        target, confidence, source = await self._target(
+                        target, confidence, _source = await self._target(
                             inbound, gateway, messages, message
                         )
                         limits = effective_limits(self.config.character, target, confidence)

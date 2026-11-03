@@ -84,6 +84,39 @@ max-complexity = 12
 [tool.ruff.lint.per-file-ignores]
 # Long prose lines inside the soul loader template and prompt scaffolding.
 "eidesoul/engine/soul.py" = ["E501"]
+# Prompt copy reads as one sentence per line; wrapping the literal would hurt it.
+"**/prompts.py" = ["E501"]
+"**/decision.py" = ["E501"]
+# Regex literals cannot be wrapped without changing the pattern.
+"**/patterns.py" = ["E501"]
+# Spreadsheet XML parts are literal content.
+"scripts/xlsx.py" = ["E501"]
+# `scripts/` puts the repo on sys.path before importing the package it enables.
+"scripts/**" = ["E402"]
+"migrations/env.py" = ["E402"]
+
+# ADR-0031 §4.1 debt recorded when the ceiling landed: these functions are above it today.
+# The list is per file on purpose, so a new module is still held to the rule.
+"eidesoul/__main__.py" = ["C901", "PLR0912", "PLR0915"]
+"eidesoul/engine/agent.py" = ["C901", "PLR0912", "PLR0915"]
+"eidesoul/engine/ambient.py" = ["C901", "PLR0912"]
+"eidesoul/engine/commands/approve.py" = ["C901", "PLR0912", "PLR0915"]
+"eidesoul/engine/commands/help.py" = ["C901", "PLR0912"]
+"eidesoul/engine/commands/memori.py" = ["C901", "PLR0912"]
+"eidesoul/engine/config.py" = ["C901", "PLR0915"]
+"eidesoul/engine/registry.py" = ["C901", "PLR0912"]
+"eidesoul/engine/reply.py" = ["C901"]
+"eidesoul/engine/stores/affect.py" = ["C901", "PLR0912", "PLR0915"]
+"eidesoul/engine/stores/recipes.py" = ["C901", "PLR0912"]
+"eidesoul/engine/stores/style.py" = ["C901", "PLR0912"]
+"eidesoul/engine/tools/__init__.py" = ["C901", "PLR0912"]
+"eidesoul/engine/tools/memory.py" = ["C901", "PLR0912", "PLR0915"]
+"eidesoul/engine/tools/settings.py" = ["C901", "PLR0912"]
+"eidesoul/gateways/whatsapp/commands/backfill.py" = ["C901", "PLR0915"]
+"eidesoul/gateways/whatsapp/gateway.py" = ["C901", "PLR0915"]
+"eidesoul/gateways/whatsapp/tools/chat_history.py" = ["C901", "PLR0912"]
+"eidesoul/gateways/whatsapp/tools/send_to.py" = ["C901", "PLR0912"]
+"scripts/ablate.py" = ["PLR0915"]
 
 [tool.coverage.run]
 branch = true

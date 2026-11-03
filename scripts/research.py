@@ -29,14 +29,14 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "scripts"))
 
-import xlsx  # noqa: E402
-from _paths import safe_path  # noqa: E402
-from patterns import REGISTERS, TARGETS  # noqa: E402
+import xlsx
+from _paths import safe_path
+from patterns import REGISTERS, TARGETS
 
-from eidesoul.engine.config import load_config, load_env  # noqa: E402
-from eidesoul.engine.llm import LLM  # noqa: E402
-from eidesoul.engine.patterns import load_patterns  # noqa: E402
-from eidesoul.engine.tools.web_search import _search_sync  # noqa: E402
+from eidesoul.engine.config import load_config, load_env
+from eidesoul.engine.llm import LLM
+from eidesoul.engine.patterns import load_patterns
+from eidesoul.engine.tools.web_search import _search_sync
 
 OUT = ROOT / "workspace" / "research"
 OUT_ROOT = OUT.parent

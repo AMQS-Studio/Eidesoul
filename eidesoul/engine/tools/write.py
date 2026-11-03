@@ -25,7 +25,10 @@ TOOL = Handler(
     parameters={
         "type": "object",
         "properties": {
-            "path": {"type": "string", "description": "File path inside the workspace (relative or absolute)."},
+            "path": {
+                "type": "string",
+                "description": "File path inside the workspace (relative or absolute).",
+            },
             "content": {"type": "string", "description": "Full file content."},
         },
         "required": ["path", "content"],

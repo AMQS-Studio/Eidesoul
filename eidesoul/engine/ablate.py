@@ -9,8 +9,8 @@ import dataclasses
 from dataclasses import dataclass
 
 from . import salience
-from .context import AUTHOR_BOT, AUTHOR_MANUAL, Message, prompt_entry
 from .config import Config
+from .context import AUTHOR_BOT, AUTHOR_MANUAL, Message, prompt_entry
 from .decision import decide
 from .prompts import system_prompt
 from .roles import Role
@@ -104,9 +104,10 @@ def prompt_budget(
             name: source.get(name, "")
             for name in (*salience.COMPETING, "memory", "actions")
         }
-        before.append(len(system_prompt(stripped, (Role(name="member"),), query=message.text, **blocks)))
+        member = (Role(name="member"),)
+        before.append(len(system_prompt(stripped, member, query=message.text, **blocks)))
         after.append(
-            len(system_prompt(config, (Role(name="member"),), query=message.text, bonuses={}, **blocks))
+            len(system_prompt(config, member, query=message.text, bonuses={}, **blocks))
         )
         _, names = salience.select(
             {**mandatory, **blocks},

@@ -119,7 +119,8 @@ def test_claim_once_under_two_workers(tmp_path) -> None:
     first = queue.claim(worker="a", limit=1)
     second = queue.claim(worker="b", limit=1)
 
-    assert len(first) == 1 and second == []
+    assert len(first) == 1
+    assert second == []
     assert first[0].attempts == 1
 
 
@@ -191,7 +192,8 @@ def test_template_keys_load_and_are_read(tmp_path) -> None:
 
 
 def test_a_claimed_job_cannot_complete_after_the_generation_moves(tmp_path) -> None:
-    """A replaced primary's job update is refused, so the reaper hands the job on (ADR-0012 §4.4)."""
+    """A replaced primary's job update is refused; the reaper hands the job on (ADR-0012 §4.4)."""
+
     db = database()
     config = build_config(tmp_path)
     queue = CognitionQueue(db, config)
@@ -213,7 +215,8 @@ def test_a_claimed_job_cannot_complete_after_the_generation_moves(tmp_path) -> N
     with db.connect() as conn:
         conn.execute(sql("UPDATE cognition_jobs SET status = 'queued', lease_until = 0"))
     owned = queue.claim(worker="b", limit=1, generation=new.generation)[0]
-    assert owned.id == job.id and owned.generation == new.generation
+    assert owned.id == job.id
+    assert owned.generation == new.generation
     assert queue.complete(owned.id, "done", generation=new.generation) is True
     row = db.fetch_one(sql("SELECT status FROM cognition_jobs WHERE id = :id"), {"id": job.id})
     assert row["status"] == "done"
@@ -233,4 +236,5 @@ def test_a_stale_fail_does_not_requeue_under_a_new_generation(tmp_path) -> None:
     row = db.fetch_one(
         sql("SELECT status, result_ref FROM cognition_jobs WHERE id = :id"), {"id": job.id}
     )
-    assert row["status"] == "claimed" and row["result_ref"] == ""
+    assert row["status"] == "claimed"
+    assert row["result_ref"] == ""

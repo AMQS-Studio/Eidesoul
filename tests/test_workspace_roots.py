@@ -163,6 +163,7 @@ def test_trusted_role_keeps_full_workspace(tmp_path) -> None:
 def test_safe_chat_strips_path_separators() -> None:
     value = safe_chat("../../x/y")
 
-    assert "/" not in value and "\\" not in value
+    assert "/" not in value
+    assert "\\" not in value
     assert Path(value).name == value
     assert value not in {"", ".", ".."}

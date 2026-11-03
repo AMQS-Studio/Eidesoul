@@ -33,7 +33,11 @@ async def whoami(ctx: CommandContext) -> str:
             id=person_id or "-",
         ),
         t("command.whoami.chat", lang, chat=_chat_label(ctx, lang)),
-        t("command.whoami.surface", lang, surface=ctx.gateway.name if ctx.gateway is not None else "-"),
+        t(
+            "command.whoami.surface",
+            lang,
+            surface=ctx.gateway.name if ctx.gateway is not None else "-",
+        ),
     ]
     handles = sorted(ctx.gateway.self_handles()) if ctx.gateway is not None else []
     if handles:

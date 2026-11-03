@@ -12,7 +12,7 @@ HERE = pathlib.Path(__file__).resolve().parent
 if str(HERE) not in sys.path:
     sys.path.insert(0, str(HERE))
 
-import baseline  # noqa: E402  — frozen snapshot of schema.py at revision 1
+import baseline
 
 config = context.config
 if config.config_file_name is not None:

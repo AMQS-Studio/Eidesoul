@@ -57,7 +57,11 @@ class ActionLedger:
         with self.db.connect() as conn:
             result = conn.execute(actions.insert().values(row))
             new_id = int(result.inserted_primary_key[0])
-            keep = select(actions.c.id).order_by(actions.c.ts.desc(), actions.c.id.desc()).limit(ACTION_KEEP)
+            keep = (
+                select(actions.c.id)
+                .order_by(actions.c.ts.desc(), actions.c.id.desc())
+                .limit(ACTION_KEEP)
+            )
             conn.execute(actions.delete().where(actions.c.id.not_in(keep)))
         return new_id
 

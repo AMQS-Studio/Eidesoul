@@ -18,7 +18,7 @@ def _admin_engine(test_url: str):
     return create_engine(admin, isolation_level="AUTOCOMMIT")
 
 
-@pytest.fixture()
+@pytest.fixture
 def fresh_database() -> str:
     """A throwaway database for the migration tests; dropped after (ADR-0029 §4.2)."""
     base = _dsn()

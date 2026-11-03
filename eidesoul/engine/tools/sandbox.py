@@ -180,7 +180,10 @@ TOOL = Handler(
         "type": "object",
         "properties": {
             "command": {"type": "string", "description": "Shell command inside the container."},
-            "timeout": {"type": "integer", "description": "Timeout in seconds (default from config)."},
+            "timeout": {
+                "type": "integer",
+                "description": "Timeout in seconds (default from config).",
+            },
         },
         "required": ["command"],
         "additionalProperties": False,

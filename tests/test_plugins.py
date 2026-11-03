@@ -198,7 +198,7 @@ def test_enable_with_fetch_false_and_no_code_fails_and_changes_nothing(tmp_path:
     before = config_path.read_text(encoding="utf-8")
     root = tmp_path / "plugins"
 
-    with pytest.raises(plugins.PluginError, match="plugin.fetch is false"):
+    with pytest.raises(plugins.PluginError, match=r"plugin\.fetch is false"):
         plugins.enable(settings(root, config_path, demo={"enabled": False}), "demo")
 
     assert config_path.read_text(encoding="utf-8") == before

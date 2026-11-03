@@ -54,8 +54,8 @@ MEDIA_LABELS = {
 }
 FOOTER = (
     "Guidance: answer the last message. Text marked [truncated] can be read in full with the read "
-    "tool at the given path (inside the sandbox: /work/<path>). Binary attachments must be inspected "
-    "with the sandbox tool; never invent their contents."
+    "tool at the given path (inside the sandbox: /work/<path>). Binary attachments must be "
+    "inspected with the sandbox tool; never invent their contents."
 )
 
 
@@ -272,7 +272,7 @@ class WorkingMemory:
         self, thread_id: str, message_id: str, by_address: str, by_name: str = ""
     ) -> bool:
         self._ensure(thread_id)
-        for index, entry in enumerate(self._data.setdefault(thread_id, [])):
+        for _index, entry in enumerate(self._data.setdefault(thread_id, [])):
             if entry.id != message_id or not entry.mark_deleted(by_address, by_name):
                 continue
             if self.store is not None:
@@ -379,7 +379,9 @@ def _is_text(media: Media) -> bool:
     return False
 
 
-def _clip(text: str, max_lines: int = PREVIEW_LINES, max_chars: int = PREVIEW_CHARS) -> tuple[str, int]:
+def _clip(
+    text: str, max_lines: int = PREVIEW_LINES, max_chars: int = PREVIEW_CHARS
+) -> tuple[str, int]:
     """Clip to `max_lines`/`max_chars`; the count of hidden lines is returned as a number."""
     lines = text.splitlines() or [text]
     if len(lines) <= max_lines and len(text) <= max_chars:

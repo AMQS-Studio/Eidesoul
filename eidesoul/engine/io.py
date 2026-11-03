@@ -10,9 +10,7 @@ import asyncio
 import functools
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
-from typing import Any, TypeVar
-
-T = TypeVar("T")
+from typing import Any
 
 _executor: ThreadPoolExecutor | None = None
 _workers = 8
@@ -33,7 +31,7 @@ def _pool() -> ThreadPoolExecutor:
     return _executor
 
 
-async def run(fn: Callable[..., T], *args, **kwargs) -> T:
+async def run[T](fn: Callable[..., T], *args, **kwargs) -> T:
     """One synchronous block on the bounded pool; cancellation never interrupts a commit."""
     loop = asyncio.get_running_loop()
     call = functools.partial(fn, *args, **kwargs)

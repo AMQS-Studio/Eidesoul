@@ -161,7 +161,8 @@ def test_render_converts_markdown_but_keeps_fence(tmp_path) -> None:
     rendered = gateway.render(text)
 
     assert rendered.startswith("*Judul*\n*halo*\n• satu")
-    assert "- kode" in rendered and "```py" in rendered
+    assert "- kode" in rendered
+    assert "```py" in rendered
     assert "reasoning" not in rendered
 
 
@@ -250,7 +251,8 @@ def test_resolve_target_never_falls_back_to_single_contact(tmp_path) -> None:
 
     target, candidates = gateway.resolve_target("tidak-ada@g.us")
 
-    assert target is None and candidates == []
+    assert target is None
+    assert candidates == []
 
 
 def test_resolve_target_exact_and_unique_substring(tmp_path) -> None:
@@ -457,8 +459,10 @@ def test_gateway_marks_revoked_rows_and_stays_silent(tmp_path, monkeypatch) -> N
     asyncio.run(client.handlers[ProtoMessage](client, revoke_event("hilang", "628222222222")))
 
     rows = {entry.id: entry for entry in gateway.windows.get("111@g.us")}
-    assert rows["t1"].deleted is True and rows["t1"].deleted_admin is False
-    assert rows["t2"].deleted is True and rows["t2"].deleted_admin is True
+    assert rows["t1"].deleted is True
+    assert rows["t1"].deleted_admin is False
+    assert rows["t2"].deleted is True
+    assert rows["t2"].deleted_admin is True
     assert handled == []
     assert "hilang" not in rows
 

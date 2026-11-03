@@ -14,7 +14,10 @@ ROLES = {"roles": {"guest": {"name": "guest", "tools": ["read"], "commands": ["h
 
 def write_folder(tmp_path, llm: dict) -> None:
     body = {
-        "database": {"url": "postgresql+psycopg://eidesoul:eidesoul@127.0.0.1:5433/eidesoul_test", "url_env": ""},
+        "database": {
+        "url": "postgresql+psycopg://eidesoul:eidesoul@127.0.0.1:5433/eidesoul_test",
+        "url_env": "",
+    },
         "workspace": ".eidesoul/workspace",
         "roles_file": "roles.yaml",
         "soul_file": "soul.yaml",
@@ -69,7 +72,7 @@ def test_opencode_lists_models_outside_its_chat_base_url():
 
 
 def test_custom_requires_an_explicit_base_url():
-    with pytest.raises(ValueError, match="requires llm.base_url"):
+    with pytest.raises(ValueError, match=r"requires llm\.base_url"):
         resolve("custom", "", "")
 
 
@@ -97,7 +100,7 @@ def test_a_missing_model_is_a_config_error(tmp_path, monkeypatch):
     monkeypatch.setenv("OPENCODE_GO_API_KEY", "key")
     write_folder(tmp_path, {"provider": "opencode"})
 
-    with pytest.raises(ConfigError, match="engine.llm.model is required"):
+    with pytest.raises(ConfigError, match=r"engine\.llm\.model is required"):
         load_config(tmp_path / "config.yaml")
 
 
@@ -171,14 +174,14 @@ def test_the_scaffold_env_only_names_the_chosen_key():
 def test_a_missing_provider_is_a_config_error(tmp_path):
     write_folder(tmp_path, {"model": "m"})
 
-    with pytest.raises(ConfigError, match="engine.llm.provider is required"):
+    with pytest.raises(ConfigError, match=r"engine\.llm\.provider is required"):
         load_config(tmp_path / "config.yaml")
 
 
 def test_custom_needs_a_key_variable(tmp_path):
     write_folder(tmp_path, {"provider": "custom", "base_url": "http://x", "model": "m"})
 
-    with pytest.raises(ConfigError, match="engine.llm.api_key_env is required"):
+    with pytest.raises(ConfigError, match=r"engine\.llm\.api_key_env is required"):
         load_config(tmp_path / "config.yaml")
 
 

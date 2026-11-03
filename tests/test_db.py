@@ -52,7 +52,8 @@ def test_upsert_partial_update_keeps_other_columns(tmp_path) -> None:
             update={"content": "y"},
         )
     row = db.fetch_one(select(documents).where(documents.c.name == "soul"))
-    assert row["content"] == "y" and row["updated_at"] == 1.0
+    assert row["content"] == "y"
+    assert row["updated_at"] == 1.0
 
 
 def test_upsert_chunks_postgres_parameter_limit() -> None:
@@ -171,5 +172,6 @@ def test_schema_version_is_recorded(tmp_path) -> None:
     db.ensure()
     db.ensure()
     version = db.fetch_one(select(schema_meta).where(schema_meta.c.key == "version"))
-    assert version is not None and version["value"] == str(SCHEMA_VERSION)
+    assert version is not None
+    assert version["value"] == str(SCHEMA_VERSION)
 

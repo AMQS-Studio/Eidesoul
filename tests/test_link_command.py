@@ -62,7 +62,8 @@ def test_unknown_gateway_lists_the_enabled_ones(tmp_path) -> None:
     text = asyncio.run(link(context(env, whatsapp, "signalapp", person=person)))
 
     assert "signalapp" in text
-    assert "cli" in text and "telegram" not in text
+    assert "cli" in text
+    assert "telegram" not in text
 
 
 def test_no_gateway_means_no_link(tmp_path) -> None:
@@ -122,5 +123,6 @@ def test_whoami_shows_the_person_id(tmp_path) -> None:
 
     text = asyncio.run(whoami(context(env, whatsapp, "", person=person)))
 
-    assert "🪪 Identitas:" in text and person in text
+    assert "🪪 Identitas:" in text
+    assert person in text
     assert "🎭 Peran:" in text

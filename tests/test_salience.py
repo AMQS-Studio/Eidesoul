@@ -80,6 +80,7 @@ def test_actions_block_is_mandatory_and_survives_a_tight_budget() -> None:
 
     kept, dropped = select(blocks, max_chars=300)
 
-    assert "actions" in COMPETING and "actions" not in MANDATORY
+    assert "actions" in COMPETING
+    assert "actions" not in MANDATORY
     assert "base" in names(kept)
     assert set(dropped) == {"actions", "topic"}

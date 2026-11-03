@@ -83,8 +83,10 @@ def test_context_renders_scopes_trust_and_dates(tmp_path) -> None:
 
     assert block.text.startswith("Long-term memory (cross-chat):")
     assert "owner suka kopi tanpa gula" in block.text
-    assert "[person/" in block.text and "[global/" in block.text
-    assert "L2 T0" in block.text and "#" in block.text
+    assert "[person/" in block.text
+    assert "[global/" in block.text
+    assert "L2 T0" in block.text
+    assert "#" in block.text
     assert "orang lain suka teh" not in block.text
     assert "tiket konser" not in block.text
 

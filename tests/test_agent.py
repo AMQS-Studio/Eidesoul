@@ -37,11 +37,14 @@ def test_dm_reply_is_delivered_and_recorded(tmp_path) -> None:
 
     assert env.gateway.sent
     thread_id, text, reply = env.gateway.sent[0]
-    assert thread_id == DM and text == "halo juga"
+    assert thread_id == DM
+    assert text == "halo juga"
     assert reply is not None
     ids = [item.id for item in env.windows.get(DM)]
-    assert ids[0] == inbound.payload.id and len(ids) == 2
-    assert env.llm.calls == 1 and env.llm.decisions == 1
+    assert ids[0] == inbound.payload.id
+    assert len(ids) == 2
+    assert env.llm.calls == 1
+    assert env.llm.decisions == 1
 
 
 def test_the_bot_echo_does_not_mint_an_identity(tmp_path) -> None:
@@ -72,7 +75,8 @@ def test_group_mention_replies(tmp_path) -> None:
         inbound_message("eidesoul tolong", thread=GROUP, dm=False, mention=True),
     )
 
-    assert env.gateway.sent and env.gateway.sent[0][0] == GROUP
+    assert env.gateway.sent
+    assert env.gateway.sent[0][0] == GROUP
 
 
 def test_command_skips_decision_and_uses_handler(tmp_path) -> None:
@@ -164,7 +168,8 @@ def test_memory_block_and_runtime_reach_prompt(tmp_path) -> None:
     handle(env, inbound)
 
     person = env.agent.identity.resolve("fake", "628111")
-    assert memory.context_calls and memory.context_calls[0]["person_id"] == person
+    assert memory.context_calls
+    assert memory.context_calls[0]["person_id"] == person
     assert "suka kopi" in env.llm.system
     assert "## Self" in env.llm.system
     assert "Reply in Indonesian" in env.llm.system
@@ -235,7 +240,9 @@ def test_shell_requires_approval_then_approve_executes(tmp_path) -> None:
     from eidesoul.engine.commands.approve import COMMAND as APPROVE
 
     inbound = inbound_message("/approve 1", thread=DM)
-    ctx = env.agent.command_context(DM, "628111", (env.config.roles.get("member"),), env.gateway, "1", inbound)
+    ctx = env.agent.command_context(
+        DM, "628111", (env.config.roles.get("member"),), env.gateway, "1", inbound
+    )
     result = asyncio.run(APPROVE.fn(ctx))
 
     assert "eidesoul-ok" in result
@@ -269,7 +276,9 @@ def test_sensitive_shell_command_waits_then_approve_executes(tmp_path) -> None:
     assert "pending approval #1" in env.gateway.sent[0][1]
     from eidesoul.engine.commands.approve import COMMAND as APPROVE
 
-    ctx = env.agent.command_context(DM, "628111", (env.config.roles.get("member"),), env.gateway, "1")
+    ctx = env.agent.command_context(
+        DM, "628111", (env.config.roles.get("member"),), env.gateway, "1"
+    )
     result = asyncio.run(APPROVE.fn(ctx))
     assert "eidesoul-ok" in result
     assert env.agent.approvals.get(1).status == "approved"
@@ -291,7 +300,9 @@ def test_approve_rejects_other_sender(tmp_path) -> None:
     approval = asyncio.run(create())
     from eidesoul.engine.commands.approve import COMMAND as APPROVE
 
-    ctx = env.agent.command_context(DM, "628111", (env.config.roles.get("member"),), env.gateway, str(approval.id))
+    ctx = env.agent.command_context(
+        DM, "628111", (env.config.roles.get("member"),), env.gateway, str(approval.id)
+    )
     result = asyncio.run(APPROVE.fn(ctx))
     assert "pengirim lain" in result
     assert env.agent.approvals.get(approval.id).status == "pending"

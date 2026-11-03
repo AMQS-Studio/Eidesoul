@@ -30,7 +30,8 @@ def catalog(code: str) -> dict[str, str]:
     """Load and validate one catalog; raise ValueError when unusable."""
     path = CATALOG_DIR / f"{code}.yaml"
     if not path.is_file():
-        raise ValueError(f"language '{code}' has no catalog; available: {', '.join(available()) or 'none'}")
+        listing = ", ".join(available()) or "none"
+        raise ValueError(f"language '{code}' has no catalog; available: {listing}")
     try:
         body = yaml.safe_load(path.read_text(encoding="utf-8"))
     except (OSError, yaml.YAMLError) as exc:

@@ -163,7 +163,7 @@ async def _memory(args: dict, ctx: ToolContext) -> str:
             ok = await ctx.memory.veto(str(raw_id), subject_id=subject, active=active)
             if not ok:
                 return "error: only the subject of a memory can veto it"
-            return f"ok: memory {str(raw_id)} {'vetoed' if active else 'unvetoed'}."
+            return f"ok: memory {raw_id!s} {'vetoed' if active else 'unvetoed'}."
         if not query:
             return "error: id or query is required for veto"
         rows = await ctx.memory.search(

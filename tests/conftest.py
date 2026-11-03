@@ -79,7 +79,8 @@ def test_store() -> Iterator[Database]:
 
         ensure_schemas(db)
         version = db.scalar(text("SELECT version_num FROM alembic_version"))
-        assert version is not None and int(version) == SCHEMA_VERSION
+        assert version is not None
+        assert int(version) == SCHEMA_VERSION
         stamped = db.scalar(text("SELECT value FROM schema_meta WHERE key = 'version'"))
         assert str(stamped) == str(SCHEMA_VERSION)
         yield db
@@ -102,7 +103,7 @@ def clean_store(test_store: Database) -> Iterator[None]:
                 "SET frozen = false, frozen_by = '', frozen_at = 0.0, shutting_down = false"
             )
         )
-    yield
+    return
 
 
 @pytest.fixture(autouse=True)

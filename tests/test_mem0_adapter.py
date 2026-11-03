@@ -316,7 +316,8 @@ def test_prefix_resolves_to_the_full_uuid(tmp_path, monkeypatch) -> None:
 
     hit = asyncio.run(backend.get("#5d94099b"))
 
-    assert hit is not None and hit.id == UUID_A
+    assert hit is not None
+    assert hit.id == UUID_A
     assert fake.seen == [UUID_A]
 
 
@@ -327,7 +328,8 @@ def test_bare_32_hex_is_dashed_not_queried(tmp_path, monkeypatch) -> None:
 
     hit = asyncio.run(backend.get(UUID_A.replace("-", "").upper()))
 
-    assert hit is not None and hit.id == UUID_A
+    assert hit is not None
+    assert hit.id == UUID_A
     assert fake.seen == [UUID_A]
 
 

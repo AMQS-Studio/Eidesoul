@@ -13,7 +13,7 @@ class CliSettings:
     chat_name: str = "Terminal"
 
     @classmethod
-    def from_mapping(cls, enabled: bool, options: dict) -> "CliSettings":
+    def from_mapping(cls, enabled: bool, options: dict) -> CliSettings:
         return cls(
             enabled=bool(enabled),
             role=str(options.get("role") or ""),

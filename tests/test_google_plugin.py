@@ -112,7 +112,8 @@ def test_device_login_polls_until_verified(tmp_path, monkeypatch) -> None:
 
     text = asyncio.run(flow())
 
-    assert "UC-123" in text and "https://example.test/device" in text
+    assert "UC-123" in text
+    assert "https://example.test/device" in text
     assert svc.identity("p1")["email"] == "me@example.com"
     assert svc._device("p1") is None
 
@@ -280,7 +281,8 @@ def test_tool_discovery_and_role_grants(tmp_path, monkeypatch) -> None:
     module = google_module(tmp_path, monkeypatch)
     handler = module.TOOL
 
-    assert handler.name == "google" and handler.family == "mcp"
+    assert handler.name == "google"
+    assert handler.family == "mcp"
     assert handler.aliases == ("gworkspace",)
     assert "google" not in CORE_TOOLS.names()
 

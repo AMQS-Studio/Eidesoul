@@ -6,11 +6,11 @@ import re
 from pathlib import Path
 
 from ..config import Config
+from ..guard import CONSENT, ActionRequest, approval_summary, scope_proof
 from ..inbound import Directory
 from ..permissions import command_allowed
 from ..registry import Handler, Registry, allows, discover
 from ..roles import Role
-from ..guard import CONSENT, ActionRequest, approval_summary, scope_proof
 
 log = logging.getLogger(__name__)
 

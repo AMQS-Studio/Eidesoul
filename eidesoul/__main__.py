@@ -31,6 +31,10 @@ def setup_logging() -> None:
     observability.install("text", "INFO")
 
 
+def _verdict(passed: object) -> str:
+    return "PASS" if passed else "FAIL"
+
+
 def _report(label: str, outcome: str, detail: str = "") -> bool:
     print(f"{outcome} {label}{(' - ' + detail) if detail else ''}", flush=True)
     return outcome != "FAIL"
@@ -338,7 +342,9 @@ async def selftest(config: Config) -> int:
             tools += [handler.name for handler in tools_for(plugin_tools, (item,))]
             tools += [handler.name for handler in hub.specs((item,))]
             commands = [handler.name for handler in commands_for(COMMANDS, (item,))]
-            print(f"role {name}: command={', '.join(commands) or '-'} | tool={', '.join(tools) or '-'}", flush=True)
+            command_label = ", ".join(commands) or "-"
+            tool_label = ", ".join(tools) or "-"
+            print(f"role {name}: command={command_label} | tool={tool_label}", flush=True)
 
         from .engine.self_knowledge import check as selfcheck
 
@@ -353,14 +359,19 @@ async def selftest(config: Config) -> int:
 
         config.workspace.mkdir(parents=True, exist_ok=True)
         ctx = ToolContext(config, role, tool_patterns((role,)), memory=memory, skills=skills)
-        specs = {handler.name: handler for handler in REGISTRY.by_name.values() if not handler.hidden}
+        specs = {
+            handler.name: handler
+            for handler in REGISTRY.by_name.values()
+            if not handler.hidden
+        }
 
         wrote = await execute(
             specs, "write", {"path": "private/selftest.txt", "content": "eidesoul-selftest"}, ctx
         )
         read = await execute(specs, "read", {"path": "private/selftest.txt"}, ctx)
         passed = wrote.startswith("ok:") and "eidesoul-selftest" in read
-        results.append(_report("write/read", "PASS" if passed else "FAIL", "" if passed else f"{wrote} | {read[:80]}"))
+        detail = "" if passed else f"{wrote} | {read[:80]}"
+        results.append(_report("write/read", _verdict(passed), detail))
 
         history.add(
             "selftest",
@@ -380,13 +391,15 @@ async def selftest(config: Config) -> int:
         passed = [item.id for item in found] == ["selftest-1"] and (
             found[0].author == "manual_owner" and found[0].visibility == 3
         ) and removed is not None and removed.deleted is True and removed.deleted_admin is True
-        results.append(_report("history", "PASS" if passed else "FAIL", "" if passed else "archive not readable"))
+        detail = "" if passed else "archive not readable"
+        results.append(_report("history", _verdict(passed), detail))
 
         action_id = ledger.log_action("selftest", "selftest", "send", "eidesoul-selftest-action")
         passed = action_id > 0 and any(
             row["summary"] == "eidesoul-selftest-action" for row in ledger.recent_actions()
         )
-        results.append(_report("ledger", "PASS" if passed else "FAIL", "" if passed else "action not recorded"))
+        detail = "" if passed else "action not recorded"
+        results.append(_report("ledger", _verdict(passed), detail))
 
         if getattr(memory, "available", False):
             ids = await memory.add(
@@ -404,7 +417,8 @@ async def selftest(config: Config) -> int:
                 ids[0], requester_id="selftest", allow_global=True
             )
             passed = bool(hits) and removed
-            results.append(_report("memory", "PASS" if passed else "FAIL", "" if passed else "entry not found"))
+            detail = "" if passed else "entry not found"
+            results.append(_report("memory", _verdict(passed), detail))
         else:
             _report("memory", "SKIP", memory_status(memory))
 
@@ -423,12 +437,15 @@ async def selftest(config: Config) -> int:
             policy.disclose(vetoed, requester="a", direct=True) == "deny",
         )
         results.append(
-            _report("privacy", "PASS" if all(checks) else "FAIL", "" if all(checks) else str(checks))
+            _report(
+                "privacy", _verdict(all(checks)), "" if all(checks) else str(checks)
+            )
         )
 
         skills.save("selftest", "Selftest check.", "Selftest steps.\n", overwrite=True)
         passed = "Selftest check." in skills.catalog()
-        results.append(_report("skill", "PASS" if passed else "FAIL", "" if passed else skills.catalog()[:120]))
+        detail = "" if passed else skills.catalog()[:120]
+        results.append(_report("skill", _verdict(passed), detail))
 
         recipes.save(
             "selftest",
@@ -438,11 +455,13 @@ async def selftest(config: Config) -> int:
             overwrite=True,
         )
         passed = recipes.get("selftest") is not None
-        results.append(_report("recipe", "PASS" if passed else "FAIL", "" if passed else "recipe missing"))
+        detail = "" if passed else "recipe missing"
+        results.append(_report("recipe", _verdict(passed), detail))
 
         shell = await execute(specs, "shell", {"command": "echo shell-ok"}, ctx)
         passed = "shell-ok" in shell
-        results.append(_report("shell", "PASS" if passed else "FAIL", "" if passed else shell[:120]))
+        detail = "" if passed else shell[:120]
+        results.append(_report("shell", _verdict(passed), detail))
 
         runtime = resolve_runtime(config.sandbox)
         if runtime is None:
@@ -455,11 +474,14 @@ async def selftest(config: Config) -> int:
                 ctx,
             )
             passed = "sandbox-ok" in box
-            results.append(_report("sandbox", "PASS" if passed else "FAIL", "" if passed else box[:200]))
+            detail = "" if passed else box[:200]
+            results.append(_report("sandbox", _verdict(passed), detail))
 
-        search = await execute(specs, "web_search", {"query": "python asyncio", "max_results": 3}, ctx)
+        args = {"query": "python asyncio", "max_results": 3}
+        search = await execute(specs, "web_search", args, ctx)
         passed = bool(search.strip()) and not search.startswith("error:")
-        results.append(_report("web_search", "PASS" if passed else "FAIL", "" if passed else search[:200]))
+        detail = "" if passed else search[:200]
+        results.append(_report("web_search", _verdict(passed), detail))
 
         llm = LLM(config, db=db)
         answer = await llm.run("Reply with: ok", "ping", [], ctx, session="eidesoul-selftest")
@@ -496,7 +518,8 @@ async def selftest(config: Config) -> int:
             and healed["pleasure"] > hurt["pleasure"]
             and affect.drives("selftest")["boredom"] >= 0
         )
-        results.append(_report("affect", "PASS" if passed else "FAIL", "" if passed else "PAD did not move"))
+        detail = "" if passed else "PAD did not move"
+        results.append(_report("affect", _verdict(passed), detail))
 
         style.learn("iyaa aku udah cek, aman kok")
         text = style.profile()
@@ -504,7 +527,8 @@ async def selftest(config: Config) -> int:
         results.append(_report("style", "PASS" if passed else "FAIL", "" if passed else text[:120]))
 
         for name in config.mcp:
-            found = [spec.name for spec in hub.specs((role,)) if spec.name.startswith(f"mcp__{name}__")]
+            prefix = f"mcp__{name}__"
+            found = [spec.name for spec in hub.specs((role,)) if spec.name.startswith(prefix)]
             print(f"mcp {name}: {', '.join(found) or '(no tools)'}", flush=True)
     finally:
         await memory.close()
@@ -527,7 +551,9 @@ def _database(args: argparse.Namespace):
 def _db_upgrade(args: argparse.Namespace) -> int:
     data = _database(args).upgrade(args.config)
     print(f"db upgrade: {data['dialect']} {data['database']}", flush=True)
-    print(f"schema version: {data['schema_version']}; documents: {len(data['documents'])}", flush=True)
+    version = data["schema_version"]
+    documents = len(data["documents"])
+    print(f"schema version: {version}; documents: {documents}", flush=True)
     return 0
 
 
@@ -866,7 +892,9 @@ def _plugins_dispatch(args: argparse.Namespace) -> int:
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="eidesoul", description="Eidesoul soul engine")
-    parser.add_argument("--config", default=None, help="path to config.yaml (default: ./config.yaml)")
+    parser.add_argument(
+        "--config", default=None, help="path to config.yaml (default: ./config.yaml)"
+    )
     parser.add_argument("--env", default=".env", help="path to .env (default: ./.env)")
     sub = parser.add_subparsers(dest="command")
     run = sub.add_parser("run", help="run the gateways enabled in config.yaml")

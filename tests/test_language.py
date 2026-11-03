@@ -156,7 +156,7 @@ def test_catalog_without_the_pronoun_key_fails_the_boot(tmp_path) -> None:
     i18n.CATALOG_DIR = tmp_path
     i18n.reload_catalogs()
     try:
-        with pytest.raises(ValueError, match="soul.pronoun.default"):
+        with pytest.raises(ValueError, match=r"soul\.pronoun\.default"):
             load_soul({"language": "en"})
     finally:
         i18n.CATALOG_DIR = original

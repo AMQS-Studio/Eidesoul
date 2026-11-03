@@ -63,7 +63,10 @@ async def _memori(ctx: CommandContext) -> str:
         label = t(f"command.memori.{SCOPE_KEYS[scope]}", lang)
         return (
             "\n".join(
-                [t("command.memori.list_head", lang, scope=label), *(_line(row, lang) for row in shown)]
+                [
+                    t("command.memori.list_head", lang, scope=label),
+                    *(_line(row, lang) for row in shown),
+                ]
             )
             if shown
             else t("command.memori.none", lang)

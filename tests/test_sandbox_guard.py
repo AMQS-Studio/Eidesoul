@@ -163,7 +163,8 @@ def test_execute_creates_an_approval_for_an_approver(tmp_path, monkeypatch) -> N
 
     assert "pending approval #1" in result
     pending = env.agent.approvals.pending(CHAT, "local")
-    assert len(pending) == 1 and pending[0].tool == "sandbox"
+    assert len(pending) == 1
+    assert pending[0].tool == "sandbox"
 
 
 def test_approved_run_skips_both_layers(tmp_path, monkeypatch) -> None:
@@ -190,4 +191,5 @@ def test_approved_run_skips_both_layers(tmp_path, monkeypatch) -> None:
 
     result = asyncio.run(execute(env.agent.tools.by_name, "sandbox", {"command": "rm -rf /"}, ctx))
 
-    assert result == "ok: ran" and called
+    assert result == "ok: ran"
+    assert called

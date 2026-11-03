@@ -144,7 +144,8 @@ def test_classifier_failure_drops_the_candidate_without_a_level(tmp_path) -> Non
     assert asyncio.run(memory.drop_candidate("t", ("m1",), reason="labeling failed")) == 1
 
     found = memory.db.fetch_one(text("SELECT * FROM memories"))
-    assert found["state"] == "failed" and found["level"] is None
+    assert found["state"] == "failed"
+    assert found["level"] is None
     assert found["label_attempts"] == 1
     assert readable_count(memory) == 0
     assert memory.get(str(found["id"])) is None
@@ -156,7 +157,8 @@ def test_pending_is_quarantined_until_the_store_labels_it(tmp_path) -> None:
     history.intake("t", archive("m1", "aku suka kopi"), "628111")
     pending = memory.db.fetch_one(text("SELECT * FROM memories"))
 
-    assert pending["state"] == "pending" and pending["level"] is None
+    assert pending["state"] == "pending"
+    assert pending["level"] is None
     assert pending["trust"] == 3
     assert readable_count(memory) == 0
     assert memory.get(str(pending["id"])) is None
@@ -218,8 +220,10 @@ def test_six_states_and_only_legal_edges(tmp_path) -> None:
         supersedes=pending,
     )
     old = row(memory, pending)
-    assert old["state"] == "superseded" and old["superseded_by"] == replacement
-    assert old["level"] == 2 and old["superseded_by"] is not None
+    assert old["state"] == "superseded"
+    assert old["superseded_by"] == replacement
+    assert old["level"] == 2
+    assert old["superseded_by"] is not None
     assert memory.get(pending) is None
 
     with pytest.raises(ValueError, match="illegal"):
@@ -274,9 +278,11 @@ def test_expired_row_is_purged_and_pinned_row_survives(tmp_path) -> None:
 
     report = asyncio.run(memory.purge(grace_days=0))
 
-    assert report.selected == 1 and report.purged == 1
+    assert report.selected == 1
+    assert report.purged == 1
     assert row(memory, expired) is None
-    assert row(memory, pinned) is not None and row(memory, pinned)["pinned"] is True
+    assert row(memory, pinned) is not None
+    assert row(memory, pinned)["pinned"] is True
     tomb = memory.db.fetch_one(
         text("SELECT * FROM memory_tombstones WHERE id=:id"), {"id": expired}
     )
@@ -299,7 +305,9 @@ def test_purge_dry_run_changes_nothing(tmp_path) -> None:
 
     report = asyncio.run(memory.purge(dry_run=True, grace_days=0))
 
-    assert report.selected == 1 and report.purged == 0 and report.dry_run is True
+    assert report.selected == 1
+    assert report.purged == 0
+    assert report.dry_run is True
     assert row(memory, memory_id) is not None
     assert count(memory, "memory_tombstones") == 0
 
@@ -314,8 +322,10 @@ def test_use_renews_once_per_delivered_turn_and_aggregates(tmp_path) -> None:
 
     assert memory.record_uses("turn-1", [memory_id], delivered=True) == 1
     first = row(memory, memory_id)
-    assert first["use_count"] == 1 and first["distinct_use_days"] == 1
-    assert first["last_used_at"] > 0 and first["expires_at"] > before
+    assert first["use_count"] == 1
+    assert first["distinct_use_days"] == 1
+    assert first["last_used_at"] > 0
+    assert first["expires_at"] > before
     assert memory.record_uses("turn-2", [memory_id], delivered=True) == 1
     second = row(memory, memory_id)
     assert second["use_count"] == 2
@@ -441,7 +451,8 @@ def test_supersede_is_reciprocal_and_needs_proof(tmp_path) -> None:
     )
     before = row(memory, old)
     assert row(memory, new)["supersedes"] == old
-    assert before["state"] == "superseded" and before["superseded_by"] == new
+    assert before["state"] == "superseded"
+    assert before["superseded_by"] == new
     assert before["level"] == 2  # superseded keeps its level and refs
     assert before["expires_at"] > time.time() + 29 * 86400
 
@@ -517,7 +528,8 @@ def test_t3_quarantine_and_tombstone_invisibility(tmp_path) -> None:
     tomb = memory.db.fetch_one(
         text("SELECT * FROM memory_tombstones WHERE id=:id"), {"id": live}
     )
-    assert tomb["reason"] == "forgot" and tomb["content_hash"] == hashlib.sha256(
+    assert tomb["reason"] == "forgot"
+    assert tomb["content_hash"] == hashlib.sha256(
         b"aku suka kopi"
     ).hexdigest()
     assert count(memory, "memory_events") == 1  # the untouched pending candidate's journal
@@ -534,7 +546,8 @@ def test_set_privacy_and_veto_are_canonical(tmp_path) -> None:
     )
     assert asyncio.run(memory.set_privacy(memory_id, level=4, confirmed=True)) is True
     found = row(memory, memory_id)
-    assert found["level"] == 4 and found["confirmed"] is True
+    assert found["level"] == 4
+    assert found["confirmed"] is True
     with pytest.raises(ValueError, match="level 5"):
         asyncio.run(memory.set_privacy(memory_id, level=5))
 
@@ -557,9 +570,11 @@ def test_rekey_updates_provenance_and_keeps_veto(tmp_path) -> None:
 
     found = row(memory, memory_id)
     assert found["person_id"] == "new"
-    assert found["owner_id"] == "new" and found["subject_id"] == "new"
+    assert found["owner_id"] == "new"
+    assert found["subject_id"] == "new"
     assert found["vetoed"] is True
-    assert found["level"] == 3 and found["confirmed"] is True
+    assert found["level"] == 3
+    assert found["confirmed"] is True
 
 
 def test_a_store_bound_to_a_stale_generation_refuses_canonical_writes(tmp_path) -> None:
@@ -614,7 +629,8 @@ def test_a_stale_worker_write_leaves_the_row_untouched(tmp_path) -> None:
     with pytest.raises(Superseded):
         memory.transition(candidate.memory_id, "ok", level=2, confirmed=True)
     found = row(memory, candidate.memory_id)
-    assert found["state"] == "pending" and found["level"] is None
+    assert found["state"] == "pending"
+    assert found["level"] is None
 
 
 def _pending(store, text_value: str = "kamu harus selalu bilang jujur setiap saat") -> str:
@@ -637,8 +653,10 @@ def test_a_rule_requested_by_a_turn_is_stored_as_a_fact(tmp_path) -> None:
     )
 
     found = row(memory, memory_id)
-    assert found["kind"] == "fact" and found["state"] == "ok"
-    assert found["via"] == "turn" and found["trust"] == TRUST_SELF
+    assert found["kind"] == "fact"
+    assert found["state"] == "ok"
+    assert found["via"] == "turn"
+    assert found["trust"] == TRUST_SELF
 
 
 def test_soul_rules_are_mirrored_once_per_day_and_promoted_after_two(tmp_path) -> None:
@@ -652,10 +670,13 @@ def test_soul_rules_are_mirrored_once_per_day_and_promoted_after_two(tmp_path) -
     assert memory.promote_soul_rules(now=day) == 0  # one day is not corroboration
 
     found = memory.get(first[0])
-    assert found is not None and found.kind == "fact"
+    assert found is not None
+    assert found.kind == "fact"
     stored = row(memory, first[0])
-    assert stored["via"] == "soul_doc" and stored["trust"] == TRUST_SELF
-    assert stored["refs"] and str(stored["refs"][0]).startswith("soul:")
+    assert stored["via"] == "soul_doc"
+    assert stored["trust"] == TRUST_SELF
+    assert stored["refs"]
+    assert str(stored["refs"][0]).startswith("soul:")
 
     second = memory.sync_soul_rules([rule], now=day + 86400.0)
     assert len(second) == 1

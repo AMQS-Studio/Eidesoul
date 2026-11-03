@@ -2465,7 +2465,7 @@ class MemoryStore:
         now = time.time()
         with self.db.connect() as conn:
             self._fence(conn, "resolve_dispute")
-            for memory_id, other in ((left, right), (right, left)):
+            for memory_id, _other in ((left, right), (right, left)):
                 values: dict = {
                     "dispute_state": "resolved",
                     "dispute_reason": str(reason or "dispute_resolved")[:120],

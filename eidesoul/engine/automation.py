@@ -179,7 +179,7 @@ def quiet_end(epoch: float, tz_name: object, window: tuple[int, int] | None) -> 
         return float(epoch)
     zoneinfo = zone(tz_name)
     moment = datetime.fromtimestamp(float(epoch), zoneinfo)
-    start, end = window
+    _start, end = window
     minutes = end
     target = moment.replace(
         hour=minutes // 60, minute=minutes % 60, second=0, microsecond=0
@@ -978,7 +978,7 @@ class AutomationStore:
                 pg_insert(automation_runs)
                 .values(
                     automation_id=int(row["id"]),
-                    occurrence_key=f"message:{int(row['id'])}:{str(message.id)}",
+                    occurrence_key=f"message:{int(row['id'])}:{message.id!s}",
                     scheduled_at=float(message.when.timestamp()) if message.when else float(now),
                     status="queued",
                     payload={

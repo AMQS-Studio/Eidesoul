@@ -67,7 +67,8 @@ def test_refresh_writes_one_item_per_topic_and_takes_the_oldest_first(tmp_path) 
         call.split(" Indonesia")[0] for call in calls
     }
     older = [name for name, item in refreshed.items() if item["fetched_at"] == 1000.0]
-    assert len(older) == 2 and len(refreshed) == 4
+    assert len(older) == 2
+    assert len(refreshed) == 4
 
 
 def test_refresh_keeps_existing_items_when_search_fails(tmp_path) -> None:

@@ -17,7 +17,10 @@ from eidesoul.engine.config import (
 from eidesoul.engine.stores.documents import DocumentStore
 
 BASE = {
-    "database": {"url": "postgresql+psycopg://eidesoul:eidesoul@127.0.0.1:5433/eidesoul_test", "url_env": ""},
+    "database": {
+        "url": "postgresql+psycopg://eidesoul:eidesoul@127.0.0.1:5433/eidesoul_test",
+        "url_env": "",
+    },
     "workspace": ".eidesoul/workspace",
     "roles_file": "roles.yaml",
     "engine": {

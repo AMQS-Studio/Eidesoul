@@ -122,7 +122,9 @@ Rules:
 - Never use names, clothes alone, or a guess you cannot see. Unknown is a fine answer."""
 
 
-async def classify(llm, raw: bytes, mime: str, *, locale: str = "id-ID") -> tuple[str, float] | None:
+async def classify(
+    llm, raw: bytes, mime: str, *, locale: str = "id-ID"
+) -> tuple[str, float] | None:
     """Avatar -> (label, 0.6) or None; a fallback signal only, failure means unknown."""
     import base64
 

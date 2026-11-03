@@ -22,7 +22,7 @@ class Prompt(str):
     stable: str
     volatile: str
 
-    def __new__(cls, stable: str, volatile: str) -> "Prompt":
+    def __new__(cls, stable: str, volatile: str) -> Prompt:
         merged = (
             f"{stable}{MERGE_SEPARATOR}{volatile}" if stable and volatile else stable or volatile
         )

@@ -127,7 +127,8 @@ def test_episode_closes_once_and_distills_one_revision(tmp_path) -> None:
     assert closed == ["t1"]
     assert episodes.scan(db, now=created + 20 * 60, idle_minutes=10) == []
     episode = episodes.get(db, "t1")
-    assert episode.status == "closed" and episode.close_signal == "idle"
+    assert episode.status == "closed"
+    assert episode.close_signal == "idle"
     assert episode.tool_calls == 1
 
     asyncio.run(engine._enqueue_distill("t1", time.time()))

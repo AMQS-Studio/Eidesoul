@@ -40,7 +40,8 @@ def test_member_sees_only_public_and_this_scratch(tmp_path) -> None:
 
     result = run(ctx, {"pattern": "needle"})
 
-    assert "public/a.py" in result and "scratch/chat/b.py" in result
+    assert "public/a.py" in result
+    assert "scratch/chat/b.py" in result
     assert "scratch/other" not in result
 
 
@@ -53,8 +54,10 @@ def test_count_and_files_modes_have_no_line_content(tmp_path) -> None:
     listed = run(ctx, {"pattern": "needle", "mode": "files"})
 
     assert counted.startswith("2 matches in 1 files")
-    assert "public/a.py: 2" in counted and "needle" not in counted
-    assert listed.startswith("1 files") and "public/a.py" in listed
+    assert "public/a.py: 2" in counted
+    assert "needle" not in counted
+    assert listed.startswith("1 files")
+    assert "public/a.py" in listed
 
 
 def test_secret_file_is_skipped(tmp_path) -> None:
@@ -65,11 +68,12 @@ def test_secret_file_is_skipped(tmp_path) -> None:
 
 
 def test_outside_root_is_a_permission_error(tmp_path) -> None:
-    config, ctx = env(tmp_path, trusted=False)
+    _config, ctx = env(tmp_path, trusted=False)
 
     result = run(ctx, {"pattern": "x", "path": "../outside"})
 
-    assert result.startswith("error:") and "not allowed" in result
+    assert result.startswith("error:")
+    assert "not allowed" in result
 
 
 def test_limit_and_next_hint(tmp_path) -> None:

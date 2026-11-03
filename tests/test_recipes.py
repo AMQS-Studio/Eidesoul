@@ -45,7 +45,8 @@ def test_store_round_trip_and_persistence(tmp_path: Path) -> None:
     )
 
     recipe = store.get("rekap")
-    assert recipe is not None and recipe.kind == "recipe"
+    assert recipe is not None
+    assert recipe.kind == "recipe"
     assert recipe.roles == ("administrator", "member")
     assert recipe.steps[0]["args"] == {"q": "x {{args}}"}
     assert "- /rekap [divisi] — Rekap mingguan." in store.index()
@@ -62,19 +63,19 @@ def test_store_round_trip_and_persistence(tmp_path: Path) -> None:
 def test_store_validation_rejects_bad_definitions(tmp_path: Path) -> None:
     store = RecipeStore(database())
     good = [{"tool": "echo", "args": {}}]
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="recipe name must be lowercase"):
         store.save("Bad Name!", "recipe", "d", steps=good)
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="kind must be recipe or prompt"):
         store.save("ok", "sihir", "d", steps=good)
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="steps must be a non-empty list"):
         store.save("ok", "recipe", "d", steps=[])
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="prompt is required"):
         store.save("ok", "prompt", "d", prompt="")
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="built-in"):
         store.save("help", "prompt", "d", prompt="p")
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="at most"):
         store.save("ok", "recipe", "d", steps=[{"tool": "echo", "args": {}}] * 11)
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="description is required"):
         store.save("ok", "recipe", "", steps=good)
 
 
@@ -85,8 +86,10 @@ def test_store_duplicate_and_overwrite(tmp_path: Path) -> None:
         store.save("prompt", "prompt", "Versi dua.", prompt="lakukan lagi")
     store.save("prompt", "prompt", "Versi dua.", prompt="lakukan lagi", overwrite=True)
     recipe = store.get("prompt")
-    assert recipe is not None and recipe.description == "Versi dua."
-    assert recipe.kind == "prompt" and recipe.prompt == "lakukan lagi"
+    assert recipe is not None
+    assert recipe.description == "Versi dua."
+    assert recipe.kind == "prompt"
+    assert recipe.prompt == "lakukan lagi"
 
 
 def test_store_skips_corrupt_rows(tmp_path: Path) -> None:

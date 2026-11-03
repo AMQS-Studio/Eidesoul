@@ -10,7 +10,8 @@ from eidesoul.engine.i18n import available, catalog, normalize_language, reload_
 
 def test_catalogs_have_identical_keys() -> None:
     codes = available()
-    assert "en" in codes and "id" in codes
+    assert "en" in codes
+    assert "id" in codes
     reference = catalog("en")
     assert reference
     assert all(value.strip() for value in reference.values())
@@ -41,11 +42,12 @@ def test_new_catalog_file_is_discovered(tmp_path, monkeypatch) -> None:
 
 
 def test_unknown_language_lists_available() -> None:
-    with pytest.raises(ValueError) as caught:
+    with pytest.raises(ValueError, match="available") as caught:
         normalize_language("jv")
     message = str(caught.value)
     assert "available" in message
-    assert "id" in message and "en" in message
+    assert "id" in message
+    assert "en" in message
 
 
 def test_missing_key_and_bad_placeholder_never_raise() -> None:

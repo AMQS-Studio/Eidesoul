@@ -131,7 +131,7 @@ def _recent_log(state: dict, limit: int = LOG_LINES) -> list[dict]:
 
 
 def _relation(affection: float, annoyance: float, trust: float, stage: str = "") -> str:
-    """Relationship label for the prompt; the archive stage is honoured so old people are not new."""
+    """Relationship label for the prompt, honouring the archive stage for old people."""
     if annoyance >= 0.75:
         return "enemy"
     if affection >= 0.85 and trust >= 0.50:
@@ -403,7 +403,8 @@ class AffectStore:
         person = self._person(conn, person_id)
         clean_name = " ".join(str(name or "").split())[:80]
         aliases = [str(item) for item in person["aliases"]]
-        if clean_name and person["name"] and clean_name != person["name"] and clean_name not in aliases:
+        renamed = clean_name and person["name"] and clean_name != person["name"]
+        if renamed and clean_name not in aliases:
             aliases = [*aliases, clean_name][-8:]
         chosen = clean_name or person["name"]
         interactions = int(person["interactions"]) + 1
@@ -977,7 +978,9 @@ class AffectStore:
 
     # ------------------------------------------------------------------ prompt
 
-    def _payload(self, state_data: dict, drives_data: dict, person_id: str = "", thread_id: str = "") -> dict:
+    def _payload(
+        self, state_data: dict, drives_data: dict, person_id: str = "", thread_id: str = ""
+    ) -> dict:
         emotion = state_data["emotion"]
         trust_tier = engine.public_status(state_data)["trust_tier"]
         person = None
@@ -1107,7 +1110,8 @@ class AffectStore:
             parts.append("Your relationships:")
             parts.extend(lines)
         parts.append(
-            "Express this through word choice and reply length. Never mention these numbers or state."
+            "Express this through word choice and reply length. "
+            "Never mention these numbers or state."
         )
         text = "\n".join(parts)
         if len(text) > PROMPT_CHARS:

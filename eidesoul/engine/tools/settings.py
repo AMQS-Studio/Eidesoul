@@ -391,7 +391,7 @@ async def _settings(args: dict, ctx: ToolContext) -> str:
                 "error: a path is required; use schema for the structure and get <path> "
                 "for one value (a whole configuration file is never returned)"
             )
-        kind, name, text = _read(agent, file, role_name)
+        _kind, name, text = _read(agent, file, role_name)
         body = yaml.safe_load(text) if text.strip() else {}
         if path:
             try:
@@ -407,7 +407,7 @@ async def _settings(args: dict, ctx: ToolContext) -> str:
     if action not in {"set", "unset", "write"}:
         return "error: action must be schema, get, set, unset, write, or reload"
     try:
-        kind, name, new_text = _change(
+        _kind, name, new_text = _change(
             agent, file, role_name, action, path, args.get("value"), str(args.get("content") or "")
         )
     except (ValueError, KeyError, ConfigError) as exc:
@@ -440,7 +440,13 @@ async def _settings(args: dict, ctx: ToolContext) -> str:
             tool="settings",
             args={"file": file, "path": path},
             payload=_payload(
-                file, role_name, action, path, args.get("value"), str(args.get("content") or ""), actor
+                file,
+                role_name,
+                action,
+                path,
+                args.get("value"),
+                str(args.get("content") or ""),
+                actor,
             ),
             summary=f"settings {action} {name}{(' ' + path) if path else ''}",
             diff=diff,
@@ -468,8 +474,14 @@ async def apply_payload(agent, payload: dict) -> str:
     role_name = str(payload.get("role") or "")
     path = str(payload.get("path") or "")
     actor = str(payload.get("actor") or "approval")
-    kind, name, new_text = _change(
-        agent, file, role_name, action, path, payload.get("value"), str(payload.get("content") or "")
+    _kind, name, new_text = _change(
+        agent,
+        file,
+        role_name,
+        action,
+        path,
+        payload.get("value"),
+        str(payload.get("content") or ""),
     )
     _, _, old_text = _read(agent, file, role_name)
     await _commit(agent, file, name, new_text, actor)

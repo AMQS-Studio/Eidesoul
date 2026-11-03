@@ -153,7 +153,8 @@ def test_two_episodes_of_one_signature_measure_together(tmp_path) -> None:
 
     assert found.count == 2
     assert found.median_tokens == 200.0
-    assert found.steps == 4 and found.failed_steps == 0
+    assert found.steps == 4
+    assert found.failed_steps == 0
     assert efficiency.eligible(found, min_episodes=2)
     assert efficiency.signatures(db, now=now) == [SIGNATURE]
 
@@ -286,7 +287,8 @@ def test_propose_automation_creates_an_approval_and_no_row(tmp_path) -> None:
     assert db.fetch_all(automations.select()) == []
     assert db.fetch_all(automation_runs.select()) == []
     pending = db.fetch_all(approvals.select())
-    assert len(pending) == 1 and pending[0]["kind"] == "automation"
+    assert len(pending) == 1
+    assert pending[0]["kind"] == "automation"
 
 
 def test_the_same_signature_does_not_propose_twice_inside_the_cooldown(tmp_path) -> None:

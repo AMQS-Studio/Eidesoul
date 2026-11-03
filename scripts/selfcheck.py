@@ -18,7 +18,7 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from eidesoul.engine.config import (  # noqa: E402
+from eidesoul.engine.config import (
     ApprovalConfig,
     Config,
     DatabaseConfig,
@@ -27,9 +27,9 @@ from eidesoul.engine.config import (  # noqa: E402
     SandboxConfig,
     SelfKnowledgeConfig,
 )
-from eidesoul.engine.roles import RoleRegistry  # noqa: E402
-from eidesoul.engine.self_knowledge import SelfKnowledge, check  # noqa: E402
-from eidesoul.engine.soul import Soul  # noqa: E402
+from eidesoul.engine.roles import RoleRegistry
+from eidesoul.engine.self_knowledge import SelfKnowledge, check
+from eidesoul.engine.soul import Soul
 
 
 def sample_config() -> Config:
