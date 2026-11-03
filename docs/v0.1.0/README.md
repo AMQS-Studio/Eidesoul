@@ -61,7 +61,7 @@ re-stamp the hash. No machine translator ships with the repo.
 | [0025](adr/engine/0025-turn-cost.md) | Turn Cost — Stable Prefix, Gating `polish`, and Call Budgets | engine | implemented |
 | [0026](adr/engine/0026-search.md) | Full-Text Search of Messages, Trigrams, and Scope | engine | implemented |
 | [0032](adr/engine/0032-address-and-command.md) | One Address, One Command — Embodiment-Neutral Output, Refusal over Guessing | engine | implemented |
-| [0033](adr/0033-neutral-core.md) | Neutral Core, Specialized Edges — No Culture, Transport, or Vendor in Mechanism | root | draft |
+| [0033](adr/0033-neutral-core.md) | Neutral Core, Specialized Edges — No Culture, Transport, or Vendor in Mechanism | root | partial |
 
 ADRs are grouped by folder: cross-cutting decisions at the `adr/` root, engine decisions under
 `adr/engine/`, web/panel decisions under `adr/web/`. Numbers are chronological and unique across the

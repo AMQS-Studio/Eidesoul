@@ -25,9 +25,9 @@ Hard rules for changes in this repo.
 - Allowed root trees are `docs/`, `scripts/`, `tests/`, `migrations/`, `plugins/`, `panel/`
   (the operator app), and `apps/` (any future application that imports the engine). Schema changes live only in `migrations/`; the engine may hold
   `plugins.py` (plugin loader) and `self_knowledge.py` (capability index) beside its other modules.
-- The engine tree is the one in ADR-0031 §4.3. The top level is 15 files — `agent.py` (the handle),
+- The engine tree is the one in ADR-0031 §4.3. The top level is 16 files — `agent.py` (the handle),
   `inbound.py` (the body seam), `plugins.py`, `registry.py`, `llm.py`, `config.py`, `db.py`,
-  `schema.py`, `embed.py`, `i18n.py`, `io.py`, `runtime.py`, `soul.py`, `self_knowledge.py`, and
+  `schema.py`, `embed.py`, `i18n.py`, `io.py`, `runtime.py`, `soul.py`, `self_knowledge.py`, `clock.py`, and
   `__init__.py` (a written map, no imports). Everything else lives in the folder that owns its reason
   to change: `turn/` (context, decision, assembly, salience, prompts, reply, observability),
   `character/` (character, knowledge, lexicon, patterns), `access/` (roles, permissions, identity,

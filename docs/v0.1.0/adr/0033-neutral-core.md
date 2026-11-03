@@ -6,7 +6,7 @@
 - **Context:** follows ADR-0000 (surface shape and language data), ADR-0009 (the ADR home and its gate), ADR-0018 (gateway contract), ADR-0027 (clean by default), ADR-0028 (plugin unit), ADR-0031 (layout, growth budget, gates), ADR-0032 (one door)
 - **Supersedes:** —
 - **Related:** ADR-0006 (privacy ceiling), ADR-0007 (approval classes), ADR-0014 (automation), ADR-0019 (`/status`), ADR-0022 (role), ADR-0025 (stable prompt prefix)
-- **Implementation:** draft — the contract and its gates are decided here; every violation listed in §1 is still in the tree.
+- **Implementation:** partial — §4.2-§4.4, §4.6, §4.7, §4.9, §4.11-§4.13 have landed with their gates (`scripts/neutral.py --check`, the prompt contract suite, migrations 0014-0016). Still open from §4.5: the relay/`dm_thread` seam, the `Chat` protocol, the group digest, quote rendering, and the media placeholders in `stores/style.py`.
 - **Location note:** cross-cutting (it constrains every engine surface), so it sits at the ADR home root. The Indonesian copy is `docs/v0.1.0/adr/id/0033-neutral-core.md`.
 
 ---

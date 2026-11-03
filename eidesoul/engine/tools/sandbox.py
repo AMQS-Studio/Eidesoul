@@ -13,8 +13,8 @@ from . import PUBLIC, SCRATCH, ToolContext, _int, safe_chat
 
 MAX_OUTPUT_BYTES = 64 * 1024
 TRUNCATED = "(truncated)\n"
-# Variables allowed into the container; everything else (API keys, etc.) is not inherited.
-CONTAINER_ENV = ("TZ", "LANG")
+# Variables allowed into the container; everything else (API keys, locale, zone) is not inherited.
+CONTAINER_ENV: tuple[str, ...] = ()
 # Client variables the runtime CLI itself needs (not container env).
 CLIENT_ENV = ("PATH", "HOME", "XDG_RUNTIME_DIR", "TERM")
 RUNTIMES = ("podman", "docker")

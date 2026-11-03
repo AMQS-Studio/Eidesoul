@@ -250,8 +250,6 @@ class ShellConfig:
     env: tuple[str, ...] = (
         "PATH",
         "HOME",
-        "LANG",
-        "TZ",
         "XDG_RUNTIME_DIR",
         "TMPDIR",
         "TERM",

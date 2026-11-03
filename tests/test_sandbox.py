@@ -96,7 +96,8 @@ def test_podman_argv_has_keep_id_and_selinux_suffix(tmp_path: Path, monkeypatch)
     assert "--read-only" in argv
     assert argv[argv.index("--tmpfs") + 1] == "/tmp:rw,noexec,nosuid,nodev"
     pairs = [argv[index + 1] for index, item in enumerate(argv) if item == "--env"]
-    assert "TZ=Asia/Jakarta" in pairs
+    # ADR-0033 §4.13: the host zone and locale are not forwarded to a child.
+    assert not any(pair.startswith(("TZ=", "LANG=", "LC_ALL=")) for pair in pairs)
     for name in ("HTTP_PROXY", "HTTPS_PROXY", "http_proxy", "https_proxy"):
         assert f"{name}=http://sandbox-proxy:3128" in pairs
     assert "NO_PROXY=127.0.0.1,localhost" in pairs

@@ -1,5 +1,41 @@
 # LOG
 
+## 2026-11-04 — Neutral core lands: culture, transport, and vendor are data
+
+ADR-0033 executed in four waves on top of the required-values commit.
+
+**Culture is packs.** Crisis and sensitive phrases moved to `library/safety/<lang>.json` (the
+English net stays compiled as the last line; a language without a pack is refused at boot unless
+`engine.safety.allow_degraded`). Profanity severity, the rhythm seed, particles, emojis, laughter,
+affirmations, level words, and serious registers are per-language data; `stores/style.py` no longer
+seeds an English chat with an Indonesian rhythm, and a language without a style pack gets no style
+block.
+
+**Currents and the old names are gone.** `currents` is deleted in full (module pair, command, state,
+config keys, and the country-shaped prompt prose). Commands are English only: `cari`, `kirim`, and
+`memori` became `search`, `send`, and `memory`; `konteks` and `gender` disappeared with their keys,
+aliases, and the verb DSL.
+
+**A person is not classified.** `access/target.py`, `display_target`, the gender config keys, the
+`people.gender*` columns (migration 0014), `affect.gender`/`set_gender`, and the WhatsApp avatar
+signal are removed. The register comes from the thread's configuration; the hard floor is unchanged.
+
+**Extensions declare, core discovers.** Handlers carry `target`, `approval_class`, `destructive`,
+`path_arg`, and `scan`; `FAMILIES`, `AUTHORIZATION_TOOLS`, `DESTRUCTIVE_ACTIONS`, `PROVIDES_KEYS`,
+and the per-name policy branches are gone. A plugin's tool passes validation by declaration, and an
+episode reads the target recorded with the step (migration 0016). Google's tables live in the plugin
+tree (migration 0015 drops the core copies), the legacy role rename and the address-adopt path are
+deleted, and `__main__.py` no longer imports a transport.
+
+**Gates.** `scripts/neutral.py --check` scans engine, admin, `__main__.py`, templates, and the
+Dockerfile for culture words, non-ASCII letters, language/locale/zone defaults, closed name tables,
+vendor names outside the allowlist, and clock reads outside `clock.py`. `tests/data/prompt_cases.yaml`
+plus `tests/test_prompt_contract.py` pin prompt properties per body (empty section, CLI, shared
+thread) and per behavior (crisis, register, missing catalog), never wording.
+
+Still open from ADR-0033 §4.5: the relay/`dm_thread` seam, the `Chat` protocol, the group digest,
+quote rendering, and the media placeholders in `stores/style.py`.
+
 ## 2026-11-04 — ADR-0033 decides a neutral core
 
 One decision record for the rule the tree was missing: **core is mechanism, never culture,
