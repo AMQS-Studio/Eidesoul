@@ -1,0 +1,154 @@
+database:
+  url_env: EIDESOUL_DATABASE_URL
+  url: ''
+  pool_size: 5
+  pool_timeout: 30
+workspace: .eidesoul/workspace
+roles_file: roles.yaml
+soul_file: soul.yaml
+sync_documents: true
+sandbox:
+  runtime: ''
+  image: docker.io/library/python:3.12-slim
+  timeout_seconds: 120
+  network: eidesoul-sandbox
+  host_workspace: null
+  env: []
+  proxy: http://sandbox-proxy:3128
+  pids_limit: 256
+  memory: 512m
+  cpus: 1.0
+web_search:
+  base_url: ''
+  timeout_seconds: 10
+mcp:
+  servers: {}
+engine:
+  llm:
+    provider: ''
+    base_url: ''
+    model: ''
+    api_key_env: ''
+    reasoning_effort: ''
+    timeout_seconds: 120
+    temperature: 0.9
+    run_budget_seconds: 240
+  default_role: guest
+  reply:
+    quiet_seconds: 600
+  memory:
+    backend: mem0
+    auto_capture: true
+    capture_min_chars: 8
+    max_items: 12
+    max_chars: 3000
+    collection: eidesoul_memories
+    extraction_model: ''
+    privacy:
+      enabled: true
+      default_level: 2
+      ask_level: 4
+      group_max_level: 2
+      dm_max_level: 4
+      auditor: true
+    telemetry: false
+  approval:
+    mode: yolo
+    sensitive_tools: []
+    sensitive_commands:
+    - rm *
+    - rmdir *
+    - shred *
+    - dd *
+    - truncate *
+    - wipefs *
+    - mkfs*
+    - fdisk *
+    - parted *
+    - shutdown *
+    - reboot *
+    - poweroff *
+    - halt *
+    - systemctl *
+    - service *
+    - kill *
+    - pkill *
+    - killall *
+    - chmod *
+    - chown *
+    - chgrp *
+    - mount *
+    - umount *
+    - git reset --hard*
+    - git clean -*f*
+    - git push *--force*
+    - git push -f*
+    - find * -delete*
+    - find * -exec rm*
+    settings: true
+    ttl_seconds: 900
+  skills:
+    max_index_chars: 3000
+  prompt:
+    salience: true
+    max_chars: 9000
+    thread_chars: 4000
+  humanize:
+    enabled: true
+    cpms: 25.0
+    min_delay: 0.5
+    max_delay: 5.0
+    between_delay: 0.7
+    max_bubbles: 3
+    reaction_stickers: []
+  style:
+    enabled: true
+    max_chars: 800
+  character:
+    enabled: false
+    max_chars: 400
+    max_tokens: 500
+    temperature: 0.7
+    toxicity: 2
+    adult_memes: 1
+    gender_gate: true
+    gender_confidence: 0.6
+    roast_jabs: 1
+    gender_avatar: false
+    max_questions: 1
+  guard:
+    enabled: true
+    model: ''
+    timeout_seconds: 6
+    max_command_chars: 4000
+  affect:
+    enabled: true
+    volatility: expressive
+    grudge_half_life_hours: 1.5
+    vibe:
+      enabled: true
+      attack: 0.35
+      baseline_influence: 0.05
+      hold_seconds: 1.2
+      tick_seconds: 1.0
+  ambient:
+    enabled: true
+    tick_seconds: 10
+    digest_every: 12
+    digest_cooldown: 900
+    history_window: 30
+    idle_minutes: 20
+    research_cooldown: 21600
+    research_per_day: 6
+    research_results: 5
+    context_enabled: true
+    context_hours: 6
+    context_topics: 2
+    context_results: 4
+gateways:
+  cli:
+    enabled: true
+    role: owner
+    user: local
+    chat_id: cli:local
+    chat_name: Terminal

@@ -1,0 +1,72 @@
+roles:
+  owner:
+    name: owner
+    description: Owner and admin of Eidesoul
+    priority: 100
+    users: []
+    tools:
+    - '*'
+    commands:
+    - '*'
+    memory_admin: true
+    context: 'You are talking to the owner of Eidesoul, who sets the direction, permissions,
+      and soul.
+
+      Allows corrections, config/soul changes, and full reports.
+
+      '
+  member:
+    name: member
+    description: Committee member
+    priority: 10
+    users: []
+    tools:
+    - read
+    - web_search
+    - chat_history
+    - memory
+    - skill
+    - recipe
+    - google
+    commands:
+    - help
+    - ping
+    - link
+    - unlink
+    - whoami
+    - status
+    - tools
+    - cari
+    - memori
+    - skill
+    - kirim
+    - mood
+    memory_admin: false
+    context: 'You are talking to a committee member. Help with their work without
+      opening new permissions.
+
+      '
+  guest:
+    name: guest
+    description: Unknown sender
+    priority: 0
+    users: []
+    tools:
+    - read
+    - web_search
+    - chat_history
+    - memory
+    commands:
+    - help
+    - ping
+    - link
+    - unlink
+    - whoami
+    - status
+    - tools
+    - cari
+    memory_admin: false
+    context: 'You do not know this person yet. Stay polite and never open another
+      chat''s data.
+
+      '

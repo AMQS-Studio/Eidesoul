@@ -1,6 +1,4 @@
 .env
-config.yaml
-roles.yaml
 .eidesoul/
 .venv/
 __pycache__/
@@ -18,7 +16,6 @@ references/
 # host config backups and secrets
 config.yaml.bak-*
 config.bak-*/
-compose.yaml
 
 # generated test artifacts
 .coverage
