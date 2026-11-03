@@ -1,0 +1,23 @@
+name: google
+version: 1.0.0
+engine: ">=0.0.0,<1.0"
+entry: plugin.py:register
+digest: "sha256:c3f4b2f303e5e7cb86a1a5f613bb0e0c70a387d2af3621177f94daac7cb11938"
+provides:
+  tools: [google]
+  commands: []
+  gateways: []
+requires:
+  - google-api-python-client>=2.150,<3
+  - google-auth>=2.35,<3
+secrets:
+  - GOOGLE_SERVICE_ACCOUNT_PATH
+credits:
+  - license: Apache-2.0
+    author: Google LLC
+    source: https://github.com/googleapis/google-api-python-client
+    use: Drive, Docs, and Sheets access
+  - license: Apache-2.0
+    author: Google LLC
+    source: https://github.com/googleapis/google-auth-library-python
+    use: Google service-account authentication

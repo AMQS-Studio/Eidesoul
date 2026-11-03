@@ -1,4 +1,4 @@
-"""Entrypoint: `eidesoul run|console|init|config|db|memory|selftest|backfill|library`."""
+"""Entrypoint: `eidesoul run|console|init|config|db|memory|components|selftest|backfill|library`."""
 
 from __future__ import annotations
 
@@ -317,10 +317,23 @@ async def selftest(config: Config) -> int:
     recipes = RecipeStore(db)
     memory = await build_memory(config, db=db)
     results: list[bool] = []
+    from .engine import components
+    from .engine.registry import Registry
+
+    component_settings = components.ComponentSettings.from_config(config)
+    component_report = components.states(component_settings)
+    if not component_report:
+        print("component: none configured", flush=True)
+    for item in component_report:
+        detail = f" - {item.reason}" if item.reason else ""
+        print(f"component {item.name}: {item.state}{detail}", flush=True)
+    enabled = components.load(component_settings)
+    plugin_tools = Registry(list(enabled.tools), "tool")
     try:
         role = _role(config)
         for name, item in config.roles.by_name.items():
             tools = [handler.name for handler in tools_for(REGISTRY, (item,))]
+            tools += [handler.name for handler in tools_for(plugin_tools, (item,))]
             tools += [handler.name for handler in hub.specs((item,))]
             commands = [handler.name for handler in commands_for(COMMANDS, (item,))]
             print(f"role {name}: command={', '.join(commands) or '-'} | tool={', '.join(tools) or '-'}", flush=True)
@@ -796,6 +809,59 @@ def _memory_purge(args: argparse.Namespace) -> int:
     return 0
 
 
+def _component_db(host):
+    """Best-effort audit store; a missing or unreachable DB never blocks the host-file action."""
+    url = resolve_database_url(host.database)
+    if not url:
+        return None
+    from .engine.db import Database
+
+    try:
+        return Database(url, pool_size=1, pool_timeout=2)
+    except Exception:  # a broken URL never blocks a host-file action
+        return None
+
+
+def _components_dispatch(args: argparse.Namespace) -> int:
+    """ADR-0028 lifecycle: list/install/enable/disable/remove, host files only."""
+    from .engine import components
+
+    host, paths = load_host(args.config)
+    settings = components.ComponentSettings.from_host(host, paths)
+    action = args.components_command
+    if action not in {"list", "install", "enable", "disable", "remove"}:
+        build_parser().print_help()
+        return 2
+    db = None if action == "list" else _component_db(host)
+    try:
+        if action == "list":
+            found = components.states(settings)
+            if not found:
+                print("components: none configured", flush=True)
+            for item in found:
+                detail = f" - {item.reason}" if item.reason else ""
+                print(f"component {item.name}: {item.state}{detail}", flush=True)
+            return 0
+        actor = os.environ.get("USER", "") or os.environ.get("USERNAME", "")
+        if action == "install":
+            item = components.install(settings, args.name, actor=actor, db=db)
+        elif action == "enable":
+            item = components.enable(settings, args.name, actor=actor, db=db)
+        elif action == "disable":
+            item = components.disable(settings, args.name, actor=actor, db=db)
+        else:
+            item = components.remove(settings, args.name, actor=actor, db=db)
+    except (components.ComponentError, OSError) as exc:
+        print(f"eidesoul: {exc}", file=sys.stderr, flush=True)
+        return 2
+    finally:
+        if db is not None:
+            db.dispose()
+    detail = f" - {item.reason}" if item.reason else ""
+    print(f"component {item.name}: {item.state}{detail}", flush=True)
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="eidesoul", description="Eidesoul soul engine")
     parser.add_argument("--config", default=None, help="path to config.yaml (default: ./config.yaml)")
@@ -882,6 +948,19 @@ def build_parser() -> argparse.ArgumentParser:
         "--dry-run", action="store_true", help="report what would be purged, change nothing"
     )
     memory_purge.add_argument("--batch", type=int, default=500, help="rows per batch")
+    components = sub.add_parser("components", help="component (plugin) lifecycle")
+    components_sub = components.add_subparsers(dest="components_command")
+    components_sub.add_parser(
+        "list", help="show absent, installed, enabled, and unavailable plugins"
+    )
+    for verb, text in (
+        ("install", "place verified component code under components.root"),
+        ("enable", "install if needed, then register the component at boot"),
+        ("disable", "switch the component off and keep its files"),
+        ("remove", "delete a disabled component's code and config entry"),
+    ):
+        item = components_sub.add_parser(verb, help=text)
+        item.add_argument("name", help="component name, e.g. google")
     return parser
 
 
@@ -904,6 +983,7 @@ def main(argv: list[str] | None = None) -> int:
             "library": _library_dispatch,
             "people": _people_dispatch,
             "memory": _memory_dispatch,
+            "components": _components_dispatch,
         }
         if args.command in dispatch:
             return dispatch[args.command](args)

@@ -15,7 +15,7 @@ from dataclasses import asdict, replace
 from datetime import datetime
 from pathlib import Path
 
-from . import assembly, guard, io, observability
+from . import assembly, components, guard, io, observability
 from .approvals import ApprovalStore
 from .character import effective_limits, polish, regulate
 from .commands import REGISTRY as CORE_COMMANDS
@@ -203,13 +203,28 @@ class Agent:
         self.boot_epoch = int(time.time() * 1000)
         self.shutdown_epoch = 0
         self._reaper_task: asyncio.Task | None = None
-        handlers = list(CORE_TOOLS.by_name.values())
-        for gateway in self.gateways:
-            handlers.extend(gateway.tools())
+        gateway_tools = [handler for gateway in self.gateways for handler in gateway.tools()]
+        gateway_commands = [
+            handler for gateway in self.gateways for handler in gateway.commands()
+        ]
+        self.components = components.load(
+            components.ComponentSettings.from_config(config),
+            tools=[
+                *CORE_TOOLS.reserved(),
+                *(value for h in gateway_tools for value in (h.name, *h.aliases)),
+            ],
+            commands=[
+                *CORE_COMMANDS.reserved(),
+                *(value for h in gateway_commands for value in (h.name, *h.aliases)),
+            ],
+        )
+        handlers = [*CORE_TOOLS.by_name.values(), *gateway_tools, *self.components.tools]
         self.tools = Registry(handlers, "tool")
-        handlers = list(CORE_COMMANDS.by_name.values())
-        for gateway in self.gateways:
-            handlers.extend(gateway.commands())
+        handlers = [
+            *CORE_COMMANDS.by_name.values(),
+            *gateway_commands,
+            *self.components.commands,
+        ]
         self.commands = Registry(handlers, "command")
         self.runtime = runtime or RuntimeFacts(
             db_label=getattr(db, "label", ""), paths=config.paths

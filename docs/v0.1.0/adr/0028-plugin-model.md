@@ -6,7 +6,7 @@
 - **Context:** follows ADR-0027 (distribution and default-off capability), ADR-0001 (surfaces), ADR-0015 (capability manifest), ADR-0007 (permission classes), ADR-0022 (`administrator`)
 - **Supersedes:** —
 - **Related:** ADR-0018 (gateway contract), ADR-0019 (ledger), ADR-0021 (tool contracts), ADR-0026 (a core tool that stays core)
-- **Implementation:** draft — `google` still lives in the core and as a build-time extra. No engine change in this ADR.
+- **Implementation:** implemented — evidence: `eidesoul/engine/components.py` (manifest, tree digest, fetch-by-digest, one entry import, lifecycle/state), `plugins/google/` (manifest + credits + tool), `google` extra removed, `eidesoul components` CLI, `tests/test_plugins.py`, `tests/test_google_plugin.py`; gate result: `pytest -q` 798 passed, `uv lock --check` clean
 - **Location note:** this ADR is cross-cutting (it defines a distribution unit used by every surface), so it sits at the root of the ADR home. The Indonesian copy is `docs/v0.1.0/adr/id/0028-plugin-model.md`.
 - **Amendments:** 2026-11-03 — first version.
 

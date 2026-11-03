@@ -56,7 +56,6 @@ def test_builtin_handlers_discovered() -> None:
     }
     assert set(TOOLS.names()) == {
         "fetch",
-        "google",
         "grep",
         "info",
         "mcp",

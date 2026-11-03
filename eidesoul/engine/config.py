@@ -627,6 +627,23 @@ class GatewaySettings:
 
 
 @dataclass(frozen=True)
+class PluginSettings:
+    """ADR-0028 §5: a component is off and unpinned until an operator enables it."""
+
+    enabled: bool = False
+    digest: str = ""
+
+
+@dataclass(frozen=True)
+class ComponentsConfig:
+    """ADR-0027 §5 / ADR-0028 §5: where fetched component code lives and whether we may fetch."""
+
+    root: Path | None = None  # unset = <workspace>/components
+    fetch: bool = True
+    source: str = ""
+
+
+@dataclass(frozen=True)
 class Paths:
     config: Path
     roles: Path
@@ -644,6 +661,8 @@ class HostConfig:
     roles_file: Path
     soul_file: Path
     sync_documents: bool
+    components: ComponentsConfig = field(default_factory=ComponentsConfig)
+    plugins: dict[str, PluginSettings] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -684,6 +703,8 @@ class Config:
     metrics: MetricsConfig = field(default_factory=MetricsConfig)
     automations: AutomationConfig = field(default_factory=AutomationConfig)
     self_knowledge: SelfKnowledgeConfig = field(default_factory=SelfKnowledgeConfig)
+    components: ComponentsConfig = field(default_factory=ComponentsConfig)
+    plugins: dict[str, PluginSettings] = field(default_factory=dict)
 
     def api_key(self) -> str:
         """The key for this provider; a local endpoint accepts any non-empty string."""
@@ -989,6 +1010,30 @@ def _self_knowledge_config(raw: Mapping) -> SelfKnowledgeConfig:
     )
 
 
+def _components_config(raw: Mapping, base: Path, workspace: Path) -> ComponentsConfig:
+    """`components` (ADR-0027 §5): root, fetch, and the operator-named source."""
+    body = _section(raw, "components")
+    root_text = str(body.get("root") or "").strip()
+    return ComponentsConfig(
+        root=_expand(root_text, base) if root_text else workspace / "components",
+        fetch=_bool(body.get("fetch"), True),
+        source=str(body.get("source") or "").strip(),
+    )
+
+
+def _plugins_config(raw: Mapping) -> dict[str, PluginSettings]:
+    """`plugins.<name>` (ADR-0028 §5): enabled and the pinned digest, both operator choices."""
+    body = _section(raw, "plugins")
+    result: dict[str, PluginSettings] = {}
+    for name, value in body.items():
+        value = value if isinstance(value, dict) else {}
+        result[str(name)] = PluginSettings(
+            enabled=_bool(value.get("enabled"), False),
+            digest=str(value.get("digest") or "").strip(),
+        )
+    return result
+
+
 def load_host(path: str | Path | None = None) -> tuple[HostConfig, Paths]:
     """Read config.yaml without creating directories or touching the DB."""
     target = Path(path or os.environ.get("EIDESOUL_CONFIG") or "config.yaml")
@@ -1018,6 +1063,8 @@ def load_host(path: str | Path | None = None) -> tuple[HostConfig, Paths]:
         roles_file=roles_file,
         soul_file=soul_file,
         sync_documents=_bool(raw.get("sync_documents"), True),
+        components=_components_config(raw, base, workspace),
+        plugins=_plugins_config(raw),
     )
     paths = Paths(
         config=target.resolve(),
@@ -1658,4 +1705,6 @@ def load_config(
         logging=_logging_config(_section(engine, "logging")),
         automations=_automation_config(_section(engine, "automations")),
         self_knowledge=self_knowledge,
+        components=host.components,
+        plugins=host.plugins,
     )

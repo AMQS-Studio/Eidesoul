@@ -23,9 +23,9 @@ COPY --from=ghcr.io/astral-sh/uv:0.13.6 /uv /uvx /bin/
 
 WORKDIR /app
 
-# The capability spine (Mem0 + embedder) ships in the core dependencies; only transports
-# and integrations are extras. Add them with:
-#   docker build --build-arg EXTRAS="--extra whatsapp --extra google" .
+# The capability spine (Mem0 + embedder) ships in the core dependencies; only transports are
+# extras. Gateways and plugins are installed and enabled later, never baked in (ADR-0027/0028):
+#   docker build --build-arg EXTRAS="--extra whatsapp" .
 ARG EXTRAS=""
 
 COPY pyproject.toml uv.lock ./

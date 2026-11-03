@@ -173,15 +173,26 @@ Hard rules for changes in this repo.
 ## Optional integrations and distribution
 
 - **Clean by default.** A `gateway`, a `tool`, and a `plugin` are three different things and none of
-  them is another: a gateway is a body (transport), a tool is a capability the engine calls, a plugin
-  is an installable bundle fetched when enabled (ADR-0027, ADR-0028). All three are off until an
-  operator enables them, and only the spine is always on. Enabling fetches the code by digest; with no
-  network the enable fails explicitly and changes nothing.
-- The published image is the spine plus the core tools only (`EXTRAS` empty, ADR-0027). It carries no
-  gateway and no plugin dependency; the panel is enabled by default once it is finished, and
-  `web.enabled: false` switches it off without stopping the engine.
-- Google is a **plugin** (`google`), not a core tool and not an extra: its code is fetched when the
-  plugin is enabled, and while it is absent the capability is reported `unavailable`, never fabricated.
+  them is another: a gateway is a body (transport plus its own body actions), a tool is a capability
+  the engine calls, a plugin is an installable bundle of capability code (ADR-0027, ADR-0028). All
+  three are off until an operator installs and enables them; only the spine is always on.
+- A plugin lives in `components/<name>/plugin.yaml` (`components.root`, default
+  `<workspace>/components`). The manifest is data: name, version, engine range, `entry`, the
+  `sha256:` digest of the code tree, `provides` (tools/commands), `requires`, `secrets` (env names
+  only), and `credits`. The loader verifies the digest before the one import of `entry`; a mismatch
+  leaves no files and no config change. Plugin dependencies install inside the plugin's own `deps/`,
+  never in the image's locked set; the manifest carries the credits rows they owe.
+- Enabling fetches code by digest (`components.fetch: true`, source in `components.source`) and
+  writes `plugins.<name>.enabled: true` only after verification. With `components.fetch: false` the
+  operator pre-places verified code; otherwise the enable fails with one message and changes
+  nothing. Disable keeps the files; remove deletes code and the config entry.
+- Google is a **plugin** (`google`, source tree `plugins/google/`), not a core tool and not an
+  extra: there is no `--extra google`, and `eidesoul/engine/tools/` holds no Google module. While
+  the plugin is absent or disabled the capability is `unavailable` (`eidesoul components list`,
+  `eidesoul selftest`) — never fabricated and never a plugin traceback; a role grant without code
+  is unavailable, not denied (ADR-0027 §4.3).
+- The image is the spine plus the core tools only (ADR-0027): it carries no gateway and no plugin
+  dependency, so plugin `requires` never enters the image's locked set.
 - WhatsApp is an optional gateway (its own install, not a plugin). Default config never enables it,
   core never imports it eagerly, and the default member role does not receive WhatsApp-only `send`.
 

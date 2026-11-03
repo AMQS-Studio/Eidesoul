@@ -1,7 +1,8 @@
-"""Tool google: Google Workspace through one service account, identity per sender.
+"""Google Workspace through one service account, identity per sender.
 
-The vendor service is imported lazily so a host without the `google` extra keeps the tool
-discoverable and inert instead of failing at import time.
+A plugin tool (ADR-0028): the engine loads this module only when the `google` component is
+enabled and its manifest digest verifies. The vendor service stays lazy so a host without the
+plugin dependencies keeps the module importable and inert instead of failing at import time.
 """
 
 from __future__ import annotations
@@ -9,19 +10,19 @@ from __future__ import annotations
 import logging
 import weakref
 
-from ..registry import Handler
-from . import ToolContext
+from eidesoul.engine.registry import Handler
+from eidesoul.engine.tools import ToolContext
 
 log = logging.getLogger(__name__)
 
-MISSING = "Google extra is not installed; run 'uv sync --extra google'."
+MISSING = "Google Workspace is not available in this build."
 _SERVICES: weakref.WeakKeyDictionary = weakref.WeakKeyDictionary()
 
 
 def _module():
-    """The vendored Google service, or None when the optional extra is missing."""
+    """The vendored Google service, or None when this build does not carry it."""
     try:
-        from ...vendor.google_workspace import service
+        from eidesoul.vendor.google_workspace import service
     except ImportError:
         return None
     return service

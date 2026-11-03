@@ -36,6 +36,10 @@ HOST: dict = {
     },
     "web_search": {"base_url": "", "timeout_seconds": 10},
     "mcp": {"servers": {}},
+    # Clean by default (ADR-0027/0028): nothing is installed or enabled. An empty root means
+    # `<workspace>/components`; enabling a plugin fetches its code by digest.
+    "components": {"root": "", "fetch": True, "source": ""},
+    "plugins": {"google": {"enabled": False, "digest": ""}},
 }
 
 ENGINE: dict = {

@@ -1,24 +1,49 @@
-"""Google plugin contract: one service account, identity-linked, per-file permission."""
+"""Google plugin contract: one service account, identity-linked, per-file permission (ADR-0028)."""
 
 from __future__ import annotations
 
 import asyncio
+import importlib
+from pathlib import Path
 
 import pytest
 import yaml
 from support import build_config, database
 
 from eidesoul.admin.templates import ROLES
+from eidesoul.engine import components
+from eidesoul.engine.config import ComponentsConfig, PluginSettings
 from eidesoul.engine.roles import Role
 from eidesoul.engine.schema import google_identity
-from eidesoul.engine.tools import REGISTRY, ToolContext
-from eidesoul.engine.tools import google as google_tool
+from eidesoul.engine.tools import REGISTRY as CORE_TOOLS
+from eidesoul.engine.tools import ToolContext
 from eidesoul.vendor.google_workspace.service import (
     DOC_MIME,
     SHEET_MIME,
     GoogleError,
     GoogleWorkspace,
 )
+
+ROOT = Path(__file__).resolve().parents[1]
+
+
+def google_module(tmp_path, monkeypatch):
+    """Load the real plugin tree through the component loader and return its tool module."""
+    monkeypatch.setenv("GOOGLE_SERVICE_ACCOUNT_PATH", str(tmp_path / "service.json"))
+    config = build_config(
+        tmp_path,
+        components=ComponentsConfig(root=ROOT / "plugins", fetch=False),
+        plugins={"google": PluginSettings(enabled=True)},
+    )
+    loaded = components.load(components.ComponentSettings.from_config(config))
+    assert loaded.state("google") == "enabled", loaded.components
+    key = components.module_name("google")
+    return importlib.import_module(f"{key}.tools.google")
+
+
+@pytest.fixture
+def google_tool(tmp_path, monkeypatch):
+    return google_module(tmp_path, monkeypatch)
 
 
 class Request:
@@ -249,11 +274,13 @@ def test_docs_read_is_supported_and_other_types_are_not(tmp_path) -> None:
     )
 
 
-def test_tool_discovery_and_role_grants() -> None:
-    handler = REGISTRY.get("google")
+def test_tool_discovery_and_role_grants(tmp_path, monkeypatch) -> None:
+    module = google_module(tmp_path, monkeypatch)
+    handler = module.TOOL
 
-    assert handler is not None and handler.name == "google" and handler.family == "mcp"
-    assert REGISTRY.get("gworkspace") is handler
+    assert handler.name == "google" and handler.family == "mcp"
+    assert handler.aliases == ("gworkspace",)
+    assert "google" not in CORE_TOOLS.names()
 
     assert "google" in ROLES["member"]["tools"]
     assert "mcp__*" not in ROLES["member"]["tools"]
@@ -268,7 +295,7 @@ def test_tool_discovery_and_role_grants() -> None:
     assert "mcp__*" not in live["member"]["tools"]
 
 
-def test_tool_blocks_actions_without_an_identity(tmp_path, monkeypatch) -> None:
+def test_tool_blocks_actions_without_an_identity(tmp_path, monkeypatch, google_tool) -> None:
     class Fake:
         def identity(self, person_id):
             return None
@@ -291,7 +318,7 @@ def test_tool_blocks_actions_without_an_identity(tmp_path, monkeypatch) -> None:
         assert result == "error: Google account not connected; run action=login in a DM"
 
 
-def test_tool_login_in_group_is_rejected(tmp_path, monkeypatch) -> None:
+def test_tool_login_in_group_is_rejected(tmp_path, monkeypatch, google_tool) -> None:
     monkeypatch.setattr(google_tool, "_service", lambda ctx: service(tmp_path))
     config = build_config(
         tmp_path, roles={"member": Role("member", tools=("google",))}
@@ -311,7 +338,7 @@ def test_tool_login_in_group_is_rejected(tmp_path, monkeypatch) -> None:
     assert result == "error: Google login is only allowed in a direct message."
 
 
-def test_tool_routes_actions_with_a_linked_identity(tmp_path, monkeypatch) -> None:
+def test_tool_routes_actions_with_a_linked_identity(tmp_path, monkeypatch, google_tool) -> None:
     calls: list[tuple] = []
 
     class Fake:

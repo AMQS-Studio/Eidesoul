@@ -207,6 +207,10 @@ class Registry:
     def names(self) -> list[str]:
         return sorted(self.by_name)
 
+    def reserved(self) -> tuple[str, ...]:
+        """Every name a new handler may not claim: canonical names plus aliases (ADR-0028)."""
+        return tuple(sorted({*self.by_name, *self.aliases}))
+
     def patterns(self, explicit: tuple[str, ...] | None) -> tuple[str, ...]:
         """Only the explicit list applies; the registry has no defaults."""
         return explicit or ()

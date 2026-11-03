@@ -1,4 +1,4 @@
-> Terjemahan turunan — jangan sunting; sumber: 0028-plugin-model.md (sha256: 3bdc44934355)
+> Terjemahan turunan — jangan sunting; sumber: 0028-plugin-model.md (sha256: 4a120714f48f)
 > Ditulis tangan (bukan mesin), mengikuti sumber English baris demi baris.
 
 # ADR-0028: Model Plugin — Satu Unit Terinstall untuk Kapabilitas Terunduh
@@ -9,7 +9,7 @@
 - **Konteks:** lanjutan ADR-0027 (distribusi dan kapabilitas clean by default), ADR-0001 (permukaan), ADR-0015 (manifest kapabilitas), ADR-0007 (kelas izin), ADR-0022 (`administrator`)
 - **Supersedes:** —
 - **Terkait:** ADR-0018 (kontrak gateway), ADR-0019 (ledger), ADR-0021 (kontrak tool), ADR-0026 (tool core yang tetap di core)
-- **Implementasi:** draft — `google` masih hidup di core dan sebagai extra build-time. Tidak ada perubahan engine di ADR ini.
+- **Implementasi:** implemented — bukti: `eidesoul/engine/components.py` (manifest, digest tree, fetch-by-digest, satu import `entry`, siklus/status), `plugins/google/` (manifest + kredit + tool), extra `google` dihapus, CLI `eidesoul components`, `tests/test_plugins.py`, `tests/test_google_plugin.py`; hasil gate: `pytest -q` 798 lulus, `uv lock --check` bersih
 - **Catatan lokasi:** ADR ini lintas-potong (mendefinisikan unit distribusi yang dipakai setiap permukaan), jadi ia duduk di akar rumah ADR. Salinan Indonesia di `docs/v0.1.0/adr/id/0028-plugin-model.md`.
 - **Amandemen:** 2026-11-03 — versi pertama.
 
