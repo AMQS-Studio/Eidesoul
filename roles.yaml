@@ -1,7 +1,9 @@
 roles:
-  owner:
-    name: owner
-    description: Owner and admin of Eidesoul
+  administrator:
+    name: administrator
+    label: ''
+    protected: true
+    description: Administrator of Eidesoul
     priority: 100
     users: []
     tools:
@@ -9,14 +11,15 @@ roles:
     commands:
     - '*'
     memory_admin: true
-    context: 'You are talking to the owner of Eidesoul, who sets the direction, permissions,
-      and soul.
+    context: 'You are talking to the administrator of Eidesoul, who sets the direction,
+      permissions, and soul.
 
       Allows corrections, config/soul changes, and full reports.
 
       '
   member:
     name: member
+    label: ''
     description: Committee member
     priority: 10
     users: []
@@ -46,6 +49,7 @@ roles:
       '
   guest:
     name: guest
+    label: ''
     description: Unknown sender
     priority: 0
     users: []

@@ -1,7 +1,7 @@
 # ADR-0022: Role `administrator`
 
 - **Status:** accepted
-- **Implementation:** draft — `roles.yaml` still uses `owner`; there is no `protected`/`label` yet
+- **Implementation:** implemented — evidence: `engine/roles.py` (`label`, `protected`, `require_administrator`, `assert_protected_roles`), `admin/roles.py` import migration with backup + audit, `roles.yaml`/templates/defaults renamed, `/whoami`/`/help`/guard agree, `tests/test_roles.py`; gate result: `pytest -q` 680 passed
 - **Date:** 2026-11-03
 - **Deciders:** Muqsith (owner), omp (reviewer)
 - **Context:** the role name `owner` collides with three other concepts that already use the same word (`owner_id` provenance, `owner` in automation manifests, `lease_owner`); the owner decided to rename the role to `administrator`, to keep that role **protected** (it may not be deleted), and to let every role carry an optional **address term** (`label`) that tells the soul how to address its holder ("God", "Master", "Dev", ...)

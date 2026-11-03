@@ -280,7 +280,7 @@ engine:
     base_url: http://x
     api_key_env: EIDESOUL_TEST_KEY
     model: test-model
-  default_role: owner
+  default_role: administrator
 gateways: {{}}
 soul:
   language: id
@@ -293,7 +293,8 @@ sandbox:
         encoding="utf-8",
     )
     (tmp_path / "roles.yaml").write_text(
-        'roles:\n  owner:\n    name: owner\n    tools: ["*"]\n', encoding="utf-8"
+        'roles:\n  administrator:\n    name: administrator\n    tools: ["*"]\n'
+        '    commands: ["*"]\n', encoding="utf-8"
     )
 
     loaded = load_config(str(target))

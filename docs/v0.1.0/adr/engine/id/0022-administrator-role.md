@@ -1,10 +1,10 @@
-> Terjemahan turunan — jangan sunting; sumber: engine/0022-administrator-role.md (sha256: a56550779806)
+> Terjemahan turunan — jangan sunting; sumber: engine/0022-administrator-role.md (sha256: 4e656681f4c4)
 > Teks ini ditulis manusia; baris yang tidak bisa diterjemahkan mesin disalin apa adanya ke sumber English, jadi sumber bercampur dua bahasa.
 
 # ADR-0022: Peran `administrator` — Nama, Proteksi, dan Sebutan
 
 - **Status:** accepted
-- **Implementasi:** draft — `roles.yaml` masih memakai `owner`; belum ada `protected`/`label`
+- **Implementasi:** implemented — bukti: `engine/roles.py` (`label`, `protected`, `require_administrator`, `assert_protected_roles`), migrasi `admin/roles.py` dengan backup + audit, `roles.yaml`/template/default diganti nama, `/whoami`/`/help`/guard sepakat, `tests/test_roles.py`; hasil gate: `pytest -q` 680 lulus
 - **Tanggal:** 2026-11-03
 - **Deciders:** Muqsith (owner), omp (reviewer)
 - **Konteks:** nama role `owner` bertabrakan dengan tiga konsep lain yang sudah memakai kata yang sama (`owner_id` provenance, `owner` pada manifest otomasi, `lease_owner`); pemilik memutuskan role diganti nama menjadi `administrator`, role itu **diproteksi** (tidak boleh dihapus), dan setiap role boleh punya **sebutan** (`label`) opsional yang memberi tahu soul bagaimana memanggil pemegangnya ("Tuhan", "Majikan", "Dev", ...)

@@ -1,14 +1,26 @@
-"""Modular roles: one role per YAML block; explicit permissions, no handler defaults."""
+"""Modular roles: one role per YAML block; explicit permissions, no handler defaults.
+
+ADR-0022: the highest role is `administrator`, it is `protected` (the loader forces the flag and
+rejects a role named `owner`), and every role may carry an optional `label` — the address text the
+soul uses for its holder. The label is display-only: nothing compares it and it is never a key.
+"""
 
 from __future__ import annotations
 
 import re
-from collections.abc import Mapping
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
 
 import yaml
 
+from .registry import allows
+
 NAME = re.compile(r"^[a-z][a-z0-9_-]{0,31}$")
+
+PROTECTED = "administrator"
+LEGACY = "owner"
+MIGRATE = "`eidesoul config import`"
+LABEL_MAX = 40
 
 
 class RoleError(ValueError):
@@ -25,6 +37,8 @@ class Role:
     context: str = ""
     priority: int = 0
     memory_admin: bool = False
+    label: str = ""
+    protected: bool = False
 
 
 @dataclass(frozen=True)
@@ -70,6 +84,37 @@ class RoleRegistry:
             found.append(role)
         return tuple(found) or (self.default_role(),)
 
+    def require_administrator(self) -> Role:
+        """Boot gate (ADR-0022 §4.2): the protected role must exist and stay able to approve."""
+        role = self.by_name.get(PROTECTED)
+        if role is None:
+            raise RoleError(
+                f"no protected role '{PROTECTED}'; add it to roles.yaml and run {MIGRATE}"
+            )
+        if not role.users:
+            raise RoleError(
+                f"role '{PROTECTED}' has no users; name at least one person in roles.yaml and "
+                f"run {MIGRATE}"
+            )
+        if "*" not in role.tools:
+            raise RoleError(f"role '{PROTECTED}' must list tools: ['*']")
+        if not allows(role.commands, "approve"):
+            raise RoleError(f"role '{PROTECTED}' must allow the approve command")
+        return role
+
+
+def assert_protected_roles(before: Iterable[str], after: Iterable[str]) -> None:
+    """Refuse any write that deletes or renames the protected role (ADR-0022 §4.2).
+
+    `before` is the current role-name set, `after` the set the write would leave behind. Only
+    roles.yaml plus `eidesoul config import` (or the host owner) may change the identifier.
+    """
+    if PROTECTED in set(before) and PROTECTED not in set(after):
+        raise RoleError(
+            f"the protected role '{PROTECTED}' cannot be deleted or renamed; change it only "
+            f"through roles.yaml and {MIGRATE}"
+        )
+
 
 def _str_tuple(value: object, field_name: str, source: str) -> tuple[str, ...]:
     if value is None:
@@ -90,6 +135,22 @@ def _bool(value: object) -> bool:
     return str(value or "").strip().lower() in {"true", "yes", "1", "on"}
 
 
+def _label(value: object, source: str) -> str:
+    """Optional address text: free-form, at most `LABEL_MAX` characters, never blank."""
+    if value is None:
+        return ""
+    if not isinstance(value, str):
+        raise RoleError(f"{source}: 'label' must be a string")
+    if value == "":
+        return ""
+    text = " ".join(value.split())
+    if not text:
+        raise RoleError(f"{source}: 'label' must not be whitespace-only")
+    if len(text) > LABEL_MAX:
+        raise RoleError(f"{source}: 'label' is longer than {LABEL_MAX} characters")
+    return text
+
+
 def parse_role(name: str, body: object, source: str) -> Role:
     if not isinstance(body, dict):
         raise RoleError(f"{source}: role must be a mapping")
@@ -98,21 +159,40 @@ def parse_role(name: str, body: object, source: str) -> Role:
         raise RoleError(f"{source}: field 'name' is required")
     if declared != name:
         raise RoleError(f"{source}: name '{declared}' does not match key '{name}'")
+    if declared == LEGACY:
+        raise RoleError(
+            f"{source}: the role name '{LEGACY}' is gone; rename it to '{PROTECTED}' with {MIGRATE}"
+        )
     if not NAME.fullmatch(declared):
         raise RoleError(f"{source}: invalid role name: '{declared}'")
     try:
         priority = int(body.get("priority") or 0)
     except (TypeError, ValueError) as exc:
         raise RoleError(f"{source}: 'priority' must be a number") from exc
+    tools = _str_tuple(body.get("tools"), "tools", source)
+    commands = _str_tuple(body.get("commands"), "commands", source)
+    protected = _bool(body.get("protected"))
+    if declared == PROTECTED:
+        if "protected" in body and not protected:
+            raise RoleError(
+                f"{source}: role '{PROTECTED}' is protected; 'protected: false' is not allowed"
+            )
+        protected = True
+        if "*" not in tools:
+            raise RoleError(f"{source}: role '{PROTECTED}' must list tools: ['*']")
+        if not allows(commands, "approve"):
+            raise RoleError(f"{source}: role '{PROTECTED}' must allow the approve command")
     return Role(
         name=declared,
         description=str(body.get("description") or "").strip(),
         users=_str_tuple(body.get("users"), "users", source),
-        tools=_str_tuple(body.get("tools"), "tools", source),
-        commands=_str_tuple(body.get("commands"), "commands", source),
+        tools=tools,
+        commands=commands,
         context=str(body.get("context") or "").strip(),
         priority=priority,
         memory_admin=_bool(body.get("memory_admin")),
+        label=_label(body.get("label"), source),
+        protected=protected,
     )
 
 
@@ -134,6 +214,10 @@ def load_roles(
         role = parse_role(str(name), body, label)
         by_name[role.name] = role
     default = str(default_role or "").strip()
+    if default == LEGACY:
+        raise RoleError(
+            f"default_role '{LEGACY}' is gone; set it to '{PROTECTED}' and run {MIGRATE}"
+        )
     if default not in by_name:
         raise RoleError(f"default_role '{default}' is not among the loaded roles")
     return RoleRegistry(by_name=by_name, default=default)

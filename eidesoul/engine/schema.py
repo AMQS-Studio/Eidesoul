@@ -122,6 +122,34 @@ approvals = Table(
 )
 Index("ix_approvals_status", approvals.c.status, approvals.c.created_at)
 
+# ADR-0023 §4.1 / ADR-0016 §4.9: one row per (task, from, to); the row holds the decision and
+# never the message content. `mode='none'` is stored too, so a refusal stays auditable.
+relay_grants = Table(
+    "relay_grants",
+    metadata,
+    Column("id", BigInteger, primary_key=True, autoincrement=True),
+    Column("task_id", String(120), nullable=False),
+    Column("from_person", String(80), nullable=False),
+    Column("to_person", String(80), nullable=False),
+    Column("mode", String(20), nullable=False, default="none", server_default="none"),
+    Column("scope_ref", String(160), nullable=False, default="", server_default=""),
+    Column("created_at", Float, nullable=False),
+    Column("expires_at", Float, nullable=True),
+    Column("revoked_at", Float, nullable=True),
+    Column("decided_via", String(40), nullable=False, default="", server_default=""),
+    CheckConstraint(
+        "mode IN ('full','summary','anonymous','none')", name="ck_relay_grants_mode"
+    ),
+)
+Index(
+    "ux_relay_grant",
+    relay_grants.c.task_id,
+    relay_grants.c.from_person,
+    relay_grants.c.to_person,
+    unique=True,
+)
+Index("ix_relay_grants_expiry", relay_grants.c.expires_at)
+
 people = Table(
     "people",
     metadata,

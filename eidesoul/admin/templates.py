@@ -205,7 +205,7 @@ GATEWAY: dict = {
     "gateways": {
         "cli": {
             "enabled": True,
-            "role": "owner",
+            "role": "administrator",
             "user": "local",
             "thread_id": "cli:local",
             "chat_name": "Terminal",
@@ -220,21 +220,24 @@ CONFIG: dict = {
 }
 
 ROLES: dict[str, dict] = {
-    "owner": {
-        "name": "owner",
-        "description": "Owner and admin of Eidesoul",
+    "administrator": {
+        "name": "administrator",
+        "label": "",
+        "protected": True,
+        "description": "Administrator of Eidesoul",
         "priority": 100,
         "users": [],
         "tools": ["*"],
         "commands": ["*"],
         "memory_admin": True,
         "context": (
-            "You are talking to the owner of Eidesoul, who sets the direction, permissions, and "
-            "soul.\nAllows corrections, config/soul changes, and full reports.\n"
+            "You are talking to the administrator of Eidesoul, who sets the direction, "
+            "permissions, and soul.\nAllows corrections, config/soul changes, and full reports.\n"
         ),
     },
     "member": {
         "name": "member",
+        "label": "",
         "description": "Committee member",
         "priority": 10,
         "users": [],
@@ -267,6 +270,7 @@ ROLES: dict[str, dict] = {
     },
     "guest": {
         "name": "guest",
+        "label": "",
         "description": "Unknown sender",
         "priority": 0,
         "users": [],

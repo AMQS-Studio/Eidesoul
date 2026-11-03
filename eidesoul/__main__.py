@@ -57,6 +57,7 @@ async def build_runtime(config_path: str | None, *, console: bool = False):
     from .engine.mcp import Hub
     from .engine.memory import build_memory
     from .engine.memory.ledger import ActionLedger
+    from .engine.roles import RoleError
     from .engine.stores.affect import AffectStore
     from .engine.stores.currents import CurrentsStore
     from .engine.stores.documents import DocumentStore
@@ -78,6 +79,10 @@ async def build_runtime(config_path: str | None, *, console: bool = False):
     documents = DocumentStore(db, paths, sync=host.sync_documents)
     documents.seed()
     config = load_config(paths.config, documents=documents, require_gateway=True)
+    try:
+        config.roles.require_administrator()
+    except RoleError as exc:
+        raise ConfigError(str(exc)) from exc
     history = HistoryStore(db, config.workspace)
     windows = WorkingMemory(store=history)
     ledger = ActionLedger(db)
@@ -541,11 +546,20 @@ def _config_export(args: argparse.Namespace) -> int:
 
 
 def _config_import(args: argparse.Namespace) -> int:
+    from .admin.roles import migrate
+    from .engine.roles import RoleError
+
     docs, db = _doc_store(args)
     try:
+        summary = migrate(docs, docs.paths)
         count = docs.import_from_files()
+    except RoleError as exc:
+        raise ConfigError(str(exc)) from exc
     finally:
         db.dispose()
+    if summary["renamed"]:
+        backup = f" (backup: {summary['backup']})" if summary["backup"] else ""
+        print(f"config import: role_rename owner -> administrator{backup}", flush=True)
     print(f"config import: {count} documents from files", flush=True)
     return 0
 

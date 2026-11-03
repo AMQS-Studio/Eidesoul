@@ -49,8 +49,8 @@ SOUL = "name: Eidesoul\nlanguage: en\npronouns: aku\n"
 ROLES = {
     "roles": {
         "guest": {"name": "guest", "tools": ["read"], "commands": ["help"]},
-        "owner": {
-            "name": "owner",
+        "administrator": {
+            "name": "administrator",
             "tools": ["*"],
             "commands": ["*"],
             "memory_admin": True,
@@ -85,7 +85,7 @@ def test_load_config_reads_all_sections(tmp_path, monkeypatch) -> None:
     assert config.default_role == "guest"
     assert config.soul.language == "en"
     assert config.gateways["cli"].enabled is True
-    assert config.roles.get("owner").memory_admin is True
+    assert config.roles.get("administrator").memory_admin is True
     assert config.memory.privacy.group_max_level == 1
     assert config.memory.privacy.auditor is False
 
@@ -97,20 +97,23 @@ def test_documents_override_config_sections(tmp_path, monkeypatch) -> None:
     docs.put(
         "engine",
         "llm:\n  provider: custom\n  base_url: http://doc\n"
-        "  model: doc-model\n  api_key_env: EIDESOUL_TEST_KEY\ndefault_role: owner\n",
+        "  model: doc-model\n  api_key_env: EIDESOUL_TEST_KEY\ndefault_role: administrator\n",
     )
     docs.put("soul", "name: eidesoul\nlanguage: id\npronouns: aku\n")
-    docs.put("role:owner", "name: owner\ntools: ['*']\nmemory_admin: true\n")
+    docs.put(
+        "role:administrator",
+        "name: administrator\ntools: ['*']\ncommands: ['*']\nmemory_admin: true\n",
+    )
     docs.put("role:guest", "name: guest\ntools: []\n")
 
     config = load_config(tmp_path / "config.yaml", documents=docs, require_key=False)
 
     assert config.llm.model == "doc-model"
     assert config.soul.language == "id"
-    assert config.default_role == "owner"
-    assert config.roles.names() == ["guest", "owner"]
+    assert config.default_role == "administrator"
+    assert config.roles.names() == ["administrator", "guest"]
     assert config.roles.get("guest").tools == ()
-    assert config.roles.get("owner").memory_admin is True
+    assert config.roles.get("administrator").memory_admin is True
 
 
 def test_roles_file_needs_the_wrapper(tmp_path, monkeypatch) -> None:
