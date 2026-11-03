@@ -35,8 +35,9 @@ target; bagian ini adalah selisih yang berjalan sekarang.
 
 - **satu diri** — satu identitas dan satu memori per jiwa, bukan sesi. Proses di-restart, permukaan
   diganti: diri yang sama tetap berlanjut.
-- **selalu ingat** — yang penting dicatat, disimpan bersama tingkat privasi, dan bisa diveto oleh orang
-  yang menjadi subjeknya. Lupa adalah keputusan (retensi, decay), bukan kecelakaan.
+- **selalu ingat** — yang penting dicatat: fakta tentang orang, dan siapa diri jiwa itu sendiri. Fakta
+  membawa tingkat privasi dan bisa diveto oleh orang yang menjadi subjeknya; identitas hidup di satu
+  dokumen soul, bukan di prompt. Lupa adalah keputusan (retensi, decay), bukan kecelakaan.
 - **selalu belajar** — saat sebuah tugas selesai, worker membaca episode-nya dan bisa menulis prosedur
   yang bisa dipakai ulang dengan rujukan ke asalnya. Belajar mengubah prosedur, tidak pernah aturan,
   persona, atau izin — dan ia berjalan secara default.
@@ -44,6 +45,16 @@ target; bagian ini adalah selisih yang berjalan sekarang.
   perangkat, robot. Chat adalah satu tubuh, bukan kelas dasar. Asisten adalah satu peran di antara
   pendamping, penasihat, dan perwujudan robot; mengganti peran mengubah apa yang boleh dilakukan jiwa,
   bukan siapa dirinya.
+
+Memori adalah lantainya, bukan seluruh jiwa. Emosi punya engine sendiri: state PAD dengan baseline
+kepribadian yang meluruh antar-giliran, drive yang berdenyut, dan relasi per orang yang bergerak lewat
+tahap. Konteks juga punya engine sendiri: fakta dipilih secara semantik tiap giliran, dan gerakan
+karakter diambil dari pack dengan gerbang register dan tingkat kasar, jadi apa yang ia tahu dan
+bagaimana ia bicara disusun, bukan diimprovisasi. Pacing yang dimanusiakan adalah timing di atasnya.
+
+Clean by default berlaku untuk gateway, tool, dan plugin: masing-masing mati sampai diaktifkan, dan
+spine satu-satunya pengecualian. Lapisan suara — emosi, humanize, karakter — aktif secara default,
+`init` menanyakannya sekali, dan tiap bagiannya bisa dimatikan.
 
 <a id="di-mana-posisinya"></a>
 ## Di mana posisinya di antara harness
@@ -72,13 +83,29 @@ berbasis role adalah sifat store itu, bukan sifat prompt.
 ## Apa yang coba diselesaikan
 
 - **Asisten yang lupa.** Anda menjelaskan hal yang sama lagi di setiap sesi baru.
+- **Percakapan yang melampaui window.** Chat panjang dipadatkan, dan yang dipadatkan hilang — memorinya
+  tidak pernah hidup di mana pun selain window.
 - **Karakter yang bergeser.** Orang yang sama berperilaku berbeda di tiap aplikasi, karena tiap aplikasi
   menyimpan prompt dan riwayatnya sendiri.
+- **Memori yang bocor.** Fakta privat satu chat muncul di chat lain, dan orang yang menjadi subjeknya
+  tidak punya suara.
 - **Agent yang bertindak tanpa otoritas.** Loop dengan tool bisa menyentuh hal yang tidak pernah
   disetujui siapa pun.
+- **Dua instance, satu jiwa.** Proses kedua menjawab pesan yang sama, atau menimpa pekerjaan yang
+  pertama.
+- **Giliran yang mati di tengah.** Proses berhenti antara panggilan tool dan balasan, dan tidak ada yang
+  tahu apa yang sudah terjadi.
+- **Belajar yang meracuni dirinya.** Agent menulis instruksinya sendiri, lalu memercayainya di giliran
+  berikutnya.
+- **Balasan yang mengarang apa yang tidak diketahuinya.** Tanpa lapisan pengetahuan, celah diisi
+  tebakan yang percaya diri.
+- **Balasan yang terdengar seperti mesin.** Datar, formal, suara yang sama untuk semua orang — tanpa
+  mood, tanpa timing, tanpa karakter.
 
-Kesinambungan, privasi, dan otoritas menjawab ketiganya; bagian sebelumnya menyebut di mana masing-masing
-berada.
+Masing-masing dijawab di desain, bukan di prompt: store kanonik, satu identitas, tingkat privasi dengan
+veto, role dan approval, satu primary, giliran yang aman dari crash, lapisan pengetahuan yang memilih
+fakta tiap giliran, dan gerbang kepercayaan untuk apa pun yang jiwa tulis tentang dirinya. Suara datar
+adalah sakelar, bukan syarat: emosi, pacing, dan karakter bisa dimatikan.
 
 <a id="architecture"></a>
 ## Arsitektur

@@ -33,14 +33,25 @@ file describes the target design; this section is the delta that runs today.
 
 - **one self** — one identity and one memory per soul, not a session. Restart the process, change the
   surface: the same self continues.
-- **always remembering** — what matters is written down, kept with a privacy level, and can be vetoed
-  by the person it is about. Forgetting is a decision (retention, decay), never an accident.
+- **always remembering** — what matters is written down: facts about people, and who the soul itself
+  is. Facts carry a privacy level and can be vetoed by the person they are about; identity lives in one
+  soul document, not in a prompt. Forgetting is a decision (retention, decay), never an accident.
 - **always learning** — when a task finishes, a worker reads the episode and can write a reusable
   procedure with a reference to where it came from. Learning changes procedures, never rules, persona,
   or permissions — and it runs by default.
 - **the same person wherever it lives** — a body carries the turn: a terminal, a chat app, a device, a
   robot. Chat is one body, not the base class. Assistant is one role among companion, advisor, and
   robot embodiments; changing role changes what the soul may do, never who it is.
+
+Memory is the floor, not the whole soul. Emotion has its own engine: a PAD state with a personality
+baseline that decays between turns, drives that pulse, and a relationship per person that moves through
+stages. Context has its own engine too: facts are selected semantically per turn, and character moves
+come from packs with gates on register and harshness, so what it knows and how it talks are assembled,
+not improvised. Humanized pacing is the timing on top.
+
+Clean by default covers gateway, tool, and plugin: each is off until enabled, and the spine is the only
+exception. The voice layer — emotion, humanize, character — is on by default, `init` asks once whether
+to keep it, and each part can be switched off.
 
 ## Where it sits among harnesses
 
@@ -66,11 +77,28 @@ properties of that store, not of a prompt.
 ## What it tries to solve
 
 - **An assistant that forgets.** You explain the same things again in every new session.
+- **A conversation that outgrows the window.** A long chat gets compacted, and what was compacted is
+  gone — the memory never lived anywhere but the window.
 - **A character that drifts.** The same person behaves differently in each app, because each app keeps
   its own prompt and its own history.
+- **A memory that leaks.** One chat's private facts surface in another, and the person they are about
+  has no say.
 - **An agent that acts without authority.** A loop with tools can touch things nobody approved.
+- **Two instances, one soul.** A second process answers the same message, or overwrites the first
+  one's work.
+- **A turn that dies halfway.** The process stops between the tool call and the reply, and nobody
+  knows what already happened.
+- **Learning that poisons itself.** The agent writes its own instructions, then trusts them on the
+  next turn.
+- **A reply that invents what it does not know.** Without a knowledge layer, gaps get filled with
+  confident guesses.
+- **A reply that sounds like a machine.** Flat, formal, the same voice for everyone — no mood, no
+  timing, no character.
 
-Continuity, privacy, and authority answer those three; the previous section says where each one lives.
+Each of those is answered in the design, not in the prompt: a canonical store, one identity, privacy
+levels with a veto, roles and approvals, a single primary, crash-safe turns, a knowledge layer that
+selects facts per turn, and a trust gate on anything the soul writes about itself. A flat voice is a
+switch, not a requirement: emotion, pacing, and character can be turned off.
 
 ## Architecture
 
