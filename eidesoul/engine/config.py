@@ -87,11 +87,20 @@ class LLMConfig:
 
 
 @dataclass(frozen=True)
+class MigrationsConfig:
+    mode: str = "on_boot"  # on_boot | manual
+    allow_down: bool = False  # `down` only in dev
+    backfill_batch: int = 500
+    advisory_lock_timeout_seconds: float = 30.0
+
+
+@dataclass(frozen=True)
 class DatabaseConfig:
     url: str = ""
     url_env: str = "EIDESOUL_DATABASE_URL"
     pool_size: int = 5
     pool_timeout: float = 30.0
+    migrations: MigrationsConfig = field(default_factory=MigrationsConfig)
 
 
 @dataclass(frozen=True)
@@ -472,11 +481,24 @@ def _mcp_servers(raw: object) -> dict[str, MCPServerConfig]:
 
 def _database(raw: Mapping) -> DatabaseConfig:
     body = _section(raw, "database")
+    mig = _section(body, "migrations")
+    mode = str(mig.get("mode") or "on_boot").strip().lower()
+    if mode not in {"on_boot", "manual"}:
+        raise ConfigError("database.migrations.mode must be 'on_boot' or 'manual'")
+    migrations = MigrationsConfig(
+        mode=mode,
+        allow_down=_bool(mig.get("allow_down"), False),
+        backfill_batch=max(1, int(_num(mig.get("backfill_batch"), 500))),
+        advisory_lock_timeout_seconds=max(
+            1.0, _num(mig.get("advisory_lock_timeout_seconds"), 30.0)
+        ),
+    )
     return DatabaseConfig(
         url=str(body.get("url") or "").strip(),
         url_env=str(body.get("url_env") or "EIDESOUL_DATABASE_URL").strip() or "EIDESOUL_DATABASE_URL",
         pool_size=max(1, int(_num(body.get("pool_size"), 5))),
         pool_timeout=_num(body.get("pool_timeout"), 30.0),
+        migrations=migrations,
     )
 
 
@@ -710,6 +732,7 @@ def load_config(
         url_env=database.url_env,
         pool_size=database.pool_size,
         pool_timeout=database.pool_timeout,
+        migrations=database.migrations,
     )
 
     reply_raw = _section(engine, "reply")

@@ -138,11 +138,12 @@ def reset_sequences(db: Database) -> list[str]:
 
 
 def upgrade(config_path=None) -> dict:
-    """Create the schema, ensure gateway tables, then seed documents from files."""
+    """Run the Alembic chain, ensure gateway tables, then seed documents from files."""
     host, paths = _host(config_path)
     db = _database(host)
     try:
-        db.ensure()
+        db.upgrade(timeout=host.database.migrations.advisory_lock_timeout_seconds)
+        db.ensure_vector()
         from ..gateways import ensure_schemas
 
         gateways = ensure_schemas(db)

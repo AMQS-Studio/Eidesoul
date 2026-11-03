@@ -1,7 +1,7 @@
 # ADR-0016: Canonical Schema & Migration Scheme, One DDL, One Alembic Baseline
 
 - **Status:** accepted
-- **Implementation:** draft — no Alembic and no versioned migrations; `schema_meta` is still manual
+- **Implementation:** partial — present: `migrations/` (Alembic baseline + `env.py`), `Database.upgrade` under `pg_advisory_lock`, primary-only check, `database.migrations` config; remaining: revisions 2-9 (memory, lease fencing, turns, automation) and the P0-3 FK/CHECK/index set
 - **Date:** 2026-11-03
 - **Deciders:** Muqsith (owner), omp (reviewer)
 - **Context:** the 2026-11-03 audit found the `memories` DDL in ADR-0001 stale (no `state` column, `level not null default 2`, `confirmed default true`), the ADR-0004 constraint clashing with `state='superseded'` from ADR-0008, and no migration owner for the columns born in ADR-0005/0008/0010/0012/0013/0014.

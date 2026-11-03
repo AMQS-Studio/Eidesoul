@@ -44,7 +44,7 @@ async def build_runtime(config_path: str | None, *, console: bool = False):
     from .engine.agent import Agent
     from .engine.ambient import Ambient
     from .engine.config import load_host, resolve_database_url
-    from .engine.db import Database
+    from .engine.db import Database, MigrationError
     from .engine.lease import Lease, lock_data_dir
     from .engine.llm import LLM
     from .engine.mcp import Hub
