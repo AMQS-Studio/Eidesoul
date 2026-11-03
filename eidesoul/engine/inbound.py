@@ -91,7 +91,7 @@ class Address:
     proof: str = ""  # "gateway" | "recorded" | ""
 
     @classmethod
-    def find(cls, query: str, *, gateway) -> tuple[Address | None, str]:
+    def find(cls, query: str, *, gateway: GatewayCore) -> tuple[Address | None, str]:
         """One address for a chat name, or a refusal naming the candidates."""
         if not isinstance(gateway, Directory):
             return None, "this body has no directory; a target is refused"
