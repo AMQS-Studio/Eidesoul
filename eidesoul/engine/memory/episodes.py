@@ -14,11 +14,11 @@ import re
 import time
 from dataclasses import dataclass
 
-from sqlalchemy import func, select, update
+from sqlalchemy import exists, func, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from ..db import Database
-from ..schema import episodes, memories, messages, thread_eras, turn_steps, turns
+from ..schema import episodes, memories, message_media, messages, thread_eras, turn_steps, turns
 
 log = logging.getLogger(__name__)
 
@@ -180,7 +180,13 @@ def _artifact(db: Database, thread_id: str, after: float) -> float | None:
             messages.c.thread_id == thread_id,
             messages.c.ts >= after,
             messages.c.outgoing.is_(True),
-            messages.c.media_ref.is_not(None),
+            exists(
+                select(message_media.c.message_id).where(
+                    message_media.c.thread_id == messages.c.thread_id,
+                    message_media.c.message_id == messages.c.msg_id,
+                    message_media.c.kind == "media",
+                )
+            ),
         )
     )
     value = row.get("last") if row else None

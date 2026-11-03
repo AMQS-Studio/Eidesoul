@@ -11,6 +11,7 @@ from sqlalchemy import (
     Date,
     Float,
     ForeignKey,
+    ForeignKeyConstraint,
     Index,
     Integer,
     LargeBinary,
@@ -63,8 +64,6 @@ messages = Table(
     Column("deleted_by", String(160), nullable=False, default="", server_default=""),
     Column("deleted_admin", Boolean, nullable=False, default=False, server_default=text("false")),
     Column("data", JSONB, nullable=False, default=dict),
-    Column("media_ref", LargeBinary, nullable=True),
-    Column("quote_media_ref", LargeBinary, nullable=True),
     # ADR-0026 §4.1: one generated column, no application-side write path.
     Column(
         "text_tsv",
@@ -76,6 +75,23 @@ messages = Table(
     ),
     UniqueConstraint("thread_id", "msg_id", name="uq_messages_thread_msg"),
     CheckConstraint("visibility >= 0 AND visibility <= 4", name="ck_messages_visibility"),
+)
+# Media blobs separated from the row (ADR-0016 §4.5); the message keeps its metadata in `data`.
+message_media = Table(
+    "message_media",
+    metadata,
+    Column("thread_id", String(120), nullable=False),
+    Column("message_id", String(160), nullable=False),
+    Column("kind", String(20), nullable=False),
+    Column("mime", String(160), nullable=False, server_default=""),
+    Column("bytes_ref", LargeBinary, nullable=True),
+    PrimaryKeyConstraint("thread_id", "message_id", "kind", name="pk_message_media"),
+    ForeignKeyConstraint(
+        ["thread_id", "message_id"],
+        ["messages.thread_id", "messages.msg_id"],
+        ondelete="CASCADE",
+        name="fk_message_media_message",
+    ),
 )
 Index("ix_messages_ts", messages.c.ts)
 Index("ix_messages_thread_ts", messages.c.thread_id, messages.c.ts, messages.c.id)

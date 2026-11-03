@@ -1,10 +1,10 @@
-> Terjemahan turunan — jangan sunting; sumber: engine/0016-schema-migration.md (sha256: 245a7c0fd8dc)
+> Terjemahan turunan — jangan sunting; sumber: engine/0016-schema-migration.md (sha256: bc1f03ce9ea6)
 > Teks ini ditulis manusia; baris yang tidak bisa diterjemahkan mesin disalin apa adanya ke sumber English, jadi sumber bercampur dua bahasa.
 
 # ADR-0016: Skema Kanonik & Migrasi — Satu DDL, Satu Baseline Alembic
 
 - **Status:** accepted
-- **Implementasi:** partial — ada: satu rantai Alembic (revisi 1-11: baseline, fencing lease, turns, spine memori, cognition/episodes/skills, relay, approval class, `llm_calls`, search, automation, set FK/CHECK/index P0-3), baseline + `upgrade` primary-only, upsert parent `threads` saat ingest dan clamp `visibility` di jalur tulis; sisa: pemisahan `message_media` (byte media masih di `messages.media_ref`/`quote_media_ref`)
+- **Implementasi:** implemented — bukti: satu rantai Alembic (revisi 1-12: baseline, fencing lease, siklus turn, spine memori, cognition/episodes/skills, relay, approval class, `llm_calls`, search, automation, set FK/CHECK/index P0-3, `message_media`), `upgrade` primary-only di bawah advisory lock, upsert parent `threads` saat ingest, clamp `visibility` di jalur tulis, byte media hanya lewat `message_media`; gerbang: `pytest -q` 792 passed, `--check` 31/31, `--translate-check` 0 masalah
 - **Tanggal:** 2026-11-03
 - **Deciders:** Muqsith (owner), omp (reviewer)
 - **Konteks:** audit 2026-11-03 menemukan DDL `memories` di ADR-0001 basi (tanpa kolom `state`, `level not null default 2`, `confirmed default true`), constraint ADR-0004 menabrak `state='superseded'` dari ADR-0008, dan tidak ada pemilik migrasi untuk kolom yang lahir di ADR-0005/0008/0010/0012/0013/0014.

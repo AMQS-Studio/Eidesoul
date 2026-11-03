@@ -72,8 +72,6 @@ def test_upsert_chunks_postgres_parameter_limit() -> None:
             "author": "unknown",
             "visibility": 2,
             "data": {},
-            "media_ref": None,
-            "quote_media_ref": None,
         }
         for i in range(5500)
     ]

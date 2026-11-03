@@ -13,6 +13,7 @@ from sqlalchemy import Text, and_, case, cast, func, literal, or_, select
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
+from ..config import SearchConfig
 from ..context import (
     AUTHOR_RANK,
     AUTHOR_UNKNOWN,
@@ -23,9 +24,8 @@ from ..context import (
 )
 from ..db import Database
 from ..memory import CaptureJobSink
-from ..config import SearchConfig
 from ..memory.store import MemoryStore
-from ..schema import memories_readable, messages, threads, turns
+from ..schema import memories_readable, message_media, messages, threads, turns
 
 log = logging.getLogger(__name__)
 
@@ -119,8 +119,6 @@ class HistoryStore:
     # ------------------------------------------------------------ write
 
     def _row(self, thread_id: str, message: Message) -> dict:
-        media = message.media
-        quote = message.quote
         return {
             "thread_id": thread_id,
             "msg_id": message.id or f"tmp-{time.time_ns()}",
@@ -136,9 +134,30 @@ class HistoryStore:
             "deleted_by": message.deleted_by or "",
             "deleted_admin": bool(message.deleted_admin),
             "data": _data(message),
-            "media_ref": _blob(media),
-            "quote_media_ref": _blob(quote.media) if quote is not None else None,
         }
+
+    @staticmethod
+    def _media_rows(thread_id: str, message: Message) -> list[dict]:
+        """The bytes that no longer live on the row (ADR-0016 §4.5)."""
+        rows: list[dict] = []
+        quote = message.quote
+        for kind, media in (
+            ("media", message.media),
+            ("quote", quote.media if quote is not None else None),
+        ):
+            blob = _blob(media)
+            if blob is None:
+                continue
+            rows.append(
+                {
+                    "thread_id": thread_id,
+                    "message_id": message.id,
+                    "kind": kind,
+                    "mime": str(getattr(media, "mimetype", "") or ""),
+                    "bytes_ref": blob,
+                }
+            )
+        return rows
 
     @staticmethod
     def _content_data(excluded):
@@ -162,7 +181,10 @@ class HistoryStore:
         removed = excluded.deleted.is_(True)
         return {
             "sender_name": case(
-                (keep_new, func.coalesce(func.nullif(excluded.sender_name, ""), table.c.sender_name)),
+                (
+                    keep_new,
+                    func.coalesce(func.nullif(excluded.sender_name, ""), table.c.sender_name),
+                ),
                 else_=table.c.sender_name,
             ),
             "sender_id": case(
@@ -186,10 +208,6 @@ class HistoryStore:
             "deleted_by": case((removed, excluded.deleted_by), else_=table.c.deleted_by),
             "deleted_admin": case((removed, excluded.deleted_admin), else_=table.c.deleted_admin),
             "data": data,
-            "media_ref": func.coalesce(excluded.media_ref, table.c.media_ref),
-            "quote_media_ref": func.coalesce(
-                excluded.quote_media_ref, table.c.quote_media_ref
-            ),
         }
 
     def add(self, thread_id: str, message: Message) -> None:
@@ -220,7 +238,25 @@ class HistoryStore:
             return 0
         with self.db.connect() as conn:
             self._upsert_messages(conn, rows)
+            self._upsert_media(conn, items)
         return len(rows)
+
+    def _upsert_media(self, conn, items: list[tuple[str, Message]]) -> None:
+        rows = [row for thread_id, message in items for row in self._media_rows(thread_id, message)]
+        if not rows:
+            return
+        statement = pg_insert(message_media).values(rows)
+        conn.execute(
+            statement.on_conflict_do_update(
+                index_elements=["thread_id", "message_id", "kind"],
+                set_={
+                    "mime": statement.excluded.mime,
+                    "bytes_ref": func.coalesce(
+                        statement.excluded.bytes_ref, message_media.c.bytes_ref
+                    ),
+                },
+            )
+        )
 
     def intake(
         self,
@@ -243,6 +279,7 @@ class HistoryStore:
         row = self._row(thread_id, message)
         with self.db.connect() as conn:
             self._upsert_messages(conn, [row])
+            self._upsert_media(conn, [(thread_id, message)])
             created = conn.execute(
                 pg_insert(turns)
                 .values(
@@ -341,7 +378,38 @@ class HistoryStore:
 
     # ------------------------------------------------------------ read
 
-    def _decode(self, row: dict) -> Message:
+    def _decode_rows(self, rows: Sequence[dict]) -> list[Message]:
+        """Decode rows and attach the media bytes that live in `message_media`."""
+        if not rows:
+            return []
+        pairs = {(str(row["thread_id"]), str(row["msg_id"])) for row in rows}
+        found = self.db.fetch_all(
+            select(
+                message_media.c.thread_id,
+                message_media.c.message_id,
+                message_media.c.kind,
+                message_media.c.bytes_ref,
+            ).where(
+                and_(
+                    message_media.c.thread_id.in_({thread for thread, _ in pairs}),
+                    message_media.c.message_id.in_({message for _, message in pairs}),
+                )
+            )
+        )
+        blobs: dict[tuple[str, str, str], bytes] = {}
+        for item in found:
+            if item.get("bytes_ref") is None:
+                continue
+            key = (str(item["thread_id"]), str(item["kind"]), str(item["message_id"]))
+            blobs[key] = bytes(item["bytes_ref"])
+        return [self._decode(row, blobs) for row in rows]
+
+    def _decode(
+        self, row: dict, blobs: dict[tuple[str, str, str], bytes] | None = None
+    ) -> Message:
+        blobs = blobs or {}
+        thread_id = str(row["thread_id"])
+        message_id = str(row["msg_id"])
         try:
             data = row.get("data") or {}
         except AttributeError:
@@ -362,7 +430,9 @@ class HistoryStore:
                 sender_name=str(quote_data.get("sender_name") or ""),
                 sender_id=str(quote_data.get("sender_id") or ""),
                 text=str(quote_data.get("text") or ""),
-                media=_media_from(quote_data.get("media"), row.get("quote_media_ref")),
+                media=_media_from(
+                    quote_data.get("media"), blobs.get((thread_id, "quote", message_id))
+                ),
                 when=datetime.fromtimestamp(float(when)) if when else None,
             )
         author = str(row.get("author") or AUTHOR_UNKNOWN)
@@ -374,7 +444,7 @@ class HistoryStore:
             sender_id=str(row["sender_id"]),
             when=datetime.fromtimestamp(float(row["ts"])),
             text=str(row["text"]),
-            media=_media_from(data.get("media"), row.get("media_ref")),
+            media=_media_from(data.get("media"), blobs.get((thread_id, "media", message_id))),
             quote=quote,
             outgoing=bool(row["outgoing"]),
             sender_address=str(row["sender_address"]),
@@ -403,7 +473,7 @@ class HistoryStore:
             .order_by(messages.c.ts.desc(), messages.c.id.desc())
             .limit(max(1, int(limit)))
         )
-        return [self._decode(row) for row in reversed(self.db.fetch_all(statement))]
+        return self._decode_rows(list(reversed(self.db.fetch_all(statement))))
 
     def find(self, thread_id: str, msg_id: str) -> Message | None:
         if not msg_id:
@@ -415,7 +485,7 @@ class HistoryStore:
             .limit(1)
         )
         found = self.db.fetch_one(statement)
-        return self._decode(found) if found else None
+        return self._decode_rows([found])[0] if found else None
 
     def search(
         self,
@@ -450,7 +520,7 @@ class HistoryStore:
             .order_by(messages.c.ts.desc(), messages.c.id.desc())
             .limit(limit)
         )
-        return [self._decode(row) for row in self.db.fetch_all(statement)]
+        return self._decode_rows(self.db.fetch_all(statement))
 
     def _fts(self, query: str, clauses: list, limit: int) -> list[Message]:
         """ADR-0026 §4.1: `websearch_to_tsquery('simple')`, ranked, deterministic tiebreak."""
@@ -464,7 +534,7 @@ class HistoryStore:
             .order_by(rank.desc(), messages.c.ts.desc(), messages.c.id.desc())
             .limit(limit)
         )
-        return [self._decode(row) for row in self.db.fetch_all(statement)]
+        return self._decode_rows(self.db.fetch_all(statement))
 
     def _trgm(self, query: str, clauses: list, limit: int) -> list[Message]:
         """ADR-0026 §4.3: the second net for affixes and typos, only when FTS found nothing."""
@@ -486,7 +556,7 @@ class HistoryStore:
             .order_by(best.desc(), messages.c.ts.desc(), messages.c.id.desc())
             .limit(limit)
         )
-        return [self._decode(row) for row in self.db.fetch_all(statement)]
+        return self._decode_rows(self.db.fetch_all(statement))
 
     def _like(self, query: str, clauses: list, limit: int) -> list[Message]:
         """Only when the operator disabled both nets (ADR-0026 §6 `search_backend=like`)."""
@@ -507,7 +577,7 @@ class HistoryStore:
             .order_by(messages.c.ts.desc(), messages.c.id.desc())
             .limit(limit)
         )
-        return [self._decode(row) for row in self.db.fetch_all(statement)]
+        return self._decode_rows(self.db.fetch_all(statement))
 
     def search_backend(self) -> str:
         """The active backend for `/status` (ADR-0026 §6); never a silent fallback."""

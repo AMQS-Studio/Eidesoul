@@ -10,7 +10,7 @@ from support import build_config, database
 from eidesoul.engine.cognition import CognitionWorker
 from eidesoul.engine.memory import episodes
 from eidesoul.engine.memory.store import MemoryStore
-from eidesoul.engine.schema import messages, turn_steps, turns
+from eidesoul.engine.schema import message_media, messages, turn_steps, turns
 from eidesoul.engine.stores.skills import SkillStore
 
 THREAD = "628111@s.whatsapp.net"
@@ -87,10 +87,23 @@ def seed_artifact(db, msg_id: str, *, thread: str = THREAD, ts: float) -> None:
                     "deleted_by": "",
                     "deleted_admin": False,
                     "data": {},
-                    "media_ref": b"x",
                 }
             ],
             ["thread_id", "msg_id"],
+        )
+        db.upsert(
+            conn,
+            message_media,
+            [
+                {
+                    "thread_id": thread,
+                    "message_id": msg_id,
+                    "kind": "media",
+                    "mime": "image/jpeg",
+                    "bytes_ref": b"x",
+                }
+            ],
+            ["thread_id", "message_id", "kind"],
         )
 
 

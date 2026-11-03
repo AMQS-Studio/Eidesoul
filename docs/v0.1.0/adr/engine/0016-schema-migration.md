@@ -1,13 +1,13 @@
 # ADR-0016: Canonical Schema & Migration Scheme, One DDL, One Alembic Baseline
 
 - **Status:** accepted
-- **Implementation:** partial — present: one Alembic chain (revisions 1-11: baseline, lease fencing, turns, memory spine, cognition/episodes/skills, relay, approval class, `llm_calls`, search, automation, P0-3 FK/CHECK/index set), baseline + primary-only `upgrade`, the `threads` parent upsert on ingest and the write-side `visibility` clamp; remaining: the `message_media` split (media bytes still in `messages.media_ref`/`quote_media_ref`)
+- **Implementation:** implemented — evidence: one Alembic chain (revisions 1-12: baseline, lease fencing, turn lifecycle, memory spine, cognition/episodes/skills, relay, approval class, `llm_calls`, search, automation, P0-3 FK/CHECK/index set, `message_media`), primary-only `upgrade` under the advisory lock, the `threads` parent upsert on ingest, the write-side `visibility` clamp, media bytes read/written only through `message_media`; gate: `pytest -q` 792 passed, `--check` 31/31, `--translate-check` 0 masalah
 - **Date:** 2026-11-03
 - **Deciders:** Muqsith (owner), omp (reviewer)
 - **Context:** the 2026-11-03 audit found the `memories` DDL in ADR-0001 stale (no `state` column, `level not null default 2`, `confirmed default true`), the ADR-0004 constraint clashing with `state='superseded'` from ADR-0008, and no migration owner for the columns born in ADR-0005/0008/0010/0012/0013/0014.
 - **Supersedes:** —
 - **Related:** ADR-0001 (canonical), ADR-0004 (state/level), ADR-0005 (retention), ADR-0008 (provenance/trust), ADR-0010 (dispute), ADR-0011 (reaper/ledger), ADR-0012 (`generation`), ADR-0013 (`turns`), ADR-0014 (automation), ADR-0009 (ADR home)
-- **Amendments:** 2026-11-03 — owner's decision: ADR-0019 (observability) joins the set; the `llm_calls` column shape is added in §4.6 as the single DDL owner, with retention `engine.metrics.retention_days` (ADR-0005). 2026-11-03 — ADR-0000 §4.4 rename: `thread_id` → `thread_id`, `chats`/`thread_eras`/`thread_people` → `threads`/`thread_eras`/`thread_people`, scope `thread` → `thread`; the baseline revision carries the new names.
+- **Amendments:** 2026-11-03 — §4.4 now mirrors the landed chain (revisions 1-12); the P0-3 set landed in 11 and the media split in 12. 2026-11-03 — owner's decision: ADR-0019 (observability) joins the set; the `llm_calls` column shape is added in §4.6 as the single DDL owner, with retention `engine.metrics.retention_days` (ADR-0005). 2026-11-03 — ADR-0000 §4.4 rename: `thread_id` → `thread_id`, `chats`/`thread_eras`/`thread_people` → `threads`/`thread_eras`/`thread_people`, scope `thread` → `thread`; the baseline revision carries the new names.
 - **Location note:** ADR lives in `docs/v0.1.0/adr/engine/`; the Indonesian copy is `docs/v0.1.0/adr/engine/id/0016-schema-migration.md`.
 
 ---
@@ -135,14 +135,17 @@ CREATE UNIQUE INDEX memories_supersede_pair ON memories (id, supersedes) WHERE s
 | Version | Contents | Decision owner |
 |---|---|---|
 | 1 | baseline: the 23 existing tables | `schema.py` |
-| 2 | `memory_events`, `cognition_jobs` (+ basic `memories` without `state`) | ADR-0001, ADR-0003 |
-| 3 | `memories.state/level/confirmed` + the `memories_readable` view + CHECK 4.3 | ADR-0004 |
-| 4 | retention columns: `pinned`, `durability`, `category`, `use_*`, `expires_at`, `max_lifetime_at` | ADR-0005 |
-| 5 | provenance/trust: `via`, `refs`, `asserted_at`, `trust`, `owner/subject` | ADR-0008 |
-| 6 | dispute: `dispute_state`, `disputed_with`, `dispute_reason`, `disputed_at` | ADR-0010 |
-| 7 | fencing: `engine_lease.generation`, FK/CHECK/index P0-3, `message_media` | ADR-0012, ADR-0011 |
-| 8 | `turns`, `turn_steps`, `outbound_messages(scope_key, chunk_index)` | ADR-0013 |
-| 9 | `automations`, `automation_runs` | ADR-0014 |
+| 2 | fencing: `engine_lease.generation`, the single-row CHECK | ADR-0012 |
+| 3 | `turns`, `turn_steps`, `outbound_messages`, `engine_control.shutting_down` | ADR-0013, ADR-0011 |
+| 4 | memory spine: `memories` (state/level/confirmed/retention/provenance/dispute), journal, uses, tombstones, index, view | ADR-0001, 0004, 0005, 0008, 0010 |
+| 5 | `cognition_jobs`, `episodes`, `skills` procedure columns, `skill_revisions` | ADR-0003, ADR-0020 |
+| 6 | `relay_grants` | ADR-0023 |
+| 7 | `approvals.approval_class`, `scope_proof` | ADR-0007 |
+| 8 | `llm_calls` | ADR-0019, ADR-0025 |
+| 9 | `messages.text_tsv` (generated), GIN + trigram indexes | ADR-0026 |
+| 10 | `automations`, `automation_runs`, `automation_state_log` | ADR-0014 |
+| 11 | P0-3 FK/CHECK/index set | ADR-0016 |
+| 12 | `message_media` split; `messages` keeps metadata only | ADR-0016 |
 
 Rules per revision:
 

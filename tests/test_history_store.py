@@ -5,8 +5,8 @@ from __future__ import annotations
 from datetime import datetime
 
 import pytest
-from sqlalchemy.exc import IntegrityError
 from sqlalchemy import text as sql_text
+from sqlalchemy.exc import IntegrityError
 from support import database
 
 from eidesoul.engine.context import Media, Message, Quote
@@ -175,9 +175,8 @@ def test_unknown_author_values_fall_back_to_unknown(tmp_path) -> None:
     assert item.visibility == 2
 
     # ADR-0016 §4.5: the database rejects a visibility outside 0-4.
-    with pytest.raises(IntegrityError):
-        with store.db.connect() as conn:
-            conn.execute(messages.update().values(visibility=9))
+    with pytest.raises(IntegrityError), store.db.connect() as conn:
+        conn.execute(messages.update().values(visibility=9))
 
 
 def test_mark_deleted_keeps_the_archived_text(tmp_path) -> None:
