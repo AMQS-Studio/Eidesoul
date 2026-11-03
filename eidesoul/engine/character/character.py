@@ -50,7 +50,7 @@ def _assistant_tell(language: str, folder: str, stamp: int) -> re.Pattern[str] |
     )
 
 
-def assistant_tell(language: str = "id") -> re.Pattern[str] | None:
+def assistant_tell(language: str) -> re.Pattern[str] | None:
     """Compiled assistant-tell pattern for one language; None when its pack carries none."""
     code = str(language or "").strip().lower()
     if not code:
@@ -58,14 +58,14 @@ def assistant_tell(language: str = "id") -> re.Pattern[str] | None:
     return _assistant_tell(code, str(lexicon.directory()), lexicon.generation())
 
 
-def polish_system(name: str, language: str = "id") -> str:
+def polish_system(name: str, language: str) -> str:
     """The polish prompt plus the pack's examples; none when the pack omits them."""
     prompt = POLISH_SYSTEM.format(name=name)
     examples = lexicon.load(language).example("character_polish_examples")
     return f"{prompt}\nExamples:\n{examples}\n" if examples else prompt
 
 
-def needs_polish(text: str, *, max_chars: int = 400, language: str = "id") -> bool:
+def needs_polish(text: str, *, max_chars: int = 400, language: str) -> bool:
     """Does this draft look like an assistant? One trigger is enough to call the character layer."""
     body = str(text or "").strip()
     if not body:
@@ -113,7 +113,7 @@ def _clean(raw: str) -> str:
     return unwrap_quotes(text).strip()
 
 
-def _rejected(draft: str, text: str, language: str = "id") -> bool:
+def _rejected(draft: str, text: str, language: str) -> bool:
     if not text:
         return True
     tell = assistant_tell(language)
@@ -327,6 +327,7 @@ async def regulate(
 ) -> str:
     """Does the reply exceed its level? Rewrite once; on failure keep the reply, never stall."""
     body = str(reply or "").strip()
+    language = config.soul.language
     if not body or not config.character.enabled:
         return body
     limits = effective_limits(config.character, target, confidence)
@@ -367,7 +368,7 @@ async def regulate(
         logging.getLogger(__name__).debug("level clamp call failed", exc_info=True)
         return body
     text = _clean(raw)
-    if not text or _rejected(body, text):
+    if not text or _rejected(body, text, language=language):
         return body
     if over_level(text, toxicity=limits[0], adult_memes=limits[1], curses=male):
         return body

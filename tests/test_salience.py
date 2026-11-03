@@ -12,7 +12,7 @@ def names(kept: list[tuple[str, str]]) -> list[str]:
 def test_all_blocks_fit_are_kept_in_order() -> None:
     blocks = {"memory": "M", "skills": "S", "base": "B", "topic": "T", "emotion": "E"}
 
-    kept, dropped = select(blocks, max_chars=9000)
+    kept, dropped = select(blocks, max_chars=9000, language="id")
 
     assert dropped == []
     assert names(kept) == [name for name in ORDER if name in blocks]
@@ -23,7 +23,7 @@ def test_all_blocks_fit_are_kept_in_order() -> None:
 def test_disabled_salience_never_drops_blocks() -> None:
     blocks = {"base": "b" * 100, "memory": "m" * 5000, "topic": "t" * 5000}
 
-    kept, dropped = select(blocks, max_chars=200, enabled=False)
+    kept, dropped = select(blocks, max_chars=200, enabled=False, language="id")
 
     assert dropped == []
     assert names(kept) == ["base", "topic", "memory"]
@@ -37,7 +37,7 @@ def test_tight_budget_keeps_mandatory_blocks_only() -> None:
         "topic": "t" * 400,
     }
 
-    kept, dropped = select(blocks, max_chars=300)
+    kept, dropped = select(blocks, max_chars=300, language="id")
 
     assert set(names(kept)) == {"base"}
     assert set(dropped) == {"emotion", "memory", "topic"}
@@ -48,7 +48,7 @@ def test_tight_budget_keeps_mandatory_blocks_only() -> None:
 def test_keyword_overlap_survives_before_unrelated_block() -> None:
     blocks = {"base": "b" * 10, "topic": "hujan " * 5, "memory": "kopi " * 5}
 
-    kept, dropped = select(blocks, "kopi enak", max_chars=50)
+    kept, dropped = select(blocks, "kopi enak", max_chars=50, language="id")
 
     assert names(kept) == ["base", "memory"]
     assert dropped == ["topic"]
@@ -57,7 +57,7 @@ def test_keyword_overlap_survives_before_unrelated_block() -> None:
 def test_bonus_keeps_skills_but_never_drops_memory() -> None:
     blocks = {"base": "b" * 10, "memory": "m" * 40, "skills": "s" * 40}
 
-    kept, dropped = select(blocks, max_chars=55, bonuses={"skills": 0.2})
+    kept, dropped = select(blocks, max_chars=55, bonuses={"skills": 0.2}, language="id")
 
     assert names(kept) == ["base", "skills"]
     assert dropped == ["memory"]
@@ -66,19 +66,19 @@ def test_bonus_keeps_skills_but_never_drops_memory() -> None:
 def test_memory_survives_tiebreak_when_nothing_matches() -> None:
     blocks = {"base": "b" * 10, "topic": "t" * 40, "memory": "m" * 40}
 
-    kept, dropped = select(blocks, "zzz qqq", max_chars=55)
+    kept, dropped = select(blocks, "zzz qqq", max_chars=55, language="id")
 
     assert names(kept) == ["base", "memory"]
     assert dropped == ["topic"]
 
 def test_keyword_set_skips_stopwords_and_short_words() -> None:
-    assert keyword_set("yang aku mau itu kopi enak") == {"kopi", "enak"}
+    assert keyword_set("yang aku mau itu kopi enak", language="id") == {"kopi", "enak"}
 
 
 def test_actions_block_is_mandatory_and_survives_a_tight_budget() -> None:
     blocks = {"base": "b" * 100, "actions": "a" * 400, "topic": "t" * 400}
 
-    kept, dropped = select(blocks, max_chars=300)
+    kept, dropped = select(blocks, max_chars=300, language="id")
 
     assert "actions" in COMPETING
     assert "actions" not in MANDATORY

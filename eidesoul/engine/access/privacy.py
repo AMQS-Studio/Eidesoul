@@ -90,7 +90,7 @@ class PrivacyService:
 
     @property
     def _lang(self) -> str:
-        return str(self.agent.soul.language or "id")
+        return str(self.agent.soul.language)
 
     def _text(self, key: str, **kwargs) -> str:
         return t(f"privacy.{key}", self._lang, **kwargs)

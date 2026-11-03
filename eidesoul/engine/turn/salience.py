@@ -46,7 +46,7 @@ ORDER = (
 JOIN = "\n\n"
 
 
-def block_score(text: str, query: str, bonus: float, *, language: str = "id") -> float:
+def block_score(text: str, query: str, bonus: float, *, language: str) -> float:
     """0..1.3: 0.7 * (keyword overlap / 3, max 1) + block bonus."""
     overlap = len(keyword_set(text, language) & keyword_set(query, language))
     return 0.7 * min(1.0, overlap / 3.0) + float(bonus)
@@ -59,7 +59,7 @@ def select(
     bonuses: dict[str, float] | None = None,
     max_chars: int = 9000,
     enabled: bool = True,
-    language: str = "id",
+    language: str,
 ) -> tuple[list[tuple[str, str]], list[str]]:
     """(selected blocks in ORDER, names of the dropped blocks).
 

@@ -98,7 +98,7 @@ def capture_env(tmp_path, replies: list[dict | None], *, ask=None) -> SimpleName
     db = database()
     store = MemoryStore(db, config)
     worker = CognitionWorker(
-        db, config, store, llm=CaptureLLM(replies), language="id", ask=ask
+        db, config, store, llm=CaptureLLM(replies), ask=ask
     )
     history = HistoryStore(db, config.workspace, memories=store, job_sink=worker.queue)
     return SimpleNamespace(
@@ -123,7 +123,7 @@ def capture(
         text=text,
         sender_address=f"{person}@s.whatsapp.net",
     )
-    assert env.history.intake(thread, message, person, audience=audience) is True
+    assert env.history.intake(thread, message, person, audience=audience, language="id") is True
     return asyncio.run(env.worker.drain(kind="capture", limit=10))
 
 

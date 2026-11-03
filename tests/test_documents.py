@@ -6,7 +6,7 @@ from support import build_config, database
 
 from eidesoul.engine.stores.documents import DocumentStore
 
-SOUL = "name: Eidesoul\nlanguage: en\npronouns: aku\n"
+SOUL = "name: Eidesoul\nlanguage: en\nlocale: en-US\ntimezone: UTC\npronouns: aku\n"
 
 
 def make_docs(tmp_path, *, sync=True):
@@ -41,7 +41,7 @@ def test_seed_only_missing_documents(tmp_path) -> None:
     assert docs.names("role:") == ["role:guest"]
     assert docs.seed() == 0
 
-    docs.put("soul", "name: Eidesoul\nlanguage: id\n")
+    docs.put("soul", "name: Eidesoul\nlanguage: id\nlocale: id-ID\ntimezone: UTC\n")
     assert docs.seed() == 0
     assert "language: id" in docs.get("soul")
     assert "persona" not in docs.names()

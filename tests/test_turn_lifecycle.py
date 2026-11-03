@@ -336,8 +336,8 @@ def test_a_duplicate_message_does_not_fork_the_turn(tmp_path) -> None:
     env = make_agent(tmp_path)
     inbound = inbound_message("halo", thread=DM, message_id="dup-1")
 
-    assert env.history.intake(DM, inbound.payload, "628111") is True
-    assert env.history.intake(DM, inbound.payload, "628111") is False
+    assert env.history.intake(DM, inbound.payload, "628111", language="id") is True
+    assert env.history.intake(DM, inbound.payload, "628111", language="id") is False
     assert len(env.db.fetch_all(_turns_table().select())) == 1
 
 
@@ -352,7 +352,7 @@ def test_a_turn_row_requires_a_valid_status(tmp_path) -> None:
 
     env = make_agent(tmp_path)
     inbound = inbound_message("halo", thread=DM, message_id="bad-1")
-    env.history.intake(DM, inbound.payload, "628111")
+    env.history.intake(DM, inbound.payload, "628111", language="id")
 
     with pytest.raises(IntegrityError), env.db.connect() as conn:
         conn.execute(
@@ -394,6 +394,7 @@ def backlog(env, thread: str, count: int, *, action: bool = False) -> list[str]:
             message.actor,
             category="action" if action else "chat",
             gateway=env.gateway.name,
+        language="id",
         )
         ids.append(str(message.payload.id))
     return ids

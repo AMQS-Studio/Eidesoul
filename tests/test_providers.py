@@ -8,7 +8,7 @@ from eidesoul.admin import templates
 from eidesoul.engine.config import ConfigError, load_config
 from eidesoul.providers import PROVIDERS, resolve
 
-SOUL = "name: Eidesoul\nlanguage: en\npronouns: aku\n"
+SOUL = "name: Eidesoul\nlanguage: en\nlocale: en-US\ntimezone: UTC\npronouns: aku\n"
 ROLES = {"roles": {"guest": {"name": "guest", "tools": ["read"], "commands": ["help"]}}}
 
 
@@ -148,7 +148,10 @@ def test_unknown_provider_becomes_a_config_error(tmp_path):
 
 
 def test_the_scaffold_writes_the_operator_choice():
-    body = yaml.safe_load(templates.files(provider="groq", model="operator-model")["config.yaml"])
+    files = templates.files(
+        provider="groq", model="operator-model", language="en", locale="en-US", timezone="UTC"
+    )
+    body = yaml.safe_load(files["config.yaml"])
     llm = body["engine"]["llm"]
 
     assert llm["provider"] == "groq"
@@ -159,13 +162,17 @@ def test_the_scaffold_writes_the_operator_choice():
 
 
 def test_the_scaffold_ships_no_model_of_its_own():
-    body = yaml.safe_load(templates.files(provider="groq")["config.yaml"])
+    body = yaml.safe_load(
+        templates.files(
+            provider="groq", language="en", locale="en-US", timezone="UTC"
+        )["config.yaml"]
+    )
 
     assert body["engine"]["llm"]["model"] == ""
 
 
 def test_the_scaffold_env_only_names_the_chosen_key():
-    env = templates.files(provider="groq")[".env"]
+    env = templates.files(provider="groq", language="en", locale="en-US", timezone="UTC")[".env"]
 
     assert env.startswith("GROQ_API_KEY=")
     assert "OPENCODE" not in env
@@ -187,4 +194,4 @@ def test_custom_needs_a_key_variable(tmp_path):
 
 def test_unknown_provider_is_rejected_by_the_scaffold():
     with pytest.raises(ValueError, match="unknown provider 'nope'"):
-        templates.files(provider="nope")
+        templates.files(provider="nope", language="en", locale="en-US", timezone="UTC")

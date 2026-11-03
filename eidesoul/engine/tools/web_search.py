@@ -61,7 +61,7 @@ async def _searx(config: Config, query: str, limit: int) -> list[dict]:
         return []
 
 
-def _search_sync(query: str, limit: int) -> list[dict]:
+def _search_sync(query: str, limit: int, region: str = "") -> list[dict]:
     from ddgs import DDGS
 
     engine = DDGS(timeout=10)
@@ -69,7 +69,9 @@ def _search_sync(query: str, limit: int) -> list[dict]:
     seen: set[str] = set()
     for backend in WEB_BACKENDS:
         try:
-            hits = engine.text(query, max_results=limit, backend=backend)
+            hits = engine.text(
+                query, max_results=limit, backend=backend, region=region or None
+            )
         except Exception:  # one blocked/rate-limited backend must not break the search
             continue
         for hit in hits:
@@ -90,7 +92,7 @@ async def _web_search(args: dict, ctx: ToolContext) -> str:
     limit = min(10, max(1, _int(args, "max_results", 5)))
     results = await _searx(ctx.config, query, limit)
     if not results:
-        results = await asyncio.to_thread(_search_sync, query, limit)
+        results = await asyncio.to_thread(_search_sync, query, limit, ctx.config.web_search.region)
     if not results:
         return "no results"
     return "\n".join(

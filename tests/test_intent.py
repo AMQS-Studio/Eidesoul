@@ -103,6 +103,7 @@ def test_the_remember_hint_forces_core_without_pinning_a_plain_category(
         candidate = memory.intake(
             conn, thread_id="t", person_id=PERSON, message_id="m1",
             text="ingat ya aku suka kopi dan teh setiap pagi",
+        language="id",
         )
     assert memory.label_candidate(
         candidate.memory_id, level=2, confirmed=True, category=category, durability=durability

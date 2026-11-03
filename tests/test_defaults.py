@@ -21,12 +21,16 @@ def test_no_example_file_is_shipped():
 
 
 def test_init_template_writes_exactly_the_host_files():
-    files = templates.files(provider="openai", model="")
+    files = templates.files(
+        provider="openai", model="", language="en", locale="en-US", timezone="UTC"
+    )
     assert set(files) == {"config.yaml", "roles.yaml", "soul.yaml", ".env"}
 
 
 def test_init_template_carries_no_placeholder_secret():
-    files = templates.files(provider="openai", model="")
+    files = templates.files(
+        provider="openai", model="", language="en", locale="en-US", timezone="UTC"
+    )
     assert "CHANGE_ME" not in files["config.yaml"]
     assert "CHANGE_ME" not in files[".env"]
 

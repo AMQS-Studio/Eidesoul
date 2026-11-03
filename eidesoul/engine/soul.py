@@ -9,6 +9,7 @@ from pathlib import Path
 
 import yaml
 
+from . import clock
 from .i18n import catalog, normalize_language, t
 
 log = logging.getLogger(__name__)
@@ -23,11 +24,12 @@ DEFAULT_SOUL_YAML = """\
 # Eidesoul soul definition. One database = one soul.
 name: Eidesoul
 description: A persistent soul engine that can inhabit any body or role.
-language: id
+language: {language}
+locale: {locale}
+timezone: {timezone}
 pronouns: ""
 gender: unspecified
 role: assistant
-locale: id-ID
 
 # background: |
 #   Born and raised in ...
@@ -55,14 +57,15 @@ class SoulStyle:
 
 @dataclass(frozen=True)
 class Soul:
+    language: str
+    locale: str
+    timezone: str
     name: str = "Eidesoul"
     description: str = ""
-    language: str = "id"
     pronouns: str = ""
     gender: str = "unspecified"
     role: str = "assistant"
     roles: tuple[str, ...] = ("assistant",)
-    locale: str = "id-ID"
     background: str = ""
     persona: str = ""
     style: SoulStyle = field(default_factory=SoulStyle)
@@ -72,14 +75,18 @@ class Soul:
     source: Path | None = None
 
     def __post_init__(self) -> None:
-        """Resolve an empty pronoun from the catalog; a missing key fails the boot."""
+        """Validate the three required values, then resolve an empty pronoun from the catalog."""
+        normalize_language(self.language)
+        if not self.locale.strip():
+            raise ValueError("soul locale is required; `eidesoul init` writes it")
+        clock.zone(self.timezone)
         if not self.pronouns:
             object.__setattr__(self, "pronouns", default_pronoun(self.language))
 
 
 def default_pronoun(language: str) -> str:
     """`soul.pronoun.default` for one catalog; the key is required, so a boot without it fails."""
-    code = normalize_language(language, "id")
+    code = normalize_language(language)
     if PRONOUN_KEY not in catalog(code):
         raise ValueError(f"language catalog '{code}' is missing the required key '{PRONOUN_KEY}'")
     return t(PRONOUN_KEY, code)
@@ -104,11 +111,8 @@ def style_block(style: SoulStyle) -> str:
 
 
 def language_line(soul: Soul) -> str:
-    """Model-facing instruction that pins the reply language to the soul catalog."""
-    language = normalize_language(soul.language, "id")
-    if language == "en":
-        return "Reply in English."
-    return "Reply in Indonesian (Bahasa Indonesia), matching the sender's casual register."
+    """Model-facing instruction from the soul catalog; no language branch lives in code."""
+    return t("soul.reply_language", normalize_language(soul.language))
 
 
 def _identifiers(value: object, key: str) -> tuple[str, ...]:
@@ -244,16 +248,20 @@ def load_soul(
         roles = (role,)
     if role not in roles:
         roles = (role, *roles)
+    for key in ("language", "locale", "timezone"):
+        if not _text(raw.get(key)):
+            raise ValueError(f"soul {key} is required; `eidesoul init` writes it")
     style = _style(raw.get("style"))
     soul = Soul(
         name=name,
         description=_text(raw.get("description")),
-        language=normalize_language(raw.get("language"), "id"),
+        language=normalize_language(raw.get("language")),
         pronouns=_text(raw.get("pronouns")),
         gender=gender,
         role=role,
         roles=roles,
-        locale=_text(raw.get("locale")) or "id-ID",
+        locale=_text(raw.get("locale")),
+        timezone=_text(raw.get("timezone")),
         background=_text(raw.get("background")),
         persona=_text(raw.get("persona")),
         style=style,
@@ -270,6 +278,7 @@ def load_soul(
         role=soul.role,
         roles=soul.roles,
         locale=soul.locale,
+        timezone=soul.timezone,
         background=soul.background,
         persona=render_persona(soul),
         style=soul.style,

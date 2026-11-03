@@ -251,7 +251,7 @@ def test_intake_is_one_transaction_with_memory_and_job(tmp_path) -> None:
     store = HistoryStore(database(), job_sink=ExplodingSink())
 
     with pytest.raises(RuntimeError, match="job insert failed"):
-        store.intake("chat", message("m1", "aku suka kopi"), "628222")
+        store.intake("chat", message("m1", "aku suka kopi"), "628222", language="id")
 
     assert _count(store, "messages") == 0
     assert _count(store, "turns") == 0
@@ -261,8 +261,8 @@ def test_intake_is_one_transaction_with_memory_and_job(tmp_path) -> None:
 
 def test_intake_writes_the_pending_candidate_and_event(tmp_path) -> None:
     store = HistoryStore(database())
-    assert store.intake("chat", message("m1", "aku suka kopi"), "628222") is True
-    assert store.intake("chat", message("m1", "aku suka kopi"), "628222") is False
+    assert store.intake("chat", message("m1", "aku suka kopi"), "628222", language="id") is True
+    assert store.intake("chat", message("m1", "aku suka kopi"), "628222", language="id") is False
 
     candidate = store.db.fetch_one(sql_text("SELECT * FROM memories"))
     event = store.db.fetch_one(sql_text("SELECT * FROM memory_events"))
@@ -280,7 +280,7 @@ def test_intake_writes_the_pending_candidate_and_event(tmp_path) -> None:
 def test_intake_hard_exclusion_keeps_the_archive_only(tmp_path) -> None:
     store = HistoryStore(database())
 
-    assert store.intake("chat", message("m1", "api_key=abc123"), "628222") is True
+    assert store.intake("chat", message("m1", "api_key=abc123"), "628222", language="id") is True
 
     assert _count(store, "messages") == 1
     assert _count(store, "turns") == 1
@@ -297,10 +297,10 @@ def test_a_second_body_cannot_claim_an_owned_thread(tmp_path) -> None:
     from eidesoul.engine.stores.history import RouteConflict
 
     store = HistoryStore(database())
-    assert store.intake("chat", message("m1", "halo"), "628222", gateway="a") is True
+    assert store.intake("chat", message("m1", "halo"), "628222", gateway="a", language="id") is True
 
     with pytest.raises(RouteConflict):
-        store.intake("chat", message("m2", "halo lagi"), "628222", gateway="b")
+        store.intake("chat", message("m2", "halo lagi"), "628222", gateway="b", language="id")
 
     found = store.db.fetch_all(
         select(messages_table.c.msg_id).where(messages_table.c.thread_id == "chat")

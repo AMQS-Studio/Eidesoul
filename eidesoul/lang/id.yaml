@@ -244,6 +244,7 @@ messages:
   memory.dispute_question: "Aku punya dua catatan yang bertentangan: \"{first}\" dan \"{second}\". Yang benar yang mana?"
   relay.ask: "Jawabanmu soal {topic} boleh diteruskan ke {to}. Balas /approve last full|summary|anonymous|none, atau /deny last supaya tetap privat."
   soul.pronoun.default: "aku"
+  soul.reply_language: "Reply in Indonesian (Bahasa Indonesia), matching the sender's casual register."
   turn.notice.interrupted: "Yang tadi belum selesai. Kirim ulang kalau masih perlu."
   turn.notice.resumed: "Aku balik lagi. Tadi koneksiku putus sebentar."
   turn.notice.shutdown: "Koneksiku putus sebelum selesai. Kirim ulang kalau masih perlu."

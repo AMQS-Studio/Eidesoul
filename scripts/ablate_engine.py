@@ -107,11 +107,14 @@ def prompt_budget(
         member = (Role(name="member"),)
         before.append(len(system_prompt(stripped, member, query=message.text, **blocks)))
         after.append(
-            len(system_prompt(config, member, query=message.text, bonuses={}, **blocks))
+            len(
+                system_prompt(config, member, query=message.text, bonuses={}, **blocks)
+            )
         )
         _, names = salience.select(
             {**mandatory, **blocks},
             message.text,
+            language=config.soul.language,
             bonuses={},
             max_chars=config.prompt.max_chars,
             enabled=config.prompt.salience,

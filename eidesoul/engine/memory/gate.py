@@ -60,7 +60,7 @@ def structural(
     kind: str = "message",
     mode: str = "balanced",
     min_chars: int = 8,
-    language: str = "id",
+    language: str,
 ) -> GateDecision:
     """Stage 1 of ADR-0002 §4: no model, no per-language vocabulary."""
     body = " ".join(str(text or "").split())

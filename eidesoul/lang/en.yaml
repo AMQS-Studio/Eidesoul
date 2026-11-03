@@ -244,6 +244,7 @@ messages:
   memory.dispute_question: "I have two notes that disagree: \"{first}\" and \"{second}\". Which one is right?"
   relay.ask: "Your answer about {topic} can be forwarded to {to}. Reply /approve last full|summary|anonymous|none, or /deny last to keep it private."
   soul.pronoun.default: "I"
+  soul.reply_language: "Reply in English."
   turn.notice.interrupted: "I couldn't finish that one. Send it again if it still matters."
   turn.notice.resumed: "I'm back. My connection had dropped for a while."
   turn.notice.shutdown: "My connection dropped before I finished. Send it again if it still matters."

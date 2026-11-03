@@ -215,7 +215,7 @@ class RelayStore:
             expires_at=deadline,
             now=moment,
         )
-        lang = str(getattr(getattr(agent, "soul", None), "language", "") or "id")
+        lang = str(agent.soul.language)
         text = question or t(
             "relay.ask",
             lang,

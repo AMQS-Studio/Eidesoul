@@ -46,7 +46,7 @@ BASE = {
     "gateways": {"cli": {"enabled": True, "role": "guest", "thread_id": "cli:local"}},
 }
 
-SOUL = "name: Eidesoul\nlanguage: en\npronouns: aku\n"
+SOUL = "name: Eidesoul\nlanguage: en\nlocale: en-US\ntimezone: UTC\npronouns: aku\n"
 
 ROLES = {
     "roles": {
@@ -101,7 +101,7 @@ def test_documents_override_config_sections(tmp_path, monkeypatch) -> None:
         "llm:\n  provider: custom\n  base_url: http://doc\n"
         "  model: doc-model\n  api_key_env: EIDESOUL_TEST_KEY\ndefault_role: administrator\n",
     )
-    docs.put("soul", "name: eidesoul\nlanguage: id\npronouns: aku\n")
+    docs.put("soul", "name: eidesoul\nlanguage: id\nlocale: id-ID\ntimezone: UTC\npronouns: aku\n")
     docs.put(
         "role:administrator",
         "name: administrator\ntools: ['*']\ncommands: ['*']\nmemory_admin: true\n",

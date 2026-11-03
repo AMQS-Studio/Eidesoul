@@ -118,7 +118,7 @@ def test_cross_chat_send_works_after_reading_the_target(tmp_path) -> None:
     assert "halo dari budi" in read
     assert result.startswith("ok: sent to Budi")
     assert [call[0] for call in env.gateway.client.calls] == ["message"]
-    assert "cross_send" in env.agent.ledger.actions_context()
+    assert "cross_send" in env.agent.ledger.actions_context(tz="UTC")
 
 
 def test_failed_cross_chat_send_is_logged_as_failure(tmp_path) -> None:
@@ -137,6 +137,6 @@ def test_failed_cross_chat_send_is_logged_as_failure(tmp_path) -> None:
 
     assert result.startswith("error: sending to Budi (628999999999@s.whatsapp.net) failed:")
     assert "koneksi putus" in result
-    actions = env.agent.ledger.actions_context()
+    actions = env.agent.ledger.actions_context(tz="UTC")
     assert "failed — error: failed to send text: RuntimeError: koneksi putus" in actions
     assert ctx.sent == []

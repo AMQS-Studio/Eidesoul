@@ -17,7 +17,7 @@ from sqlalchemy import func, insert, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from ...vendor import emotion_engine as engine
-from .. import guard
+from .. import clock, guard
 from ..config import AffectConfig
 from ..db import Database
 from ..schema import drives, people, state, thread_eras, thread_people, threads, topics
@@ -830,9 +830,9 @@ class AffectStore:
                 },
             )
 
-    def mark_research(self, thread_id: str, now: float | None = None) -> None:
+    def mark_research(self, thread_id: str, now: float | None = None, *, tz: str) -> None:
         moment = time.time() if now is None else float(now)
-        day = time.strftime("%Y-%m-%d", time.localtime(moment))
+        day = clock.day(moment, tz)
         with self._lock, self.db.connect() as conn:
             row = conn.execute(
                 select(topics.c.research_count, topics.c.research_day).where(
@@ -914,7 +914,7 @@ class AffectStore:
         with self._lock, self.db.connect() as conn:
             return self._known_people(conn, thread_id, limit)
 
-    def note_person(self, person_id: str, note: str, language: str = "id") -> None:
+    def note_person(self, person_id: str, note: str, language: str) -> None:
         text = guard.safe_text(note, NOTES_TEXT, language=language)
         if not person_id or not text:
             return

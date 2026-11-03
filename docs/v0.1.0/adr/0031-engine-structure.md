@@ -6,7 +6,7 @@
 - **Context:** follows ADR-0009 (the ADR home and its gate), ADR-0016 (schema and migration form), ADR-0027 (distribution and default-off capability), ADR-0028 (plugin unit)
 - **Supersedes:** —
 - **Related:** ADR-0000 (surface shape), ADR-0001 (one memory port), ADR-0032 (the delivery door lands after this split)
-- **Implementation:** implemented — top level 15 files; 25 modules in `turn/`, `character/`, `access/`, `jobs/`; `ablate.py` moved out; `agent.py` 1,800 lines, `automation.py` 1,953, `memory/store.py` 2,399; Python floor 3.14 everywhere; 0 `from __future__ import annotations`; `[dependency-groups] dev`; ruff `RUF/ASYNC/PT/FA`; the pyright baseline is committed (`scripts/types-baseline.json`).
+- **Implementation:** implemented — top level 16 files (the clock joined in ADR-0033); 25 modules in `turn/`, `character/`, `access/`, `jobs/`; `ablate.py` moved out; `agent.py` 1,800 lines, `automation.py` 1,953, `memory/store.py` 2,399; Python floor 3.14 everywhere; 0 `from __future__ import annotations`; `[dependency-groups] dev`; ruff `RUF/ASYNC/PT/FA`; the pyright baseline is committed (`scripts/types-baseline.json`).
 - **Location note:** cross-cutting (it governs every engine surface), so it sits at the root of the ADR home. The Indonesian copy is `docs/v0.1.0/adr/id/0031-engine-structure.md`.
 
 ---
@@ -64,7 +64,7 @@ No new folders yet, because a split and a move in the same commit hide both diff
 
 ### 4.3 Then group by domain (bucket 2)
 
-25 modules move; `ablate.py` leaves the engine for `scripts/`. The top level drops from 41 files to 15.
+25 modules move; `ablate.py` leaves the engine for `scripts/`. The top level drops from 41 files to 15, and `clock.py` joins as the sixteenth when ADR-0033 §4.13 requires one `now(tz)` helper.
 
 ```text
 eidesoul/engine/
@@ -73,6 +73,7 @@ eidesoul/engine/
   inbound.py  plugins.py  registry.py  llm.py
   config.py  db.py  schema.py
   embed.py  i18n.py  io.py  runtime.py  soul.py  self_knowledge.py
+  clock.py                      # one clock: now(tz), day buckets (ADR-0033 §4.13)
 
   turn/                         # one message becomes one reply
     context.py  decision.py  assembly.py  salience.py

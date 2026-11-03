@@ -67,6 +67,9 @@ def default_soul(**overrides) -> Soul:
     """Fixture soul: the shipped packs stay selected so agent tests keep real data."""
     body = {
         "name": "Eidesoul",
+        "language": "id",
+        "locale": "id-ID",
+        "timezone": "UTC",
         "persona": "p",
         "style": SoulStyle(
             patterns=("jawatimur",),
@@ -634,7 +637,8 @@ def make_runtime(
         encoding="utf-8",
     )
     (base / "soul.yaml").write_text(
-        "name: Eidesoul\nlanguage: id\npronouns: aku\npersona: Kamu Eidesoul yang hidup di chat.\n",
+        "name: Eidesoul\nlanguage: id\nlocale: id-ID\ntimezone: UTC\n"
+        "pronouns: aku\npersona: Kamu Eidesoul yang hidup di chat.\n",
         encoding="utf-8",
     )
 

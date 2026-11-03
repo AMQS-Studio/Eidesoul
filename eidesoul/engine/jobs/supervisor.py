@@ -267,7 +267,6 @@ class Supervisor:
             llm=getattr(agent, "llm", None),
             skills=getattr(agent, "skills", None),
             history=getattr(agent, "history", None),
-            language=getattr(getattr(agent, "soul", None), "language", "id"),
             known_tools=tuple(getattr(getattr(agent, "tools", None), "by_name", {}) or ()),
             ask=getattr(getattr(agent, "privacy", None), "ask_memory", None),
             lease=lease,

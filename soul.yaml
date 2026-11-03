@@ -10,6 +10,7 @@ roles:
   - companion
   - advisor
 locale: id-ID
+timezone: Asia/Jakarta
 
 # background: |
 #   Born and raised in ...

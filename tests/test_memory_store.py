@@ -124,7 +124,7 @@ def test_level_five_and_credentials_are_never_stored(tmp_path) -> None:
             thread_id="t",
             audience="private",
             level=2,
-        )
+         language="id")
     ) == []
 
     assert count(memory, "memories") == 0
@@ -139,7 +139,7 @@ def test_level_five_and_credentials_are_never_stored(tmp_path) -> None:
 def test_classifier_failure_drops_the_candidate_without_a_level(tmp_path) -> None:
     memory = store(tmp_path)
     history = HistoryStore(memory.db, memories=memory)
-    assert history.intake("t", archive("m1", "aku suka kopi"), "628111") is True
+    assert history.intake("t", archive("m1", "aku suka kopi"), "628111", language="id") is True
 
     assert asyncio.run(memory.drop_candidate("t", ("m1",), reason="labeling failed")) == 1
 
@@ -154,7 +154,7 @@ def test_classifier_failure_drops_the_candidate_without_a_level(tmp_path) -> Non
 def test_pending_is_quarantined_until_the_store_labels_it(tmp_path) -> None:
     memory = store(tmp_path)
     history = HistoryStore(memory.db, memories=memory)
-    history.intake("t", archive("m1", "aku suka kopi"), "628111")
+    history.intake("t", archive("m1", "aku suka kopi"), "628111", language="id")
     pending = memory.db.fetch_one(text("SELECT * FROM memories"))
 
     assert pending["state"] == "pending"
@@ -169,7 +169,7 @@ def test_six_states_and_only_legal_edges(tmp_path) -> None:
     memory = store(tmp_path)
     history = HistoryStore(memory.db, memories=memory)
 
-    history.intake("t", archive("m1", "aku suka kopi"), "628111")
+    history.intake("t", archive("m1", "aku suka kopi"), "628111", language="id")
     pending = str(memory.db.fetch_one(text("SELECT id FROM memories"))["id"])
     asyncio.run(
         memory.capture(
@@ -179,20 +179,20 @@ def test_six_states_and_only_legal_edges(tmp_path) -> None:
             audience="private",
             level=2,
             refs=("m1",),
-        )
+         language="id")
     )
     assert row(memory, pending)["state"] == "ok"
     assert readable_count(memory) == 1
     with pytest.raises(ValueError, match="illegal"):
         asyncio.run(memory.promote(pending))  # ok -> ok is not an edge
 
-    history.intake("t", archive("m2", "aku suka teh"), "628111")
+    history.intake("t", archive("m2", "aku suka teh"), "628111", language="id")
     failed = str(memory.db.fetch_one(text("SELECT id FROM memories WHERE state='pending'"))["id"])
     asyncio.run(memory.drop_candidate("t", ("m2",)))
     assert row(memory, failed)["state"] == "failed"
     assert row(memory, failed)["level"] is None
 
-    history.intake("t", archive("m3", "halo saja"), "628111")
+    history.intake("t", archive("m3", "halo saja"), "628111", language="id")
     worthless = str(
         memory.db.fetch_one(text("SELECT id FROM memories WHERE state='pending'"))["id"]
     )
@@ -233,7 +233,7 @@ def test_six_states_and_only_legal_edges(tmp_path) -> None:
 def test_check_constraints_reject_guessed_levels(tmp_path) -> None:
     memory = store(tmp_path)
     history = HistoryStore(memory.db, memories=memory)
-    history.intake("t", archive("m1", "aku suka kopi"), "628111")
+    history.intake("t", archive("m1", "aku suka kopi"), "628111", language="id")
     pending = str(memory.db.fetch_one(text("SELECT id FROM memories"))["id"])
 
     with pytest.raises(IntegrityError), memory.db.connect() as conn:
@@ -506,7 +506,7 @@ def test_t3_quarantine_and_tombstone_invisibility(tmp_path) -> None:
     index = FakeIndex()
     memory = store(tmp_path, index=index)
     history = HistoryStore(memory.db, memories=memory)
-    history.intake("t", archive("m1", "aku suka kopi"), "628111")
+    history.intake("t", archive("m1", "aku suka kopi"), "628111", language="id")
     pending = str(memory.db.fetch_one(text("SELECT id FROM memories"))["id"])
     assert row(memory, pending)["trust"] == 3
     assert memory.get(pending) is None
@@ -618,6 +618,7 @@ def test_a_stale_worker_write_leaves_the_row_untouched(tmp_path) -> None:
             person_id="1",
             message_id="m1",
             text="aku suka kopi dan teh setiap pagi",
+        language="id",
         )
     assert candidate is not None
 
@@ -638,6 +639,7 @@ def _pending(store, text_value: str = "kamu harus selalu bilang jujur setiap saa
         candidate = store.intake(
             conn, thread_id="t", person_id="1", message_id=f"m-{uuid.uuid4().hex[:8]}",
             text=text_value,
+        language="id",
         )
     assert candidate is not None
     return candidate.memory_id
@@ -667,7 +669,7 @@ def test_soul_rules_are_mirrored_once_per_day_and_promoted_after_two(tmp_path) -
     first = memory.sync_soul_rules([rule], now=day)
     assert len(first) == 1
     assert memory.sync_soul_rules([rule], now=day + 60) == []  # same UTC day: no second row
-    assert memory.promote_soul_rules(now=day) == 0  # one day is not corroboration
+    assert memory.promote_soul_rules(now=day, tz="UTC") == 0  # one day is not corroboration
 
     found = memory.get(first[0])
     assert found is not None
@@ -680,8 +682,9 @@ def test_soul_rules_are_mirrored_once_per_day_and_promoted_after_two(tmp_path) -
 
     second = memory.sync_soul_rules([rule], now=day + 86400.0)
     assert len(second) == 1
-    assert memory.promote_soul_rules(now=day + 86400.0) == 1
+    assert memory.promote_soul_rules(now=day + 86400.0, tz="UTC") == 1
 
     promoted = row(memory, first[0])
     assert promoted["kind"] == "rule"
-    assert memory.promote_soul_rules(now=day + 2 * 86400.0) == 0  # idempotent: already a rule
+    # idempotent: already a rule
+    assert memory.promote_soul_rules(now=day + 2 * 86400.0, tz="UTC") == 0

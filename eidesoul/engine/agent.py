@@ -894,7 +894,7 @@ class Agent:
                 thread_id,
                 message,
                 inbound.actor,
-                language=str(self.soul.language or "id"),
+                language=str(self.soul.language),
                 audience="private" if bool(inbound.hints.get("dm")) else "group",
                 # ADR-0013 §11: the body marks a single-action turn; the backlog never folds it.
                 category="action" if inbound.hints.get("action") is True else "chat",
@@ -1278,7 +1278,7 @@ class Agent:
                         actions_block = ""
                         if self.ledger is not None:
                             try:
-                                actions_block = self.ledger.actions_context()
+                                actions_block = self.ledger.actions_context(tz=self.soul.timezone)
                             except Exception:
                                 log.exception(
                                     "failed to read the action ledger chat=%s", thread_id

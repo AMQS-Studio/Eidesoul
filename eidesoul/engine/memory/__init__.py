@@ -71,6 +71,7 @@ class MemoryBackend(Protocol):
         owner_id: str = "",
         subject_id: str = "",
         confirmed: bool = True,
+        language: str,
     ) -> list[str]: ...
 
     async def search(

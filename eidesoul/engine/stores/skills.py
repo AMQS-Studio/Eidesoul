@@ -343,6 +343,7 @@ class SkillStore:
         trust: str,
         stated_by: str,
         approved: bool,
+        language: str,
     ) -> tuple[str, str, str, str, str]:
         slug = str(name or "").strip().lower()
         if not NAME.fullmatch(slug):
@@ -356,7 +357,7 @@ class SkillStore:
             raise ValueError("skill body is too large")
         if SENSITIVE.search(text) or SENSITIVE.search(desc):
             raise ValueError("a procedure never contains a secret/credential")
-        if is_injection(text):
+        if is_injection(text, language=language):
             raise ValueError("a procedure never contains an instruction to the system")
         wanted = str(scope or "thread").strip().lower()
         if wanted not in SCOPES:
@@ -381,6 +382,7 @@ class SkillStore:
         trust: str = "T2",
         source_episode: str = "",
         approved: bool = False,
+        language: str,
     ) -> str:
         """Owner/import write: one row plus one append-only revision, never a silent overwrite."""
         slug, desc, text, wanted, tier = self._check(
@@ -391,6 +393,7 @@ class SkillStore:
             trust=trust,
             stated_by=stated_by,
             approved=approved,
+            language=language,
         )
         now = time.time()
         with self.db.connect() as conn:
@@ -458,6 +461,7 @@ class SkillStore:
         scope: str = "thread",
         stated_by: str = "",
         trust: str = "T2",
+        language: str,
     ) -> str:
         """A derived update: the new revision is appended, the old one stays readable."""
         return self.save(
@@ -470,6 +474,7 @@ class SkillStore:
             stated_by=stated_by,
             trust=trust,
             source_episode=source_episode,
+            language=language,
         )
 
     def revisions(self, name: str) -> list[dict]:
@@ -480,7 +485,7 @@ class SkillStore:
         )
         return [dict(row) for row in rows]
 
-    def restore(self, name: str, revision: int) -> str:
+    def restore(self, name: str, revision: int, *, language: str) -> str:
         """Roll back to a stored revision by appending it again (never a destructive update)."""
         slug = str(name or "").strip().lower()
         row = self.db.fetch_one(
@@ -498,6 +503,7 @@ class SkillStore:
             overwrite=True,
             via="command",
             source_episode=str(row["source_episode"] or ""),
+            language=language,
         )
 
     def archive(self, name: str) -> str:

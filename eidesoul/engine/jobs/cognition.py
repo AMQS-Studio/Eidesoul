@@ -370,7 +370,6 @@ class CognitionWorker:
         llm=None,
         skills=None,
         history=None,
-        language: str = "id",
         known_tools: Sequence[str] = (),
         ask=None,
         worker_id: str = "",
@@ -384,7 +383,7 @@ class CognitionWorker:
         self.llm = llm
         self.skills = skills
         self.history = history
-        self.language = str(language or "id")
+        self.language = str(config.soul.language)
         self.known_tools = tuple(str(item) for item in known_tools if str(item or ""))
         self.ask = ask
         self.lease = lease
@@ -952,6 +951,7 @@ class CognitionWorker:
                 scope=current.scope,
                 stated_by=current.stated_by,
                 trust=current.trust,
+                language=self.language,
             )
             await io.run(self.skills.set_priority, current.name, current.priority + 1)
             await io.run(self.skills.record_notice, current.name, f"promoted: {reason}")
@@ -973,6 +973,7 @@ class CognitionWorker:
                 scope=survivor.scope,
                 stated_by=survivor.stated_by,
                 trust=survivor.trust,
+                language=self.language,
             )
             await io.run(self.skills.record_notice, survivor.name, f"merged: {reason}")
             return
@@ -1077,6 +1078,7 @@ class CognitionWorker:
                 scope="thread",
                 stated_by=episode.thread_id,
                 trust="T2",
+                language=self.language,
             )
         except (ValueError, FileExistsError) as exc:
             return f"procedure refused: {exc}"

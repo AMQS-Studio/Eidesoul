@@ -126,6 +126,8 @@ def test_resolve_soul_keeps_other_keys_and_unmatched_kinds(temp_library, tmp_pat
             {
                 "name": "Eidesoul",
                 "language": "id",
+                "locale": "id-ID",
+                "timezone": "UTC",
                 "persona": "tidak ada kata yang cocok",
                 "role": "assistant",
                 "style": {

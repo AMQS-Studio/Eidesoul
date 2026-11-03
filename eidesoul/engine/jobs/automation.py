@@ -25,13 +25,13 @@ import random
 import re
 import shlex
 import time
-from datetime import date, datetime, timedelta
+from datetime import datetime, timedelta
 from datetime import time as clock_time
 
 from sqlalchemy import func, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
-from .. import io
+from .. import clock, io
 from ..access.relay import RelayStore
 from ..config import AutomationConfig, parse_quiet_hours
 from ..db import Database
@@ -49,7 +49,6 @@ from ..tools import execute
 from ..turn import observability
 from .schedule import (
     DAY,
-    DEFAULT_TZ,
     ManifestError,
     _at_list,
     _date,
@@ -152,7 +151,7 @@ def _validate_event(raw: object, config: AutomationConfig) -> dict:
     kind = str(raw.get("kind") or "").strip().lower()
     if kind not in {"schedule", "message"}:
         raise ManifestError("event.kind must be 'schedule' or 'message'")
-    event: dict = {"kind": kind, "tz": str(raw.get("tz") or DEFAULT_TZ).strip()}
+    event: dict = {"kind": kind, "tz": str(raw.get("tz") or "").strip()}
     zone(event["tz"])
     if kind == "message":
         # ADR-0014 §4.3: the sink queues a run per matching message; there is no clock.
@@ -1129,9 +1128,7 @@ class AutomationStore:
         runs, not attempts); the currently claimed run is excluded until it finishes.
         """
         event = _mapping(automation.get("event"))
-        moment = datetime.fromtimestamp(
-            float(scheduled_at), zone(event.get("tz") or DEFAULT_TZ)
-        )
+        moment = datetime.fromtimestamp(float(scheduled_at), zone(event.get("tz")))
         start = datetime.combine(
             moment.date(), clock_time(0, 0), tzinfo=moment.tzinfo
         ).timestamp()
@@ -1536,7 +1533,7 @@ class AutomationWorker:
         return str(raw or "").strip().lower().startswith("yes")
 
     def _nl_allowed(self) -> bool:
-        day = date.today().isoformat()
+        day = clock.today(self.agent.soul.timezone).isoformat()
         if self._nl.get("day") != day:
             self._nl = {"day": day, "tokens": 0}
         budget = int(self.config.condition.nl_budget_tokens_per_day)
@@ -1941,7 +1938,7 @@ class AutomationWorker:
             log.warning("automation notice failed: %s", type(exc).__name__)
 
     def _language(self) -> str:
-        return str(getattr(getattr(self.agent, "soul", None), "language", "id") or "id")
+        return str(self.agent.soul.language)
 
 
 def automation_counters(agent, now: float | None = None) -> dict[str, int]:

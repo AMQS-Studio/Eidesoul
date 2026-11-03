@@ -140,7 +140,12 @@ def test_register_allow_list_filters_rows(tmp_path, monkeypatch) -> None:
 def test_soul_style_drives_agent_selection(tmp_path, monkeypatch) -> None:
     monkeypatch.setattr(pattern_catalog, "_load_vectors", lambda name: {})
 
-    quiet = make_agent(tmp_path, soul=Soul(name="Eidesoul", style=SoulStyle()))
+    quiet = make_agent(
+        tmp_path,
+        soul=Soul(
+            language="id", locale="id-ID", timezone="UTC", name="Eidesoul", style=SoulStyle()
+        ),
+    )
     quiet.agent.config = replace(quiet.agent.config, character=CharacterConfig(enabled=True))
     asyncio.run(quiet.agent.handle(inbound_message("aku capek banget", thread=DM), quiet.gateway))
     assert "## Room patterns" not in quiet.llm.system

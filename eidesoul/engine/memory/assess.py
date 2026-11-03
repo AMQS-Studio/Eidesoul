@@ -130,7 +130,7 @@ async def assess_batch(
     llm,
     items: Sequence[Mapping],
     *,
-    language: str = "id",
+    language: str,
     ask_level: int = 4,
 ) -> dict[str, FactVerdict]:
     """One call for the batch; the result maps item id -> verdict (missing = invalid)."""
@@ -138,7 +138,7 @@ async def assess_batch(
     if llm is None or not wanted:
         return {}
     payload = {
-        "soul_language": str(language or "id"),
+        "soul_language": str(language),
         "items": [
             {"id": str(item["id"]), "text": _flat(item.get("text"))} for item in wanted
         ],

@@ -113,7 +113,6 @@ def worker(tmp_path, db) -> CognitionWorker:
         config,
         MemoryStore(db, config),
         skills=SkillStore(db, config.skills),
-        language="id",
     )
 
 
@@ -190,6 +189,7 @@ def test_procedure_scope_does_not_leak_to_another_thread(tmp_path) -> None:
         "# Steps\n1. read the file.\n",
         scope="thread",
         stated_by=THREAD,
+    language="id",
     )
 
     assert skills.retrieve("deploy production", thread_id=THREAD, catalog_tools=("read",))

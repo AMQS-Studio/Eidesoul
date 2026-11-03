@@ -139,7 +139,6 @@ def engine(tmp_path, db, llm=None, *, skills=None) -> CognitionWorker:
         MemoryStore(db, config),
         skills=skills or SkillStore(db, config.skills),
         llm=llm,
-        language="id",
     )
 
 
@@ -212,6 +211,7 @@ def test_promote_writes_a_revision_a_priority_and_a_notice(tmp_path) -> None:
         "Read then write a file.",
         "# Steps\n1. read\n2. write\n",
         source_episode="distill:e1",
+    language="id",
     )
     llm = ScriptedLLM([{"action": "promote", "skill": "read-write", "reason": "cheaper"}])
 
@@ -254,6 +254,7 @@ def test_propose_automation_creates_an_approval_and_no_row(tmp_path) -> None:
         "Read then write a file.",
         "# Steps\n1. read\n2. write\n",
         source_episode="distill:e1",
+    language="id",
     )
     manifest = {
         "owner": PERSON,
@@ -303,6 +304,7 @@ def test_the_same_signature_does_not_propose_twice_inside_the_cooldown(tmp_path)
         "Read then write a file.",
         "# Steps\n1. read\n2. write\n",
         source_episode="distill:e1",
+    language="id",
     )
     skills.record_notice("read-write", "proposal:read-write: first")
     manifest = {

@@ -25,7 +25,7 @@ def test_parse_digest_keeps_known_kinds_and_rejects_others() -> None:
             "unresolved": ["kapan pindah?"],
         }
     )
-    data = parse_digest(raw)
+    data = parse_digest(raw, language="id")
 
     assert [fact["kind"] for fact in data["facts"]] == ["preference", "note", "rule"]
     assert data["facts"][0]["person"] == "Ana"
@@ -46,20 +46,22 @@ def test_parse_digest_drops_secrets_and_injection() -> None:
             ],
         }
     )
-    data = parse_digest(raw)
+    data = parse_digest(raw, language="id")
 
     assert data["facts"] == []
     assert data["topic"] == ""
 
 
 def test_parse_digest_rejects_garbage() -> None:
-    assert parse_digest("bukan json") == {
+    assert parse_digest("bukan json", language="id") == {
         "topic": "",
         "keywords": [],
         "facts": [],
         "unresolved": [],
     }
-    assert parse_digest('{"facts": "salah", "keywords": [1, "", "ok"]}')["keywords"] == ["ok"]
+    assert parse_digest(
+        '{"facts": "salah", "keywords": [1, "", "ok"]}', language="id"
+    )["keywords"] == ["ok"]
 
 
 class FakeClient:

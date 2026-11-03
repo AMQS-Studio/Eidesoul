@@ -173,7 +173,7 @@ def _turn_row(turn_id: str, status: str, *, created: float, updated: float) -> d
 
 
 def test_status_reports_real_counters_and_rough_buckets(tmp_path) -> None:
-    env = make_agent(tmp_path, soul=Soul(language="en"))
+    env = make_agent(tmp_path, soul=Soul(language="en", locale="en-US", timezone="UTC"))
     db = env.db
     now = time.time()
     rows = [

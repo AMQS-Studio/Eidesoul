@@ -45,9 +45,9 @@ def build(tmp_path, digest: dict):
 
 
 def test_drift_needs_an_overlap_and_a_new_topic() -> None:
-    assert drift("rapat logistik gudang", "jadwal puasa ramadan") is True
-    assert drift("rapat logistik gudang", "rapat logistik gudang") is False
-    assert drift("rapat logistik", "") is False
+    assert drift("rapat logistik gudang", "jadwal puasa ramadan", language="id") is True
+    assert drift("rapat logistik gudang", "rapat logistik gudang", language="id") is False
+    assert drift("rapat logistik", "", language="id") is False
 
 
 def test_a_drifting_digest_archives_the_previous_topic(tmp_path) -> None:

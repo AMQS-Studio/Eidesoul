@@ -361,14 +361,14 @@ async def decide(
     replied: bool = False,
     away: str = "",
     vibe: str = "",
-    soul=None,
+    soul,
     deadline: float | None = None,
     min_call_seconds: float = 0.0,
 ) -> Decision | None:
     """One LLM decision; empty after one retry = None (no regex fallback)."""
-    from ..soul import Soul, language_line
+    from ..soul import language_line
 
-    identity = soul if isinstance(soul, Soul) else Soul()
+    identity = soul
     system = (
         f"You are {identity.name}, a soul in chat. Gender: {identity.gender}. "
         f"Active role: {identity.role}. "
@@ -442,7 +442,7 @@ async def decide_turn(
     replied: bool = False,
     away: str = "",
     vibe: str = "",
-    soul=None,
+    soul,
     deadline: float | None = None,
     min_call_seconds: float = 0.0,
     annoyance: float = 0.0,

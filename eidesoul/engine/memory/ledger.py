@@ -6,6 +6,7 @@ import time
 from sqlalchemy import func, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
+from .. import clock
 from ..db import Database
 from ..guard import SENSITIVE
 from ..schema import actions, outbound_messages
@@ -21,8 +22,8 @@ def _clip(text: object, limit: int) -> str:
     return flat if len(flat) <= limit else flat[: limit - 1].rstrip() + "…"
 
 
-def _stamp(value: float) -> str:
-    return time.strftime("%Y-%m-%d %H:%M", time.localtime(float(value or 0)))
+def _stamp(value: float, tz: str) -> str:
+    return clock.stamp(float(value or 0), tz)
 
 
 class ActionLedger:
@@ -80,8 +81,8 @@ class ActionLedger:
     def count(self) -> int:
         return int(self.db.scalar(select(func.count()).select_from(actions)) or 0)
 
-    def actions_context(self, limit: int = ACTION_ITEMS) -> str:
-        """Prompt block of the most recent activity; no requester/source, failures included."""
+    def actions_context(self, limit: int = ACTION_ITEMS, *, tz: str) -> str:
+        """Prompt block of the most recent activity, stamped in the host zone."""
         rows = self.recent_actions(limit)
         if not rows:
             return ""
@@ -92,7 +93,7 @@ class ActionLedger:
         for row in rows:
             target = row["target_name"] or row["target"]
             lines.append(
-                f"- [{_stamp(row['ts'])}] {row['kind']} -> {target}: "
+                f"- [{_stamp(row['ts'], tz)}] {row['kind']} -> {target}: "
                 f"{_clip(row['summary'], ACTION_TEXT)}"
             )
         text = "\n".join(lines)

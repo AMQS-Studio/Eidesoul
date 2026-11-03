@@ -18,6 +18,7 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+from eidesoul.admin.init import host_locale, host_timezone
 from eidesoul.engine.access.roles import RoleRegistry
 from eidesoul.engine.config import (
     ApprovalConfig,
@@ -32,7 +33,7 @@ from eidesoul.engine.self_knowledge import SelfKnowledge, check
 from eidesoul.engine.soul import Soul
 
 ENGINE = ROOT / "eidesoul" / "engine"
-TOP_LEVEL_CAP = 15
+TOP_LEVEL_CAP = 16
 # ADR-0031 §4.1 caps. The allowlist is the four modules this ADR does not split.
 LINE_CAPS = {
     "eidesoul/engine/agent.py": 1_800,
@@ -96,7 +97,12 @@ def sample_config() -> Config:
         roles=RoleRegistry(by_name={}, default="member"),
         default_role="member",
         gateways={},
-        soul=Soul(name="Eidesoul", language="en"),
+        soul=Soul(
+            name="Eidesoul",
+            language="en",
+            locale=host_locale() or "en-US",
+            timezone=host_timezone() or "UTC",
+        ),
         sandbox=SandboxConfig(),
         mcp={},
         self_knowledge=SelfKnowledgeConfig(),

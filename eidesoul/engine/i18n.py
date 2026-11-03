@@ -1,6 +1,7 @@
 """Language catalogs: chat-visible strings live in `eidesoul/lang/<code>.yaml`."""
 
 
+import os
 from functools import cache
 from pathlib import Path
 
@@ -14,7 +15,6 @@ ALIASES = {
     "id": "id",
     "in": "id",
     "indonesian": "id",
-    "auto": "id",
 }
 
 
@@ -47,9 +47,27 @@ def reload_catalogs() -> None:
     catalog.cache_clear()
 
 
-def normalize_language(value: object, default: str = "id") -> str:
-    """Map aliases to an installed catalog code; raise ValueError otherwise."""
-    text = str(value or "").strip().lower() or default
+def host_language() -> str:
+    """The operator's language from the process locale; empty means nothing was stated."""
+    for name in ("LC_ALL", "LC_MESSAGES", "LANGUAGE", "LANG"):
+        raw = str(os.environ.get(name) or "").strip()
+        if not raw:
+            continue
+        primary = raw.split(":")[0].split(".")[0].split("@")[0].strip().lower()
+        if primary and primary not in ("c", "posix"):
+            return primary.split("_")[0]
+    return ""
+
+
+def normalize_language(value: object) -> str:
+    """Map aliases to an installed catalog code; empty is an error, `auto` means host."""
+    text = str(value or "").strip().lower()
+    if not text:
+        raise ValueError("a language is required; pass a catalog code such as `en`")
+    if text == "auto":
+        text = host_language()
+        if not text:
+            raise ValueError("`auto` needs a process locale; pass a catalog code instead")
     code = ALIASES.get(text, text)
     if code not in available():
         raise ValueError(

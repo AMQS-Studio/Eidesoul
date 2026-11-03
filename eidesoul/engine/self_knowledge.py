@@ -459,7 +459,7 @@ class SelfKnowledge:
         raw = str(name or "").strip().lstrip("/")
         if not raw:
             raw = "README.md"
-        language = str(self.config.soul.language or "id")
+        language = str(self.config.soul.language)
         candidates = [raw]
         if raw.lower() == "readme.md" and language not in {"en"}:
             candidates.insert(0, f"README.{language}.md")

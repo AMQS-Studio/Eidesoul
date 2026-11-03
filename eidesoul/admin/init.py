@@ -19,7 +19,9 @@ import yaml
 from sqlalchemy.engine import make_url
 from sqlalchemy.exc import ArgumentError
 
+from ..engine import clock
 from ..engine.config import Config, ConfigError
+from ..engine.i18n import host_language, normalize_language
 from ..providers import PROVIDERS
 from . import templates
 
@@ -47,9 +49,37 @@ class Answers:
     database_url: str = ""
     label: str = ""
     voice_off: tuple[str, ...] = ()
+    language: str = ""
+    locale: str = ""
+    timezone: str = ""
 
 
 # --- values -------------------------------------------------------------------------------
+
+
+def host_locale() -> str:
+    """The operator's locale from the process environment; empty when nothing states one."""
+    for name in ("LC_ALL", "LC_MESSAGES", "LANGUAGE", "LANG"):
+        raw = str(os.environ.get(name) or "").strip()
+        if not raw:
+            continue
+        text = raw.split(":")[0].split(".")[0].split("@")[0].strip().replace("_", "-")
+        if text and text.lower() not in ("c", "posix"):
+            return text
+    return ""
+
+
+def host_timezone() -> str:
+    """The operator's zone: `TZ` when set, else the `/etc/localtime` target; empty otherwise."""
+    stated = str(os.environ.get("TZ") or "").strip()
+    if stated:
+        return stated
+    with contextlib.suppress(OSError):
+        target = str(Path("/etc/localtime").resolve())
+        marker = "zoneinfo/"
+        if marker in target:
+            return target.split(marker, 1)[1]
+    return ""
 
 
 def voice_off(value: str | tuple[str, ...] | list[str]) -> tuple[str, ...]:
@@ -168,9 +198,26 @@ def build(
     database_url: str = "",
     label: str = "",
     voice: str | tuple[str, ...] = "on",
+    language: str = "",
+    locale: str = "",
+    timezone: str = "",
 ) -> dict[str, str]:
     """The four files: `templates.files()` plus the operator's answers, nothing else."""
-    contents = templates.files(provider=provider, model=model)
+    locale = locale or host_locale()
+    language = language or (locale.split("-")[0] if locale else "") or host_language()
+    language = normalize_language(language)
+    locale = locale or language
+    timezone = timezone or host_timezone()
+    if not timezone:
+        raise ValueError("a timezone is required; pass --timezone <IANA name>")
+    clock.zone(timezone)
+    contents = templates.files(
+        provider=provider,
+        model=model,
+        language=language,
+        locale=locale,
+        timezone=timezone,
+    )
     off = voice_off(voice)
     if off:
         body = yaml.safe_load(contents["config.yaml"])
@@ -306,6 +353,9 @@ def init(
     database_url: str = "",
     label: str = "",
     voice_layer: str = "on",
+    language: str = "",
+    locale: str = "",
+    timezone: str = "",
 ) -> tuple[list[Path], list[Path]]:
     """Write the scaffold without prompting; return (written, skipped)."""
     error = validate_provider(provider) or validate_database_url(database_url)
@@ -317,6 +367,9 @@ def init(
         database_url=database_url,
         label=label,
         voice=voice_layer,
+        language=language,
+        locale=locale,
+        timezone=timezone,
     )
     decisions: dict[str, str] = dict.fromkeys(HOST_FILES, "replace" if force else "new")
     return write_files(folder, contents, decisions)
@@ -611,6 +664,9 @@ def _interactive(
             database_url=answers.database_url,
             label=answers.label,
             voice=answers.voice_off,
+            language=answers.language,
+            locale=answers.locale,
+            timezone=answers.timezone,
         )
         if decisions is None:
             decisions = _decide(base, force, stdin, stdout)
@@ -637,6 +693,9 @@ def wizard(
     database_url: str | None = None,
     label: str | None = None,
     voice_layer: str | None = None,
+    language: str | None = None,
+    locale: str | None = None,
+    timezone: str | None = None,
     force: bool = False,
 ) -> tuple[list[Path], list[Path]]:
     """The interactive setup (ADR-0030 §4.2): five steps, a review, then the files.
@@ -651,6 +710,9 @@ def wizard(
         model=model or "",
         database_url=database_url or "",
         label=label or "",
+        language=language or "",
+        locale=locale or "",
+        timezone=timezone or "",
     )
     locked: set[int] = set()
     if provider is not None:

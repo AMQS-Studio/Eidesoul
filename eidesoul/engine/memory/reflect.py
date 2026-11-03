@@ -93,7 +93,7 @@ def opposite_polarity(left: str, right: str, negations: frozenset[str]) -> bool:
     return False
 
 
-def _pair(left: Mapping, right: Mapping, language: str = "id") -> Candidate | None:
+def _pair(left: Mapping, right: Mapping, language: str) -> Candidate | None:
     if str(left.get("scope")) != str(right.get("scope")):
         return None
     if str(left.get("subject_id") or "") != str(right.get("subject_id") or ""):
@@ -122,7 +122,7 @@ def _pair(left: Mapping, right: Mapping, language: str = "id") -> Candidate | No
     return None
 
 
-def candidates(rows: Sequence[Mapping], *, language: str = "id") -> list[Candidate]:
+def candidates(rows: Sequence[Mapping], *, language: str) -> list[Candidate]:
     """All deterministic contradiction candidates in one scope (no model, no writes)."""
     ordered = sorted(rows, key=lambda row: str(row.get("id") or ""))
     found: list[Candidate] = []
@@ -264,7 +264,7 @@ async def run_pass(
     *,
     scope: str,
     llm=None,
-    language: str = "id",
+    language: str,
     max_items: int = 40,
     max_writes: int = 20,
     min_candidates: int = 1,

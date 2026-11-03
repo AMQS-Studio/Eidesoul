@@ -57,16 +57,18 @@ def long_draft() -> str:
 
 
 def test_short_natural_reply_needs_no_polish() -> None:
-    assert needs_polish(NATURAL) is False
-    assert needs_polish("") is False
+    assert needs_polish(NATURAL, language="id") is False
+    assert needs_polish("", language="id") is False
 
 
 def test_assistant_tell_markdown_and_lengths_trigger_polish() -> None:
-    assert needs_polish("Tentu, aku bantu ya") is True
-    assert needs_polish("- susun rundown\n- cek konsumsi") is True
-    assert needs_polish("iya. kamu gimana? kabarin ya nanti sore. aku tunggu. jangan lupa.") is True
-    assert needs_polish("a" * 241) is True
-    assert needs_polish("x" * 401) is True
+    assert needs_polish("Tentu, aku bantu ya", language="id") is True
+    assert needs_polish("- susun rundown\n- cek konsumsi", language="id") is True
+    assert needs_polish(
+        "iya. kamu gimana? kabarin ya nanti sore. aku tunggu. jangan lupa.", language="id"
+    ) is True
+    assert needs_polish("a" * 241, language="id") is True
+    assert needs_polish("x" * 401, language="id") is True
 
 
 def test_disabled_layer_returns_the_draft_without_calling_the_model(tmp_path) -> None:

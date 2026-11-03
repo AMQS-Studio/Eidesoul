@@ -14,6 +14,14 @@ from eidesoul.engine.turn.context import (
     prompt_entry,
 )
 
+QUIET = Soul(
+    language="id",
+    locale="id-ID",
+    timezone="UTC",
+    name="eidesoul",
+    persona="p",
+)
+
 
 def message(
     mid: str,
@@ -47,7 +55,7 @@ def test_chat_message_normalizes_author_and_clamps_visibility() -> None:
 
 
 def test_payload_tags_manual_owner_without_calling_it_you(tmp_path) -> None:
-    config = build_config(tmp_path, soul=Soul(name="eidesoul", persona="p"))
+    config = build_config(tmp_path, soul=QUIET)
     manual = message("m1", "aku ketik sendiri", author="manual_owner")
     bot = message("b1", "halo", sender_name="eidesoul", sender_id="628567770837", author="bot")
 
@@ -73,7 +81,7 @@ def test_prompt_entry_never_calls_manual_owner_you() -> None:
 
 
 def test_payload_visibility_tag_follows_the_entry(tmp_path) -> None:
-    config = build_config(tmp_path, soul=Soul(name="eidesoul", persona="p"))
+    config = build_config(tmp_path, soul=QUIET)
     entry = message("m1", "aib", author="manual_owner", visibility=3)
 
     text = asyncio.run(build_user_content(config, "chat", [entry], entry))
@@ -118,7 +126,7 @@ def head(text: str) -> str:
 
 
 def test_deleted_row_hides_its_text_in_the_payload(tmp_path) -> None:
-    config = build_config(tmp_path, soul=Soul(name="eidesoul", persona="p"))
+    config = build_config(tmp_path, soul=QUIET)
     entry = row(
         "m1", "rahasia banget", author="manual_owner", sender_address="628222@s.whatsapp.net"
     )
@@ -131,7 +139,7 @@ def test_deleted_row_hides_its_text_in_the_payload(tmp_path) -> None:
 
 
 def test_deleted_by_admin_names_the_admin_and_bot_rows_are_never_admin(tmp_path) -> None:
-    config = build_config(tmp_path, soul=Soul(name="eidesoul", persona="p"))
+    config = build_config(tmp_path, soul=QUIET)
     member = row("m1", "isi", sender_address="628222@s.whatsapp.net")
     member.mark_deleted("628999@s.whatsapp.net", "Ani")
     bot = row("b1", "halo", sender_name="eidesoul", sender_id="628567770837", author="bot",
@@ -145,7 +153,7 @@ def test_deleted_by_admin_names_the_admin_and_bot_rows_are_never_admin(tmp_path)
 
 
 def test_view_once_row_is_tagged(tmp_path) -> None:
-    config = build_config(tmp_path, soul=Soul(name="eidesoul", persona="p"))
+    config = build_config(tmp_path, soul=QUIET)
     entry = row("m1", "foto sekali lihat", view_once=True)
 
     text = asyncio.run(build_user_content(config, "chat", [entry], entry))
@@ -155,7 +163,7 @@ def test_view_once_row_is_tagged(tmp_path) -> None:
 
 
 def test_unreadable_row_renders_a_note_and_tag(tmp_path) -> None:
-    config = build_config(tmp_path, soul=Soul(name="eidesoul", persona="p"))
+    config = build_config(tmp_path, soul=QUIET)
     entry = row("m1", "", unreadable=True)
 
     text = asyncio.run(build_user_content(config, "chat", [entry], entry))
@@ -184,7 +192,7 @@ def test_deletion_matches_the_canonical_address_not_its_digits() -> None:
 
 
 def test_normal_row_tag_is_unchanged_and_person_rows_expose_a_mention_handle(tmp_path) -> None:
-    config = build_config(tmp_path, soul=Soul(name="eidesoul", persona="p"))
+    config = build_config(tmp_path, soul=QUIET)
     plain = row("m1", "halo")
     person = row("m2", "halo", sender_address="628222@example.net", sender_kind="person")
 
@@ -196,7 +204,7 @@ def test_normal_row_tag_is_unchanged_and_person_rows_expose_a_mention_handle(tmp
 
 
 def test_a_non_person_address_gets_no_mention_tag(tmp_path) -> None:
-    config = build_config(tmp_path, soul=Soul(name="eidesoul", persona="p"))
+    config = build_config(tmp_path, soul=QUIET)
     entry = row("m1", "halo", sender_address="628222@example.net")
 
     text = asyncio.run(build_user_content(config, "chat", [entry], entry))
@@ -240,7 +248,7 @@ def test_mark_deleted_falls_back_to_the_archive(tmp_path) -> None:
 def sticker_line(tmp_path, *, animated: bool) -> str:
     from eidesoul.engine.turn.context import Media
 
-    config = build_config(tmp_path, soul=Soul(name="eidesoul", persona="p"))
+    config = build_config(tmp_path, soul=QUIET)
     media = Media(
         kind="sticker",
         mimetype="image/webp",

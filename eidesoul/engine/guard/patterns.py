@@ -30,7 +30,7 @@ def _injection(language: str, folder: str, stamp: int) -> re.Pattern[str] | None
     return re.compile(rf"(?<!\w)(?:{body})", re.IGNORECASE)
 
 
-def injection(language: str = "id") -> re.Pattern[str] | None:
+def injection(language: str) -> re.Pattern[str] | None:
     """Compiled injection pattern for one language; None when its pack carries no phrases."""
     code = str(language or "").strip().lower()
     if not code:
@@ -42,12 +42,12 @@ def is_crisis(text: str) -> bool:
     return bool(CRISIS.search(str(text or "")))
 
 
-def is_injection(text: str, language: str = "id") -> bool:
+def is_injection(text: str, language: str) -> bool:
     pattern = injection(language)
     return bool(pattern and pattern.search(str(text or "")))
 
 
-def safe_text(text: str, limit: int = 400, *, language: str = "id") -> str:
+def safe_text(text: str, limit: int = 400, *, language: str) -> str:
     """Flatten text before storing it; secrets and injection attempts never reach memory."""
     flat = " ".join(str(text or "").split())
     if not flat or SENSITIVE.search(flat) or is_injection(flat, language):

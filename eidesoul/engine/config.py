@@ -214,6 +214,7 @@ class FetchConfig:
 @dataclass(frozen=True)
 class WebSearchConfig:
     base_url: str = ""  # empty = only the ddgs backend
+    region: str = ""  # empty = no region bias; never a vendor or country default
     timeout_seconds: float = 10.0
     fetch: FetchConfig = field(default_factory=FetchConfig)
 
@@ -1110,6 +1111,7 @@ def load_host(path: str | Path | None = None) -> tuple[HostConfig, Paths]:
         sandbox=_sandbox(raw, base),
         web_search=WebSearchConfig(
             base_url=str(search_raw.get("base_url") or "").strip().rstrip("/"),
+            region=str(search_raw.get("region") or "").strip(),
             timeout_seconds=_num(search_raw.get("timeout_seconds"), 10.0),
             fetch=_fetch_config(_section(search_raw, "fetch")),
         ),

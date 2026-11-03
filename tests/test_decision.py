@@ -3,6 +3,8 @@
 
 import asyncio
 
+from support import default_soul
+
 from eidesoul.engine.soul import Soul
 from eidesoul.engine.turn import decision as decision_module
 from eidesoul.engine.turn.decision import (
@@ -168,7 +170,13 @@ def test_decision_uses_one_llm_call_with_full_context() -> None:
             transcript="Fahri: besok rapat jam 3",
             emotion={"summary": "even, steady, balanced", "pulse": "subtle warmth pulse"},
             relationship="- Fahri (member): teman",
-            soul=Soul(name="Eidesoul", persona="Kamu Eidesoul."),
+            soul=Soul(
+                language="id",
+                locale="id-ID",
+                timezone="UTC",
+                name="Eidesoul",
+                persona="Kamu Eidesoul.",
+            ),
         )
     )
 
@@ -194,7 +202,7 @@ def test_decision_retries_once_when_empty_then_gives_up() -> None:
             chat_name="panitia",
             current="Fahri: halo",
             transcript="Fahri: halo",
-        )
+         soul=default_soul())
     )
 
     assert parsed is None
@@ -211,7 +219,7 @@ def test_invalid_json_falls_back_to_ignore_without_regex() -> None:
             chat_name="grup",
             current="Fahri: wkwk",
             transcript="Fahri: wkwk",
-        )
+         soul=default_soul())
     )
 
     assert parsed is not None

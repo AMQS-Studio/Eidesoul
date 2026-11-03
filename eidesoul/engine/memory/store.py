@@ -19,7 +19,7 @@ from dataclasses import dataclass
 from sqlalchemy import delete, select, text
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
-from .. import io
+from .. import clock, io
 from ..config import PrivacyConfig
 from ..db import Database
 from ..guard import SENSITIVE, is_crisis, is_injection
@@ -208,6 +208,7 @@ class MemoryStore:
         self._policy = policy or RetentionPolicy()
         self._quota = quota or WriteQuota()
         self._limits = getattr(config, "memory", None)
+        self._tz = str(getattr(getattr(config, "soul", None), "timezone", "") or "")
         self._guard = None
         self.available = db is not None
         self.reason = "" if db is not None else "no database"
@@ -678,7 +679,7 @@ class MemoryStore:
         message_id: str,
         text: str,
         kind: str = "message",
-        language: str = "id",
+        language: str,
         audience: str = "private",
         asserted_at: float | None = None,
     ) -> MemoryCandidate | None:
@@ -1083,7 +1084,7 @@ class MemoryStore:
         category: str = "",
         durability: str = "",
         worth: bool = True,
-        language: str = "id",
+        language: str,
     ) -> list[str]:
         """Label a turn candidate; Mem0 extraction is used when present, canonical never waits."""
         user = self._user_text(messages)
@@ -1708,6 +1709,7 @@ class MemoryStore:
                 query=query,
                 direct=bool(direct),
                 policy=policy,
+                tz=self._tz,
                 max_items=items,
                 max_chars=chars,
             )
@@ -2193,7 +2195,7 @@ class MemoryStore:
             )
         return written
 
-    def promote_soul_rules(self, *, now: float | None = None) -> int:
+    def promote_soul_rules(self, *, now: float | None = None, tz: str) -> int:
         """ADR-0008 §4.3: a soul rule restated on ≥2 UTC days becomes `kind=rule`.
 
         Grouping is by normalized text; the row set that earned it is updated together and the
@@ -2212,10 +2214,7 @@ class MemoryStore:
         promoted = 0
         for body in sorted(groups):
             group = groups[body]
-            days = {
-                time.strftime("%Y-%m-%d", time.gmtime(float(row.get("asserted_at") or 0)))
-                for row in group
-            }
+            days = {clock.day(float(row.get("asserted_at") or 0), tz) for row in group}
             if len(days) < RULE_MIN_CORROBORATION_DAYS:
                 continue
             level = min(int(row.get("level") or 0) for row in group)

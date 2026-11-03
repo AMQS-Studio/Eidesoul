@@ -13,7 +13,6 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from ..config import parse_quiet_hours  # noqa: F401 — re-exported for the manifest reader
 
 DAY = 86400.0
-DEFAULT_TZ = "Asia/Jakarta"
 WEEKDAYS = ("mon", "tue", "wed", "thu", "fri", "sat", "sun")
 
 
@@ -28,10 +27,14 @@ def occurrence_key(automation_id: int | str, scheduled_at: float) -> str:
 
 
 def zone(name: object) -> ZoneInfo:
+    """A manifest must state its zone (ADR-0033 §4.4); there is no default."""
+    text = str(name or "").strip()
+    if not text:
+        raise ManifestError("event.tz is required; no default zone is chosen")
     try:
-        return ZoneInfo(str(name or DEFAULT_TZ))
+        return ZoneInfo(text)
     except (ZoneInfoNotFoundError, ValueError) as exc:
-        raise ManifestError(f"unknown timezone: {name}") from exc
+        raise ManifestError(f"unknown timezone: {text}") from exc
 
 
 def _minutes(value: str) -> int:
@@ -73,7 +76,7 @@ def _days(value: object) -> tuple[str, int]:
             if step < 1:
                 raise ManifestError("days 'every:N' needs N >= 1")
             return "every", step
-        names = [part.strip()[:3] for part in text.split(",") if part.strip()]
+        names = [part.strip()[:3].lower() for part in text.split(",") if part.strip()]
         if names and all(name in WEEKDAYS for name in names):
             return "set", 0
         raise ManifestError("days must be 'daily', a day list, or 'every:N'")
@@ -133,8 +136,7 @@ def next_after(
     event: dict, after: float, *, anchor: float
 ) -> float | None:
     """The first occurrence strictly after `after`, or None when the schedule is finished."""
-    tz_name = event.get("tz") or DEFAULT_TZ
-    zoneinfo = zone(tz_name)
+    zoneinfo = zone(event.get("tz"))
     starts = _date(event.get("start"), "start")
     until = _date(event.get("until"), "until")
     if event.get("every"):

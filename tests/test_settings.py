@@ -59,7 +59,10 @@ def test_invalid_engine_value_does_not_change_document(tmp_path, monkeypatch) ->
 
 def test_write_soul_changes_prompt_and_mirror(tmp_path, monkeypatch) -> None:
     env = make_runtime(tmp_path, monkeypatch, settings_approval=False)
-    content = "name: Eidesoul\npersona: Persona baru yang tenang.\n"
+    content = (
+        "name: Eidesoul\nlanguage: id\nlocale: id-ID\ntimezone: UTC\n"
+        "persona: Persona baru yang tenang.\n"
+    )
 
     result = run(env, "write", file="soul", content=content)
 

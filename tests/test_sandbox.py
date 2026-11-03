@@ -268,6 +268,9 @@ def test_load_config_reads_host_workspace_and_rejects_file(tmp_path: Path, monke
     monkeypatch.setenv("EIDESOUL_TEST_KEY", "x")
     host_ws = tmp_path / "host-workspace"
     host_ws.mkdir()
+    (tmp_path / "soul.yaml").write_text(
+        "name: Eidesoul\nlanguage: id\nlocale: id-ID\ntimezone: UTC\n", encoding="utf-8"
+    )
     target = tmp_path / "config.yaml"
     target.write_text(
         f"""
@@ -284,6 +287,8 @@ engine:
 gateways: {{}}
 soul:
   language: id
+  locale: id-ID
+  timezone: UTC
 sandbox:
   runtime: ""
   host_workspace: "{host_ws}"

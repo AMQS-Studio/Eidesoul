@@ -325,7 +325,9 @@ def test_the_review_comes_from_the_templates_plus_answers():
         provider="openai", database_url="postgresql+psycopg://u:secret@h/db", voice=("character",)
     )
 
-    assert set(contents) == set(templates.files(provider="openai"))
+    assert set(contents) == set(
+        templates.files(provider="openai", language="en", locale="en-US", timezone="UTC")
+    )
     config = yaml.safe_load(contents["config.yaml"])
     assert config["engine"]["character"]["enabled"] is False
     assert config["engine"]["affect"]["enabled"] is True

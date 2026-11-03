@@ -242,7 +242,9 @@ def test_owner_is_not_permission_for_a_cross_room_send(tmp_path) -> None:
         gateway=gateway,
         roles={"member": role("member", users=("628111",), tools=("*",), commands=("*",))},
     )
-    env.history.intake("other", inbound_message("halo", thread="other").payload, "999999")
+    env.history.intake(
+        "other", inbound_message("halo", thread="other").payload, "999999", language="id"
+    )
 
     receipt = send(
         env.agent,

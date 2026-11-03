@@ -28,7 +28,7 @@ class CommandContext:
 
     @property
     def lang(self) -> str:
-        return str(self.agent.soul.language or "id")
+        return str(self.agent.soul.language)
 
     def role_names(self) -> str:
         return ", ".join(role.name for role in self.roles) or "-"

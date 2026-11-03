@@ -20,18 +20,21 @@ from eidesoul.engine.turn.prompts import (
 
 
 def test_language_line_variants() -> None:
-    assert "Indonesian" in language_line(Soul(language="id"))
-    assert language_line(Soul(language="en")) == "Reply in English."
+    assert "Indonesian" in language_line(Soul(language="id", locale="id-ID", timezone="UTC"))
+    assert language_line(Soul(language="en", locale="en-US", timezone="UTC")) == "Reply in English."
     with pytest.raises(ValueError, match="available"):
-        language_line(Soul(language="jv"))
+        Soul(language="jv", locale="jv-ID", timezone="UTC")
 
 
-def test_normalize_language_aliases() -> None:
+def test_normalize_language_aliases(monkeypatch) -> None:
     assert normalize_language("EN") == "en"
     assert normalize_language("english") == "en"
     assert normalize_language("in") == "id"
+    monkeypatch.setenv("LC_ALL", "")
+    monkeypatch.setenv("LANG", "id_ID.UTF-8")
     assert normalize_language("auto") == "id"
-    assert normalize_language("") == "id"
+    with pytest.raises(ValueError, match="required"):
+        normalize_language("")
     with pytest.raises(ValueError, match="available"):
         normalize_language("jv")
 
@@ -186,7 +189,9 @@ def test_system_prompt_states_the_cross_room_policy(tmp_path) -> None:
 
 
 def test_character_block_reports_levels_target_and_patterns() -> None:
-    block = character_block((3, 2), "male", 0.9, jabs=2, patterns=["Balas sekali", " "])
+    block = character_block(
+        (3, 2), "male", 0.9, jabs=2, patterns=["Balas sekali", " "], language="id"
+    )
 
     assert "Toxicity level 3/4 for this turn (target male, confidence 0.90)." in block
     assert "Adult memes 2/3:" in block
@@ -199,11 +204,11 @@ def test_character_block_reports_levels_target_and_patterns() -> None:
 
 
 def test_character_block_gentle_floor_and_disabled_gate() -> None:
-    gentle = character_block((1, 0), "", 0.0)
+    gentle = character_block((1, 0), "", 0.0, language="id")
     assert "target unknown" in gentle
     assert "Toxicity level 1/4" in gentle
     assert "## Room patterns" not in gentle
-    ungated = character_block((3, 3), "female", 0.9, gate=False)
+    ungated = character_block((3, 3), "female", 0.9, gate=False, language="id")
     assert "Target restriction disabled for this host." in ungated
     assert "Never target a woman" not in ungated
 
@@ -224,7 +229,7 @@ def test_system_prompt_carries_the_character_and_research_blocks(tmp_path) -> No
         replace(env.agent.config, prompt=PromptConfig(max_chars=20000)),
         (Role(name="member"),),
         runtime=RuntimeFacts(),
-        character=character_block((1, 0), "unknown", 0.0),
+        character=character_block((1, 0), "unknown", 0.0, language="id"),
         research=research_block("id-ID"),
         currents="## Current context (fetched 2026-11-01)\n- rupiah: melemah",
         query="ada berita apa",

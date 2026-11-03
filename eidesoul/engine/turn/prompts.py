@@ -1,8 +1,8 @@
 """Prompt scaffolding (English) + persona + the Self/roles/memory blocks that must stay visible."""
 
 
-from datetime import date
 
+from .. import clock
 from ..access.roles import Role
 from ..character import lexicon
 from ..config import Config
@@ -118,7 +118,7 @@ def character_block(
     jabs: int = 1,
     patterns: list[str] | None = None,
     facts: list[str] | None = None,
-    language: str = "id",
+    language: str,
 ) -> str:
     """Register this turn: harshness level and adult memes, target, and attribution rules."""
     tox, memes = int(limits[0]), int(limits[1])
@@ -495,6 +495,6 @@ def system_prompt(
         salience.JOIN.join(text for _, text in kept)
         + "\n\n"
         + language_line(config.soul)
-        + f"\nDate: {date.today().isoformat()}."
+        + f"\nDate: {clock.today(config.soul.timezone).isoformat()}."
     )
     return Prompt(stable, volatile)

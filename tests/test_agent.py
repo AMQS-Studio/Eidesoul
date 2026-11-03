@@ -152,7 +152,7 @@ def test_auto_capture_runs_for_memory_role(tmp_path) -> None:
         text="aku suka kopi tanpa gula",
         sender_address="628111@s.whatsapp.net",
     )
-    assert history.intake(DM, message, person) is True
+    assert history.intake(DM, message, person, language="id") is True
 
     claimed = worker.queue.claim(worker="t", limit=1)
     assert [job.kind for job in claimed] == ["capture"]

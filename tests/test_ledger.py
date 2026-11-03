@@ -28,7 +28,7 @@ def test_log_and_recent_order(tmp_path) -> None:
 
 def test_actions_context_is_internal_and_hides_the_requester(tmp_path) -> None:
     ledger = ActionLedger(database())
-    assert ledger.actions_context() == ""
+    assert ledger.actions_context(tz="UTC") == ""
     ledger.log_action(
         "whatsapp",
         "chat",
@@ -38,7 +38,7 @@ def test_actions_context_is_internal_and_hides_the_requester(tmp_path) -> None:
         request="kirim stiker dong",
     )
 
-    text = ledger.actions_context()
+    text = ledger.actions_context(tz="UTC")
     lines = text.splitlines()
 
     assert lines[0].startswith("## Recent actions")
@@ -55,13 +55,13 @@ def test_actions_context_caps_lines_and_keeps_failures(tmp_path) -> None:
         ledger.log_action("whatsapp", f"chat-{index}", "teks", f"aksi {index}")
     ledger.log_action("whatsapp", "chat-x", "file", "gagal — error: gateway tidak tersedia")
 
-    lines = ledger.actions_context().splitlines()
+    lines = ledger.actions_context(tz="UTC").splitlines()
 
     assert len(lines) == 11  # header + at most 10 actions
     assert lines[1].startswith("- [")
     assert "chat-x" in lines[1]
     assert "gagal — error" in lines[1]
-    assert "chat-0" not in ledger.actions_context()
+    assert "chat-0" not in ledger.actions_context(tz="UTC")
 
 
 def test_sensitive_payload_never_stored(tmp_path) -> None:
@@ -77,4 +77,4 @@ def test_sensitive_payload_never_stored(tmp_path) -> None:
     rows = ledger.recent_actions()
     assert rows[0]["request"] == ""
     assert "[sensitive content not recorded]" in rows[0]["summary"]
-    assert "rahasia" not in ledger.actions_context()
+    assert "rahasia" not in ledger.actions_context(tz="UTC")

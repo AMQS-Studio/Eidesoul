@@ -67,6 +67,7 @@ def _import(ctx: CommandContext, store, rest: str, lang: str) -> str:
         stated_by=str(ctx.sender or ""),
         trust=str(meta.get("trust") or "T2"),
         approved=bool(meta.get("approved", False)),
+        language=lang,
     )
     return t("command.skill.imported", lang, name=name)
 
@@ -85,6 +86,7 @@ def _save(ctx: CommandContext, store, rest: str, lang: str) -> str:
         via="command",
         stated_by=str(ctx.sender or ""),
         trust="T0",
+        language=lang,
     )
     return t("command.skill.saved", lang, name=name)
 

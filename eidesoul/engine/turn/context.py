@@ -314,7 +314,7 @@ def clean(text: str) -> str:
     return (text or "").translate(INVISIBLE).replace("\u00a0", " ")
 
 
-def keyword_set(text: str, language: str = "id") -> set[str]:
+def keyword_set(text: str, language: str) -> set[str]:
     """Words of >=4 letters without the pack's stopwords: used by salience and drift."""
     stopwords = lexicon.load(language).stopwords
     return {

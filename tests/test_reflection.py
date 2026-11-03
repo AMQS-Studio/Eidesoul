@@ -42,7 +42,7 @@ def test_opposite_polarity_opens_a_dispute_and_hides_both(tmp_path) -> None:
     right = write(memory, "aku tidak suka kopi")
 
     report = asyncio.run(
-        reflect.run_pass(memory, scope=f"person:{PERSON}", llm=None)
+        reflect.run_pass(memory, scope=f"person:{PERSON}", llm=None, language="id")
     )
 
     assert report.disputes == 1
@@ -59,7 +59,7 @@ def test_duplicates_merge_into_one_t2_derivative_and_never_chain(tmp_path) -> No
     write(memory, "aku suka kopi tanpa gula")
     write(memory, "aku suka kopi tanpa gula")
 
-    first = asyncio.run(reflect.run_pass(memory, scope=f"person:{PERSON}", llm=None))
+    first = asyncio.run(reflect.run_pass(memory, scope=f"person:{PERSON}", llm=None, language="id"))
     assert first.writes == 1
     derived = [row for row in rows(memory) if row["via"] == "reflection"]
     assert len(derived) == 1
@@ -67,7 +67,9 @@ def test_duplicates_merge_into_one_t2_derivative_and_never_chain(tmp_path) -> No
     assert derived[0]["refs"]
     assert derived[0]["state"] == "ok"
 
-    second = asyncio.run(reflect.run_pass(memory, scope=f"person:{PERSON}", llm=None))
+    second = asyncio.run(
+        reflect.run_pass(memory, scope=f"person:{PERSON}", llm=None, language="id")
+    )
     assert second.writes == 0
     assert len([row for row in rows(memory) if row["via"] == "reflection"]) == 1
 
@@ -149,7 +151,9 @@ def test_a_pass_reports_the_pairs_it_opened(tmp_path) -> None:
     left = write(memory, "aku suka kopi")
     right = write(memory, "aku tidak suka kopi")
 
-    report = asyncio.run(reflect.run_pass(memory, scope=f"person:{PERSON}", llm=None))
+    report = asyncio.run(
+        reflect.run_pass(memory, scope=f"person:{PERSON}", llm=None, language="id")
+    )
 
     assert report.disputes == 1
     assert len(report.opened) == 1

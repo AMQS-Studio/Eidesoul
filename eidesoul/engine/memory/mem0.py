@@ -592,6 +592,7 @@ class Mem0Backend:
                     query=query,
                     direct=bool(direct),
                     policy=PrivacyPolicy(self._limits.privacy),
+                    tz=self.config.soul.timezone,
                     max_items=max_items or self._limits.max_items,
                     max_chars=max_chars or self._limits.max_chars,
                 ),

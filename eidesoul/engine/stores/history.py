@@ -277,7 +277,7 @@ class HistoryStore:
         message: Message,
         person_id: str = "",
         *,
-        language: str = "id",
+        language: str,
         audience: str = "private",
         category: str = "chat",
         gateway: str = "",

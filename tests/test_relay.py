@@ -163,7 +163,7 @@ def test_a_valid_grant_allows_the_relay_without_content_in_the_ledger(tmp_path) 
 
     assert result.startswith("ok: sent to A")
     assert [call[0] for call in env.gateway.client.calls[1:]] == ["message"]
-    actions = env.agent.ledger.actions_context()
+    actions = env.agent.ledger.actions_context(tz="UTC")
     assert "relay" in actions
     assert ANSWER not in actions
     assert ANSWER not in str(ctx.sent)

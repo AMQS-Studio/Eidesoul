@@ -491,7 +491,7 @@ def test_automation_tables_follow_the_migration(tmp_path) -> None:
 def message_manifest(**overrides) -> dict:
     body = manifest(
         name="reaksi",
-        event={"kind": "message"},
+        event={"kind": "message", "tz": "UTC"},
         steps=[{"kind": "send", "to": "origin"}],
         **{},
     )
@@ -509,10 +509,12 @@ def test_a_message_event_queues_one_run_per_matching_message(tmp_path) -> None:
     first = inbound_message("halo", thread=thread_id, message_id="msg-1")
     duplicate = inbound_message("halo", thread=thread_id, message_id="msg-1")
     assert env.history.intake(
-        thread_id, first.payload, first.actor, gateway="fake"
+        thread_id, first.payload, first.actor, gateway="fake",
+    language="id",
     ) is True
     assert env.history.intake(
-        thread_id, duplicate.payload, duplicate.actor, gateway="fake"
+        thread_id, duplicate.payload, duplicate.actor, gateway="fake",
+    language="id",
     ) is False
 
     rows = runs(env)
@@ -528,18 +530,20 @@ def test_a_message_event_only_matches_its_room_and_sender(tmp_path) -> None:
     env.history.event_sink = env.store
     create(
         env,
-        message_manifest(event={"kind": "message", "thread": ["room-a"], "sender": "628222"}),
+        message_manifest(
+            event={"kind": "message", "tz": "UTC", "thread": ["room-a"], "sender": "628222"}
+        ),
         now=time.time(),
     )
 
     other_room = inbound_message("halo", thread="room-b", sender="628222", person_id="628222")
-    env.history.intake("room-b", other_room.payload, other_room.actor)
+    env.history.intake("room-b", other_room.payload, other_room.actor, language="id")
     other_sender = inbound_message("halo", thread="room-a", sender="628999", person_id="628999")
-    env.history.intake("room-a", other_sender.payload, other_sender.actor)
+    env.history.intake("room-a", other_sender.payload, other_sender.actor, language="id")
     assert runs(env) == []
 
     matching = inbound_message("halo", thread="room-a", sender="628222", person_id="628222")
-    env.history.intake("room-a", matching.payload, matching.actor)
+    env.history.intake("room-a", matching.payload, matching.actor, language="id")
     assert len(runs(env)) == 1
 
 
@@ -556,7 +560,7 @@ def test_a_message_run_reads_its_text_and_sender(tmp_path) -> None:
         now=time.time(),
     )
     message = inbound_message("halo semuanya", thread=thread_id, message_id="msg-9")
-    env.history.intake(thread_id, message.payload, message.actor, gateway="fake")
+    env.history.intake(thread_id, message.payload, message.actor, gateway="fake", language="id")
 
     worker = AutomationWorker(env.agent, store=env.store)
     facts: dict = {}
@@ -575,7 +579,7 @@ def test_the_durable_route_survives_a_restart(tmp_path) -> None:
     env.agent.gateways = (env.gateway, other)
     thread_id = "628111@s.whatsapp.net"
     message = inbound_message("halo", thread=thread_id, message_id="msg-route")
-    env.history.intake(thread_id, message.payload, message.actor, gateway="other")
+    env.history.intake(thread_id, message.payload, message.actor, gateway="other", language="id")
 
     assert env.history.gateway_of(thread_id) == "other"
     env.agent._turn_gateways.clear()  # a fresh boot keeps no in-memory map

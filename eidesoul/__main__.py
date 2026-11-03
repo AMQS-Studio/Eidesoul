@@ -442,7 +442,13 @@ async def selftest(config: Config) -> int:
             )
         )
 
-        skills.save("selftest", "Selftest check.", "Selftest steps.\n", overwrite=True)
+        skills.save(
+            "selftest",
+            "Selftest check.",
+            "Selftest steps.\n",
+            overwrite=True,
+            language=config.soul.language,
+        )
         passed = "Selftest check." in skills.catalog()
         detail = "" if passed else skills.catalog()[:120]
         results.append(_report("skill", _verdict(passed), detail))
@@ -672,6 +678,7 @@ def _init(args: argparse.Namespace) -> int:
             "eidesoul: no terminal for the interactive setup and no --provider given.\n"
             "  pass: --provider <name>  (required)\n"
             "        --model <id> --database-url <url> --label <text> --voice-layer on|off\n"
+        "        --language <code> --locale <tag> --timezone <IANA>   (default: the host)\n"
             "  or run `eidesoul init` on a terminal.",
             file=sys.stderr,
             flush=True,
@@ -687,6 +694,9 @@ def _init(args: argparse.Namespace) -> int:
                 database_url=args.database_url,
                 label=args.label,
                 voice_layer=args.voice_layer,
+                language=args.language,
+                locale=args.locale,
+                timezone=args.timezone,
                 force=args.force,
                 color=color,
             )
@@ -699,6 +709,9 @@ def _init(args: argparse.Namespace) -> int:
                 database_url=args.database_url or "",
                 label=args.label or "",
                 voice_layer=args.voice_layer or "on",
+                language=args.language or "",
+                locale=args.locale or "",
+                timezone=args.timezone or "",
             )
     except admin_init.InitCancelled as exc:
         print(f"eidesoul: {exc}", file=sys.stderr, flush=True)
@@ -930,6 +943,21 @@ def build_parser() -> argparse.ArgumentParser:
         choices=("on", "off"),
         default=None,
         help="keep emotion, humanize, and character on (default) or turn all three off",
+    )
+    init.add_argument(
+        "--language",
+        default=None,
+        help="language catalog code written to soul.language (default: the host locale)",
+    )
+    init.add_argument(
+        "--locale",
+        default=None,
+        help="locale such as en-US written to soul.locale (default: the host locale)",
+    )
+    init.add_argument(
+        "--timezone",
+        default=None,
+        help="IANA zone written to soul.timezone (default: the host zone)",
     )
     init.add_argument(
         "--non-interactive",

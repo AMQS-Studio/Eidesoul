@@ -87,15 +87,21 @@ def test_member_without_permission_cannot_switch(tmp_path) -> None:
     assert env.agent.soul.language == "id"
 
 
-def test_normalize_language_aliases() -> None:
+def test_normalize_language_aliases(monkeypatch) -> None:
     assert normalize_language("en") == "en"
     assert normalize_language("English") == "en"
     assert normalize_language("id") == "id"
+    monkeypatch.setenv("LC_ALL", "")
+    monkeypatch.setenv("LANG", "id_ID.UTF-8")
     assert normalize_language("auto") == "id"
+    with pytest.raises(ValueError, match="required"):
+        normalize_language("")
 
 
 def test_system_prompt_language_follows_the_yaml_value(tmp_path) -> None:
-    env = make_agent(tmp_path, soul=Soul(persona="p", language="en"))
+    env = make_agent(
+        tmp_path, soul=Soul(persona="p", language="en", locale="en-US", timezone="UTC")
+    )
     prompt = system_prompt(env.config, (Role("member"),))
     assert "Reply in English." in prompt
     assert "Indonesian" not in prompt
@@ -144,10 +150,14 @@ def test_no_default_pronoun_literal_survives() -> None:
 
 
 def test_empty_pronouns_resolve_from_the_catalog() -> None:
-    assert Soul(language="en").pronouns == "I"
-    assert Soul(language="id").pronouns == "aku"
-    assert load_soul({"language": "en", "pronouns": ""}).pronouns == "I"
-    assert load_soul({"language": "id", "pronouns": "gue"}).pronouns == "gue"
+    assert Soul(language="en", locale="en-US", timezone="UTC").pronouns == "I"
+    assert Soul(language="id", locale="id-ID", timezone="UTC").pronouns == "aku"
+    assert load_soul(
+        {"language": "en", "locale": "en-US", "timezone": "UTC", "pronouns": ""}
+    ).pronouns == "I"
+    assert load_soul(
+        {"language": "id", "locale": "id-ID", "timezone": "UTC", "pronouns": "gue"}
+    ).pronouns == "gue"
 
 
 def test_catalog_without_the_pronoun_key_fails_the_boot(tmp_path) -> None:
@@ -159,7 +169,7 @@ def test_catalog_without_the_pronoun_key_fails_the_boot(tmp_path) -> None:
     i18n.reload_catalogs()
     try:
         with pytest.raises(ValueError, match=r"soul\.pronoun\.default"):
-            load_soul({"language": "en"})
+            load_soul({"language": "en", "locale": "en-US", "timezone": "UTC"})
     finally:
         i18n.CATALOG_DIR = original
         i18n.reload_catalogs()
@@ -252,7 +262,9 @@ def test_missing_pack_degrades_and_never_borrows(tmp_path) -> None:
         assert guard.is_crisis("mau mati") is True
         assert guard.safe_text("api key abc", language="en") == ""
         # Prompt examples are omitted, never taken from the other language.
-        config = build_config(tmp_path / "cfg", soul=Soul(persona="p", language="en"))
+        config = build_config(
+            tmp_path / "cfg", soul=Soul(persona="p", language="en", locale="en-US", timezone="UTC")
+        )
         prompt = system_prompt(config, (Role("member"),))
         assert "kabur" not in prompt
         assert (

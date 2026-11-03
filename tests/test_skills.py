@@ -66,7 +66,7 @@ def test_parse_frontmatter_and_empty_store(tmp_path: Path) -> None:
 def test_save_view_read_and_revision(tmp_path: Path) -> None:
     db = database()
     store = SkillStore(db)
-    store.save("deploy-aman", "Deploy service dengan cek test.", BODY)
+    store.save("deploy-aman", "Deploy service dengan cek test.", BODY, language="id")
     add_file(db, "deploy-aman", "references/checklist.md", "cek dulu")
 
     assert "deploy-aman" in store.catalog()
@@ -77,37 +77,38 @@ def test_save_view_read_and_revision(tmp_path: Path) -> None:
     with pytest.raises(FileNotFoundError):
         store.read("deploy-aman", "references/missing.md")
 
-    store.save("deploy-aman", "Versi dua.", "# Dua\n", overwrite=True)
+    store.save("deploy-aman", "Versi dua.", "# Dua\n", overwrite=True, language="id")
     revisions = store.revisions("deploy-aman")
     assert [row["revision"] for row in revisions] == [2, 1]
     assert "# Deploy aman" in revisions[1]["body"]
-    store.restore("deploy-aman", 1)
+    store.restore("deploy-aman", 1, language="id")
     assert "# Deploy aman" in store.get("deploy-aman").body
     assert len(store.revisions("deploy-aman")) == 3
 
 
 def test_save_duplicate_and_overwrite(tmp_path: Path) -> None:
     store = SkillStore(database())
-    assert store.save("deploy", "Deploy aman.", "# Deploy\n") == "deploy"
+    assert store.save("deploy", "Deploy aman.", "# Deploy\n", language="id") == "deploy"
     with pytest.raises(FileExistsError):
-        store.save("deploy", "Lagi.", "# Lagi\n")
-    store.save("deploy", "Versi dua.", "# Dua\n", overwrite=True)
+        store.save("deploy", "Lagi.", "# Lagi\n", language="id")
+    store.save("deploy", "Versi dua.", "# Dua\n", overwrite=True, language="id")
     assert "Versi dua." in store.catalog()
     with pytest.raises(ValueError, match="skill name must be lowercase"):
-        store.save("../escape", "x", "y")
+        store.save("../escape", "x", "y", language="id")
     with pytest.raises(ValueError, match="never contains a secret"):
-        store.save("secret", "api_key=abc", "# x\n")
+        store.save("secret", "api_key=abc", "# x\n", language="id")
 
 
 def test_global_needs_t0_or_approval(tmp_path: Path) -> None:
     store = SkillStore(database())
     with pytest.raises(ValueError, match="global"):
-        store.save("global-proc", "Shared.", "# Shared\n", scope="global")
+        store.save("global-proc", "Shared.", "# Shared\n", scope="global", language="id")
     assert store.save(
-        "global-proc", "Shared.", "# Shared\n", scope="global", trust="T0"
+        "global-proc", "Shared.", "# Shared\n", scope="global", trust="T0",
+    language="id",
     ) == "global-proc"
     with pytest.raises(ValueError, match="global"):
-        store.save("other-proc", "Shared.", "# Shared\n", scope="global", trust="T1")
+        store.save("other-proc", "Shared.", "# Shared\n", scope="global", trust="T1", language="id")
 
 
 def test_retrieval_is_scoped_and_updates_uses(tmp_path: Path) -> None:
@@ -115,8 +116,9 @@ def test_retrieval_is_scoped_and_updates_uses(tmp_path: Path) -> None:
     store.save(
         "deploy", "Deploy service to production.", "# Steps\n1. Run sandbox.\n",
         scope="thread", stated_by="chat-a",
+    language="id",
     )
-    store.save("notes", "Write meeting notes.", "# Notes\n1. read the file.\n")
+    store.save("notes", "Write meeting notes.", "# Notes\n1. read the file.\n", language="id")
 
     inside = store.retrieve(
         "deploy production",
@@ -148,10 +150,10 @@ def test_retrieval_is_scoped_and_updates_uses(tmp_path: Path) -> None:
 
 def test_retrieval_budget_and_decay(tmp_path: Path) -> None:
     store = SkillStore(database())
-    store.save("long", "A long procedure.", "# " + "x" * 500 + "\n")
+    store.save("long", "A long procedure.", "# " + "x" * 500 + "\n", language="id")
     assert store.retrieve("long procedure", max_chars=100) == ""
 
-    store.save("old", "Old procedure.", "# Old\n")
+    store.save("old", "Old procedure.", "# Old\n", language="id")
     with store.db.connect() as conn:
         from sqlalchemy import text as sql
 
@@ -167,7 +169,7 @@ def test_retrieval_budget_and_decay(tmp_path: Path) -> None:
 
 def test_pin_and_forget(tmp_path: Path) -> None:
     store = SkillStore(database())
-    store.save("deploy", "Deploy aman.", "# Deploy\n")
+    store.save("deploy", "Deploy aman.", "# Deploy\n", language="id")
     assert store.pin("deploy") == "deploy"
     assert store.get("deploy").trust == "T0"
     assert store.forget("deploy") == "deploy"
@@ -182,7 +184,7 @@ def test_skill_tool_is_not_in_the_catalog() -> None:
 def test_skill_command_owner_surface(tmp_path: Path) -> None:
     db = database()
     store = SkillStore(db)
-    store.save("deploy", "Deploy aman.", "# Deploy\n")
+    store.save("deploy", "Deploy aman.", "# Deploy\n", language="id")
     add_file(db, "deploy", "refs/x.md", "detail")
 
     class FakeApp:

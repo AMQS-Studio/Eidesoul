@@ -40,7 +40,7 @@ HOST_KEYS: dict[str, tuple[str, ...]] = {
         "memory",
         "cpus",
     ),
-    "web_search": ("base_url", "timeout_seconds"),
+    "web_search": ("base_url", "region", "timeout_seconds"),
     "mcp": ("servers",),
     "plugin": ("root", "fetch", "source"),
     "plugins": (),
@@ -408,14 +408,22 @@ def dump(body: object) -> str:
     return yaml.safe_dump(body, sort_keys=False, allow_unicode=True)
 
 
-def soul_yaml() -> str:
-    """The seed soul plus the style its own text resolves to; never loads the embedder."""
-    soul = load_soul(yaml.safe_load(DEFAULT_SOUL_YAML) or {})
+def soul_yaml(language: str, locale: str, timezone: str) -> str:
+    """The seed soul with the operator's three required values, plus the derived style."""
+    text = DEFAULT_SOUL_YAML.format(language=language, locale=locale, timezone=timezone)
+    soul = load_soul(yaml.safe_load(text) or {})
     style = library.seed_style(library.soul_text(soul), soul.language)
-    return DEFAULT_SOUL_YAML + style_block(style)
+    return text + style_block(style)
 
 
-def files(*, provider: str, model: str = "") -> dict[str, str]:
+def files(
+    *,
+    provider: str,
+    model: str = "",
+    language: str,
+    locale: str,
+    timezone: str,
+) -> dict[str, str]:
     """Every scaffold file: relative path -> content.
 
     `provider` and `model` are the operator's pick; the scaffold never ships a model id of
@@ -434,6 +442,6 @@ def files(*, provider: str, model: str = "") -> dict[str, str]:
     return {
         "config.yaml": dump(config),
         "roles.yaml": dump({"roles": ROLES}),
-        "soul.yaml": soul_yaml(),
+        "soul.yaml": soul_yaml(language, locale, timezone),
         ".env": env_file(provider),
     }

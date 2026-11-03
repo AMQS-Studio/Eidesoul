@@ -8,9 +8,9 @@ limited to the same chat + global, and it never sends a message to any chat.
 import asyncio
 import logging
 import time
-from datetime import date, datetime
+from datetime import datetime
 
-from .. import guard
+from .. import clock, guard
 from ..access.roles import Role
 from ..config import Config
 from ..tools import ToolContext, execute
@@ -25,7 +25,7 @@ AMBIENT_ROLE = ("web_search",)
 DRIFT_FLOOR = 0.2
 
 
-def drift(old: str, new: str, language: str = "id") -> bool:
+def drift(old: str, new: str, language: str) -> bool:
     """True when the new summary shares almost none of the old summary's keywords."""
     fresh = keyword_set(new, language)
     if not fresh:
@@ -312,7 +312,7 @@ class Ambient:
         if self.memory is not None:
             try:
                 await self.memory.add(
-                    f"[research {date.today().isoformat()}] {text}",
+                    f"[research {clock.today(self.config.soul.timezone).isoformat()}] {text}",
                     scope="thread",
                     kind="note",
                     thread_id=thread_id,
