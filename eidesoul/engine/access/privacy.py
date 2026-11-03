@@ -323,10 +323,15 @@ class PrivacyService:
                 if parsed in {"yes", "no", "level", "unclear"}:
                     level = None
                     if parsed == "level":
-                        try:
-                            number = int(body.get("level"))
-                        except (TypeError, ValueError):
+                        # A JSON null is "no level", not an exception: keep it out of `int()`.
+                        raw_level = body.get("level")
+                        if raw_level is None:
                             number = -1
+                        else:
+                            try:
+                                number = int(raw_level)
+                            except (TypeError, ValueError):
+                                number = -1
                         level = number if 0 <= number <= 4 else None
                         if level is None:
                             parsed = "unclear"
