@@ -1,4 +1,4 @@
-# Gateway and Plugin Contract
+# Gateway, Plugin, and MCP Contract
 
 **Scope:** the extension surface of the Eidesoul engine: how a body (gateway) and an installable
 capability bundle (plugin) plug in, what each owns, and what neither may do.
@@ -11,7 +11,7 @@ alternative reading.
 
 ---
 
-## 1. The three words
+## 1. The four words
 
 A **gateway** is a body. It moves events between an outside world and the engine and owns the
 transport-specific actions of that body.
@@ -23,6 +23,10 @@ A **tool** is a capability the engine calls. A **command** is an operator-facing
 engine dispatches. Tools and commands are not extension units: they are the *contents* a core
 module, a gateway, or a plugin may provide.
 
+An **MCP server** is an external tool provider reached live over the Model Context Protocol. It is
+configured, not installed: no manifest, no digest, no `register()`, no prompt part, no body. It
+supplies tools and nothing else.
+
 They are not interchangeable:
 
 | Question | Answer |
@@ -30,12 +34,13 @@ They are not interchangeable:
 | Does it own a transport, a run loop, and the body's own actions? | gateway |
 | Is it installable/removable code with a manifest and a digest? | plugin |
 | Is it a capability the model or an operator invokes? | tool or command |
+| Is it an external tool server reached live over a standard protocol, with no install step? | MCP server |
 | Can a gateway be "just a plugin"? | No. It may be *shipped* by a plugin, but it is registered and enabled as a gateway (ADR-0028 §4.1). |
 | Can a plugin open its own transport? | Only through a gateway it ships and declares; never as an import-time side effect. |
 | Can core contain a gateway's actions? | No. Gateway actions live in `eidesoul/gateways/<name>/tools|commands`; a plugin's actions live in the plugin tree. |
 
-The one-line test: **a gateway is where bytes come from; a plugin is what can be installed; a tool
-is what the model may call.**
+The one-line test: **a gateway is where bytes come from; a plugin is what can be installed; an MCP
+server is a tool supplier you configure; a tool is what the model may call.**
 
 ---
 
@@ -205,7 +210,83 @@ opens the database, bypasses `execute`, or writes a core table directly.
 
 ---
 
-## 4. Composition rules
+## 4. MCP contract
+
+An **MCP server** is an external tool provider the engine reaches at runtime over the Model Context
+Protocol. It is not a plugin, not a gateway, and not an extension package: it has no manifest, no
+digest, no `register()`, and no prompt surface. Its whole contribution is tools.
+
+### 4.1 Configuration
+
+- Host key `mcp.servers.<name>`. Each entry has exactly one transport:
+  - **stdio:** `command`, optional `args`, optional `env`;
+  - **Streamable HTTP:** `url` (`http://` or `https://`).
+- `command` and `url` are mutually exclusive; both or neither is a `ConfigError`.
+- The server name and its tool names are slugged into the exposed name; names are data.
+- There is no install, enable, disable, or remove step. A config change plus a restart is the whole
+  lifecycle.
+
+### 4.2 Discovery and exposure
+
+- `Hub.start()` connects to every configured server (20-second timeout) and calls
+  `list_tools()` (another 20-second timeout).
+- A failing server logs one warning, contributes no tools, and never blocks boot.
+- Every tool becomes a `Handler` named `mcp__<server>__<tool>`, `family="mcp"`,
+  `pattern="mcp__*"`, description `[<server>] ...`, and parameters equal to the server's
+  `input_schema`.
+- `Hub.stop()` closes the connections on shutdown.
+
+### 4.3 Permission and approval
+
+- `Hub.specs(roles)` filters by `tool_allowed`, so a tool is visible only when a role pattern
+  matches `mcp__<server>__<tool>`. `execute` checks again; there is no MCP-specific bypass.
+- A grant of `mcp__*` spans every server. Prefer `mcp__<server>__*` per server.
+- The handler keeps the fail-closed default: `approval_class="authorization"`, and no `target`,
+  `path_arg`, `scan`, or `destructive` metadata. MCP does not negotiate approval classes.
+- The handler ignores the context it is passed: no memory, no skills, no ledger, no `ctx.app`.
+  The server sees only its arguments and its own environment. This is the line between "tool" and
+  "deep integration".
+
+### 4.4 Results and failure
+
+- Text content blocks are joined; empty output becomes `(no output)`; `is_error` becomes
+  `error: ...`.
+- A call has a 60-second timeout. An unknown exposed name returns an error string, never an
+  exception.
+- An MCP result is untrusted text: data for the model, never an instruction, and never a reason to
+  write memory by itself.
+
+### 4.5 What MCP is not
+
+- It does not install code into the engine; it runs outside the engine's tree and digest.
+- It cannot provide commands, prompt parts, gateways, or app-scoped skills.
+- It never reads `ctx.app` (after 0035); per-app wiring is external (separate server entries and
+  role patterns).
+- It does not get secrets from the plugin loader. Its `env` is literal config; keep real secrets
+  out of `config.yaml` (see §10).
+- It does not add a second permission path; roles remain the only grant.
+
+### 4.6 Plugin versus MCP
+
+| | Plugin | MCP server |
+| --- | --- | --- |
+| Unit | manifest + digest + `register()` | live external server |
+| Lifecycle | fetch, verify, enable, disable, remove | config entry, connect on boot |
+| Provides | tools, commands, a shipped gateway, static prompt parts (after 0034) | tools only |
+| Version binding | semver + engine range + digest pin | its own; the engine checks nothing |
+| Context | handler receives `ToolContext` | args only; no context |
+| Prompt | static parts (after 0034) | none |
+| App (after 0035) | `ctx.app` | not visible |
+| Failure | `unavailable`, no import | one warning, tools absent, engine continues |
+| Permission | roles at `execute` | roles at `execute` |
+| Trust | operator-installed code, digest-pinned | operator-configured process/endpoint; output is untrusted |
+
+The difference in one sentence: **a plugin integrates deeply (context, prompt, commands, optional
+gateway, version pin); an MCP server only supplies tools over a wire protocol.**
+
+---
+
+## 5. Composition rules
 
 These are the rules that keep "modular" from meaning "overlapping".
 
@@ -225,8 +306,12 @@ These are the rules that keep "modular" from meaning "overlapping".
    fabricated success and never a traceback in the turn (ADR-0027 §4.3).
 7. **Removal is clean.** Disabling a plugin never leaves a registered handler; stopping a gateway
    never leaves a running loop; a removed plugin's code is deleted, not shadowed.
+8. **MCP is configured, not installed.** A server adds tools to the same index and the same
+   permission check as every other tool. It adds no command, no prompt part, no gateway, no
+   lifecycle, and no digest. A plugin may wrap an MCP server, but then the plugin is the
+   installable unit and still owns the packaging.
 
-### 4.1 After ADR-0034: the prompt surface
+### 5.1 After ADR-0034: the prompt surface
 
 - A gateway contributes exactly one static body section through `prompt_section()`; it cannot
   register prompt parts and cannot add a second section.
@@ -237,7 +322,7 @@ These are the rules that keep "modular" from meaning "overlapping".
   A part that fails validation is a `PluginError` before the plugin joins the turn path.
 - The body section is the only gateway prompt contribution; a plugin cannot pretend to be a body.
 
-### 4.2 After ADR-0035: the app hint
+### 5.2 After ADR-0035: the app hint
 
 - A gateway may report `Inbound.hints["app"]` (the application or corpus the event belongs to). It
   is optional; a body that omits it reports "no app".
@@ -251,7 +336,7 @@ These are the rules that keep "modular" from meaning "overlapping".
 
 ---
 
-## 5. Permissions and trust
+## 6. Permissions and trust
 
 - **Roles are the only source of permission.** A gateway's or plugin's handler has no default
   grant; a missing `tools`/`commands` entry denies everything. The one check is
@@ -269,7 +354,7 @@ These are the rules that keep "modular" from meaning "overlapping".
 
 ---
 
-## 6. Failure semantics
+## 7. Failure semantics
 
 | Failure | Result |
 | --- | --- |
@@ -281,12 +366,15 @@ These are the rules that keep "modular" from meaning "overlapping".
 | Plugin `register()` raises | `unavailable`, modules purged, engine continues |
 | Plugin declares a capability it does not return | `PluginError`; the plugin does not load |
 | Plugin returns an undeclared capability | `PluginError`; the plugin does not load |
+| MCP server fails to start or list tools | one warning; its tools are absent; engine continues |
+| MCP tool call times out or returns `is_error` | `error:` text; the turn continues |
+| MCP tool lacks a role grant | denied at `execute`; no MCP-specific bypass |
 | Role lacks the grant | denied at `execute`; no plugin-specific bypass |
 | Worker not primary | standby refuses intake and sends nothing (lease) |
 
 ---
 
-## 7. Conformance checks
+## 8. Conformance checks
 
 A gateway is conformant when:
 
@@ -310,12 +398,22 @@ A plugin is conformant when:
 6. its tools pass the same `Handler` validation and permission check as core tools;
 7. if it ships a gateway, the gateway meets the gateway checks above.
 
-The executable form of these checks lives in `tests/test_gateway.py`, `tests/test_plugins.py`, and
-the prompt contract suite. A new body or plugin adds its case; it does not add a new mechanism.
+An MCP server is conformant when:
+
+1. it is configured with exactly one of `command` or `url`, and the name is unique;
+2. it answers `list_tools()` within 20 seconds and its tools expose usable input schemas;
+3. every tool resolves to `mcp__<server>__<tool>` and reaches the model only under a role grant;
+4. its arguments and results are treated as untrusted data, never as instructions;
+5. it does not use `ToolContext` and needs no prompt part, command, or gateway;
+6. real secrets are not written into `config.yaml` (until the env-name gap in §10 is closed).
+
+The executable form of these checks lives in `tests/test_gateway.py`, `tests/test_plugins.py`,
+`tests/test_mcp.py`, and the prompt contract suite. A new body, plugin, or server adds its case; it
+does not add a new mechanism.
 
 ---
 
-## 8. Worked example: a robot guard
+## 9. Worked example: a robot guard
 
 - **Gateway `robot`.** Owns the serial/sensor loop, presence detection, identity input (RFID,
   keypad, voice), TTS, and the alarm relay. It emits `Percept(hints={"app": "robot", "presence":
@@ -334,7 +432,7 @@ the prompt contract suite. A new body or plugin adds its case; it does not add a
 
 ---
 
-## 9. Known gaps (as of 2026-11-04)
+## 10. Known gaps (as of 2026-11-04)
 
 These are defects against this contract, not options:
 
@@ -346,10 +444,18 @@ These are defects against this contract, not options:
   tools/commands.
 - `Inbound` appears in older prose (including `AGENTS.md`); the live seam is `Percept`/`Action` in
   `eidesoul/engine/inbound.py`. This contract uses the live names.
+- MCP `env` values are read from `config.yaml` as literal strings; unlike plugin `secrets`, there is
+  no env-name indirection or verification. Keep secrets out of that mapping until the gap is
+  closed.
+- MCP handlers keep the default `authorization` class and carry no `target`, `path_arg`, `scan`, or
+  `destructive` metadata, so the guard cannot treat one MCP tool differently from another by
+  declaration.
+- MCP tools ignore the `ToolContext` they are passed, so they cannot read `ctx.app` after 0035 nor
+  write skills through the engine's stores.
 
 ---
 
-## 10. References
+## 11. References
 
 - `eidesoul/engine/inbound.py` — `Percept`, `Action`, `Address`, `Receipt`, `GatewayCore`, `Rich`,
   `Directory`, `PrivateThread`, `HINT_KEYS`, `PROMPT_SECTION_MAX`.
@@ -365,3 +471,8 @@ These are defects against this contract, not options:
 - ADR-0033 §4.5 — one body `prompt_section`.
 - ADR-0034 — prompt parts: static plugin parts, one body contribution.
 - ADR-0035 — app namespace: gateway supplies `hints["app"]`, plugin reads `ctx.app`, core filters.
+- `eidesoul/engine/jobs/mcp.py` — the `Hub`, discovery, `mcp__<server>__<tool>` naming, timeouts,
+  result rendering.
+- `eidesoul/engine/config.py:649-656,870-895` — `MCPServerConfig` and `mcp.servers` validation.
+- `eidesoul/__main__.py:112-113,476` — `Hub` start at process boot and stop in the selftest path;
+  `eidesoul/engine/agent.py:1796-1798` — `hub.stop()` on agent shutdown.

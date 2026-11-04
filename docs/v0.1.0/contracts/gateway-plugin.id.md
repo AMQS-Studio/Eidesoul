@@ -1,4 +1,4 @@
-# Kontrak Gateway dan Plugin
+# Kontrak Gateway, Plugin, dan MCP
 
 **Cakupan:** permukaan ekstensi engine Eidesoul: bagaimana sebuah body (gateway) dan bundel
 kemampuan yang dapat dipasang (plugin) terhubung, apa yang dimiliki masing-masing, dan apa yang
@@ -11,7 +11,7 @@ masing-masing keluar dari `draft`.
 
 ---
 
-## 1. Tiga kata
+## 1. Empat kata
 
 Sebuah **gateway** adalah body. Ia memindahkan event antara dunia luar dan engine serta memiliki aksi
 transport-specific dari body itu.
@@ -24,6 +24,10 @@ Sebuah **tool** adalah kemampuan yang dipanggil engine. Sebuah **command** adala
 operasional yang didispatch engine. Tool dan command bukan unit ekstensi: keduanya adalah *isi*
 yang dapat disediakan oleh modul core, gateway, atau plugin.
 
+Sebuah **server MCP** adalah penyedia tool eksternal yang dijangkau hidup-hidup lewat Model Context
+Protocol. Ia dikonfigurasi, bukan dipasang: tanpa manifest, tanpa digest, tanpa `register()`, tanpa
+prompt part, tanpa body. Ia memasok tool dan tidak yang lain.
+
 Ketiganya tidak dapat dipertukarkan:
 
 | Pertanyaan | Jawaban |
@@ -31,12 +35,13 @@ Ketiganya tidak dapat dipertukarkan:
 | Apakah ia memiliki transport, run loop, dan aksi tubuhnya sendiri? | gateway |
 | Apakah ia kode yang dapat dipasang/dihapus dengan manifest dan digest? | plugin |
 | Apakah ia kemampuan yang dipanggil model atau operator? | tool atau command |
+| Apakah ia server tool eksternal yang dijangkau lewat protokol standar, tanpa langkah pemasangan? | server MCP |
 | Bolehkah gateway "sekadar plugin"? | Tidak. Ia boleh *dikirim* oleh plugin, tetapi didaftarkan dan diaktifkan sebagai gateway (ADR-0028 §4.1). |
 | Bolehkah plugin membuka transportnya sendiri? | Hanya lewat gateway yang ia kirim dan deklarasikan; tidak pernah sebagai efek samping saat import. |
 | Bolehkah core memuat aksi gateway? | Tidak. Aksi gateway tinggal di `eidesoul/gateways/<name>/tools|commands`; aksi plugin tinggal di pohon plugin. |
 
-Uji satu baris: **gateway adalah dari mana byte datang; plugin adalah apa yang dapat dipasang; tool
-adalah apa yang boleh dipanggil model.**
+Uji satu baris: **gateway adalah dari mana byte datang; plugin adalah apa yang dapat dipasang;
+server MCP adalah pemasok tool yang kamu konfigurasi; tool adalah apa yang boleh dipanggil model.**
 
 ---
 
@@ -209,7 +214,81 @@ membuka database, melewati `execute`, atau menulis tabel core secara langsung.
 
 ---
 
-## 4. Aturan komposisi
+## 4. Kontrak MCP
+
+Sebuah **server MCP** adalah penyedia tool eksternal yang dijangkau engine saat runtime lewat Model
+Context Protocol. Ia bukan plugin, bukan gateway, dan bukan paket ekstensi: tidak ada manifest,
+digest, `register()`, atau permukaan prompt. Seluruh kontribusinya adalah tool.
+
+### 4.1 Konfigurasi
+
+- Key host `mcp.servers.<name>`. Setiap entri memiliki tepat satu transport:
+  - **stdio:** `command`, opsional `args`, opsional `env`;
+  - **Streamable HTTP:** `url` (`http://` atau `https://`).
+- `command` dan `url` saling eksklusif; keduanya atau tidak keduanya adalah `ConfigError`.
+- Nama server dan nama tool-nya di-slug menjadi nama yang diekspos; nama adalah data.
+- Tidak ada langkah install, enable, disable, atau remove. Perubahan config plus restart adalah
+  seluruh siklus hidupnya.
+
+### 4.2 Penemuan dan eksposur
+
+- `Hub.start()` terhubung ke setiap server yang dikonfigurasi (timeout 20 detik) dan memanggil
+  `list_tools()` (timeout 20 detik lagi).
+- Server yang gagal mencatat satu peringatan, tidak menyumbang tool, dan tidak pernah memblokir boot.
+- Setiap tool menjadi `Handler` bernama `mcp__<server>__<tool>`, `family="mcp"`,
+  `pattern="mcp__*"`, deskripsi `[<server>] ...`, dan parameter sama dengan `input_schema` server.
+- `Hub.stop()` menutup koneksi saat shutdown.
+
+### 4.3 Izin dan approval
+
+- `Hub.specs(roles)` memfilter dengan `tool_allowed`, jadi sebuah tool hanya terlihat ketika pola
+  role cocok dengan `mcp__<server>__<tool>`. `execute` memeriksa lagi; tidak ada bypass khusus MCP.
+- Grant `mcp__*` mencakup semua server. Utamakan `mcp__<server>__*` per server.
+- Handler mempertahankan default fail-closed: `approval_class="authorization"`, tanpa metadata
+  `target`, `path_arg`, `scan`, atau `destructive`. MCP tidak menegosiasikan kelas approval.
+- Handler mengabaikan konteks yang diterimanya: tanpa memori, tanpa skill, tanpa ledger, tanpa
+  `ctx.app`. Server hanya melihat argumennya dan environment-nya sendiri. Inilah garis antara "tool"
+  dan "integrasi mendalam".
+
+### 4.4 Hasil dan kegagalan
+
+- Blok konten teks digabung; output kosong menjadi `(no output)`; `is_error` menjadi `error: ...`.
+- Panggilan memiliki timeout 60 detik. Nama terekspos yang tidak dikenal mengembalikan string error,
+  tidak pernah exception.
+- Hasil MCP adalah teks tidak tepercaya: data bagi model, tidak pernah instruksi, dan tidak pernah
+  menjadi alasan untuk menulis memori sendiri.
+
+### 4.5 Apa yang bukan MCP
+
+- Ia tidak memasang kode ke engine; ia berjalan di luar pohon dan digest engine.
+- Ia tidak dapat menyediakan command, prompt part, gateway, atau skill ber-scope app.
+- Ia tidak pernah membaca `ctx.app` (setelah 0035); pengkabelan per app bersifat eksternal (entri
+  server dan pola role terpisah).
+- Ia tidak memperoleh secret dari loader plugin. `env`-nya adalah config literal; jauhkan secret
+  asli dari `config.yaml` (lihat §10).
+- Ia tidak menambah jalur izin kedua; role tetap satu-satunya grant.
+
+### 4.6 Plugin versus MCP
+
+| | Plugin | Server MCP |
+| --- | --- | --- |
+| Unit | manifest + digest + `register()` | server eksternal yang hidup |
+| Siklus hidup | ambil, verifikasi, enable, disable, remove | entri config, konek saat boot |
+| Menyediakan | tool, command, gateway yang dikirim, prompt part statis (setelah 0034) | tool saja |
+| Ikatan versi | semver + rentang engine + pin digest | miliknya sendiri; engine tidak memeriksa apa pun |
+| Konteks | handler menerima `ToolContext` | argumen saja; tanpa konteks |
+| Prompt | part statis (setelah 0034) | tidak ada |
+| App (setelah 0035) | `ctx.app` | tidak terlihat |
+| Kegagalan | `unavailable`, tanpa import | satu peringatan, tool absen, engine lanjut |
+| Izin | role di `execute` | role di `execute` |
+| Kepercayaan | kode dipasang operator, dipin digest | proses/endpoint eksternal yang dikonfigurasi operator; output tidak tepercaya |
+
+Perbedaannya dalam satu kalimat: **plugin berintegrasi mendalam (konteks, prompt, command, gateway
+opsional, pin versi); server MCP hanya memasok tool lewat protokol kabel.**
+
+---
+
+## 5. Aturan komposisi
 
 Inilah aturan yang menjaga "modular" tidak berarti "tumpang tindih".
 
@@ -230,8 +309,12 @@ Inilah aturan yang menjaga "modular" tidak berarti "tumpang tindih".
 7. **Penghapusan bersih.** Menonaktifkan plugin tidak pernah meninggalkan handler terdaftar;
    menghentikan gateway tidak pernah meninggalkan loop berjalan; kode plugin yang dihapus benar-benar
    dihapus, bukan ditutupi.
+8. **MCP dikonfigurasi, bukan dipasang.** Server menambah tool ke indeks dan pemeriksaan izin yang
+   sama dengan tool lain. Ia tidak menambah command, prompt part, gateway, siklus hidup, atau digest.
+   Plugin boleh membungkus server MCP, tetapi plugin tetap unit yang dapat dipasang dan tetap
+   memiliki packaging.
 
-### 4.1 Setelah ADR-0034: permukaan prompt
+### 5.1 Setelah ADR-0034: permukaan prompt
 
 - Gateway menyumbang tepat satu bagian body statis lewat `prompt_section()`; ia tidak dapat
   mendaftarkan prompt part dan tidak dapat menambah bagian kedua.
@@ -244,7 +327,7 @@ Inilah aturan yang menjaga "modular" tidak berarti "tumpang tindih".
 - Bagian body adalah satu-satunya kontribusi prompt gateway; plugin tidak dapat berpura-pura menjadi
   body.
 
-### 4.2 Setelah ADR-0035: hint app
+### 5.2 Setelah ADR-0035: hint app
 
 - Gateway boleh melaporkan `Inbound.hints["app"]` (aplikasi atau korpus tempat event itu berada). Ia
   opsional; body yang menghilangkannya melaporkan "tanpa app".
@@ -258,7 +341,7 @@ Inilah aturan yang menjaga "modular" tidak berarti "tumpang tindih".
 
 ---
 
-## 5. Izin dan kepercayaan
+## 6. Izin dan kepercayaan
 
 - **Role adalah satu-satunya sumber izin.** Handler gateway atau plugin tidak punya grant default;
   entri `tools`/`commands` yang hilang menolak semuanya. Satu-satunya pemeriksaan adalah
@@ -276,7 +359,7 @@ Inilah aturan yang menjaga "modular" tidak berarti "tumpang tindih".
 
 ---
 
-## 6. Semantik kegagalan
+## 7. Semantik kegagalan
 
 | Kegagalan | Hasil |
 | --- | --- |
@@ -288,12 +371,15 @@ Inilah aturan yang menjaga "modular" tidak berarti "tumpang tindih".
 | `register()` plugin melempar | `unavailable`, modul dibersihkan, engine lanjut |
 | Plugin mendeklarasikan capability yang tidak dikembalikan | `PluginError`; plugin tidak dimuat |
 | Plugin mengembalikan capability yang tidak dideklarasikan | `PluginError`; plugin tidak dimuat |
+| Server MCP gagal start atau list tool | satu peringatan; tool-nya absen; engine lanjut |
+| Panggilan tool MCP timeout atau mengembalikan `is_error` | teks `error:`; turn lanjut |
+| Tool MCP tidak punya grant role | ditolak di `execute`; tanpa bypass khusus MCP |
 | Role tidak punya grant | ditolak di `execute`; tidak ada bypass khusus plugin |
 | Worker bukan primary | standby menolak intake dan tidak mengirim apa pun (lease) |
 
 ---
 
-## 7. Pemeriksaan konformansi
+## 8. Pemeriksaan konformansi
 
 Gateway konforman ketika:
 
@@ -317,12 +403,22 @@ Plugin konforman ketika:
 6. tool-nya lolos validasi `Handler` dan pemeriksaan izin yang sama dengan tool core;
 7. jika ia mengirim gateway, gateway itu memenuhi pemeriksaan gateway di atas.
 
-Bentuk eksekusi pemeriksaan ini tinggal di `tests/test_gateway.py`, `tests/test_plugins.py`, dan
-suite kontrak prompt. Body atau plugin baru menambahkan kasusnya; ia tidak menambah mekanisme baru.
+Server MCP konforman ketika:
+
+1. ia dikonfigurasi dengan tepat satu dari `command` atau `url`, dan namanya unik;
+2. ia menjawab `list_tools()` dalam 20 detik dan tool-nya mengekspos input schema yang dapat dipakai;
+3. setiap tool me-resolve ke `mcp__<server>__<tool>` dan mencapai model hanya di bawah grant role;
+4. argumen dan hasilnya diperlakukan sebagai data tidak tepercaya, tidak pernah instruksi;
+5. ia tidak memakai `ToolContext` dan tidak membutuhkan prompt part, command, atau gateway;
+6. secret asli tidak ditulis ke `config.yaml` (sampai celah nama-env di §10 ditutup).
+
+Bentuk eksekusi pemeriksaan ini tinggal di `tests/test_gateway.py`, `tests/test_plugins.py`,
+`tests/test_mcp.py`, dan suite kontrak prompt. Body, plugin, atau server baru menambahkan kasusnya;
+ia tidak menambah mekanisme baru.
 
 ---
 
-## 8. Contoh kerja: robot guard
+## 9. Contoh kerja: robot guard
 
 - **Gateway `robot`.** Memiliki loop serial/sensor, deteksi kehadiran, input identitas (RFID,
   keypad, suara), TTS, dan relay alarm. Ia memancarkan `Percept(hints={"app": "robot", "presence":
@@ -341,7 +437,7 @@ suite kontrak prompt. Body atau plugin baru menambahkan kasusnya; ia tidak menam
 
 ---
 
-## 9. Celah yang diketahui (per 2026-11-04)
+## 10. Celah yang diketahui (per 2026-11-04)
 
 Ini adalah cacat terhadap kontrak ini, bukan opsi:
 
@@ -353,10 +449,18 @@ Ini adalah cacat terhadap kontrak ini, bukan opsi:
   tools/commands.
 - `Inbound` muncul di prosa lama (termasuk `AGENTS.md`); seam yang hidup adalah `Percept`/`Action` di
   `eidesoul/engine/inbound.py`. Kontrak ini memakai nama yang hidup.
+- Nilai `env` MCP dibaca dari `config.yaml` sebagai string literal; berbeda dari `secrets` plugin,
+  tidak ada indireksi atau verifikasi nama env. Jauhkan secret dari mapping itu sampai celahnya
+  ditutup.
+- Handler MCP mempertahankan kelas default `authorization` dan tidak membawa metadata `target`,
+  `path_arg`, `scan`, atau `destructive`, sehingga guard tidak dapat memperlakukan satu tool MCP
+  berbeda dari yang lain lewat deklarasi.
+- Tool MCP mengabaikan `ToolContext` yang diterimanya, jadi tidak dapat membaca `ctx.app` setelah
+  0035 atau menulis skill lewat store engine.
 
 ---
 
-## 10. Referensi
+## 11. Referensi
 
 - `eidesoul/engine/inbound.py` — `Percept`, `Action`, `Address`, `Receipt`, `GatewayCore`, `Rich`,
   `Directory`, `PrivateThread`, `HINT_KEYS`, `PROMPT_SECTION_MAX`.
@@ -372,3 +476,8 @@ Ini adalah cacat terhadap kontrak ini, bukan opsi:
 - ADR-0033 §4.5 — satu `prompt_section` body.
 - ADR-0034 — prompt parts: part plugin statis, satu kontribusi body.
 - ADR-0035 — namespace app: gateway memasok `hints["app"]`, plugin membaca `ctx.app`, core memfilter.
+- `eidesoul/engine/jobs/mcp.py` — `Hub`, penemuan, penamaan `mcp__<server>__<tool>`, timeout,
+  rendering hasil.
+- `eidesoul/engine/config.py:649-656,870-895` — `MCPServerConfig` dan validasi `mcp.servers`.
+- `eidesoul/__main__.py:112-113,476` — start `Hub` saat boot proses dan stop di jalur selftest;
+  `eidesoul/engine/agent.py:1796-1798` — `hub.stop()` saat agent shutdown.
