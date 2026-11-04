@@ -6,8 +6,8 @@
 directory `.monoagens/`, environment prefix `MONOAGENS_`, wordmark MONOAGENS, and repository
 `github.com/AMQStudio/MonoAgens`. No alias package, shim, or dual CLI remains. `soul.yaml` and
 the `soul` document keep their internal names; historical ADR prose keeps the old product name.
-README now names the category, the creator, and AMQStudio stewardship; the runtime type is a
-persistent mono agent harness.
+README now names the category, AMQStudio, and its founder; the runtime type is a persistent mono
+agent harness.
 
 **Voice (ADR-0041/0045)** — one `soul.voice` block owns `sampling`, `affect`, `style`, `character`,
 `humanize`, `profanity`, and `safety`; `voice.enabled` is the master and defaults off. The old

@@ -35,14 +35,13 @@ design; this section is the delta that runs today.
 ## What MonoAgens is
 
 MonoAgens is a **persistent mono agent harness**: the runtime around a model whose state is one
-continuous self, not a session. It keeps one identity, one memory, and one set of permissions across restarts,
-surfaces, and bodies. Each turn rebuilds its working set from Postgres, and a body adds a transport,
-never a personality. It is not a chatbot template, an orchestration framework, or a hosted service.
+continuous self, not a session. It keeps one identity, one memory, and one set of permissions across
+restarts, surfaces, and bodies. Each turn rebuilds its working set from Postgres, and a body adds a
+transport, never a personality. It is not a chatbot template or an orchestration framework.
 
-MonoAgens is created and maintained by Abdul Muqsith under
-[AMQStudio](https://github.com/AMQStudio). The repository is
-[AMQStudio/MonoAgens](https://github.com/AMQStudio/MonoAgens). It is a program you run yourself: the
-deployment, the data in it, and the legal duties around it belong to the operator.
+MonoAgens is built by [AMQStudio](https://github.com/AMQStudio) (founded by Abdul Muqsith) and
+developed as a shared open-source project. The repository is
+[AMQStudio/MonoAgens](https://github.com/AMQStudio/MonoAgens).
 
 ## What the slogan means
 

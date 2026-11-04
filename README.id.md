@@ -37,15 +37,14 @@ bagian ini adalah selisih yang berjalan sekarang.
 ## Apa itu MonoAgens
 
 MonoAgens adalah **persistent mono agent harness**: runtime di sekitar model yang state-nya adalah satu
-diri yang berlanjut, bukan sesi. Ia menjaga satu identitas, satu memori, dan satu set izin lintas restart,
-permukaan, dan tubuh. Setiap giliran menyusun ulang working set dari Postgres, dan sebuah tubuh hanya
-menambah transport, tidak pernah menambah kepribadian. Ia bukan template chatbot, framework orkestrasi,
-atau layanan SaaS.
+diri yang berlanjut, bukan sesi. Ia menjaga satu identitas, satu memori, dan satu set izin lintas
+restart, permukaan, dan tubuh. Setiap giliran menyusun ulang working set dari Postgres, dan sebuah
+tubuh hanya menambah transport, tidak pernah menambah kepribadian. Ia bukan template chatbot atau framework
+orkestrasi.
 
-MonoAgens dibuat dan dipelihara oleh Abdul Muqsith di bawah
-[AMQStudio](https://github.com/AMQStudio). Repositorinya ada di
-[AMQStudio/MonoAgens](https://github.com/AMQStudio/MonoAgens). Ini program yang Anda jalankan sendiri:
-deployment, data di dalamnya, dan kewajiban hukumnya milik operator.
+MonoAgens dibangun oleh [AMQStudio](https://github.com/AMQStudio) (didirikan oleh Abdul Muqsith) dan
+dikembangkan sebagai proyek open-source bersama. Repositorinya ada di
+[AMQStudio/MonoAgens](https://github.com/AMQStudio/MonoAgens).
 
 <a id="apa-arti-slogan-ini"></a>
 ## Apa arti slogan ini
