@@ -90,24 +90,38 @@ def _ask(
 def _ask_location(state: Answers, stdin: TextIO, stdout: TextIO, color: bool = False) -> None:
     """The first decision: where the host files land, shown before anything is written."""
     current = state.location or str(Path.cwd())
-    _say(stdout, "  where should this soul live?")
-    base = Path(current).expanduser()
-    for name in HOST_FILES:
-        path = base / name
-        status = "existing" if path.exists() else "new"
-        _say(stdout, f"    {name:<12} {status}")
-    _say(stdout, "    .eidesoul/   workspace will be created")
     while True:
-        answer = _ask(stdin, stdout, "  directory", current, show_default=False)
+        base = Path(current).expanduser()
+        detail = [
+            f"{name:<12} {'existing' if (base / name).exists() else 'new'}"
+            for name in HOST_FILES
+        ]
+        detail.append(".eidesoul/   workspace will be created")
+        try:
+            answer = terminal.text(
+                stdin=stdin,
+                stdout=stdout,
+                title="where should this soul live?",
+                default=current,
+                header=_menu_header(STEP_INDEX["location"], color),
+                detail=detail,
+                allow_back=False,
+                color=color,
+                plain=not color,
+            )
+        except terminal.Cancelled:
+            raise
         path = Path(answer).expanduser()
         if path.exists() and not path.is_dir():
             _say(stdout, "  that path is a file, not a directory; try again")
+            current = answer
             continue
         probe = path
         while not probe.exists() and probe != probe.parent:
             probe = probe.parent
         if not os.access(probe, os.W_OK):
             _say(stdout, f"  {probe} is not writable; choose another directory")
+            current = answer
             continue
         state.location = str(path.resolve())
         return
@@ -124,21 +138,18 @@ def _ask_provider(state: Answers, stdin: TextIO, stdout: TextIO, color: bool = F
         for name in names
     ]
     default = names.index("opencode") if "opencode" in names else 0
-    try:
-        picked = terminal.choose(
-            stdin=stdin,
-            stdout=stdout,
-            title="which provider serves your model?",
-            choices=choices,
-            default=default,
-            header=_menu_header(STEP_INDEX["provider"], color),
-            searchable=True,
-            allow_back=True,
-            color=color,
-            plain=not color,
-        )
-    except terminal.Back:
-        raise
+    picked = terminal.choose(
+        stdin=stdin,
+        stdout=stdout,
+        title="which provider serves your model?",
+        choices=choices,
+        default=default,
+        header=_menu_header(STEP_INDEX["provider"], color),
+        searchable=True,
+        allow_back=True,
+        color=color,
+        plain=not color,
+    )
     state.provider = names[picked]
 
 
@@ -149,20 +160,21 @@ def _ask_credential(state: Answers, stdin: TextIO, stdout: TextIO, color: bool =
         state.api_key = ""
         return
     optional = " (optional for this provider)" if defaults.api_key_optional else ""
-    _say(stdout, f"  {key_env}{optional} (blank leaves it in .env to fill later)")
-    try:
-        state.api_key = terminal.secret(
-            stdin=stdin,
-            stdout=stdout,
-            prompt=f"  {key_env}: ",
-            plain=not color,
-        )
-    except terminal.Cancelled:
-        raise
+    state.api_key = terminal.text(
+        stdin=stdin,
+        stdout=stdout,
+        title=f"{key_env}{optional}",
+        default=state.api_key,
+        header=_menu_header(STEP_INDEX["credential"], color),
+        detail=["blank leaves it in .env to fill later"],
+        secret=True,
+        allow_back=True,
+        color=color,
+        plain=not color,
+    )
 
 
 def _ask_model(state: Answers, stdin: TextIO, stdout: TextIO, color: bool = False) -> None:
-    _say(stdout, "  model id (blank leaves it for later; `eidesoul models` lists them)")
     try:
         served = model_ids(state.provider)
     except (ConfigError, KeyError, ValueError, OSError):
@@ -174,26 +186,32 @@ def _ask_model(state: Answers, stdin: TextIO, stdout: TextIO, color: bool = Fals
         ]
         choices.append(terminal.Choice("Enter another model id", "manual entry", ""))
         default = served.index(state.model) if state.model in served else 0
-        try:
-            picked = terminal.choose(
-                stdin=stdin,
-                stdout=stdout,
-                title="which model should this soul use?",
-                choices=choices,
-                default=default,
-                header=_menu_header(STEP_INDEX["model"], color),
-                searchable=True,
-                allow_back=True,
-                color=color,
-                plain=not color,
-            )
-        except terminal.Back:
-            raise
+        picked = terminal.choose(
+            stdin=stdin,
+            stdout=stdout,
+            title="which model should this soul use?",
+            choices=choices,
+            default=default,
+            header=_menu_header(STEP_INDEX["model"], color),
+            searchable=True,
+            allow_back=True,
+            color=color,
+            plain=not color,
+        )
         if picked < len(served):
             state.model = served[picked]
             return
     while True:
-        answer = _ask(stdin, stdout, "  model", state.model)
+        answer = terminal.text(
+            stdin=stdin,
+            stdout=stdout,
+            title="model id (blank leaves it for later; `eidesoul models` lists them)",
+            default=state.model,
+            header=_menu_header(STEP_INDEX["model"], color),
+            allow_back=True,
+            color=color,
+            plain=not color,
+        )
         error = validate_model(state.provider, answer)
         if error is None:
             state.model = answer
@@ -202,10 +220,16 @@ def _ask_model(state: Answers, stdin: TextIO, stdout: TextIO, color: bool = Fals
 
 
 def _ask_database(state: Answers, stdin: TextIO, stdout: TextIO, color: bool = False) -> None:
-    _say(stdout, "  Postgres URL for EIDESOUL_DATABASE_URL (blank fills .env later)")
     while True:
-        answer = _ask(
-            stdin, stdout, "  database URL", state.database_url, show_default=False
+        answer = terminal.text(
+            stdin=stdin,
+            stdout=stdout,
+            title="Postgres URL for EIDESOUL_DATABASE_URL (blank fills .env later)",
+            default=state.database_url,
+            header=_menu_header(STEP_INDEX["database"], color),
+            allow_back=True,
+            color=color,
+            plain=not color,
         )
         error = validate_database_url(answer)
         if error is None:
@@ -215,16 +239,32 @@ def _ask_database(state: Answers, stdin: TextIO, stdout: TextIO, color: bool = F
 
 
 def _ask_label(state: Answers, stdin: TextIO, stdout: TextIO, color: bool = False) -> None:
-    _say(stdout, "  label for the first administrator (roles.yaml; blank keeps it empty)")
-    state.label = _ask(stdin, stdout, "  administrator label", state.label)
+    state.label = terminal.text(
+        stdin=stdin,
+        stdout=stdout,
+        title="label for the first administrator (blank keeps it empty)",
+        default=state.label,
+        header=_menu_header(STEP_INDEX["identity"], color),
+        allow_back=True,
+        color=color,
+        plain=not color,
+    )
 
 
 def _ask_voice(state: Answers, stdin: TextIO, stdout: TextIO, color: bool = False) -> None:
-    _say(stdout, "  keep emotion, humanize, and character on?")
-    _say(stdout, "  (`on`, `off`, or the parts to turn off, e.g. `character`)")
     default = "on" if not state.voice_off else ",".join(state.voice_off)
     while True:
-        answer = _ask(stdin, stdout, "  voice layer", default)
+        answer = terminal.text(
+            stdin=stdin,
+            stdout=stdout,
+            title="keep emotion, humanize, and character on?",
+            default=default,
+            header=_menu_header(STEP_INDEX["voice layer"], color),
+            detail=["on, off, or the parts to turn off, e.g. character"],
+            allow_back=True,
+            color=color,
+            plain=not color,
+        )
         try:
             state.voice_off = voice_off(answer)
             return

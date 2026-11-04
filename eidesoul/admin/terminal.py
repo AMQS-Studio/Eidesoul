@@ -265,18 +265,111 @@ def _draw(
     stdscr.refresh()
 
 
-def secret(*, stdin: TextIO, stdout: TextIO, prompt: str, plain: bool = False) -> str:
-    """Read a secret without echoing it on a real terminal; fallback never prints the value."""
-    if interactive(stdin, stdout, plain=plain) and hasattr(stdin, "fileno"):
-        import getpass
 
-        try:
-            return getpass.getpass(prompt, stream=stdout)
-        except (EOFError, KeyboardInterrupt) as exc:
-            raise Cancelled("secret prompt cancelled") from exc
-    stdout.write(prompt)
-    stdout.flush()
-    line = stdin.readline()
-    if line == "":
-        raise Cancelled("input closed before the secret was entered")
-    return line.strip()
+
+def text(
+    *,
+    stdin: TextIO,
+    stdout: TextIO,
+    title: str,
+    default: str = "",
+    header: Sequence[str] = (),
+    detail: Sequence[str] = (),
+    secret: bool = False,
+    allow_back: bool = True,
+    color: bool = False,
+    plain: bool = False,
+) -> str:
+    """One framed text field; Enter accepts, Left goes back, Escape cancels."""
+    if not interactive(stdin, stdout, plain=plain):
+        for line in detail:
+            stdout.write(f"  {line}\n")
+        hint = f" [{default}]" if default else ""
+        stdout.write(f"  {title}{hint}: ")
+        stdout.flush()
+        line = stdin.readline()
+        if line == "":
+            raise Cancelled("input closed before the field was answered")
+        value = line.rstrip("\n")
+        return value if value else default
+    return _curses_text(
+        title=title,
+        default=default,
+        header=header,
+        detail=detail,
+        secret=secret,
+        allow_back=allow_back,
+        color=color,
+    )
+
+
+
+
+def _put_line(stdscr, row: int, text: str, width: int, attr: int = 0) -> None:
+    import curses
+
+    if row < 0:
+        return
+    with contextlib.suppress(curses.error):
+        stdscr.addnstr(row, 0, text, max(0, width - 1), attr)
+
+
+def _curses_text(  # noqa: C901
+    *,
+    title: str,
+    default: str,
+    header: Sequence[str],
+    detail: Sequence[str],
+    secret: bool,
+    allow_back: bool,
+    color: bool,
+) -> str:
+    import curses
+
+    def run(stdscr) -> str:  # noqa: C901, PLR0912
+        with contextlib.suppress(curses.error):
+            curses.curs_set(1)
+        stdscr.keypad(True)
+        value = list(default)
+        while True:
+            stdscr.erase()
+            height, width = stdscr.getmaxyx()
+            row = 0
+
+            for line in header:
+                _put_line(stdscr, row, line, width)
+                row += 1
+            if row and row < height:
+                row += 1
+            _put_line(stdscr, row, f"  {title}", width, curses.A_BOLD)
+            row += 1
+            for line in detail:
+                _put_line(stdscr, row, f"  {line}", width, curses.A_DIM)
+                row += 1
+            row += 1
+            shown = "•" * len(value) if secret else "".join(value)
+            _put_line(stdscr, row, f"  > {shown}", width)
+            with contextlib.suppress(curses.error):
+                stdscr.move(min(row, height - 2), min(width - 1, 4 + len(shown)))
+            stdscr.refresh()
+            key = stdscr.getch()
+            if key in (curses.KEY_ENTER, 10, 13):
+                return "".join(value)
+            if key == curses.KEY_LEFT:
+                if allow_back:
+                    raise Back()
+                raise Cancelled("cancelled at the first field")
+            if key == 27:
+                if allow_back:
+                    raise Back()
+                raise Cancelled("cancelled at the first field")
+            if key in (3,):
+                raise Cancelled("cancelled by the operator")
+            if key in (curses.KEY_BACKSPACE, 127, 8):
+                if value:
+                    value.pop()
+                continue
+            if 32 <= key < 127 and len(value) < 4096:
+                value.append(chr(key))
+
+    return curses.wrapper(run)
