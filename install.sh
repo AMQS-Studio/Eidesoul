@@ -832,19 +832,20 @@ database_configured() {
 }
 
 # `prepare_database_env MODE` fills .env with one generated password and one URL.
-# MODE is native (engine on host) or compose (engine in the stack). It prints
+# MODE is container (engine on host, Postgres in a container) or compose (engine and Postgres in
+# containers). It prints
 # "container" when the database belongs to compose, "external" when the operator
 # supplied their own server. A generated URL carries MONOAGENS_DB_CONTAINER=1 so a
 # later run repairs the container instead of mistaking it for an external server.
 prepare_database_env() {
-    local mode="$1" result
+    local mode="$1" target="${2:-$dir/.env}" result
     if (( dry_run )); then
-        detail "would prepare the $mode database credentials in $dir/.env" >&2
+        detail "would prepare the $mode database credentials in $target" >&2
         printf 'container'
         return 0
     fi
     result="$(
-        "$python_bin" - "$dir/.env" "$mode" <<'PY'
+        "$python_bin" - "$target" "$mode" <<'PY'
 import os
 import secrets
 import sys
@@ -923,18 +924,31 @@ PY
 }
 
 env_value() {
-    local name="$1"
-    [[ -f "$dir/.env" ]] || return 0
-    awk -F= -v key="$name" '$1 == key { sub(/^[^=]*=/, ""); print; exit }' "$dir/.env"
+    local name="$1" path="${2:-$dir/.env}"
+    [[ -f "$path" ]] || return 0
+    awk -F= -v key="$name" '$1 == key { sub(/^[^=]*=/, ""); print; exit }' "$path"
+}
+
+database_env_mode() {
+    if [[ "$stack" == "compose" ]]; then
+        printf 'compose'
+    else
+        printf 'container'
+    fi
 }
 
 prepare_database_before_init() {
     [[ "$database_mode" == "external" ]] && return 0
     if [[ -z "$database_url" ]]; then
         stage "prepare the database credentials"
-        prepare_database_env "$stack" >/dev/null
-        database_url="$(env_value MONOAGENS_DATABASE_URL)"
-        detail "Postgres URL and password prepared in .env"
+        # Keep `.env` absent until `init` writes it: the wizard's credential step must
+        # not be lost because an installer-owned file made it ask keep/change/replace.
+        local scratch
+        scratch="$(mktemp)"
+        TMP_DIRS+=("$scratch")
+        prepare_database_env "$(database_env_mode)" "$scratch" >/dev/null
+        database_url="$(env_value MONOAGENS_DATABASE_URL "$scratch")"
+        detail "Postgres URL and password prepared"
     fi
 }
 
@@ -942,7 +956,7 @@ prepare_database_after_init() {
     (( dry_run )) && return 0
     [[ "$database_mode" == "external" ]] && return 0
     # A `replace` decision for .env must not drop the generated container password.
-    prepare_database_env "$stack" >/dev/null
+    prepare_database_env "$(database_env_mode)" >/dev/null
 }
 
 bootstrap_identity() {
@@ -1215,7 +1229,7 @@ stage_native_database() {
         stage_selftest
         return 0
     fi
-    mode="$(prepare_database_env native)"
+    mode="$(prepare_database_env container)"
     if [[ "$mode" == "container" ]]; then
         stage_postgres
     fi

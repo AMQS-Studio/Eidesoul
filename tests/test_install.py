@@ -281,6 +281,31 @@ def test_installer_menus_return_the_selected_values(tmp_path):
     ) == "docker"
 
 
+def test_prepare_database_env_marks_a_container_database(tmp_path):
+    env_file = tmp_path / ".env"
+    code = """
+MONOAGENS_INSTALL_SOURCED=1
+source "$1/install.sh"
+dir="$2"
+python_bin="$3"
+prepare_database_env container "$2/.env"
+"""
+    result = subprocess.run(
+        ["bash", "-c", code, "_", str(ROOT), str(tmp_path), sys.executable],
+        env=clean_env(),
+        capture_output=True,
+        text=True,
+        timeout=60,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.strip() == "container"
+    text = env_file.read_text(encoding="utf-8")
+    assert "MONOAGENS_DB_CONTAINER=1" in text
+    assert "POSTGRES_PASSWORD=" in text
+    assert "MONOAGENS_DATABASE_URL=postgresql+psycopg://" in text
+
+
 def test_wait_for_postgres_runs_inside_the_install_directory(tmp_path):
     app = tmp_path / "app"
     app.mkdir()
