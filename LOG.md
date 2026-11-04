@@ -1,5 +1,21 @@
 # LOG
 
+## 2026-11-04 — ADR-0034 decides a prompt-part registry
+
+The prompt is assembled correctly but described three times: sixteen block names in
+`stable_blocks`/`volatile_blocks`, the same names in `PINNED`/`MANDATORY`/`COMPETING`/`ORDER`,
+and twelve keyword arguments at the agent's call site. Adding a block edits four files plus a
+test; a plugin has no prompt surface at all.
+
+ADR-0034 (draft) chooses one `PromptPart` entry per block (`name`, `stable`, `order`, `bonus`,
+`pinned`, `produce`/`text`), one frozen `PromptContext` built per turn, metadata-driven salience,
+and plugin parts as static text declared in `provides.prompt`. The body keeps `prompt_section()`
+as the single `body` part; a gateway gains no second surface. No new module: the registry lives
+in `turn/prompts.py`. It rejects the `Handler` route (permissions/catalog/async are the wrong
+contract) and the store-push route (dependency inversion and a global registry).
+
+Next: `tests/test_prompt_parts.py` and a rebuilt `test_salience.py` before any producer moves.
+
 ## 2026-11-04 — Neutral core lands: culture, transport, and vendor are data
 
 ADR-0033 executed in four waves on top of the required-values commit.
