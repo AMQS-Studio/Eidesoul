@@ -117,3 +117,46 @@ def test_untrusted_header_and_injection_flag(tmp_path, monkeypatch) -> None:
 
     assert result.startswith("fetched: http://public.test/ (text, untrusted)")
     assert "flagged" in result
+
+
+def test_main_content_is_preferred_over_navigation_and_scripts(monkeypatch) -> None:
+    body = (
+        "<html><body><nav>menu yang tidak boleh muncul</nav>"
+        "<main><h1>Judul</h1>"
+        + "<p>Isi utama halaman ini cukup panjang untuk dipakai sebagai bukti riset.</p>" * 5
+        + "<script>jangan pernah baca ini()</script></main>"
+        "<footer>kaki halaman</footer></body></html>"
+    ).encode()
+
+    class Response:
+        status = 200
+        headers: ClassVar[dict[str, str]] = {"Content-Type": "text/html; charset=utf-8"}
+
+        def getheader(self, name):
+            return self.headers.get(name)
+
+        def read(self, size):
+            return body
+
+    class Connection:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def request(self, *args, **kwargs):
+            return None
+
+        def getresponse(self):
+            return Response()
+
+        def close(self):
+            return None
+
+    monkeypatch.setattr(fetch, "_Pinned", Connection)
+    monkeypatch.setattr(fetch, "resolve_addresses", lambda host, port: ["93.184.216.34"])
+    page = asyncio.run(
+        fetch.read_public("http://public.test/", FetchConfig(), max_chars=1000)
+    )
+
+    assert "Isi utama halaman" in page.text
+    assert "menu yang tidak boleh muncul" not in page.text
+    assert "jangan pernah baca" not in page.text

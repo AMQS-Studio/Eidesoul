@@ -9,13 +9,15 @@ import re
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 
-from .. import clock
+from .. import clock, embed
 from ..character import lexicon
 
 SOURCE_TYPES = ("official", "news", "reference", "social", "unknown")
 STATUSES = ("ok", "empty", "failed")
 MAX_QUOTE = 500
 CITATION = re.compile(r"\[R(\d+)\]")
+SENTENCE = re.compile(r"(?<=[.!?])\s+|\n+")
+SUPPORT_FLOOR = 0.75
 # A bare number is often personal or stable; only a dated/measured/currency/score shape
 # forces a search. Ordinary arithmetic stays with the model.
 EXACT = re.compile(
@@ -116,7 +118,9 @@ def build_card(
         url = str(hit.get("href") or hit.get("url") or "").strip()
         if not url:
             continue
-        quote = " ".join(str(hit.get("body") or hit.get("snippet") or "").split())
+        quote = quote_window(
+            str(hit.get("body") or hit.get("snippet") or ""), query
+        )
         sources.append(
             ResearchSource(
                 id=f"R{index}",
@@ -135,6 +139,32 @@ def build_card(
         sources=tuple(sources),
         reason=reason,
     )
+
+
+def quote_window(text: str, query: str, limit: int = MAX_QUOTE) -> str:
+    """Pick the part of a page that is most likely to support the query, capped by `limit`."""
+    body = " ".join(str(text or "").split())
+    if len(body) <= limit:
+        return body
+    terms = {
+        term
+        for term in re.findall(r"[^\W_]+", str(query or "").casefold(), flags=re.UNICODE)
+        if len(term) >= 3
+    }
+    if not terms:
+        return body[:limit].strip()
+    best_start = 0
+    best_score = -1
+    step = max(1, limit // 8)
+    starts = list(range(0, max(1, len(body) - limit + 1), step))
+    if starts[-1] != len(body) - limit:
+        starts.append(len(body) - limit)
+    for start in starts:
+        window = body[start : start + limit].casefold()
+        score = sum(1 for term in terms if term in window)
+        if score > best_score:
+            best_start, best_score = start, score
+    return body[best_start : best_start + limit].strip()
 
 
 def render(card: ResearchCard) -> str:
@@ -170,15 +200,48 @@ def _moment(value: str | None) -> datetime | None:
     return parsed if parsed.tzinfo is not None else parsed.replace(tzinfo=UTC)
 
 
+def _supports(
+    by_id: dict[str, ResearchSource],
+    reply: str,
+    *,
+    require_citation: bool,
+    support_floor: float,
+) -> tuple[bool, str]:
+    """Claim-level citation check; the local MiniLM measures claim/quote support."""
+    for sentence in SENTENCE.split(str(reply or "")):
+        numbers = CITATION.findall(sentence)
+        claim = " ".join(CITATION.sub(" ", sentence).split())
+        if not numbers:
+            if require_citation and EXACT.search(claim):
+                return False, "uncited exact claim"
+            continue
+        if len(claim.split()) < 2:
+            continue
+        quotes = [
+            by_id[f"R{number}"].quote.strip()
+            for number in numbers
+            if by_id[f"R{number}"].quote.strip()
+        ]
+        if not quotes:
+            return False, f"missing quote R{numbers[0]}"
+        vectors = embed.encode([claim, *quotes])
+        if len(vectors) != len(quotes) + 1:
+            return False, "support unavailable"
+        if max(embed.cosine(vectors[0], quote) for quote in vectors[1:]) < support_floor:
+            return False, f"unsupported citation R{numbers[0]}"
+    return True, "ok"
+
+
 def verify(
     card: ResearchCard,
     reply: str,
     *,
     require_citation: bool = True,
     freshness_hours: int = 24,
+    support_floor: float = SUPPORT_FLOOR,
     now: datetime | None = None,
 ) -> tuple[bool, str]:
-    """Deterministic support check: card is usable, citations exist and are fresh."""
+    """Card, citation, freshness, and local claim/quote support; never invents evidence."""
     if card.status != "ok" or not card.sources:
         return False, "no usable source"
     by_id = {source.id: source for source in card.sources}
@@ -197,8 +260,12 @@ def verify(
             and current - published > timedelta(hours=int(freshness_hours))
         ):
             return False, f"stale R{number}"
-    return True, "ok"
-
+    return _supports(
+        by_id,
+        reply,
+        require_citation=require_citation,
+        support_floor=support_floor,
+    )
 
 def retry_prompt(card: ResearchCard, draft: str, failure: str) -> str:
     """One correction attempt; the same card, no new facts."""

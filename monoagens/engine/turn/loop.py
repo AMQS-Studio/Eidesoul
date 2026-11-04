@@ -18,7 +18,7 @@ from ..inbound import CONSENT, Action, Address, GatewayCore, Percept, prompt_sec
 from ..memory import MemoryContext
 from ..registry import allows
 from ..runtime import ACTIVE_GENERATION
-from ..tools.web_search import search
+from ..tools.web_search import collect
 from . import assembly
 from .context import (
     Message,
@@ -425,11 +425,18 @@ class TurnRunner:
                             mode=self.config.research.mode,
                             challenged=challenged,
                         )
-                        research_card = None
-                        if trigger:
+                        research_card = next(
+                            (
+                                card
+                                for card in reversed(tool_ctx.research_cards)
+                                if card.status == "ok" and card.sources
+                            ),
+                            None,
+                        )
+                        if trigger and research_card is None:
                             if allows(tool_ctx.allowed, "web_search"):
                                 try:
-                                    hits = await search(
+                                    hits, fetch_failed = await collect(
                                         tool_ctx,
                                         message.text,
                                         self.config.research.max_results,
@@ -440,6 +447,7 @@ class TurnRunner:
                                         hits,
                                         timezone=self.soul.timezone,
                                         reason=trigger,
+                                        status="failed" if fetch_failed else None,
                                     )
                                 except Exception:
                                     log.exception("research search failed chat=%s", thread_id)

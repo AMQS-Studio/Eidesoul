@@ -21,10 +21,12 @@ Postgres advisory lock, imports a changed file, exports a DB-only change, and ke
 conflict. It runs after seed on `run`, `console`, database seed, and the WhatsApp gateway. No new
 schema and no watcher; `config import`/`export` remain for forced direction.
 
-**Research (ADR-0043, partial)** — deterministic triggers from the language pack, an ephemeral
-`ResearchCard`, rendered untrusted evidence, citation and freshness verification, one correction
-attempt, and abstention. `library/facts` is gone. Automatic page-fetch enrichment and the 40-case
-eval fixture remain open, so the ADR is `partial`.
+**Research (ADR-0043)** — deterministic triggers from the language pack, an ephemeral
+`ResearchCard`, short-snippet page-fetch enrichment with query-focused quotes, local MiniLM
+claim/quote support, citation and freshness verification, one correction attempt, and abstention.
+`library/facts` is gone. The 40-case eval lives in `tests/data/research_cases.yaml`; a real LLM +
+web-search conversation (`glm-5.3-flash`) returned a supported cited answer, and the page path
+fetched live short-snippet sources while tolerating an optional 403.
 
 **Providers (ADR-0044)** — every provider record carries a `wire`, sampling capability, and safety
 capability. OpenAI-compatible providers keep `AsyncOpenAI`; Google uses native
@@ -41,9 +43,8 @@ stays fp32 instead of moving to int8/ONNX. The probe loads MiniLM and the entity
 measures about 928 MiB peak RSS. ADR-0038 remains partial only on the linear semantic head and
 production calibration.
 
-**Verification** — `pytest -q` 857 passed (plus the research regex/tagline focus rerun and the
-privacy-budget rerun); `ruff check` clean; neutral gate clean; ADR check 46/46 (`implemented=41
-partial=5 draft=0`) and translations clean; `uv lock` regenerated.
+**Verification** — `pytest -q` 864 passed; `ruff check` clean; neutral gate clean; ADR check 46/46
+(`implemented=42 partial=4 draft=0`) and translations clean; `uv lock` regenerated.
 
 
 ## 2026-11-04 — ADR-0039 init terminal interface

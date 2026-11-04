@@ -4,6 +4,7 @@
 import asyncio
 import json
 import logging
+import time
 import urllib.parse
 import urllib.request
 
@@ -11,10 +12,19 @@ from ..config import Config
 from ..registry import Handler
 from ..turn.research import build_card, render
 from . import ToolContext, _int
+from . import fetch as fetch_tool
 
 log = logging.getLogger(__name__)
 
 USER_AGENT = "monoagens"
+# The library's auto engine set includes adapters that currently return `None`; yahoo is the
+# adapter that answers in this environment, and it is still an ordinary public result page.
+DDGS_BACKENDS = "yahoo"
+SEARCH_ATTEMPTS = 4
+SEARCH_BACKOFF = 1.5
+SNIPPET_FLOOR = 200
+MAX_FETCHES = 3
+FETCH_CHARS = 4_000
 
 
 def searx_hits(payload: dict, limit: int) -> list[dict]:
@@ -65,10 +75,20 @@ def _search_sync(query: str, limit: int, region: str = "") -> list[dict]:
     from ddgs import DDGS
 
     engine = DDGS(timeout=10)
-    try:
-        hits = engine.text(query, max_results=limit, region=region or None)
-    except Exception:  # a blocked or rate-limited engine must not break the search
-        return []
+    hits: list[dict] = []
+    for attempt in range(SEARCH_ATTEMPTS):
+        try:
+            hits = engine.text(
+                query,
+                max_results=limit,
+                region=region or None,
+                backend=DDGS_BACKENDS,
+            )
+        except Exception:  # a blocked or rate-limited engine must not break the search
+            hits = []
+        if hits or attempt == SEARCH_ATTEMPTS - 1:
+            break
+        time.sleep(SEARCH_BACKOFF)
     found: list[dict] = []
     seen: set[str] = set()
     for hit in hits:
@@ -96,15 +116,66 @@ async def search(ctx: ToolContext, query: str, limit: int) -> list[dict]:
     return results
 
 
+def _quote(hit: dict) -> str:
+    return " ".join(str(hit.get("body") or hit.get("snippet") or "").split())
+
+
+async def enrich(ctx: ToolContext, hits: list[dict]) -> tuple[list[dict], bool]:
+    """Replace short snippets with fetched page text; a failed required fetch fails the card."""
+    config = ctx.config.web_search.fetch
+    if not config.enabled:
+        return list(hits), False
+    results: list[dict] = []
+    fetches = 0
+    failures = 0
+    for hit in hits:
+        if not isinstance(hit, dict):
+            continue
+        url = str(hit.get("href") or hit.get("url") or "").strip()
+        quote = _quote(hit)
+        if url and fetches < MAX_FETCHES and len(quote) < SNIPPET_FLOOR:
+            fetches += 1
+            try:
+                page = await fetch_tool.read_public(
+                    url,
+                    config,
+                    max_chars=FETCH_CHARS,
+                    language=ctx.config.soul.language,
+                )
+            except Exception as exc:  # optional enrichment: keep the snippet and continue
+                failures += 1
+                log.warning(
+                    "research fetch failed url=%s (%s: %s)",
+                    url,
+                    type(exc).__name__,
+                    exc,
+                )
+            else:
+                if page.text and not page.flagged:
+                    hit = {**hit, "href": page.url, "body": page.text}
+        results.append(hit)
+    usable = any(_quote(hit) for hit in results)
+    return results, bool(fetches and failures and not usable)
+
+
+async def collect(ctx: ToolContext, query: str, limit: int) -> tuple[list[dict], bool]:
+    """Search plus optional page enrichment, shared by the tool and the forced research path."""
+    hits = await search(ctx, query, limit)
+    return await enrich(ctx, hits)
+
+
 async def _web_search(args: dict, ctx: ToolContext) -> str:
     query = str(args.get("query", "")).strip()
     if not query:
         return "error: empty query"
+    for card in reversed(ctx.research_cards):
+        if card.query == query and card.status == "ok":
+            return render(card)
     limit = min(
         10,
         max(1, _int(args, "max_results", ctx.config.research.max_results)),
     )
-    results = await search(ctx, query, limit)
+    results, failed = await collect(ctx, query, limit)
     for hit in results:
         if isinstance(hit, dict) and hit.get("published"):
             hit["published_at"] = hit["published"]
@@ -113,6 +184,7 @@ async def _web_search(args: dict, ctx: ToolContext) -> str:
         results,
         timezone=ctx.config.soul.timezone,
         reason="tool",
+        status="failed" if failed else None,
     )
     ctx.research_cards.append(card)
     return render(card)

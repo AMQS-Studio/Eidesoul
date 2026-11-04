@@ -147,9 +147,10 @@ Hard rules for changes in this repo.
   No prompt examples and no character-level map. Other detector data lives in `library/privacy/`,
   `library/safety/`, `library/style/`, `library/affect/`, and `library/intent/`.
 - Stable common knowledge may come from the model prior. Current, specific, local, numeric, disputed,
-  or citation-required claims go through `web_search` and enter the prompt only as an ephemeral
-  `ResearchCard`; personal facts stay in Mem0; a failed search abstains (ADR-0043). Never add a
-  public-fact catalogue or a persistent research table.
+  or citation-required claims go through `web_search`; short snippets are enriched from the fetched
+  page, and evidence enters the prompt only as an ephemeral `ResearchCard`. A local MiniLM support
+  check, the 40-case eval, and abstention on missing evidence are part of the contract (ADR-0043).
+  Personal facts stay in Mem0; never add a public-fact catalogue or a persistent research table.
 - Affect prototypes live in `monoagens/library/affect/<language>.json`: exactly the eight
   `EMOTION_VAD` labels, at least six short casual sentences each, never a name, URL, or phone number.
   `scripts/affect.py --check` gates them.

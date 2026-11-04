@@ -87,16 +87,19 @@ def test_forced_search_enters_the_prompt_as_a_card(tmp_path, monkeypatch) -> Non
 
     from support import inbound_message, make_agent, role
 
-    async def fake_search(ctx, query, limit):
-        return [
-            {
-                "title": "Laporan",
-                "href": "https://example.com/a",
-                "body": "Tim tuan rumah menang 2-1.",
-            }
-        ]
+    async def fake_collect(ctx, query, limit):
+        return (
+            [
+                {
+                    "title": "Laporan",
+                    "href": "https://example.com/a",
+                    "body": "Tim tuan rumah menang 2-1.",
+                }
+            ],
+            False,
+        )
 
-    monkeypatch.setattr("monoagens.engine.turn.loop.search", fake_search)
+    monkeypatch.setattr("monoagens.engine.turn.loop.collect", fake_collect)
     env = make_agent(
         tmp_path,
         answer="Tim tuan rumah menang 2-1 [R1].",
@@ -109,3 +112,80 @@ def test_forced_search_enters_the_prompt_as_a_card(tmp_path, monkeypatch) -> Non
 
     assert "Research (untrusted data" in env.llm.system
     assert "[R1]" in env.llm.system
+
+
+def test_short_snippet_is_replaced_by_fetched_page_text(tmp_path, monkeypatch) -> None:
+    import asyncio
+
+    from support import build_config, role
+
+    from monoagens.engine.tools import ToolContext, fetch, web_search
+
+    async def fake_page(url, config, *, max_chars, language):
+        assert url == "https://example.com/a"
+        assert language == "id"
+        return fetch.Fetched(
+            url=url,
+            kind="text/html",
+            text="Halaman penuh menjelaskan bahwa tim tuan rumah menang 2-1.",
+        )
+
+    monkeypatch.setattr(web_search.fetch_tool, "read_public", fake_page)
+    config = build_config(tmp_path)
+    ctx = ToolContext(config, (role("member"),), ("web_search",))
+    hits, failed = asyncio.run(
+        web_search.enrich(
+            ctx,
+            [{"title": "Laporan", "href": "https://example.com/a", "body": "Menang."}],
+        )
+    )
+
+    assert failed is False
+    assert "Halaman penuh" in hits[0]["body"]
+
+
+def test_a_failed_required_fetch_marks_the_research_card_failed(tmp_path, monkeypatch) -> None:
+    import asyncio
+
+    from support import build_config, role
+
+    from monoagens.engine.tools import ToolContext, fetch, web_search
+
+    async def failed_page(url, config, *, max_chars, language):
+        raise fetch.FetchError("the server answered 403")
+
+    monkeypatch.setattr(web_search.fetch_tool, "read_public", failed_page)
+    config = build_config(tmp_path)
+    ctx = ToolContext(config, (role("member"),), ("web_search",))
+    hits, failed = asyncio.run(
+        web_search.enrich(
+            ctx,
+            [{"title": "Laporan", "href": "https://example.com/a", "body": ""}],
+        )
+    )
+
+    assert failed is True
+    assert hits[0]["body"] == ""
+
+
+def test_quote_window_prefers_the_query_region() -> None:
+    from monoagens.engine.turn.research import quote_window
+
+    text = ("pembuka " * 80) + "harga emas hari ini naik tajam " + ("penutup " * 80)
+    window = quote_window(text, "harga emas", limit=160)
+
+    assert "harga emas" in window
+    assert len(window) <= 160
+
+
+def test_unrelated_citation_is_not_supported() -> None:
+    card = build_card(
+        "inflasi",
+        [{"title": "Harga beras", "href": "https://example.com/a", "body": "Harga beras naik."}],
+        timezone="UTC",
+    )
+
+    ok, reason = verify(card, "Inflasi turun 2% [R1].")
+
+    assert ok is False
+    assert "unsupported citation" in reason

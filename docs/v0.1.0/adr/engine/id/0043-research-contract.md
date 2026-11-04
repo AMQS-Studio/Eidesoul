@@ -1,4 +1,4 @@
-> Terjemahan turunan — jangan sunting; sumber: engine/0043-research-contract.md (sha256: ca7e0a6d245c)
+> Terjemahan turunan — jangan sunting; sumber: engine/0043-research-contract.md (sha256: 0b9e6a0f8b8f)
 
 # ADR-0043: Kontrak Riset — Prior Model, Websearch, dan ResearchCard Ephemeral
 
@@ -8,7 +8,7 @@
 - **Konteks:** mengikuti ADR-0021 (output tool dan `fetch`), ADR-0033 (core netral), ADR-0034 (prompt parts), ADR-0038 (privasi), dan ADR-0041 (konfigurasi voice); menghapus pemakaian runtime fact pack lokal untuk pengetahuan publik dan menetapkan kapan model boleh menjawab dari prior, kapan wajib mencari, dan bagaimana bukti search masuk ke satu turn.
 - **Supersedes:** —
 - **Terkait:** ADR-0001 (sumber kebenaran memori), ADR-0019 (observability), ADR-0021 (output tool), ADR-0027 (clean by default), ADR-0031 (struktur modul), ADR-0033 (core netral), ADR-0034 (prompt parts), ADR-0038 (privasi), ADR-0041 (konfigurasi voice)
-- **Implementasi:** partial — trigger, card, verifier sitasi/freshness, dan abstain sudah live; enrich fetch halaman otomatis dan fixture eval 40 kasus belum.
+- **Implementasi:** implemented — trigger deterministik, `ResearchCard` ephemeral, enrich fetch halaman, pemeriksaan sitasi/freshness, dukungan klaim/quote lewat MiniLM lokal, satu percobaan koreksi, dan abstention sudah live. Eval 40 kasus ada di `tests/data/research_cases.yaml` dengan `tests/test_research_eval.py` sebagai harness-nya.
 - **Catatan lokasi:** kontrak mengikat turn engine dan tool-nya, jadi ADR ini duduk di `adr/engine/`. Salinan Indonesia di `docs/v0.1.0/adr/engine/id/0043-research-contract.md`.
 
 ---
@@ -137,7 +137,7 @@ Field:
 
 Tidak ada field `confidence`. Confidence adalah penilaian policy, bukan pengukuran; card mengekspos bukti, dan verifier memutuskan apakah bukti mendukung klaim.
 
-`status: empty` berarti provider tidak mengembalikan hasil. `status: failed` berarti provider atau fetch gagal. Keduanya terminal untuk turn kecuali retry dikonfigurasi; keduanya tidak boleh diganti card yang dikarang.
+`status: empty` berarti provider tidak mengembalikan hasil. `status: failed` berarti provider gagal atau tidak ada quote yang bisa dipakai setelah enrichment. Keduanya terminal untuk turn kecuali retry dikonfigurasi; keduanya tidak boleh diganti card yang dikarang.
 
 ### 4.4 Rendering dan pemakaian prompt
 
@@ -165,13 +165,13 @@ Instruksi prompt bukan penegakan. Jalur turn:
 
 1. **Trigger** — klasifikasikan pesan dengan aturan deterministik di §4.2. `always` boleh memaksa search; `off` untuk test dan operasi offline.
 2. **Search** — panggil `web_search` dengan query yang menyertakan entitas, peristiwa, dan tanggal bila relevan. Panggilan harus membawa parameter freshness/limit yang didefinisikan di §5.
-3. **Fetch** — bila snippet tidak cukup, fetch URL hasil. Card mencatat teks hasil fetch atau quote; kegagalan fetch meninggalkan `status: failed`.
-4. **Card** — bangun satu card. Jangan menambahkan output search sebagai teks lepas.
+3. **Fetch** — snippet di bawah 200 karakter dianggap tidak cukup. Fetch maksimal tiga URL hasil, ekstrak konten utama halaman, lalu ganti snippet itu; kegagalan fetch opsional mempertahankan snippet. Card hanya `failed` bila tidak ada quote yang bisa dipakai.
+4. **Card** — bangun satu card. Quote dipilih di sekitar istilah query dan dibatasi 500 karakter; jangan menambahkan output search sebagai teks lepas.
 5. **Generate** — inject card yang dirender sebagai bagian riset volatile. Model menjawab dengan sitasi untuk klaim current.
-6. **Verify** — periksa bahwa setiap klaim faktual current punya `[Rn]` dan quote pendukung. Bila tidak, regenerate sekali dengan card yang sama; bila masih gagal, abstain.
+6. **Verify** — periksa bahwa setiap klaim faktual current punya `[Rn]` dan quote pendukung. Kalimat bersitasi dibandingkan dengan quote yang dikutip lewat MiniLM bersama; cosine terbaik harus mencapai 0,75. Klaim exact tanpa sitasi juga gagal. Bila verifikasi gagal, regenerate sekali dengan card yang sama; bila masih gagal, abstain.
 7. **Trace** — catat card, sitasi, alasan trigger, dan hasil verifikasi bersama turn. Trace adalah bukti audit, bukan memori.
 
-Tool gate berada di turn loop, bukan di prompt. Bila trigger aktif dan tidak ada panggilan search, turn tidak boleh menghasilkan jawaban fakta current.
+Tool gate berada di turn loop, bukan di prompt. Bila trigger aktif dan tidak ada panggilan search, turn tidak boleh menghasilkan jawaban fakta current. Verifier memakai satu MiniLM lokal yang sudah diwajibkan ADR-0038; ia tidak memanggil model eksternal. Card sukses yang dihasilkan selama turn dipakai ulang, bukan mencari untuk kedua kalinya.
 
 ### 4.6 Tanpa persistensi
 
@@ -221,23 +221,23 @@ engine:
 | `python scripts/adr.py --check` | lulus |
 | `python scripts/adr.py --translate-check` | lulus |
 
-Eval set adalah fixture test, bukan data library: minimal 40 kasus mencakup fakta current, fakta stabil, hasil kosong, hasil basi, sumber bertentangan, dan teks injection. Ia disimpan bersama test dan diperbarui bersama kontrak, bukan dengan korpus riset.
+Eval set adalah fixture test, bukan data library: `tests/data/research_cases.yaml` berisi 40 kasus yang mencakup fakta current, fakta stabil, hasil kosong, hasil basi, sitasi tidak didukung, quote hilang, dan teks injection. Harness-nya `tests/test_research_eval.py`; ia melaporkan recall trigger, laju tanpa-search pada fakta stabil, presisi/recall sitasi, abstention, penolakan sumber basi, dan rendering injection. Fixture diperbarui bersama kontrak, bukan dengan korpus riset.
 
 ## 7. Kriteria penerimaan
 
-- [ ] Tidak ada jalur runtime yang membaca `library/facts/*.json` untuk pengetahuan publik.
-- [ ] Fakta umum stabil boleh dijawab dari prior model tanpa search.
-- [ ] Klaim current, spesifik, lokal, numerik, disputed, atau butuh sitasi memicu `web_search`.
-- [ ] Search wajib yang tidak mengembalikan apa pun menghasilkan abstention, bukan jawaban prior model.
-- [ ] Hasil search masuk ke prompt hanya sebagai `ResearchCard` yang dirender.
-- [ ] Setiap klaim current di jawaban terverifikasi mengutip id yang ada di card.
-- [ ] Sumber basi (`published_at` lebih tua dari `freshness_hours`) tidak bisa mendukung klaim current.
-- [ ] Card `empty` atau `failed` tidak bisa mendukung klaim current.
-- [ ] Instruksi di dalam sumber diperlakukan sebagai data untrusted.
-- [ ] Card tidak dipersistenkan; tidak ada migrasi atau tabel baru.
-- [ ] Mode `off`, `auto`, dan `always` punya test.
-- [ ] Trace turn mencatat alasan trigger, card, sitasi, dan hasil verifikasi.
-- [ ] Voice bukan bagian dari keputusan ini.
+- [x] Tidak ada jalur runtime yang membaca `library/facts/*.json` untuk pengetahuan publik.
+- [x] Fakta umum stabil boleh dijawab dari prior model tanpa search.
+- [x] Klaim current, spesifik, lokal, numerik, disputed, atau butuh sitasi memicu `web_search`.
+- [x] Search wajib yang tidak mengembalikan apa pun menghasilkan abstention, bukan jawaban prior model.
+- [x] Hasil search masuk ke prompt hanya sebagai `ResearchCard` yang dirender.
+- [x] Setiap klaim current di jawaban terverifikasi mengutip id yang ada di card.
+- [x] Sumber basi (`published_at` lebih tua dari `freshness_hours`) tidak bisa mendukung klaim current.
+- [x] Card `empty` atau `failed` tidak bisa mendukung klaim current.
+- [x] Instruksi di dalam sumber diperlakukan sebagai data untrusted.
+- [x] Card tidak dipersistenkan; tidak ada migrasi atau tabel baru.
+- [x] Mode `off`, `auto`, dan `always` punya test.
+- [x] Trace turn mencatat alasan trigger, card, sitasi, dan hasil verifikasi.
+- [x] Voice bukan bagian dari keputusan ini.
 
 ## 8. Risiko dan mitigasi
 
@@ -273,19 +273,15 @@ Eval set adalah fixture test, bukan data library: minimal 40 kasus mencakup fakt
 
 ## 10. Referensi kode
 
-- `monoagens/engine/turn/prompts.py:218-229` — `research_block()`: instruksi prompt saat ini dan batasnya.
-- `monoagens/engine/turn/prompts.py:477` — bagian riset sudah menjadi prompt part; card menjadi input volatile-nya.
-- `monoagens/engine/tools/web_search.py:84-118` — `_web_search` dan schema `query`/`max_results` saat ini; belum ada parameter freshness.
-- `monoagens/engine/tools/fetch.py:205-240` — `_fetch` mengembalikan teks untrusted dan menandai injection.
-- `monoagens/engine/tools/fetch.py:244-257` — handler `fetch` dan batas output-nya.
-- `monoagens/engine/config.py:202-220` — `FetchConfig` dan `WebSearchConfig`; section host yang dipakai ulang ADR ini.
-- `monoagens/engine/turn/loop.py:410-413` — pemilihan fakta lokal saat ini memberi makan `character_block`.
-- `monoagens/engine/turn/loop.py:500-519` — turn memanggil model dengan spec tool dan tool context.
-- `monoagens/engine/tools/__init__.py:335-365` — `execute()` adalah satu-satunya gate tool untuk izin, argumen, dan batas output.
-- `monoagens/engine/character/knowledge.py:176-200` — `select_facts()` adalah jalur pemilihan fakta lokal yang dihapus dari runtime oleh ADR ini.
-- `tests/test_prompts_status.py:216-226` — test yang ada untuk `research_block()`.
-- `usulan` — `monoagens/engine/turn/research.py`: klasifikasi trigger, pembangunan/rendering card, dan verifier.
-- `usulan` — `tests/test_research_contract.py`: fixture kontrak 40 kasus dan gate di §6.
+- `monoagens/engine/turn/research.py` — klasifikasi trigger, `quote_window()`, pembangunan/rendering card, dan verifier sitasi/freshness/dukungan.
+- `monoagens/engine/tools/web_search.py` — backend search, enrichment snippet, dan pemakaian ulang card.
+- `monoagens/engine/tools/fetch.py` — `read_public()` mengembalikan teks halaman terstruktur, terekstrak, dan untrusted; renderer tool tetap kontrak publik `fetch`.
+- `monoagens/engine/config.py` — `FetchConfig`, `WebSearchConfig`, dan `ResearchConfig`.
+- `monoagens/engine/turn/loop.py` — trigger, forced search, pemakaian ulang card, verifikasi, retry, dan abstention.
+- `monoagens/engine/tools/__init__.py` — `execute()` tetap satu-satunya gate tool untuk izin, argumen, dan batas output.
+- `tests/test_research_contract.py` — unit trigger, card, enrichment, dan verifier.
+- `tests/test_research_eval.py` — harness eval 40 kasus dan gate di §6.
+- `tests/data/research_cases.yaml` — 40 kasus berlabel.
 
 ---
 

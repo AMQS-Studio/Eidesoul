@@ -33,8 +33,9 @@ MonoAgens checklist. Every item is done when the listed surface exists and works
 - [x] Character data is `persona` + `examples` + the model; no `library/patterns`,
       `library/facts`, `library/severity`, `select_patterns`, `select_facts`, or `regulate`.
 - [x] `library/lexicon` holds detector lists only; no prompt examples or level map.
-- [x] Research uses a deterministic trigger, one ephemeral `ResearchCard`, citation/freshness
-      verification, and an abstain when no usable source exists; no table or migration.
+- [x] Research uses a deterministic trigger, one ephemeral `ResearchCard`, page-fetch enrichment,
+      local MiniLM claim/quote support, citation/freshness verification, a 40-case eval, and an
+      abstain when no usable source exists; no table or migration.
 - [x] Native Gemini `generateContent` carries `safetySettings`/`topK`; OpenAI-compatible providers
       keep the existing wire; Anthropic native stays deferred by ADR-0044.
 

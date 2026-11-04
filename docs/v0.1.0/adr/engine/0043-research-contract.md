@@ -6,7 +6,7 @@
 - **Context:** follows ADR-0021 (tool output and `fetch`), ADR-0033 (neutral core), ADR-0034 (prompt parts), ADR-0038 (privacy), and ADR-0041 (voice configuration); removes the runtime use of local fact packs for public knowledge and defines when the model may answer from its prior, when it must search, and how search evidence enters a turn.
 - **Supersedes:** —
 - **Related:** ADR-0001 (memory source of truth), ADR-0019 (observability), ADR-0021 (tool output), ADR-0027 (clean by default), ADR-0031 (module structure), ADR-0033 (neutral core), ADR-0034 (prompt parts), ADR-0038 (privacy), ADR-0041 (voice configuration)
-- **Implementation:** partial — trigger, card, citation/freshness verifier, and abstention are live; automatic page fetch enrichment and the 40-case eval fixture remain.
+- **Implementation:** implemented — deterministic trigger, an ephemeral `ResearchCard`, page-fetch enrichment, citation/freshness checks, local MiniLM claim/quote support, one correction attempt, and abstention are live. The 40-case eval is `tests/data/research_cases.yaml` with `tests/test_research_eval.py` as its harness.
 - **Location note:** the contract binds the engine turn and its tools, so this ADR sits under `adr/engine/`. The Indonesian copy is `docs/v0.1.0/adr/engine/id/0043-research-contract.md`.
 
 ---
@@ -135,7 +135,7 @@ Fields:
 
 There is no `confidence` field. Confidence is a policy judgement, not a measurement; the card exposes evidence, and the verifier decides whether the evidence supports the claim.
 
-`status: empty` means the provider returned no result. `status: failed` means the provider or fetch failed. Both are terminal for the turn unless a retry is configured; neither may be replaced by a fabricated card.
+`status: empty` means the provider returned no result. `status: failed` means the provider failed or no usable quote remains after enrichment. Both are terminal for the turn unless a retry is configured; neither may be replaced by a fabricated card.
 
 ### 4.4 Rendering and prompt use
 
@@ -163,13 +163,13 @@ A prompt instruction is not the enforcement. The turn path is:
 
 1. **Trigger** — classify the message with the deterministic rules in §4.2. `always` may force a search; `off` is for tests and offline operation.
 2. **Search** — call `web_search` with a query that includes the entity, event, and date where relevant. The call must carry the freshness/limit parameters defined in §5.
-3. **Fetch** — when a snippet is insufficient, fetch the result URL. The card records the fetched text or a quote; a fetch failure leaves `status: failed`.
-4. **Card** — build one card. Do not append search output as loose text.
+3. **Fetch** — a snippet shorter than 200 characters is insufficient. Fetch up to three result URLs, extract the main page content, and replace that snippet; a failed optional fetch keeps the snippet. The card is `failed` only when no usable quote remains.
+4. **Card** — build one card. The quote is selected around the query terms and capped at 500 characters; do not append search output as loose text.
 5. **Generate** — inject the rendered card as the volatile research part. The model answers with citations for current claims.
-6. **Verify** — check that every current factual claim has a supporting `[Rn]` and quote. If not, regenerate once with the same card; if it still fails, abstain.
+6. **Verify** — check that every current factual claim has a supporting `[Rn]` and quote. A cited sentence is compared with its cited quotes through the shared MiniLM; the best cosine must reach 0.75. An exact claim without a citation also fails. If verification fails, regenerate once with the same card; if it still fails, abstain.
 7. **Trace** — record the card, citations, trigger reason, and verification result with the turn. The trace is audit evidence, not memory.
 
-The tool gate belongs in the turn loop, not in a prompt. If the trigger is active and no search call was made, the turn must not produce a current-fact answer.
+The tool gate belongs in the turn loop, not in a prompt. If the trigger is active and no search call was made, the turn must not produce a current-fact answer. The verifier uses the one local MiniLM already required by ADR-0038; it calls no external model. A successful card produced during the turn is reused instead of searching a second time.
 
 ### 4.6 No persistence
 
@@ -219,23 +219,23 @@ Existing `web_search.base_url`, `web_search.region`, `web_search.timeout_seconds
 | `python scripts/adr.py --check` | pass |
 | `python scripts/adr.py --translate-check` | pass |
 
-The eval set is a test fixture, not a data library: at least 40 cases covering current facts, stable facts, empty results, stale results, contradictory sources, and injection text. It is stored with the tests and updated with the contract, not with a research corpus.
+The eval set is a test fixture, not a data library: `tests/data/research_cases.yaml` has 40 cases covering current facts, stable facts, empty results, stale results, unsupported citations, missing quotes, and injection text. The harness is `tests/test_research_eval.py`; it reports the trigger recall, stable no-search rate, citation precision/recall, abstention, stale rejection, and injection rendering. The fixture is updated with the contract, not with a research corpus.
 
 ## 7. Acceptance criteria
 
-- [ ] No runtime path reads `library/facts/*.json` for public knowledge.
-- [ ] Stable common facts may be answered from the model prior without a search.
-- [ ] Current, specific, local, numeric, disputed, or citation-required claims trigger `web_search`.
-- [ ] A required search that returns nothing produces an abstention, not a model-prior answer.
-- [ ] The search result enters the prompt only as a rendered `ResearchCard`.
-- [ ] Every current claim in a verified answer cites an id that exists in the card.
-- [ ] A stale source (`published_at` older than `freshness_hours`) cannot support a current claim.
-- [ ] A card marked `empty` or `failed` cannot support a current claim.
-- [ ] Instructions inside a source are treated as untrusted data.
-- [ ] The card is not persisted; no migration or table is added.
-- [ ] `off`, `auto`, and `always` modes have tests.
-- [ ] The turn trace records the trigger reason, card, citations, and verification result.
-- [ ] Voice is not part of this decision.
+- [x] No runtime path reads `library/facts/*.json` for public knowledge.
+- [x] Stable common facts may be answered from the model prior without a search.
+- [x] Current, specific, local, numeric, disputed, or citation-required claims trigger `web_search`.
+- [x] A required search that returns nothing produces an abstention, not a model-prior answer.
+- [x] The search result enters the prompt only as a rendered `ResearchCard`.
+- [x] Every current claim in a verified answer cites an id that exists in the card.
+- [x] A stale source (`published_at` older than `freshness_hours`) cannot support a current claim.
+- [x] A card marked `empty` or `failed` cannot support a current claim.
+- [x] Instructions inside a source are treated as untrusted data.
+- [x] The card is not persisted; no migration or table is added.
+- [x] `off`, `auto`, and `always` modes have tests.
+- [x] The turn trace records the trigger reason, card, citations, and verification result.
+- [x] Voice is not part of this decision.
 
 ## 8. Risks and mitigations
 
@@ -271,19 +271,15 @@ The eval set is a test fixture, not a data library: at least 40 cases covering c
 
 ## 10. Code references
 
-- `monoagens/engine/turn/prompts.py:218-229` — `research_block()`: the current prompt instruction and its limits.
-- `monoagens/engine/turn/prompts.py:477` — the research part is already a prompt part; the card becomes its volatile input.
-- `monoagens/engine/tools/web_search.py:84-118` — `_web_search` and its current `query`/`max_results` schema; no freshness parameter yet.
-- `monoagens/engine/tools/fetch.py:205-240` — `_fetch` returns untrusted text and flags injection.
-- `monoagens/engine/tools/fetch.py:244-257` — the `fetch` handler and its output cap.
-- `monoagens/engine/config.py:202-220` — `FetchConfig` and `WebSearchConfig`; the host section this ADR reuses.
-- `monoagens/engine/turn/loop.py:410-413` — local fact selection currently feeds `character_block`.
-- `monoagens/engine/turn/loop.py:500-519` — the turn calls the model with the tool specs and the tool context.
-- `monoagens/engine/tools/__init__.py:335-365` — `execute()` is the single tool gate for permissions, arguments, and output caps.
-- `monoagens/engine/character/knowledge.py:176-200` — `select_facts()` is the current local fact selection path that this ADR removes from runtime use.
-- `tests/test_prompts_status.py:216-226` — existing tests for `research_block()`.
-- `usulan` — `monoagens/engine/turn/research.py`: trigger classification, card construction/rendering, and verifier.
-- `usulan` — `tests/test_research_contract.py`: the 40-case contract fixture and the gates in §6.
+- `monoagens/engine/turn/research.py` — trigger classification, `quote_window()`, card construction/rendering, and the citation/freshness/support verifier.
+- `monoagens/engine/tools/web_search.py` — search backends, snippet enrichment, and card reuse.
+- `monoagens/engine/tools/fetch.py` — `read_public()` returns structured, extracted, untrusted page text; the tool renderer remains the public `fetch` contract.
+- `monoagens/engine/config.py` — `FetchConfig`, `WebSearchConfig`, and `ResearchConfig`.
+- `monoagens/engine/turn/loop.py` — the trigger, forced search, card reuse, verification, retry, and abstention path.
+- `monoagens/engine/tools/__init__.py` — `execute()` remains the single tool gate for permissions, arguments, and output caps.
+- `tests/test_research_contract.py` — trigger, card, enrichment, and verifier units.
+- `tests/test_research_eval.py` — the 40-case eval harness and the gates in §6.
+- `tests/data/research_cases.yaml` — the 40 labeled cases.
 
 ---
 
