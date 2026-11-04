@@ -274,13 +274,16 @@ def test_missing_pack_degrades_and_never_borrows(tmp_path) -> None:
         assert "Only role=bot lines are words you actually typed." in prompt
         assert "Attribute carefully" not in character_block((2, 1), language="en")
         # Without stopwords, block selection falls back to length (the longest block goes first).
-        kept, dropped = salience.select(
-            {"base": "b" * 10, "topic": "t" * 40, "memory": "m" * 40},
-            max_chars=55,
-            language="en",
-        )
+        from eidesoul.engine.turn.prompts import PromptPart
+
+        blocks = [
+            (PromptPart("base", False, 0, pinned=True, text="b" * 10), "b" * 10),
+            (PromptPart("topic", False, 1, text="t" * 40), "t" * 40),
+            (PromptPart("memory", False, 2, text="m" * 40), "m" * 40),
+        ]
+        kept, dropped = salience.select(blocks, max_chars=55, language="en")
         assert dropped == ["topic"]
-        assert [name for name, _ in kept] == ["base", "memory"]
+        assert [item.name for item, _ in kept] == ["base", "memory"]
     finally:
         lexicon.configure(None)
 

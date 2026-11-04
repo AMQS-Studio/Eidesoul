@@ -296,7 +296,7 @@ def test_tool_discovery_and_role_grants(tmp_path, monkeypatch) -> None:
             encoding="utf-8"
         )
     )["roles"]
-    assert "google" in live["member"]["tools"]
+    assert "google" not in live["member"]["tools"]
     assert "mcp__*" not in live["member"]["tools"]
 
 

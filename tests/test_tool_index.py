@@ -73,17 +73,19 @@ def test_a_duplicate_inside_one_body_is_a_boot_failure(tmp_path) -> None:
 
 
 def test_the_prompt_names_the_other_bodies_once(tmp_path) -> None:
-    from eidesoul.engine.turn.prompts import system_prompt
+    from eidesoul.engine.turn.prompts import PromptContext, system_prompt
 
     gateway = FakeGateway(name="a", tools=[handler("speak")])
     env = make_agent(tmp_path, gateway=gateway)
-    prompt = system_prompt(
-        env.config,
-        (env.config.roles.get("member"),),
+    roles = (env.config.roles.get("member"),)
+    context = PromptContext(
+        config=env.config,
+        roles=roles,
         tools=env.agent.tool_index.registry("a"),
         commands=env.agent.commands,
         bodies=env.agent.tool_index.other_bodies("a"),
     )
+    prompt = system_prompt(env.config, roles, context=context)
 
     assert "other bodies:" not in prompt
     index = env.agent.tool_index

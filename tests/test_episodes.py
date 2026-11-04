@@ -17,7 +17,9 @@ PERSON = "628111"
 OTHER = "222@g.us"
 
 
-def seed_turn(db, turn_id: str, *, thread: str = THREAD, created: float, tools=()) -> None:
+def seed_turn(
+    db, turn_id: str, *, thread: str = THREAD, created: float, tools=(), app: str = ""
+) -> None:
     with db.connect() as conn:
         db.upsert(
             conn,
@@ -29,6 +31,7 @@ def seed_turn(db, turn_id: str, *, thread: str = THREAD, created: float, tools=(
                     "person_id": PERSON,
                     "status": "delivered",
                     "step": "delivered",
+                    "app": app,
                     "attempt": 1,
                     "lease_owner": "",
                     "lease_until": 0.0,
@@ -209,3 +212,6 @@ def test_the_signature_names_scope_tools_and_target_types() -> None:
     signature = episodes._signature(steps, "t")
 
     assert signature == "scope=thread;tools=read,send;targets=file,room"
+    assert episodes._signature(steps, "t", "a") == (
+        "scope=thread;app=a;tools=read,send;targets=file,room"
+    )

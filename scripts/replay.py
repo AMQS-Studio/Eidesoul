@@ -45,7 +45,7 @@ from eidesoul.engine.turn.context import (
     Message,
     build_user_content,
 )
-from eidesoul.engine.turn.prompts import character_block, system_prompt
+from eidesoul.engine.turn.prompts import PromptContext, system_prompt
 from eidesoul.engine.turn.reply import clean_prose, human_chunks, strip_blocks
 
 SCENARIOS = ROOT / "tests" / "data" / "scenarios.json"
@@ -197,17 +197,11 @@ async def reply_once(
         registers=style.registers,
         lexicon=lexicon,
     )
-    block = character_block(
-        limits,
-        jabs=config.character.roast_jabs,
-        patterns=patterns,
-        language=config.soul.language,
-    )
-    system = system_prompt(
-        config,
-        (Role("owner"),),
+    context = PromptContext(
+        config=config,
+        roles=(Role("owner"),),
         runtime=RuntimeFacts(mode="primary", gateways=("replay",), db_label="replay"),
-        gateway_hints=(
+        body_section=(
             "## Chat interface\n- WhatsApp formatting only: *bold*, _italic_. No headings."
         ),
         sender=current.sender_name,
@@ -216,8 +210,11 @@ async def reply_once(
         tone="neutral",
         decision_reason="replay turn; reply",
         query=current.text,
-        character=block,
+        language=config.soul.language,
+        limits=limits,
+        patterns=patterns,
     )
+    system = system_prompt(config, context.roles, context=context)
     content = await build_user_content(
         config,
         f"replay-{'dm' if scenario['chat'] == 'dm' else 'group'}",

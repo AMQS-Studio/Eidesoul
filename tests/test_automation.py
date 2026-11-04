@@ -12,14 +12,10 @@ from support import inbound_message, make_agent
 
 from eidesoul.engine.access.relay import RelayStore
 from eidesoul.engine.access.roles import Role
-from eidesoul.engine.jobs.automation import (
-    AutomationStore,
-    AutomationWorker,
-    ManifestError,
-    describe,
-    next_after,
-    occurrence_key,
-)
+from eidesoul.engine.jobs.automation_manifest import describe, validate_manifest
+from eidesoul.engine.jobs.automation_store import AutomationStore
+from eidesoul.engine.jobs.automation_worker import AutomationWorker
+from eidesoul.engine.jobs.schedule import ManifestError, next_after, occurrence_key
 from eidesoul.engine.schema import automation_runs, automations, outbound_messages
 
 OWNER = "628111"
@@ -434,7 +430,6 @@ def test_clean_shutdown_marks_interrupted_and_boot_resumes_it(tmp_path) -> None:
 
 def test_describe_names_event_steps_and_policy(tmp_path) -> None:
     env = build(tmp_path)
-    from eidesoul.engine.jobs.automation import validate_manifest
 
     described = describe(validate_manifest(manifest(), env.agent.config.automations))
     assert "at 10:00" in described

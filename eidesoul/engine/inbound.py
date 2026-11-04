@@ -20,7 +20,7 @@ a hint the body cannot supply. The known keys:
 * `group` — the thread has more than two participants.
 * `presence` — the body observed activity without a message.
 * `self` — the message came from the body's own account (never a turn).
-* `roles` — role names the body declares for this turn (local console only).
+* `app` — the application this message belongs to (ADR-0035); optional.
 
 Minimal body::
 
@@ -47,7 +47,7 @@ from uuid import uuid4
 from .registry import Handler
 from .turn.context import Message
 
-HINT_KEYS = frozenset({"dm", "mention", "reply", "group", "presence", "self", "roles"})
+HINT_KEYS = frozenset({"dm", "mention", "reply", "group", "presence", "self", "app"})
 
 CONSENT = "consent"
 AUTHORIZATION = "authorization"

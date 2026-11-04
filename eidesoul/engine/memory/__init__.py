@@ -26,6 +26,8 @@ class MemoryHit:
     kind: str = "fact"
     trust: int = 1
     state: str = "ok"
+    privacy_evidence: tuple[dict, ...] = ()
+    privacy_policy: str = ""
 
 
 @dataclass(frozen=True)

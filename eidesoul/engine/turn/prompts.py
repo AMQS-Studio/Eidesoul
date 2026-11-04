@@ -2,8 +2,12 @@
 
 
 
+import re
+from collections.abc import Callable, Sequence
+from dataclasses import dataclass, field
+
 from .. import clock
-from ..access.roles import Role
+from ..access.roles import Role, privileged
 from ..character import lexicon
 from ..config import Config
 from ..runtime import RuntimeFacts
@@ -33,13 +37,68 @@ class Prompt(str):
         return prompt
 
 
+@dataclass(frozen=True)
+class PromptPart:
+    """One prompt block: its name, cache side, order, salience, and producer (ADR-0034)."""
+
+    name: str
+    stable: bool
+    order: int
+    bonus: float = 0.0
+    pinned: bool = False
+    produce: Callable[[PromptContext], str] | None = None
+    text: str = ""
+
+
+@dataclass(frozen=True)
+class PromptContext:
+    """The explicit data dependency of the prompt producers; built once per turn."""
+
+    config: Config
+    roles: tuple[Role, ...]
+    runtime: RuntimeFacts | None = None
+    query: str = ""
+    thread_id: str = ""
+    person_id: str = ""
+    direct: bool = False
+    body_section: str = ""
+    language: str = ""
+    limits: tuple[int, int] = (3, 2)
+    patterns: list[str] = field(default_factory=list)
+    facts: list[str] = field(default_factory=list)
+    affect: str = ""
+    style: str = ""
+    vibe: str = ""
+    topic: str = ""
+    away: str = ""
+    emotion: str = ""
+    memory: str = ""
+    actions: str = ""
+    skills: str = ""
+    tools: object | None = None
+    commands: object | None = None
+    bodies: tuple[str, ...] = ()
+    sender: str = ""
+    mode: str = "daily"
+    tone: str = "neutral"
+    decision_reason: str = ""
+    safety: str = ""
+    person_style: str = ""
+    bonuses: dict[str, float] = field(default_factory=dict)
+
+
+PROMPT_PART_MAX = 1200
+CORE_NAME = re.compile(r"^[a-z][a-z0-9_]{0,63}$")
+PLUGIN_NAME = re.compile(r"^plugin:[a-z0-9][a-z0-9-]{0,63}:[a-z][a-z0-9_]{0,63}$")
+
+
 def _infra_visible(roles: tuple[Role, ...], mode: str) -> bool:
     """ADR-0015 §4.5: infrastructure facts stay in the administrator context."""
     if mode == "never":
         return False
     if mode == "always":
         return True
-    return any(role.protected or "*" in (role.tools or ()) for role in roles)
+    return any(privileged(role) for role in roles)
 
 
 def _capability_index(
@@ -241,37 +300,10 @@ def self_block(
     return "\n".join(lines)
 
 
-def system_prompt(
-    config: Config,
-    roles: tuple[Role, ...],
-    *,
-    runtime: RuntimeFacts | None = None,
-    gateway_hints: str = "",
-    memory: str = "",
-    actions: str = "",
-    skills: str = "",
-    cross_send: bool = False,
-    topic: str = "",
-    away: str = "",
-    emotion: str = "",
-    vibe: str = "",
-    style: str = "",
-    person_style: str = "",
-    safety: str = "",
-    character: str = "",
-    research: str = "",
-    sender: str = "",
-    direct: bool = False,
-    mode: str = "daily",
-    tone: str = "neutral",
-    decision_reason: str = "",
-    query: str = "",
-    bonuses: dict[str, float] | None = None,
-    tools=None,
-    commands=None,
-    bodies: tuple[str, ...] = (),
-) -> str:
-    role_names = ", ".join(role.name for role in roles) or "-"
+def _base_block(context: PromptContext) -> str:
+    """Stable prefix: identity, rules, and the thread-independent contract."""
+    config = context.config
+    role_names = ", ".join(role.name for role in context.roles) or "-"
     language = config.soul.language
     formal = _example(language, "formal_words")
     openers = _example(language, "curse_openers")
@@ -279,17 +311,13 @@ def system_prompt(
     formal_clause = f" ({formal})" if formal else ""
     opener_clause = f" ({openers})" if openers else ""
     self_clause = f"; only those may be called {self_words}" if self_words else ""
-    base = (
+    return (
         f"{config.soul.persona}\n\n"
         f"You live in chat as {config.soul.name}, with your own voice; never a support-desk voice. "
         f"Sender roles: {role_names}.\n"
-        f"Current sender: {' '.join(str(sender or '').split()) or '-'}.\n"
         f"Workspace: {config.workspace}. Member roots: public/ (shared, read-only) and scratch/ "
         "(this chat, writable); all other workspace paths are private and trusted-only. "
         "In sandbox use /work/public and /work/scratch.\n"
-        f"{PRO_STYLE.format(soul_name=config.soul.name) if mode == 'professional' else DAILY_STYLE}"
-        f"Your decision: {' '.join(str(decision_reason or '').split()) or '-'}. Tone: {tone}.\n"
-        f"{TONE_STYLE.get(tone, TONE_STYLE['neutral'])}"
         "Never open with 'Sure', 'Here is', or 'As an AI'. Never repeat the question.\n"
         "You decide: anything genuinely addressed to you must be answered, even briefly "
         "and coldly. Never disappear from those.\n"
@@ -317,12 +345,7 @@ def system_prompt(
         "race, religion, sexuality, a private insecurity). Swearing about a situation with nobody "
         "degraded stays banter; degrading a person is the floor, at any level.\n"
         "If someone corrects you, accept it briefly and do not cling to the accusation.\n"
-        + (
-            "This thread is private: one person is speaking with you.\n"
-            if direct
-            else "This thread is shared: several people can speak here.\n"
-        )
-        + f"Use '{config.soul.pronouns}' for yourself. You may sulk, cry, get attached, tease; never "
+        f"Use '{config.soul.pronouns}' for yourself. You may sulk, cry, get attached, tease; never "
         "manipulate or threaten.\n"
         "If asked whether you are an AI, answer honestly and briefly, still as "
         f"{config.soul.name}: you are an AI, "
@@ -395,41 +418,136 @@ def system_prompt(
         "kind=prompt contains one-turn LLM instructions. Register only when the user asks for repeated "
         "automation; mention the /name after saving. Do not overwrite an existing recipe unless asked "
         "(overwrite=false default).\n"
-        + (f"{gateway_hints.strip()}\n" if gateway_hints.strip() else "")
     )
-    # ADR-0025 §4.1: the stable prefix holds only values that change with soul/roles/config.
-    stable_blocks = {
-        "base": base,
-        "character": character,
-        "roles": roles_block(roles) if roles else "",
-        "safety": safety,
-        "person_style": person_style,
-    }
-    volatile_blocks = {
-        "self": self_block(runtime, roles, config),
-        "topic": topic,
-        "away": away,
-        "emotion": emotion,
-        "vibe": vibe,
-        "style": style,
-        "research": research,
-        "memory": memory,
-        "actions": actions,
-        "skills": skills,
-        "capabilities": _capability_index(
-            config, roles, tools=tools, commands=commands, bodies=bodies
-        ),
-    }
-    stable = salience.JOIN.join(text for _, text in stable_blocks.items() if text.strip())
-    # Pinned blocks skip the selection, so the budget governs the competing references only.
-    budget = int(config.prompt.max_chars)
+
+
+def _frame_block(context: PromptContext) -> str:
+    """Per-turn frame: who is speaking, which working mode, and the decision."""
+    style = PRO_STYLE.format(soul_name=context.config.soul.name) if context.mode == "professional" else DAILY_STYLE
+    thread = (
+        "This thread is private: one person is speaking with you.\n"
+        if context.direct
+        else "This thread is shared: several people can speak here.\n"
+    )
+    return (
+        f"Current sender: {' '.join(str(context.sender or '').split()) or '-'}.\n"
+        f"{style}"
+        f"Your decision: {' '.join(str(context.decision_reason or '').split()) or '-'}. "
+        f"Tone: {context.tone}.\n"
+        f"{TONE_STYLE.get(context.tone, TONE_STYLE['neutral'])}"
+        f"{thread}"
+    )
+
+
+def _character_part(context: PromptContext) -> str:
+    return character_block(
+        context.limits,
+        jabs=context.config.character.roast_jabs,
+        patterns=context.patterns,
+        facts=context.facts,
+        language=context.language or context.config.soul.language,
+    )
+
+
+def _context_text(name: str) -> Callable[[PromptContext], str]:
+    def produce(context: PromptContext) -> str:
+        return str(getattr(context, name) or "")
+    return produce
+
+
+def _self_part(context: PromptContext) -> str:
+    return self_block(context.runtime, context.roles, context.config)
+
+
+def _roles_part(context: PromptContext) -> str:
+    return roles_block(context.roles) if context.roles else ""
+
+
+def _capabilities_part(context: PromptContext) -> str:
+    return _capability_index(
+        context.config,
+        context.roles,
+        tools=context.tools,
+        commands=context.commands,
+        bodies=context.bodies,
+    )
+
+
+def _research_part(context: PromptContext) -> str:
+    return research_block()
+
+
+CORE_PARTS: tuple[PromptPart, ...] = (
+    PromptPart("base", True, 0, pinned=True, produce=_base_block),
+    PromptPart("body", True, 1, pinned=True, produce=_context_text("body_section")),
+    PromptPart("roles", True, 2, produce=_roles_part),
+    PromptPart("character", False, 9, produce=_character_part),
+    PromptPart("safety", False, 10, produce=_context_text("safety")),
+    PromptPart("person_style", False, 11, produce=_context_text("person_style")),
+    PromptPart("frame", False, 12, pinned=True, produce=_frame_block),
+    PromptPart("self", False, 13, pinned=True, produce=_self_part),
+    PromptPart("capabilities", False, 14, pinned=True, produce=_capabilities_part),
+    PromptPart("away", False, 15, pinned=True, produce=_context_text("away")),
+    PromptPart("research", False, 16, produce=_research_part),
+    PromptPart("topic", False, 17, produce=_context_text("topic")),
+    PromptPart("emotion", False, 18, produce=_context_text("emotion")),
+    PromptPart("vibe", False, 19, produce=_context_text("vibe")),
+    PromptPart("style", False, 20, produce=_context_text("style")),
+    PromptPart("memory", False, 21, produce=_context_text("memory")),
+    PromptPart("actions", False, 22, produce=_context_text("actions")),
+    PromptPart("skills", False, 23, produce=_context_text("skills")),
+)
+
+
+def validate_parts(parts: Sequence[PromptPart]) -> None:
+    """Reject duplicate names/orders and malformed extension parts, aggregating the errors."""
+    errors: list[str] = []
+    names: set[str] = set()
+    orders: set[int] = set()
+    for part in parts:
+        if not (CORE_NAME.fullmatch(part.name) or PLUGIN_NAME.fullmatch(part.name)):
+            errors.append(f"invalid prompt part name: {part.name!r}")
+        if part.name in names:
+            errors.append(f"duplicate prompt part name: {part.name}")
+        names.add(part.name)
+        if part.order in orders:
+            errors.append(f"duplicate prompt part order: {part.order} ({part.name})")
+        orders.add(part.order)
+        if part.produce is not None and part.text:
+            errors.append(f"prompt part {part.name} has both produce and text")
+        if part.produce is None and not part.text:
+            errors.append(f"prompt part {part.name} has neither produce nor text")
+        if part.produce is None and len(part.text) > PROMPT_PART_MAX:
+            errors.append(f"prompt part {part.name} exceeds {PROMPT_PART_MAX} characters")
+    if errors:
+        raise ValueError("; ".join(errors))
+
+
+def system_prompt(
+    config: Config,
+    roles: tuple[Role, ...],
+    *,
+    context: PromptContext | None = None,
+    parts: Sequence[PromptPart] = CORE_PARTS,
+) -> Prompt:
+    """Assemble the stable prefix and the selected volatile blocks from one registry."""
+    context = context or PromptContext(config=config, roles=roles)
+    validate_parts(parts)
+    rendered: list[tuple[PromptPart, str]] = []
+    for part in parts:
+        text = part.produce(context) if part.produce is not None else part.text
+        text = str(text or "")
+        if text.strip():
+            rendered.append((part, text))
+    stable = salience.JOIN.join(text for part, text in rendered if part.stable)
+    volatile_parts = [(part, text) for part, text in rendered if not part.stable]
     kept, dropped = salience.select(
-        volatile_blocks,
-        query,
-        bonuses=bonuses,
-        max_chars=budget,
+        volatile_parts,
+        context.query,
+        bonuses=context.bonuses,
+        max_chars=int(config.prompt.max_chars),
         enabled=config.prompt.salience,
-        language=language,
+        language=context.language or config.soul.language,
     )
     if dropped:
         import logging

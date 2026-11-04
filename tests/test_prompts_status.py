@@ -12,6 +12,7 @@ from eidesoul.engine.config import PromptConfig
 from eidesoul.engine.runtime import RuntimeFacts
 from eidesoul.engine.soul import Soul, language_line, normalize_language
 from eidesoul.engine.turn.prompts import (
+    PromptContext,
     character_block,
     research_block,
     self_block,
@@ -41,12 +42,13 @@ def test_normalize_language_aliases(monkeypatch) -> None:
 
 def test_system_prompt_is_english_with_self_and_roles(tmp_path) -> None:
     env = make_agent(tmp_path)
-    prompt = system_prompt(
-        env.config,
-        (Role("member", description="Team member", context="Help the team."),),
+    context = PromptContext(
+        config=env.config,
+        roles=(Role("member", description="Team member", context="Help the team."),),
         runtime=RuntimeFacts(mode="primary", db_label="postgresql://db/eidesoul"),
-        gateway_hints="## Interface\n- test",
+        body_section="## Interface\n- test",
     )
+    prompt = system_prompt(env.config, context.roles, context=context)
 
     assert "## Self" in prompt
     assert "## Roles" in prompt
@@ -139,7 +141,7 @@ def test_chat_kind_label_follows_the_inbound_flag(tmp_path, monkeypatch) -> None
 
 
 def test_status_gives_a_non_administrator_only_rough_buckets(tmp_path, monkeypatch) -> None:
-    env = make_runtime(tmp_path, monkeypatch, settings_approval=False)
+    env = make_runtime(tmp_path, monkeypatch, role_tools='["read"]', settings_approval=False)
     roles = (env.config.roles.default_role(),)
 
     text = asyncio.run(
@@ -177,9 +179,11 @@ def test_commands_requesting_llm_do_not_decide(tmp_path) -> None:
 
 def test_system_prompt_states_the_cross_room_policy(tmp_path) -> None:
     env = make_agent(tmp_path)
-    prompt = system_prompt(
-        env.config, (Role("member"),), actions='- [2026-01-01 10:00] teks -> chat: "halo"'
+    roles = (Role("member"),)
+    context = PromptContext(
+        config=env.config, roles=roles, actions='- [2026-01-01 10:00] teks -> chat: "halo"'
     )
+    prompt = system_prompt(env.config, roles, context=context)
 
     assert "one soul across conversations" in prompt
     assert "role=trusted" in prompt
@@ -221,14 +225,16 @@ def test_research_block_forbids_interrogation_without_a_country() -> None:
 
 def test_system_prompt_carries_the_character_and_research_blocks(tmp_path) -> None:
     env = make_agent(tmp_path)
-    prompt = system_prompt(
-        replace(env.agent.config, prompt=PromptConfig(max_chars=20000)),
-        (Role(name="member"),),
+    roles = (Role(name="member"),)
+    context = PromptContext(
+        config=replace(env.agent.config, prompt=PromptConfig(max_chars=20000)),
+        roles=roles,
         runtime=RuntimeFacts(),
-        character=character_block((1, 0), language="id"),
-        research=research_block(),
+        limits=(1, 0),
+        language="id",
         query="ada berita apa",
     )
+    prompt = system_prompt(context.config, roles, context=context)
 
     assert "Toxicity level 1/4" in prompt
     assert "Research before asking" in prompt

@@ -13,6 +13,7 @@ from dataclasses import dataclass, field
 import yaml
 
 from ..registry import allows
+from .identity import is_person_id
 
 NAME = re.compile(r"^[a-z][a-z0-9_-]{0,31}$")
 
@@ -71,16 +72,6 @@ class RoleRegistry:
             return (self.default_role(),)
         return tuple(sorted(matched, key=lambda role: (-role.priority, role.name)))
 
-    def override(self, names: tuple[str, ...]) -> tuple[Role, ...]:
-        """Replace the for_person result with named roles (used by the CLI gateway)."""
-        found: list[Role] = []
-        for name in names:
-            role = self.get(name)
-            if role is None:
-                raise RoleError(f"role '{name}' does not exist")
-            found.append(role)
-        return tuple(found) or (self.default_role(),)
-
     def require_administrator(self) -> Role:
         """Boot gate (ADR-0022 §4.2): the protected role must exist and stay able to approve."""
         role = self.by_name.get(PROTECTED)
@@ -95,6 +86,11 @@ class RoleRegistry:
         if not allows(role.commands, "approve"):
             raise RoleError(f"role '{PROTECTED}' must allow the approve command")
         return role
+
+
+def privileged(role: Role) -> bool:
+    """ADR-0036 §4.3: one predicate for status, redaction, and diagnostics."""
+    return bool(role.protected or "*" in (role.tools or ()))
 
 
 def assert_protected_roles(before: Iterable[str], after: Iterable[str]) -> None:
@@ -145,6 +141,35 @@ def _label(value: object, source: str) -> str:
     return text
 
 
+def _users(value: object, source: str) -> tuple[str, ...]:
+    users = _str_tuple(value, "users", source)
+    for person in users:
+        if not is_person_id(person):
+            raise RoleError(
+                f"{source}: 'users' must contain per_… person ids, not {person!r}"
+            )
+    return users
+
+
+def _protected(
+    declared: str, body: Mapping, tools: tuple[str, ...], commands: tuple[str, ...], source: str
+) -> bool:
+    protected = _bool(body.get("protected"))
+    if declared != PROTECTED and protected:
+        raise RoleError(f"{source}: only '{PROTECTED}' may be protected")
+    if declared == PROTECTED:
+        if "protected" in body and not protected:
+            raise RoleError(
+                f"{source}: role '{PROTECTED}' is protected; 'protected: false' is not allowed"
+            )
+        protected = True
+        if "*" not in tools:
+            raise RoleError(f"{source}: role '{PROTECTED}' must list tools: ['*']")
+        if not allows(commands, "approve"):
+            raise RoleError(f"{source}: role '{PROTECTED}' must allow the approve command")
+    return protected
+
+
 def parse_role(name: str, body: object, source: str) -> Role:
     if not isinstance(body, dict):
         raise RoleError(f"{source}: role must be a mapping")
@@ -161,21 +186,12 @@ def parse_role(name: str, body: object, source: str) -> Role:
         raise RoleError(f"{source}: 'priority' must be a number") from exc
     tools = _str_tuple(body.get("tools"), "tools", source)
     commands = _str_tuple(body.get("commands"), "commands", source)
-    protected = _bool(body.get("protected"))
-    if declared == PROTECTED:
-        if "protected" in body and not protected:
-            raise RoleError(
-                f"{source}: role '{PROTECTED}' is protected; 'protected: false' is not allowed"
-            )
-        protected = True
-        if "*" not in tools:
-            raise RoleError(f"{source}: role '{PROTECTED}' must list tools: ['*']")
-        if not allows(commands, "approve"):
-            raise RoleError(f"{source}: role '{PROTECTED}' must allow the approve command")
+    users = _users(body.get("users"), source)
+    protected = _protected(declared, body, tools, commands, source)
     return Role(
         name=declared,
         description=str(body.get("description") or "").strip(),
-        users=_str_tuple(body.get("users"), "users", source),
+        users=users,
         tools=tools,
         commands=commands,
         context=str(body.get("context") or "").strip(),

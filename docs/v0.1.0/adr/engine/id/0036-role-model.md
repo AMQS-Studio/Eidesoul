@@ -1,4 +1,4 @@
-> Terjemahan turunan — jangan sunting; sumber: engine/0036-role-model.md (sha256: 413275b7650a)
+> Terjemahan turunan — jangan sunting; sumber: engine/0036-role-model.md (sha256: e96a979b4c1f)
 
 - **Status:** accepted
 - **Tanggal:** 2026-11-04
@@ -6,7 +6,7 @@
 - **Konteks:** memperluas ADR-0022 (role `administrator`), ADR-0007 (otorisasi capability), ADR-0018 (fakta gateway), ADR-0033 (core netral)
 - **Supersedes:** —
 - **Terkait:** ADR-0016 (migrasi dan dokumen), ADR-0035 (namespace app, tidak terkait grant)
-- **Implementasi:** draft — dokumen role, pemilihan berbasis identitas, dan command bootstrap diputuskan di sini; pohon kode masih menerima hint role dari body mana pun, membiarkan `administrator.users` kosong saat init, dan membiarkan role mana pun mengklaim `protected`.
+- **Implementasi:** implemented — validasi protected/users, pemilihan identity-only, `people add`, seed netral, dan penghapusan role CLI ada di `access/roles.py`, `admin/people.py`, dan testnya.
 - **Catatan lokasi:** keputusan engine (ia memiliki identitas, role, dan gate boot), jadi duduk di bawah `adr/engine/`. Salinan Indonesia di `docs/v0.1.0/adr/engine/id/0036-role-model.md`.
 
 ---

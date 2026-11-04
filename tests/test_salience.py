@@ -1,52 +1,66 @@
-"""Prompt block competition contract: mandatory always fits, optional ones compete when tight."""
-
+"""Prompt block competition: pinned parts always fit, references compete when tight (ADR-0034)."""
 
 from eidesoul.engine.turn.context import keyword_set
-from eidesoul.engine.turn.salience import COMPETING, MANDATORY, ORDER, select
+from eidesoul.engine.turn.prompts import PromptPart
+from eidesoul.engine.turn.salience import select
 
 
-def names(kept: list[tuple[str, str]]) -> list[str]:
-    return [name for name, _ in kept]
+def part(name: str, *, pinned: bool = False, bonus: float = 0.0, order: int = 0) -> PromptPart:
+    return PromptPart(name, False, order, bonus=bonus, pinned=pinned, text="x")
 
 
-def test_all_blocks_fit_are_kept_in_order() -> None:
-    blocks = {"memory": "M", "skills": "S", "base": "B", "topic": "T", "emotion": "E"}
+def names(kept: list[tuple[PromptPart, str]]) -> list[str]:
+    return [item.name for item, _ in kept]
+
+
+def test_all_blocks_fit_are_kept_in_input_order() -> None:
+    blocks = [
+        (part("base", pinned=True, order=0), "B"),
+        (part("memory", order=3), "M"),
+        (part("skills", order=4), "S"),
+        (part("topic", order=1), "T"),
+        (part("emotion", order=2), "E"),
+    ]
 
     kept, dropped = select(blocks, max_chars=9000, language="id")
 
     assert dropped == []
-    assert names(kept) == [name for name in ORDER if name in blocks]
-    assert names(kept) == ["base", "emotion", "topic", "memory", "skills"]
-    assert kept[1] == ("emotion", "E")
+    assert names(kept) == ["base", "memory", "skills", "topic", "emotion"]
 
 
 def test_disabled_salience_never_drops_blocks() -> None:
-    blocks = {"base": "b" * 100, "memory": "m" * 5000, "topic": "t" * 5000}
+    blocks = [
+        (part("base", pinned=True), "b" * 100),
+        (part("memory"), "m" * 5000),
+        (part("topic"), "t" * 5000),
+    ]
 
     kept, dropped = select(blocks, max_chars=200, enabled=False, language="id")
 
     assert dropped == []
-    assert names(kept) == ["base", "topic", "memory"]
+    assert names(kept) == ["base", "memory", "topic"]
 
 
-def test_tight_budget_keeps_mandatory_blocks_only() -> None:
-    blocks = {
-        "base": "b" * 100,
-        "emotion": "e" * 100,
-        "memory": "m" * 400,
-        "topic": "t" * 400,
-    }
+def test_tight_budget_keeps_pinned_blocks_only() -> None:
+    blocks = [
+        (part("base", pinned=True), "b" * 100),
+        (part("emotion"), "e" * 100),
+        (part("memory"), "m" * 400),
+        (part("topic"), "t" * 400),
+    ]
 
     kept, dropped = select(blocks, max_chars=300, language="id")
 
-    assert set(names(kept)) == {"base"}
+    assert names(kept) == ["base"]
     assert set(dropped) == {"emotion", "memory", "topic"}
-    assert set(dropped) <= set(COMPETING)
-    assert set(MANDATORY) & set(names(kept)) == {"base"}
 
 
 def test_keyword_overlap_survives_before_unrelated_block() -> None:
-    blocks = {"base": "b" * 10, "topic": "hujan " * 5, "memory": "kopi " * 5}
+    blocks = [
+        (part("base", pinned=True), "b" * 10),
+        (part("topic"), "hujan " * 5),
+        (part("memory"), "kopi " * 5),
+    ]
 
     kept, dropped = select(blocks, "kopi enak", max_chars=50, language="id")
 
@@ -54,33 +68,31 @@ def test_keyword_overlap_survives_before_unrelated_block() -> None:
     assert dropped == ["topic"]
 
 
-def test_bonus_keeps_skills_but_never_drops_memory() -> None:
-    blocks = {"base": "b" * 10, "memory": "m" * 40, "skills": "s" * 40}
+def test_metadata_bonus_keeps_skills_but_never_drops_memory() -> None:
+    blocks = [
+        (part("base", pinned=True), "b" * 10),
+        (part("memory"), "m" * 40),
+        (part("skills", bonus=0.2), "s" * 40),
+    ]
 
-    kept, dropped = select(blocks, max_chars=55, bonuses={"skills": 0.2}, language="id")
+    kept, dropped = select(blocks, max_chars=55, language="id")
 
     assert names(kept) == ["base", "skills"]
     assert dropped == ["memory"]
 
 
-def test_memory_survives_tiebreak_when_nothing_matches() -> None:
-    blocks = {"base": "b" * 10, "topic": "t" * 40, "memory": "m" * 40}
+def test_tiebreak_is_stable_when_nothing_matches() -> None:
+    blocks = [
+        (part("base", pinned=True), "b" * 10),
+        (part("topic"), "t" * 40),
+        (part("memory"), "m" * 40),
+    ]
 
     kept, dropped = select(blocks, "zzz qqq", max_chars=55, language="id")
 
     assert names(kept) == ["base", "memory"]
     assert dropped == ["topic"]
 
+
 def test_keyword_set_skips_stopwords_and_short_words() -> None:
     assert keyword_set("yang aku mau itu kopi enak", language="id") == {"kopi", "enak"}
-
-
-def test_actions_block_is_mandatory_and_survives_a_tight_budget() -> None:
-    blocks = {"base": "b" * 100, "actions": "a" * 400, "topic": "t" * 400}
-
-    kept, dropped = select(blocks, max_chars=300, language="id")
-
-    assert "actions" in COMPETING
-    assert "actions" not in MANDATORY
-    assert "base" in names(kept)
-    assert set(dropped) == {"actions", "topic"}

@@ -35,7 +35,8 @@ def _relay_decision(ctx: CommandContext, approval, extra: str) -> str:
 
 async def _automation_decision(ctx: CommandContext, approval) -> str:
     """ADR-0014 §4.8: the row is stored only here, by the approval that authorises it."""
-    from ..jobs.automation import AutomationStore, ManifestError
+    from ..jobs.automation_store import AutomationStore
+    from ..jobs.schedule import ManifestError
 
     agent = ctx.agent
     lang = ctx.lang

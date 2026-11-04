@@ -1,8 +1,9 @@
 """Schedule and quiet-hours arithmetic for automations (ADR-0014 §4.3).
 
-Pure functions: no store, no model, no clock of their own. `automation.py` keeps the manifest,
-the worker, and the SQL; this module answers "when is the next occurrence" and "is the owner
-quiet right now" (ADR-0031 §4.5: a module over the cap may be split).
+Pure functions: no store, no model, no clock of their own. `automation_manifest.py`,
+`automation_store.py`, and `automation_worker.py` keep the manifest, the SQL, and the worker;
+this module answers "when is the next occurrence" and "is the owner quiet right now"
+(ADR-0031 §4.5: a module over the cap may be split).
 """
 
 import hashlib

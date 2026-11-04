@@ -261,7 +261,10 @@ def test_shutdown_drains_notices_once_and_keeps_the_turn_unfinished(tmp_path) ->
                 inbound_message("halo", thread=DM, message_id="drain-1"), env.gateway
             )
         )
-        await asyncio.sleep(0.05)
+        for _ in range(200):
+            if env.agent._turn_tasks.get(DM) is not None:
+                break
+            await asyncio.sleep(0.005)
         env.agent.begin_drain()
         assert env.agent.runtime.phase == "draining"
         pending = await env.agent.drain(0.01)

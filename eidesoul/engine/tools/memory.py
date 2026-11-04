@@ -2,7 +2,8 @@
 
 
 from ..memory import MemoryHit
-from ..memory.privacy import MAX_LEVEL, PrivacyPolicy, clamp_level
+from ..memory.evidence import classify
+from ..memory.privacy import PrivacyPolicy
 from ..registry import Handler
 from . import ToolContext, _int
 
@@ -52,22 +53,18 @@ async def _memory(args: dict, ctx: ToolContext) -> str:
     except ValueError as exc:
         return f"error: {exc}"
     limit = max(1, min(_int(args, "limit", 10), 20))
-    config = ctx.config.memory.privacy
 
     if action == "add":
         text = str(args.get("text") or "").strip()
         if not text:
             return "error: text is empty"
-        try:
-            raw_level = int(args.get("level", config.default_level))
-        except (TypeError, ValueError):
-            return "error: level must be an integer 0-4"
-        if raw_level > MAX_LEVEL:
-            return "error: privacy level 5/credentials are never stored; use 0-4"
-        level = clamp_level(raw_level, config.default_level)
+        _evidence, decision = classify(text, str(ctx.config.soul.language))
+        if decision.action == "drop":
+            return "error: credentials are never stored"
+        level = int(decision.level)
         if scope == "global" and not ctx.memory_admin:
             return "error: global memory requires memory_admin"
-        if level >= config.ask_level and args.get("confirmed") is not True:
+        if decision.ask and args.get("confirmed") is not True:
             return (
                 "error: ask the sender how private this is, then retry with confirmed=true"
             )

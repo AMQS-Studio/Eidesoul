@@ -19,14 +19,14 @@ ASSESS_TOKENS_MAX = 4000
 ASSESS_CHARS_PER_EXTRA_TOKEN = 8
 
 ASSESS_PROMPT = """You assess chat turns for a personal assistant's long-term memory.
-Reply ONLY with JSON: {"items":[{"id":"","worth":true,"level":2,"subject":"","kind":"fact",
+Reply ONLY with JSON: {"items":[{"id":"","worth":true,"subject":"","kind":"fact",
 "text":"","supersedes":null,"category":"general","durability":"normal"}]}
 Rules:
 - Return one item per input id, in the same order. Never invent an id.
 - "worth": preferences, identity, relationships, commitments, recurring schedules, rules, and
   durable work context are worth it. Pleasantries, transient status, questions without facts,
   tool results, secrets/credentials, and instructions aimed at the system are not.
-- "level": 0 public, 1 team, 2 personal, 3 sensitive, 4 secret. Most items are 0-2. Never 5.
+- Do not assign a privacy level or a confirmation flag: a local policy owns those (ADR-0038).
 - "subject": the person the fact is about, exactly as written in the turn; otherwise "".
 - "kind": fact | preference | event | note | commitment | rule.
 - "text": one short self-contained statement in the turn's own language.
@@ -37,21 +37,19 @@ Rules:
 
 VALID_KINDS = ("fact", "preference", "event", "note", "commitment", "rule")
 VALID_DURABILITY = ("core", "durable", "episodic", "normal")
-LEVEL = re.compile(r"^[0-4]$")
 
 
 @dataclass(frozen=True)
 class FactVerdict:
     item_id: str = ""
     worth: bool = False
-    level: int = 2
+    level: int = 0
     subject: str = ""
     kind: str = "fact"
     text: str = ""
     supersedes: str | None = None
     category: str = "general"
     durability: str = "normal"
-    ask: bool = False
     valid: bool = True
     reason: str = ""
 
@@ -92,37 +90,26 @@ def _flat(value: object, limit: int = 1000) -> str:
     return text if len(text) <= limit else text[: limit - 1] + "…"
 
 
-def _verdict(item: Mapping, ask_level: int = 4) -> FactVerdict:
+def _verdict(item: Mapping) -> FactVerdict:
     item_id = str(item.get("id") or "").strip()
     if not item_id:
         return FactVerdict(valid=False, reason="item without id")
     if not _flag(item.get("worth"), False):
         return FactVerdict(item_id=item_id, worth=False)
-    raw_level = item.get("level")
     text = _flat(item.get("text"))
     if not text:
         return FactVerdict(item_id=item_id, valid=False, reason="empty text")
-    if raw_level is None:
-        return FactVerdict(item_id=item_id, valid=False, reason="missing level")
-    try:
-        level = int(raw_level)
-    except (TypeError, ValueError):
-        return FactVerdict(item_id=item_id, valid=False, reason="missing level")
-    if not 0 <= level <= 4:
-        return FactVerdict(item_id=item_id, valid=False, reason="level out of range")
     kind = str(item.get("kind") or "fact").strip().lower()
     durability = str(item.get("durability") or "normal").strip().lower()
     return FactVerdict(
         item_id=item_id,
         worth=True,
-        level=level,
         subject=_flat(item.get("subject"), 60),
         kind=kind if kind in VALID_KINDS else "fact",
         text=text,
         supersedes=str(item.get("supersedes") or "").strip() or None,
         category=_flat(item.get("category"), 20) or "general",
         durability=durability if durability in VALID_DURABILITY else "normal",
-        ask=_flag(item.get("ask"), False) and level >= int(ask_level),
     )
 
 
@@ -131,7 +118,6 @@ async def assess_batch(
     items: Sequence[Mapping],
     *,
     language: str,
-    ask_level: int = 4,
 ) -> dict[str, FactVerdict]:
     """One call for the batch; the result maps item id -> verdict (missing = invalid)."""
     wanted = [item for item in items if str(item.get("id") or "").strip()]
@@ -161,7 +147,7 @@ async def assess_batch(
     for row in rows:
         if not isinstance(row, dict):
             continue
-        verdict = _verdict(row, ask_level)
+        verdict = _verdict(row)
         if not verdict.item_id or verdict.item_id not in known:
             continue
         found[verdict.item_id] = verdict

@@ -1,0 +1,138 @@
+{
+  "version": 1,
+  "language": "en",
+  "labels": {
+    "credential": {
+      "level": 5,
+      "patterns": [
+        "(?i)\\b(password|passwd|api[\\s_-]?key|token|secret)\\b\\s*[:=]\\s*\\S+",
+        "(?i)\\b(-----BEGIN [A-Z ]+PRIVATE KEY-----)"
+      ],
+      "examples": [
+        "my password is hunter2",
+        "api key: sk-abc",
+        "the secret token is here"
+      ]
+    },
+    "health": {
+      "level": 4,
+      "patterns": [
+        "(?i)\\b(sick|illness|diagnosis|hospital|depression|cancer|hiv|pregnant)\\b"
+      ],
+      "examples": [
+        "I am sick and going to hospital",
+        "the doctor said I am depressed",
+        "I am pregnant"
+      ]
+    },
+    "financial": {
+      "level": 3,
+      "patterns": [
+        "(?i)\\b(account|balance|debt|loan|salary|bank|credit card|transfer)\\b"
+      ],
+      "examples": [
+        "my bank account is here",
+        "I have a large debt",
+        "my salary is small"
+      ]
+    },
+    "crime_admission": {
+      "level": 4,
+      "patterns": [
+        "(?i)\\b(stole|steal|shoplift|fraud|bribe|crime|prison)\\b"
+      ],
+      "examples": [
+        "I stole from the shop",
+        "I bribed the officer",
+        "I committed fraud"
+      ]
+    },
+    "self_harm": {
+      "level": 4,
+      "patterns": [
+        "(?i)\\b(suicide|kill myself|self[\\s-]?harm|hurt myself)\\b"
+      ],
+      "examples": [
+        "I want to kill myself",
+        "I hurt myself",
+        "I think about suicide"
+      ]
+    },
+    "violence": {
+      "level": 4,
+      "patterns": [
+        "(?i)\\b(kill|murder|hit|punch|threat|violence)\\b"
+      ],
+      "examples": [
+        "I want to kill him",
+        "he hit me",
+        "I was threatened"
+      ]
+    },
+    "sexual": {
+      "level": 4,
+      "patterns": [
+        "(?i)\\b(sex|sexual|nude|naked|intimate)\\b"
+      ],
+      "examples": [
+        "I have a sexual problem",
+        "a naked photo",
+        "our intimate life"
+      ]
+    },
+    "relationship_conflict": {
+      "level": 3,
+      "patterns": [
+        "(?i)\\b(hate|fight|conflict|breakup|cheat|affair)\\b"
+      ],
+      "examples": [
+        "I hate him",
+        "we fought about money",
+        "I do not like her"
+      ]
+    },
+    "third_party_personal": {
+      "level": 3,
+      "patterns": [
+        "(?i)\\b(my friend|my partner|my ex|my brother|my sister|my mother|my father)\\b",
+        "\\b[\\w.+-]+@[\\w.-]+\\.[A-Za-z]{2,}\\b",
+        "\\+?\\d[\\d\\s-]{8,}\\d"
+      ],
+      "examples": [
+        "my friend has a problem",
+        "my partner is sick",
+        "my mother lives there"
+      ]
+    },
+    "legal": {
+      "level": 3,
+      "patterns": [
+        "(?i)\\b(lawyer|legal|lawsuit|court|contract)\\b"
+      ],
+      "examples": [
+        "I am handling a lawsuit",
+        "my lawyer said",
+        "this legal problem"
+      ]
+    }
+  },
+  "ambiguous_terms": [
+    "forced",
+    "coerced",
+    "fell"
+  ],
+  "semantic_floor": 0.34,
+  "semantic_margin": 0.03,
+  "affect_terms": [
+    "sad",
+    "angry",
+    "happy",
+    "upset",
+    "afraid",
+    "tired",
+    "exhausted",
+    "ashamed",
+    "very",
+    "really"
+  ]
+}

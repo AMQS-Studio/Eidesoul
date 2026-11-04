@@ -274,7 +274,7 @@ def test_propose_automation_creates_an_approval_and_no_row(tmp_path) -> None:
             }
         ]
     )
-    from eidesoul.engine.jobs.automation import AutomationStore
+    from eidesoul.engine.jobs.automation_store import AutomationStore
 
     store = AutomationStore(db, env.agent.config.automations)
 

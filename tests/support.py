@@ -601,7 +601,7 @@ def inbound_message(
     person_id: str = "628111",
     mention: bool = False,
     reply: bool = False,
-    role_override: tuple[str, ...] = (),
+    app: str = "",
     message_id: str = "",
 ):
     from datetime import datetime
@@ -610,8 +610,8 @@ def inbound_message(
     from eidesoul.engine.turn.context import Message
 
     hints: dict[str, object] = {"dm": dm, "mention": mention, "reply": reply}
-    if role_override:
-        hints["roles"] = role_override
+    if app:
+        hints["app"] = app
     return Percept(
         source="fake",
         thread=thread,

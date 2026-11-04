@@ -6,7 +6,7 @@
 - **Context:** extends ADR-0006 (group privacy and pre-filter), ADR-0008 (memory integrity), ADR-0007 (approval classes), ADR-0010 (reflection and disputes); follows ADR-0033 (neutral core)
 - **Supersedes:** —
 - **Related:** ADR-0001 (single memory port), ADR-0011 (durability), ADR-0015 (capability), ADR-0020 (skills), ADR-0035 (app scope), ADR-0036 (roles)
-- **Implementation:** draft — the layer contract, the evidence record, and the policy authority are decided here; the engine still lets the LLM propose a level without a stored evidence trail, has no semantic sensitivity classifier, and does not record a policy version per decision. A rule is not implemented until its §6.1 test exists and passes.
+- **Implementation:** partial — evidence/policy, persisted `privacy_evidence`/`privacy_policy` (migration 0018), LLM-free audit/answer, the policy-owned `ask` contract, and the golden set are in `memory/evidence.py`, `memory/candidates.py`, `access/privacy.py`, and tests. The Presidio+spaCy entity adapter named in §5.1 is not installed; the shipped entity layer is the deterministic language pack plus the MiniLM centroid layer. Closing that gap or amending §5.1 is required before this is fully implemented.
 - **Location note:** an engine decision (it owns classification, disclosure policy, and audit), so it sits under `adr/engine/`. The Indonesian copy is `docs/v0.1.0/adr/engine/id/0038-privacy-layers.md`.
 
 ---

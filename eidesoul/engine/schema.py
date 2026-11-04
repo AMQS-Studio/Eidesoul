@@ -474,6 +474,7 @@ skills = Table(
     Column("created_at", Float, nullable=False),
     Column("updated_at", Float, nullable=False),
     Column("scope", String(20), nullable=False, server_default="thread"),
+    Column("app", String(40), nullable=False, server_default=""),
     Column("via", String(20), nullable=False, server_default="reflection"),
     Column("stated_by", String(80), nullable=True),
     Column("source_episode", String(160), nullable=True),
@@ -486,6 +487,7 @@ skills = Table(
     CheckConstraint("trust IN ('T0','T1','T2','T3')", name="ck_skills_trust"),
 )
 Index("ix_skills_scope", skills.c.scope)
+Index("ix_skills_app_scope", skills.c.app, skills.c.scope)
 
 # Append-only history (ADR-0020 §4.5): a save/merge never destroys the previous version.
 skill_revisions = Table(
@@ -584,6 +586,8 @@ memories = Table(
     Column("state", String(20), nullable=False, server_default="pending"),
     Column("level", SmallInteger, nullable=True),
     Column("confirmed", Boolean, nullable=True),
+    Column("privacy_evidence", JSONB, nullable=False, server_default=text("'[]'::jsonb")),
+    Column("privacy_policy", String(40), nullable=False, server_default=""),
     Column("label_attempts", Integer, nullable=False, server_default="0"),
     Column("last_error", Text, nullable=False, server_default=""),
     Column("label_after", Float, nullable=False, server_default="0"),
@@ -673,6 +677,8 @@ memories_readable = table(
     column("state", String(20)),
     column("level", SmallInteger),
     column("confirmed", Boolean),
+    column("privacy_evidence", JSONB),
+    column("privacy_policy", String(40)),
     column("label_attempts", Integer),
     column("last_error", Text),
     column("label_after", Float),
@@ -831,6 +837,7 @@ episodes = Table(
     Column("thread_id", String(120), nullable=False, server_default=""),
     Column("person_id", String(80), nullable=False, server_default=""),
     Column("status", String(20), nullable=False, server_default="open"),
+    Column("app", String(40), nullable=False, server_default=""),
     Column("close_signal", String(20), nullable=False, server_default=""),
     Column("signature", Text, nullable=False, server_default=""),
     Column("turns", Integer, nullable=False, server_default="0"),
@@ -859,6 +866,7 @@ turns = Table(
     Column("person_id", String(80), nullable=False, default=""),
     Column("status", String(20), nullable=False, default="received"),
     Column("step", String(20), nullable=False, default="received"),
+    Column("app", String(40), nullable=False, default="", server_default=""),
     Column("attempt", Integer, nullable=False, default=0, server_default="0"),
     Column("lease_owner", String(80), nullable=False, default="", server_default=""),
     Column("lease_until", Float, nullable=False, default=0.0, server_default="0"),

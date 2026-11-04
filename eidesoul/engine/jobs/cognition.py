@@ -26,6 +26,7 @@ from ..db import Database
 from ..memory import assess as memory_assess
 from ..memory import efficiency, gate, intent
 from ..memory import episodes as memory_episodes
+from ..memory import evidence as privacy_layers
 from ..memory import reflect as memory_reflect
 from ..schema import actions, cognition_jobs
 from ..turn import observability
@@ -719,7 +720,6 @@ class CognitionWorker:
                 self.llm,
                 items,
                 language=self.language,
-                ask_level=int(self.config.memory.privacy.ask_level),
             )
             for job, row in novel:
                 results[job.id] = await self._label(row, verdicts.get(str(row["id"])))
@@ -733,6 +733,11 @@ class CognitionWorker:
         if not verdict.worth:
             await io.run(self.memory.mark_not_worth, memory_id, "assess: not worth")
             return "not worth"
+        body = str(row.get("text") or verdict.text or "")
+        evidence, decision = privacy_layers.classify(body, self.language)
+        if decision.action == "drop":
+            await io.run(self.memory.mark_not_worth, memory_id, "privacy: credential")
+            return "credential dropped"
         group = str(row.get("audience") or "private") == "group"
         owner = str(row.get("owner_id") or "")
         subject = str(verdict.subject or "")
@@ -743,37 +748,39 @@ class CognitionWorker:
                 return "third party held"
             await io.run(self.memory.mark_not_worth, memory_id, "third party")
             return "third party dropped"
-        if group and verdict.ask and not rules.ask_in_group:
+        if group and decision.ask and not rules.ask_in_group:
             await io.run(self.memory.defer_candidate, memory_id, reason="ask in group")
             return "ask pending"
         category, durability = await self._remember_hint(row, verdict)
         labelled = await io.run(
             self.memory.label_candidate,
             memory_id,
-            level=int(verdict.level),
-            confirmed=not bool(verdict.ask),
+            level=int(decision.level),
+            confirmed=not bool(decision.ask),
             subject_id=subject or owner,
             category=category,
             durability=durability,
             kind=str(verdict.kind or ""),
-            text=str(verdict.text or ""),
+            text=body,
+            evidence=[item.record() for item in evidence],
+            policy=decision.policy_version,
         )
         if not labelled:
             return "label refused"
         self.counters["captured"] += 1
-        await self._visibility(row, int(verdict.level))
-        if verdict.ask and self.ask is not None:
+        await self._visibility(row, int(decision.level))
+        if decision.ask and self.ask is not None:
             try:
                 await self.ask(
                     str(row.get("thread_id") or ""),
                     owner,
                     [memory_id],
-                    int(verdict.level),
+                    int(decision.level),
                     "",
                 )
             except Exception:
                 log.debug("ask callback failed", exc_info=True)
-        return f"ok L{verdict.level}"
+        return f"ok L{decision.level}"
 
     async def _remember_hint(self, row: Mapping, verdict) -> tuple[str, str]:
         """ADR-0005 §4.6: "remember this" raises durability and pins only a core memory.
@@ -1081,6 +1088,7 @@ class CognitionWorker:
                 stated_by=episode.thread_id,
                 trust="T2",
                 language=self.language,
+                app=episode.app,
             )
         except (ValueError, FileExistsError) as exc:
             return f"procedure refused: {exc}"

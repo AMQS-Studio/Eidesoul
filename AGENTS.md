@@ -29,10 +29,12 @@ Hard rules for changes in this repo.
   `inbound.py` (the body seam), `plugins.py`, `registry.py`, `llm.py`, `config.py`, `db.py`,
   `schema.py`, `embed.py`, `i18n.py`, `io.py`, `runtime.py`, `soul.py`, `self_knowledge.py`, `clock.py`, and
   `__init__.py` (a written map, no imports). Everything else lives in the folder that owns its reason
-  to change: `turn/` (context, decision, assembly, salience, prompts, reply, observability),
-  `character/` (character, knowledge, lexicon, patterns), `access/` (roles, permissions, identity,
-  privacy, approvals, relay, target), `jobs/` (cognition, automation, supervisor, lease, ambient,
-  currents, mcp), plus the fixed contracts `memory/`, `stores/`, `tools/`, `commands/`, `guard/`.
+  to change: `turn/` (context, decision, assembly, salience, prompts, reply, observability,
+  loop, intake, delivery, commands, steps, plugin_registration), `character/` (character,
+  knowledge, lexicon, patterns), `access/` (roles, permissions, identity, privacy, approvals,
+  relay, target), `jobs/` (cognition, automation_manifest, automation_store, automation_worker,
+  supervisor, lease, ambient, currents, mcp), plus the fixed contracts `memory/`, `stores/`,
+  `tools/`, `commands/`, `guard/`.
   `ablate.py` is a research tool, not engine code: it lives at `scripts/ablate_engine.py`.
 - A module has one reason to change and stays at or below 800 lines; a stateful module above that
   needs a line in the ADR that introduces it (ADR-0031 §4.1). A new engine module is allowed when it
@@ -159,7 +161,7 @@ Hard rules for changes in this repo.
   → `consent` (requester approves), shared or outside (`public/`, other rooms, host config,
   credentials) → `authorization` (approver role). `scope_proof` is computed at request and re-checked
   at execution, so a widened role reopens the approval. `approved=True` (`/approve`) bypasses both layers.
-- `administrator` is the protected top role (ADR-0022): it must exist with `tools: "*"`, `memory_admin`, and `approve`; it cannot be deleted or renamed, only its `label` (address) may change, and only through `roles.yaml` + `eidesoul config import`.
+- `administrator` is the protected top role (ADR-0022/0036): it must exist with `tools: "*"`, `memory_admin`, and `approve`; it cannot be deleted or renamed, only its `label` (address) may change, and only through `roles.yaml` + `eidesoul config import`. `protected: true` is refused on every other role. `users` holds `per_...` ids, never an address; a body never names a role. Bootstrap with `eidesoul people add <gateway> <address> --role administrator`, which links the identity and updates the role document plus its mirror.
 - Sensitive actions (`shell`, `sandbox`) and internal changes (`settings`) must pass
   `SafetyPolicy`/`approvals` and `/approve`. Default mode `yolo`; `off` disables approval (document
   the risk). `/approve` never calls the LLM and re-checks role permissions.
@@ -178,9 +180,13 @@ Hard rules for changes in this repo.
 - Memory carries a numeric privacy level 0-4 (public, team, personal, sensitive/aib, secret).
   Level 5/credentials are never stored. `owner_id` is the speaker who stated the fact; `subject_id`
   is who it is about and only that subject may veto it. Level maths, veto precedence, and disclosure
-  verdicts live in `eidesoul/engine/memory/privacy.py` (deterministic, no LLM). The LLM only labels a
-  provisional level, phrases the confirmation question, and identifies which entries a draft
-  mentions; `eidesoul/engine/access/privacy.py` is the only agent-facing hook.
+  verdicts live in `eidesoul/engine/memory/privacy.py` (deterministic, no LLM). Evidence comes from
+  `eidesoul/engine/memory/evidence.py` (deterministic language pack plus the shared MiniLM
+  centroid layer) and only its policy writes the level; `memories.privacy_evidence` and
+  `privacy_policy` persist the record. `eidesoul/engine/access/privacy.py` is the only agent-facing
+  hook and detects mentions locally; no memory text is sent to an external model. The Presidio+spaCy
+  entity adapter named in ADR-0038 §5.1 is not bundled yet; the shipped entity layer is the
+  deterministic pack, so that ADR is only partial.
 - Disclosure policy: L0-L2 stay fluid everywhere; L3 in a group and L4 ask for confirmation through
   `approvals`; vetoed entries are never shown and never disclosed. The auditor pass runs only when a
   risky entry exists.

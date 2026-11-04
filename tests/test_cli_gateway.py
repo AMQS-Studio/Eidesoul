@@ -52,7 +52,7 @@ def test_stdin_line_becomes_inbound_and_quit_stops(tmp_path, monkeypatch) -> Non
     assert inbound.thread == "cli:local"
     assert inbound.payload.text == "halo"
     assert inbound.hints.get("dm") is True
-    assert inbound.hints.get("roles") == ("owner",)
+    assert "roles" not in inbound.hints
 
 
 def test_send_text_prints_with_prefix(tmp_path, capsys) -> None:

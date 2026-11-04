@@ -147,7 +147,7 @@ def test_quote_is_read_from_context_info(tmp_path) -> None:
 
 
 def test_command_body_strips_only_bot_mentions() -> None:
-    from eidesoul.engine.agent import command_body
+    from eidesoul.engine.turn.commands import command_body
 
     assert command_body(f"@{BOT} /ping", "eidesoul", {BOT}) == "/ping"
     assert command_body("@Budi /ping", "eidesoul", {BOT}) == "@Budi /ping"

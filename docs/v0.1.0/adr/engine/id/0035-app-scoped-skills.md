@@ -1,4 +1,4 @@
-> Terjemahan turunan — jangan sunting; sumber: engine/0035-app-scoped-skills.md (sha256: c92663557aed)
+> Terjemahan turunan — jangan sunting; sumber: engine/0035-app-scoped-skills.md (sha256: a1754183b748)
 > Ditulis tangan (bukan mesin), mengikuti sumber English baris demi baris.
 
 # ADR-0035: Skill Ber-scope App — Namespace di Atas `scope`, Bukan Audiens Keempat
@@ -9,7 +9,7 @@
 - **Konteks:** perluasan ADR-0020 (memori prosedural), ADR-0018 (fakta body), ADR-0006 (plafon audiens); lanjutan ADR-0033 (core netral) dan ADR-0034 (prompt parts, draft)
 - **Supersedes:** —
 - **Terkait:** ADR-0031 (skema dan anggaran modul), ADR-0016 (migrasi), ADR-0027/0028 (unit plugin), ADR-0032 (alamat dan body)
-- **Implementasi:** draft — kolom, hint, dan aturan visibilitas diputuskan di sini; skill masih hanya membawa `global|thread|person`.
+- **Implementasi:** implemented — `turns.app`, `episodes.app`, `skills.app`, dan `ix_skills_app_scope` ada di migrasi 0017; hint body, retrieval, write, dan signature episode sudah diteruskan; matriks visibilitas dan jalur hint turn diuji.
 - **Catatan lokasi:** keputusan engine (memperluas memori prosedural dan kontrak inbound), jadi ia duduk di bawah `adr/engine/`. Salinan Indonesia di `docs/v0.1.0/adr/engine/id/0035-app-scoped-skills.md`.
 
 ---

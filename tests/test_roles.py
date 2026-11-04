@@ -34,8 +34,10 @@ from eidesoul.engine.stores.documents import DocumentStore
 from eidesoul.engine.tools import REGISTRY as TOOLS
 
 ROOT = Path(__file__).resolve().parents[1]
+PERSON = "per_aaaaaaaaaa"
+OTHER = "per_bbbbbbbbbb"
 ADMIN = (
-    "name: administrator\nusers: ['628111']\ntools: ['*']\ncommands: ['*']\n"
+    f"name: administrator\nusers: ['{PERSON}']\ntools: ['*']\ncommands: ['*']\n"
     "memory_admin: true\n"
 )
 
@@ -43,7 +45,7 @@ ADMIN = (
 def test_load_role_mapping_and_union() -> None:
     source = {
         "administrator": ADMIN,
-        "panitia": 'name: panitia\npriority: 10\nusers: ["628111"]\ntools: ["read"]\n'
+        "panitia": f'name: panitia\npriority: 10\nusers: ["{PERSON}"]\ntools: ["read"]\n'
         'commands: ["help"]\ncontext: "Panitia."\n',
         "guest": "name: guest\n",
     }
@@ -51,12 +53,12 @@ def test_load_role_mapping_and_union() -> None:
     registry = load_roles(source, "guest")
 
     assert registry.names() == ["administrator", "guest", "panitia"]
-    roles = registry.for_person("628111")
+    roles = registry.for_person(PERSON)
     assert [role.name for role in roles] == ["panitia", "administrator"]
     assert tool_patterns(roles) == ("read", "*")
     assert command_patterns(roles) == ("help", "*")
-    assert registry.for_person("628999")[0].name == "guest"
-    # the core compares canonical identities only; a gateway hands in the bare identity
+    assert registry.for_person(OTHER)[0].name == "guest"
+    # the core compares canonical identities only; a raw address is not a person id
     assert registry.for_person("628111@s.whatsapp.net")[0].name == "guest"
 
 
@@ -82,9 +84,6 @@ def test_role_documents_mapping() -> None:
     }
     registry = load_roles(docs, "guest")
     assert registry.get("member").tools == ("read",)
-    assert registry.override(("member",))[0].name == "member"
-    with pytest.raises(RoleError):
-        registry.override(("hilang",))
 
 
 def test_memory_admin_parses_true_and_defaults_false() -> None:
@@ -239,7 +238,7 @@ def test_shipped_role_surfaces_use_administrator() -> None:
     assert template["administrator"]["commands"] == ["*"]
     assert template["administrator"]["memory_admin"] is True
     assert template["administrator"]["protected"] is True
-    assert templates.GATEWAY["gateways"]["cli"]["role"] == "administrator"
+    assert "role" not in templates.GATEWAY["gateways"]["cli"]
 
 
 def test_no_owner_role_literal_in_the_role_surfaces() -> None:
@@ -271,3 +270,38 @@ def _roles_file(tmp_path, roles: dict) -> DocumentStore:
         yaml.safe_dump({"roles": roles}, sort_keys=False), encoding="utf-8"
     )
     return docs
+
+
+def test_people_add_bootstraps_an_administrator_and_writes_the_mirror(tmp_path) -> None:
+    from eidesoul.admin import people as admin_people
+
+    config = build_config(tmp_path)
+    db = database()
+    docs = DocumentStore(db, config.paths)
+    docs.put(
+        "role:administrator",
+        "name: administrator\nusers: []\ntools: ['*']\ncommands: ['*']\n"
+        "memory_admin: true\n",
+    )
+    config.paths.roles.parent.mkdir(parents=True, exist_ok=True)
+
+    person = admin_people.add(db, config.paths, "cli", "local", "administrator", name="Boss")
+
+    stored = yaml.safe_load(docs.get("role:administrator"))
+    assert stored["users"] == [person]
+    mirror = yaml.safe_load(config.paths.roles.read_text(encoding="utf-8"))
+    assert mirror["roles"]["administrator"]["users"] == [person]
+    assert person.startswith("per_")
+    assert docs.names("role:") == ["role:administrator"]
+
+
+def test_people_add_refuses_a_non_administrator_first_user(tmp_path) -> None:
+    from eidesoul.admin import people as admin_people
+
+    config = build_config(tmp_path)
+    db = database()
+    docs = DocumentStore(db, config.paths)
+    docs.put("role:member", 'name: member\ntools: ["read"]\n')
+
+    with pytest.raises(ValueError, match="first user"):
+        admin_people.add(db, config.paths, "cli", "local", "member")

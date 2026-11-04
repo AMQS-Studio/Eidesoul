@@ -6,7 +6,7 @@
 - **Context:** extends ADR-0031 (engine structure, module caps); follows ADR-0001 (one memory port), ADR-0013 (turn lifecycle), ADR-0032 (the dispatch door)
 - **Supersedes:** —
 - **Related:** ADR-0007 (permissions), ADR-0016 (schema), ADR-0024 (tool input), ADR-0035/0036 (feature decisions, not structure)
-- **Implementation:** draft — the seams and the new caps are decided here; `agent.py` (1,800), `jobs/automation.py` (1,971), and `memory/store.py` (2,376) are still the three concentrated modules.
+- **Implementation:** implemented — `agent.py` is 787 lines over `turn/loop.py`/`intake.py`/`delivery.py`/`commands.py`/`steps.py`, `memory/store.py` is 645 over five helpers, and `jobs/automation.py` is replaced by manifest/store/worker (548/690/744). `LINE_CAPS` is empty and `selfcheck` passes.
 - **Location note:** an engine decision (it owns module boundaries and the size gate), so it sits under `adr/engine/`. The Indonesian copy is `docs/v0.1.0/adr/engine/id/0037-module-budgets.md`.
 
 ---

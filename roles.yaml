@@ -20,7 +20,7 @@ roles:
   member:
     name: member
     label: ''
-    description: Committee member
+    description: Member of this deployment
     priority: 10
     users: []
     tools:
@@ -30,8 +30,6 @@ roles:
     - web_search
     - chat_history
     - memory
-    - recipe
-    - google
     - info
     commands:
     - help
@@ -41,13 +39,9 @@ roles:
     - whoami
     - status
     - tools
-    - cari
-    - memori
-    - kirim
-    - mood
     memory_admin: false
-    context: 'You are talking to a committee member. Help with their work without
-      opening new permissions.
+    context: 'You are talking to a member. Help with their work without opening new
+      permissions.
 
       '
   guest:
@@ -62,7 +56,6 @@ roles:
     - fetch
     - web_search
     - chat_history
-    - memory
     - info
     commands:
     - help
@@ -72,7 +65,6 @@ roles:
     - whoami
     - status
     - tools
-    - cari
     memory_admin: false
     context: 'You do not know this person yet. Stay polite and never open another
       chat''s data.

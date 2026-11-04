@@ -35,11 +35,7 @@ from eidesoul.engine.soul import Soul
 ENGINE = ROOT / "eidesoul" / "engine"
 TOP_LEVEL_CAP = 16
 # ADR-0031 §4.1 caps. The allowlist is the four modules this ADR does not split.
-LINE_CAPS = {
-    "eidesoul/engine/agent.py": 1_800,
-    "eidesoul/engine/jobs/automation.py": 2_000,
-    "eidesoul/engine/memory/store.py": 2_400,
-}
+LINE_CAPS: dict[str, int] = {}
 OVER_CAP_ALLOWED = {
     "eidesoul/engine/config.py",
     "eidesoul/engine/stores/affect.py",

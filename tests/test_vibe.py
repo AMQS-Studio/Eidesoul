@@ -97,7 +97,12 @@ def test_advance_pulls_current_to_baseline() -> None:
 def test_vibe_block_in_prompts() -> None:
     block = "Vibe ruangan: netral, tenang, seimbang."
 
-    assert block in system_prompt(make_config(), (Role("member"),), vibe=block)
+    from eidesoul.engine.turn.prompts import PromptContext
+
+    config = make_config()
+    roles = (Role("member"),)
+    context = PromptContext(config=config, roles=roles, vibe=block)
+    assert block in system_prompt(config, roles, context=context)
     assert "Vibe ruangan" in build_context(vibe=block)
 
 

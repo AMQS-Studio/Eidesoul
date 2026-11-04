@@ -18,7 +18,7 @@ from sqlalchemy import text
 
 from .. import io
 from ..inbound import MESSAGE, Percept
-from .automation import AutomationWorker
+from .automation_worker import AutomationWorker
 from .cognition import CognitionWorker
 from .lease import Lease
 

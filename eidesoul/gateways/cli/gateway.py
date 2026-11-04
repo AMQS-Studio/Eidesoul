@@ -44,7 +44,7 @@ class CliGateway(CoreDefaults):
     async def run(self, agent) -> None:
         self.agent = agent
         print(
-            f"Eidesoul console — mode: {agent.mode}; role: {self.settings.role or '-'}; "
+            f"Eidesoul console — mode: {agent.mode}; identity: {self.settings.user or 'local'}; "
             "type /help, /quit to exit.",
             flush=True,
         )
@@ -63,8 +63,6 @@ class CliGateway(CoreDefaults):
             self.counter += 1
             user = self.settings.user or "local"
             hints: dict[str, object] = {"dm": True}
-            if self.settings.role:
-                hints["roles"] = (self.settings.role,)
             inbound = Percept(
                 source=self.name,
                 thread=self.settings.thread_id,

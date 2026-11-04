@@ -288,7 +288,6 @@ GATEWAY: dict = {
     "gateways": {
         "cli": {
             "enabled": True,
-            "role": "administrator",
             "user": "local",
             "thread_id": "cli:local",
             "chat_name": "Terminal",
@@ -315,13 +314,14 @@ ROLES: dict[str, dict] = {
         "memory_admin": True,
         "context": (
             "You are talking to the administrator of Eidesoul, who sets the direction, "
-            "permissions, and soul.\nAllows corrections, config/soul changes, and full reports.\n"
+            "permissions, and soul.\n"
+            "Allows corrections, config/soul changes, and full reports.\n"
         ),
     },
     "member": {
         "name": "member",
         "label": "",
-        "description": "Committee member",
+        "description": "Member of this deployment",
         "priority": 10,
         "users": [],
         "tools": [
@@ -331,7 +331,6 @@ ROLES: dict[str, dict] = {
             "web_search",
             "chat_history",
             "memory",
-            "recipe",
             "info",
         ],
         "commands": [
@@ -342,14 +341,10 @@ ROLES: dict[str, dict] = {
             "whoami",
             "status",
             "tools",
-            "search",
-            "memory",
-            "send",
-            "mood",
         ],
         "memory_admin": False,
         "context": (
-            "You are talking to a committee member. Help with their work without opening new "
+            "You are talking to a member. Help with their work without opening new "
             "permissions.\n"
         ),
     },
@@ -359,17 +354,8 @@ ROLES: dict[str, dict] = {
         "description": "Unknown sender",
         "priority": 0,
         "users": [],
-        "tools": ["read", "grep", "fetch", "web_search", "chat_history", "memory", "info"],
-        "commands": [
-            "help",
-            "ping",
-            "link",
-            "unlink",
-            "whoami",
-            "status",
-            "tools",
-            "search",
-        ],
+        "tools": ["read", "grep", "fetch", "web_search", "chat_history", "info"],
+        "commands": ["help", "ping", "link", "unlink", "whoami", "status", "tools"],
         "memory_admin": False,
         "context": (
             "You do not know this person yet. Stay polite and never open another chat's data.\n"

@@ -1,4 +1,4 @@
-> Terjemahan turunan — jangan sunting; sumber: engine/0034-prompt-parts.md (sha256: ada5010a2aac)
+> Terjemahan turunan — jangan sunting; sumber: engine/0034-prompt-parts.md (sha256: fbda400d8cba)
 > Ditulis tangan (bukan mesin), mengikuti sumber English baris demi baris.
 
 # ADR-0034: Prompt Parts — Satu Registry untuk Metadata Blok, Bukan Kontrak Tool Kedua
@@ -9,7 +9,7 @@
 - **Konteks:** lanjutan ADR-0015 (anggaran prompt dan indeks kapabilitas), ADR-0025 (prefix stabil dan cache prompt), ADR-0027/0028 (unit plugin dan kapabilitas clean-by-default), ADR-0033 (core netral dan `prompt_section`)
 - **Supersedes:** —
 - **Terkait:** ADR-0031 (tata letak modul dan anggaran pertumbuhan), ADR-0024 (kontrak input tool), ADR-0018 (seam gateway)
-- **Implementasi:** draft — registry, metadata, dan titik ekstensi plugin diputuskan di sini; pohon kode masih merakit blok dari dua kamus hardcoded dan tiga daftar nama.
+- **Implementasi:** partial — `PromptPart`/`PromptContext`/`CORE_PARTS`, salience metadata, dan registrasi prompt plugin ada di `turn/prompts.py`, `turn/salience.py`, dan `turn/plugin_registration.py`; test mencakup kemurnian stable, prompt plugin, dan kontrak prompt. Scan tree plugin di neutral gate belum ditambahkan.
 - **Catatan lokasi:** keputusan engine (ia memiliki perakitan prompt dan permukaan ekstensi untuk blok), jadi ia duduk di bawah `adr/engine/`. Salinan Indonesia di `docs/v0.1.0/adr/engine/id/0034-prompt-parts.md`.
 
 ---

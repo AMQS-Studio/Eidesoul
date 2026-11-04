@@ -10,7 +10,7 @@ from eidesoul.engine.access.roles import Role
 from eidesoul.engine.inbound import PROMPT_SECTION_MAX, CoreDefaults, prompt_section
 from eidesoul.engine.llm import prompt_prefix_hash
 from eidesoul.engine.soul import Soul
-from eidesoul.engine.turn.prompts import Prompt, system_prompt
+from eidesoul.engine.turn.prompts import Prompt, PromptContext, system_prompt
 
 ROOT = Path(__file__).resolve().parents[1]
 CASES = yaml.safe_load((ROOT / "tests" / "data" / "prompt_cases.yaml").read_text())[
@@ -39,14 +39,16 @@ def _section(case: dict) -> str:
 
 def _prompt(tmp_path, case: dict) -> Prompt:
     config = build_config(tmp_path, soul=_soul(case))
-    return system_prompt(
-        config,
-        (Role("member"),),
-        gateway_hints=prompt_section(_Body(_section(case))),
-        character="## Register\nToxicity level 1/4 for this turn.",
+    context = PromptContext(
+        config=config,
+        roles=(Role("member"),),
+        body_section=prompt_section(_Body(_section(case))),
+        language=case["language"],
+        limits=(3, 2),
         safety="Hard floor no level unlocks: sexual content with minors.",
         query="hello",
     )
+    return system_prompt(config, (Role("member"),), context=context)
 
 
 class _Body(CoreDefaults):
@@ -127,3 +129,37 @@ def test_the_register_never_classifies_a_person() -> None:
 def test_a_language_without_a_catalog_is_refused() -> None:
     with pytest.raises(ValueError, match="available"):
         Soul(language="fr", locale="fr-FR", timezone="UTC")
+
+
+def test_stable_parts_are_pure_across_per_turn_contexts(tmp_path) -> None:
+    case = CASES[0]
+    config = build_config(tmp_path, soul=_soul(case))
+    roles = (Role("member"),)
+    first_context = PromptContext(
+        config=config,
+        roles=roles,
+        sender="Budi",
+        direct=True,
+        mode="daily",
+        tone="neutral",
+        query="first",
+        memory="memory one",
+        emotion="emotion one",
+    )
+    second_context = PromptContext(
+        config=config,
+        roles=roles,
+        sender="Sari",
+        direct=False,
+        mode="professional",
+        tone="angry",
+        query="second",
+        memory="memory two",
+        emotion="emotion two",
+    )
+
+    first = system_prompt(config, roles, context=first_context)
+    second = system_prompt(config, roles, context=second_context)
+
+    assert first.stable == second.stable
+    assert prompt_prefix_hash(first.stable, []) == prompt_prefix_hash(second.stable, [])

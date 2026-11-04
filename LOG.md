@@ -1,5 +1,26 @@
 # LOG
 
+## 2026-11-04 — ADR-0034..0038 implemented
+
+The module caps are real: `agent.py` is 787 lines behind `turn/loop.py`, `intake.py`, `delivery.py`,
+`commands.py`, and `steps.py`; `memory/store.py` is 645 lines behind writes/candidates/reads/
+maintenance/disputes/records; `jobs/automation.py` is replaced by manifest/store/worker. `selfcheck`
+has no private cap entries. Prompt blocks are one `PromptPart` registry with a frozen `PromptContext`
+and metadata salience; plugins declare static prompt parts and the loader checks them before import.
+Skills gain a nullable `app` namespace above `scope`, threaded from the body hint through turns,
+episodes, retrieval, and writes. Roles are identity-only bundles: `protected` is administrator-only,
+`users` are `per_...`, the `roles` hint and CLI role are gone, and `eidesoul people add` is the
+bootstrap. Privacy now classifies locally: `memory/evidence.py` returns detector/version/digest/
+label/score/span, a versioned policy writes the level, credentials drop, `ask` is policy-owned, and
+`memories.privacy_evidence`/`privacy_policy` persist the record. The auditor and pending-answer
+parser call no external model. The golden set is `tests/data/privacy_cases.yaml`.
+
+Gates: `pytest -q` 863 passed; `ruff` clean; `pyright` 0 errors; `selfcheck` ok; ADR check 39/39 and
+translation clean. ADR-0038 remains partial only because the Presidio+spaCy entity adapter named in
+§5.1 is not installed; the shipped entity layer is the deterministic language pack plus the MiniLM
+centroid layer. Closing that gap or amending §5.1 is required before claiming the fully local
+default stack.
+
 ## 2026-11-04 — ADR-0038 decides layered privacy
 
 The level stays, but the label gets an evidence trail and the policy gets sole authority. A

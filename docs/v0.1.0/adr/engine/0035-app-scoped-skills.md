@@ -6,7 +6,7 @@
 - **Context:** extends ADR-0020 (procedural memory), ADR-0018 (body facts), ADR-0006 (audience ceiling); follows ADR-0033 (neutral core) and ADR-0034 (prompt parts, draft)
 - **Supersedes:** —
 - **Related:** ADR-0031 (schema and module budgets), ADR-0016 (migrations), ADR-0027/0028 (plugin unit), ADR-0032 (address and body)
-- **Implementation:** draft — the columns, the hint, and the visibility rules are decided here; skills still carry only `global|thread|person`.
+- **Implementation:** implemented — `turns.app`, `episodes.app`, `skills.app`, and `ix_skills_app_scope` are in migration 0017; the body hint, retrieval, writes, and episode signature are threaded; the visibility matrix and turn-hint path are tested.
 - **Location note:** an engine decision (it extends procedural memory and the inbound contract), so it sits under `adr/engine/`. The Indonesian copy is `docs/v0.1.0/adr/engine/id/0035-app-scoped-skills.md`.
 
 ---

@@ -131,7 +131,7 @@ def test_revision_0013_adds_the_fence_event_and_efficiency_columns(fresh_databas
                 )
             ).scalars().all()
         assert "dispute_asked_at" in set(view_columns)
-        assert SCHEMA_VERSION == 16
+        assert SCHEMA_VERSION == 18
     finally:
         db.dispose()
 
@@ -145,5 +145,33 @@ def test_revision_0014_drops_the_person_gender_columns(fresh_database) -> None:
         assert "gender" not in found
         assert "gender_confidence" not in found
         assert "gender_source" not in found
+    finally:
+        db.dispose()
+
+
+def test_revision_0017_and_0018_add_app_scope_and_privacy_evidence(fresh_database) -> None:
+    """ADR-0035/0038: one namespace column per record and one evidence column on a memory."""
+    db = Database(fresh_database)
+    try:
+        db.upgrade()
+        inspector = inspect(db.engine)
+        for table in ("turns", "episodes", "skills"):
+            found = {column["name"] for column in inspector.get_columns(table)}
+            assert "app" in found, table
+        assert "ix_skills_app_scope" in {
+            index["name"] for index in inspector.get_indexes("skills")
+        }
+        memories = {column["name"] for column in inspector.get_columns("memories")}
+        assert {"privacy_evidence", "privacy_policy"} <= memories
+        with db.connect() as conn:
+            view_columns = set(
+                conn.execute(
+                    text(
+                        "SELECT column_name FROM information_schema.columns "
+                        "WHERE table_name = 'memories_readable'"
+                    )
+                ).scalars()
+            )
+        assert {"privacy_evidence", "privacy_policy"} <= view_columns
     finally:
         db.dispose()

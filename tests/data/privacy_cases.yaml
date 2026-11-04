@@ -1,0 +1,62 @@
+# ADR-0038 §4.7 golden set: deterministic, checked in, per-label expectations.
+cases:
+  - id: credential-password
+    language: id
+    text: "passwordku hunter2"
+    label: credential
+    level: 4
+    action: drop
+  - id: credential-api-key
+    language: id
+    text: "api_key=abc123"
+    label: credential
+    level: 4
+    action: drop
+  - id: crime-admission
+    language: id
+    text: "aku tadi nyuri di toko"
+    label: crime_admission
+    level: 4
+    action: ask
+  - id: health-disclosure
+    language: id
+    text: "aku sakit dan harus ke rumah sakit"
+    label: health
+    level: 4
+    action: ask
+  - id: financial
+    language: id
+    text: "aku punya utang besar"
+    label: financial
+    level: 3
+    action: allow
+  - id: third-party
+    language: id
+    text: "temanku baru pindah kerja"
+    label: third_party_personal
+    level: 3
+    action: allow
+  - id: affect-only
+    language: id
+    text: "aku sedih banget"
+    label: none
+    level: 2
+    action: allow
+  - id: ambiguous-fall
+    language: id
+    text: "aku tadi jatuh"
+    label: ambiguous
+    level: 2
+    action: ask
+  - id: english-credential
+    language: en
+    text: "my password is hunter2"
+    label: credential
+    level: 4
+    action: drop
+  - id: english-crime
+    language: en
+    text: "I stole from the shop"
+    label: crime_admission
+    level: 4
+    action: ask

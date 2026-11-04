@@ -212,3 +212,83 @@ def test_skill_command_owner_surface(tmp_path: Path) -> None:
     assert store.get("deploy") is not None
     assert out("forget deploy")
     assert store.get("deploy") is None
+
+
+def test_app_scope_is_applied_before_the_audience_ceiling(tmp_path: Path) -> None:
+    store = SkillStore(database())
+    store.save(
+        "a-proc", "Deploy on app a.", "# A\n", app="a", scope="global", trust="T0",
+        language="id",
+    )
+    store.save("shared", "Shared deploy.", "# S\n", language="id")
+
+    inside = store.retrieve(
+        "deploy", app="a", thread_id="chat", person_id="p",
+        catalog_tools=(), held_tools=(),
+    )
+    outside = store.retrieve(
+        "deploy", app="b", thread_id="chat", person_id="p",
+        catalog_tools=(), held_tools=(),
+    )
+
+    assert "a-proc" in inside
+    assert "shared" in inside
+    assert "a-proc" not in outside
+    assert "shared" in outside
+
+
+def test_app_combines_with_person_and_thread_scope(tmp_path: Path) -> None:
+    store = SkillStore(database())
+    store.save(
+        "mine", "Only this person in app a.", "# M\n", app="a", scope="person",
+        stated_by="per_aaaaaaaaaa", language="id",
+    )
+    store.save(
+        "room", "Only this thread in app a.", "# R\n", app="a", scope="thread",
+        stated_by="chat-a", language="id",
+    )
+
+    own = store.retrieve(
+        "app", app="a", thread_id="chat-a", person_id="per_aaaaaaaaaa",
+        catalog_tools=(), held_tools=(),
+    )
+    other = store.retrieve(
+        "app", app="a", thread_id="chat-b", person_id="per_bbbbbbbbbb",
+        catalog_tools=(), held_tools=(),
+    )
+
+    assert "mine" in own
+    assert "room" in own
+    assert "mine" not in other
+    assert "room" not in other
+
+
+def test_revise_without_app_keeps_the_namespace(tmp_path: Path) -> None:
+    store = SkillStore(database())
+    store.save("a-proc", "One.", "# One\n", app="a", language="id")
+    store.revise("a-proc", "Two.", "# Two\n", language="id")
+    assert store.get("a-proc").app == "a"
+
+
+def test_the_turn_app_hint_selects_the_skill_corpus(tmp_path: Path) -> None:
+    from sqlalchemy import select
+    from support import inbound_message, make_agent
+
+    from eidesoul.engine.schema import turns
+
+    env = make_agent(tmp_path)
+    env.agent.skills.save(
+        "a-proc", "Deploy on app a.", "# A\n", app="a", scope="global", trust="T0",
+        language="id",
+    )
+    env.agent.skills.save(
+        "b-proc", "Deploy on app b.", "# B\n", app="b", scope="global", trust="T0",
+        language="id",
+    )
+
+    asyncio.run(env.agent.handle(inbound_message("deploy", app="a"), env.gateway))
+
+    assert "a-proc" in env.llm.system
+    assert "b-proc" not in env.llm.system
+    row = env.db.fetch_one(select(turns.c.app))
+    assert row["app"] == "a"

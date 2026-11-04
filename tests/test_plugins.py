@@ -67,6 +67,7 @@ def write_plugin(
     secrets: tuple[str, ...] = (),
     raises: bool = False,
     broken_entry: bool = False,
+    prompts: tuple[str, ...] = (),
 ) -> Path:
     """Write a complete local plugin tree and stamp its manifest with the real digest."""
     folder = root / name
@@ -76,12 +77,18 @@ def write_plugin(
         (folder / "tools" / f"{tool}.py").write_text(TOOL.format(name=tool), encoding="utf-8")
     imports = "\n".join(f"from .tools.{tool} import TOOL as {tool.upper()}" for tool in tools)
     returned = ", ".join(tool.upper() for tool in tools)
+    prompt_rows = ", ".join(
+        f'PromptPart("plugin:{name}:{slug}", True, 0, text="Plugin instruction {index}.")'
+        for index, slug in enumerate(prompts)
+    )
     action = 'raise RuntimeError("boom")' if raises else (
-        f'return {{"tools": [{returned}], "commands": [], "gateways": []}}'
+        f'return {{"tools": [{returned}], "commands": [], "gateways": [], '
+        f'"prompts": [{prompt_rows}]}}'
     )
     entry = (
         '"""Fixture plugin entry."""\n'
-        "from eidesoul.engine.registry import Handler\n\n"
+        "from eidesoul.engine.registry import Handler\n"
+        "from eidesoul.engine.turn.prompts import PromptPart\n\n"
         f"{imports}\n\n\n"
         "def register() -> dict[str, list[Handler]]:\n"
         f"    {action}\n"
@@ -99,7 +106,12 @@ def write_plugin(
         "engine": ">=0.0.0,<1.0",
         "entry": "plugin.py:register",
         "digest": digest or actual,
-        "provides": {"tools": list(tools), "commands": [], "gateways": []},
+        "provides": {
+            "tools": list(tools),
+            "commands": [],
+            "gateways": [],
+            "prompt": list(prompts),
+        },
         "requires": [],
         "secrets": list(secrets),
         "credits": CREDITS,
@@ -203,6 +215,38 @@ def test_enable_with_fetch_false_and_no_code_fails_and_changes_nothing(tmp_path:
 
     assert config_path.read_text(encoding="utf-8") == before
     assert not (root / "demo").exists()
+
+
+def test_a_plugin_prompt_is_declared_static_and_namespaced(tmp_path: Path) -> None:
+    root = tmp_path / "plugins"
+    write_plugin(root, prompts=("guide",))
+
+    loaded = plugins.load(settings(root, demo={"enabled": True}))
+
+    assert loaded.state("demo") == "enabled"
+    assert len(loaded.prompts) == 1
+    part = loaded.prompts[0]
+    assert part.name == "plugin:demo:guide"
+    assert part.text == "Plugin instruction 0."
+    assert part.stable is True
+    assert part.order >= 1000
+
+
+def test_a_plugin_prompt_must_be_declared(tmp_path: Path) -> None:
+    root = tmp_path / "plugins"
+    write_plugin(root, prompts=("guide",))
+    manifest = yaml.safe_load((root / "demo" / "plugin.yaml").read_text(encoding="utf-8"))
+    manifest["provides"]["prompt"] = []
+    (root / "demo" / "plugin.yaml").write_text(yaml.safe_dump(manifest), encoding="utf-8")
+    manifest["digest"] = plugins.tree_digest(root / "demo")
+    (root / "demo" / "plugin.yaml").write_text(yaml.safe_dump(manifest), encoding="utf-8")
+
+    loaded = plugins.load(settings(root, demo={"enabled": True}))
+
+    assert loaded.state("demo") == "unavailable"
+    assert "declared" in next(
+        item.reason for item in loaded.plugins if item.name == "demo"
+    ) or "missing" in next(item.reason for item in loaded.plugins if item.name == "demo")
 
 
 def test_a_shadowed_core_tool_is_refused(tmp_path: Path) -> None:
@@ -322,3 +366,20 @@ def test_manifest_requires_credits(tmp_path: Path) -> None:
 
     with pytest.raises(plugins.PluginError, match="credits"):
         plugins.read_manifest(folder / "plugin.yaml")
+
+
+def test_a_plugin_prompt_reaches_the_assembled_prompt(tmp_path: Path) -> None:
+    from eidesoul.engine.turn.prompts import CORE_PARTS, PromptContext, system_prompt
+
+    root = tmp_path / "plugins"
+    write_plugin(root, prompts=("guide",))
+    loaded = plugins.load(settings(root, demo={"enabled": True}))
+    config = build_config(tmp_path)
+    roles = (Role("member"),)
+    context = PromptContext(config=config, roles=roles)
+
+    prompt = system_prompt(
+        config, roles, context=context, parts=(*CORE_PARTS, *loaded.prompts)
+    )
+
+    assert "Plugin instruction 0." in prompt

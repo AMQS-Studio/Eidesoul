@@ -6,7 +6,7 @@
 - **Context:** follows ADR-0015 (prompt budgets and the capability index), ADR-0025 (stable prefix and prompt cache), ADR-0027/0028 (plugin unit and clean-by-default capability), ADR-0033 (neutral core and `prompt_section`)
 - **Supersedes:** —
 - **Related:** ADR-0031 (module layout and the growth budget), ADR-0024 (tool input contract), ADR-0018 (gateway seam)
-- **Implementation:** draft — the registry, the metadata, and the plugin extension point are decided here; the tree still assembles blocks from two hardcoded dictionaries and three name lists.
+- **Implementation:** partial — `PromptPart`/`PromptContext`/`CORE_PARTS`, metadata salience, and plugin prompt registration are in `turn/prompts.py`, `turn/salience.py`, and `turn/plugin_registration.py`; tests cover stable purity, plugin parts, and the prompt contract. The neutral gate's plugin-tree scan is not added yet.
 - **Location note:** an engine decision (it owns prompt assembly and the extension surface for blocks), so it sits under `adr/engine/`. The Indonesian copy is `docs/v0.1.0/adr/engine/id/0034-prompt-parts.md`.
 
 ---

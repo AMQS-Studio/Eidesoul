@@ -280,6 +280,7 @@ class HistoryStore:
         audience: str = "private",
         category: str = "chat",
         gateway: str = "",
+        app: str = "",
     ) -> bool:
         """The one intake transaction (ADR-0011 §4.1): message + turn + memory journal + candidate.
 
@@ -303,6 +304,7 @@ class HistoryStore:
                     person_id=str(person_id or "")[:80],
                     status="received",
                     step="received",
+                    app=str(app or "").strip().lower(),
                     category="action" if str(category) == "action" else "chat",
                     attempt=0,
                     lease_owner="",

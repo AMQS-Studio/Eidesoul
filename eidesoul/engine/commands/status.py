@@ -12,7 +12,7 @@ from statistics import median
 from sqlalchemy import text
 
 from .. import db as database
-from ..access.roles import PROTECTED
+from ..access.roles import PROTECTED, privileged
 from ..character.lexicon import warnings as lexicon_warnings
 from ..i18n import t
 from ..registry import Handler
@@ -58,7 +58,7 @@ def _last_change(agent, lang: str) -> str:
 
 
 def _is_administrator(roles) -> bool:
-    return any(role.name == PROTECTED or role.protected for role in roles)
+    return any(role.name == PROTECTED or privileged(role) for role in roles)
 
 
 def percentile(values: list[float], share: float) -> float:
@@ -245,7 +245,7 @@ def _metrics_lines(agent, lang: str, now: float) -> list[str]:
 
 
 def _body_lines(ctx: CommandContext, agent, lang: str, now: float) -> list[str]:
-    from ..jobs.automation import automation_counters
+    from ..jobs.automation_worker import automation_counters
     from ..memory import memory_status
 
     lines: list[str] = []

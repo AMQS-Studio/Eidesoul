@@ -1,4 +1,4 @@
-> Terjemahan turunan — jangan sunting; sumber: engine/0037-module-budgets.md (sha256: 56cfaecfa174)
+> Terjemahan turunan — jangan sunting; sumber: engine/0037-module-budgets.md (sha256: 719657fa8d31)
 
 - **Status:** accepted
 - **Tanggal:** 2026-11-04
@@ -6,7 +6,7 @@
 - **Konteks:** memperluas ADR-0031 (struktur engine, cap modul); mengikuti ADR-0001 (satu port memori), ADR-0013 (siklus turn), ADR-0032 (pintu dispatch)
 - **Supersedes:** —
 - **Terkait:** ADR-0007 (izin), ADR-0016 (skema), ADR-0024 (input tool), ADR-0035/0036 (keputusan fitur, bukan struktur)
-- **Implementasi:** draft — seam dan cap baru diputuskan di sini; `agent.py` (1.800), `jobs/automation.py` (1.971), dan `memory/store.py` (2.376) masih tiga modul terkonsentrasi.
+- **Implementasi:** implemented — `agent.py` 787 baris di atas `turn/loop.py`/`intake.py`/`delivery.py`/`commands.py`/`steps.py`, `memory/store.py` 645 di atas lima helper, dan `jobs/automation.py` diganti manifest/store/worker (548/690/744). `LINE_CAPS` kosong dan `selfcheck` lolos.
 - **Catatan lokasi:** keputusan engine (ia memiliki batas modul dan gate ukuran), jadi duduk di bawah `adr/engine/`. Salinan Indonesia di `docs/v0.1.0/adr/engine/id/0037-module-budgets.md`.
 
 ---

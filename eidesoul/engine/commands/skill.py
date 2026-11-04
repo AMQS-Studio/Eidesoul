@@ -51,7 +51,21 @@ def _restore(ctx: CommandContext, store, rest: str, lang: str) -> str:
     return t("command.skill.restored", lang, name=store.restore_archived(name))
 
 
+def _app_token(rest: str) -> tuple[str, str]:
+    """Strip one trailing/wrapped app=<name> token; every other word stays in the payload."""
+    words = str(rest or "").split()
+    app = ""
+    kept: list[str] = []
+    for word in words:
+        if word.startswith("app="):
+            app = word.split("=", 1)[1].strip().lower()
+        else:
+            kept.append(word)
+    return " ".join(kept), app
+
+
 def _import(ctx: CommandContext, store, rest: str, lang: str) -> str:
+    rest, app = _app_token(rest)
     path = Path(rest.strip()).expanduser()
     from ..stores.skills import parse_frontmatter
 
@@ -68,11 +82,13 @@ def _import(ctx: CommandContext, store, rest: str, lang: str) -> str:
         trust=str(meta.get("trust") or "T2"),
         approved=bool(meta.get("approved", False)),
         language=lang,
+        app=app,
     )
     return t("command.skill.imported", lang, name=name)
 
 
 def _save(ctx: CommandContext, store, rest: str, lang: str) -> str:
+    rest, app = _app_token(rest)
     name, _, payload = rest.partition(" ")
     description, _, body = payload.partition("|")
     if not name or not description.strip() or not body.strip():
@@ -87,6 +103,7 @@ def _save(ctx: CommandContext, store, rest: str, lang: str) -> str:
         stated_by=str(ctx.sender or ""),
         trust="T0",
         language=lang,
+        app=app,
     )
     return t("command.skill.saved", lang, name=name)
 

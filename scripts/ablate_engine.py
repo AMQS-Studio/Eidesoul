@@ -13,7 +13,7 @@ from eidesoul.engine.config import Config
 from eidesoul.engine.turn import salience
 from eidesoul.engine.turn.context import AUTHOR_BOT, AUTHOR_MANUAL, Message, prompt_entry
 from eidesoul.engine.turn.decision import decide
-from eidesoul.engine.turn.prompts import system_prompt
+from eidesoul.engine.turn.prompts import CORE_PARTS, PromptContext, system_prompt
 
 REPLY_WINDOW = 1
 TRANSCRIPT_LINES = 30
@@ -84,35 +84,36 @@ def prompt_budget(
     stripped = dataclasses.replace(
         config, prompt=dataclasses.replace(config.prompt, salience=False)
     )
-    mandatory = {
-        "base": "x",
-        "self": "",
-        "roles": "",
-        "safety": "",
-        "away": "",
-        "emotion": "x",
-        "vibe": "x",
-        "memory": "",
-        "actions": "",
-    }
     before: list[int] = []
     after: list[int] = []
     dropped: dict[str, int] = {}
     for message in incoming:
         source = blocks_for(message)
-        blocks = {
-            name: source.get(name, "")
-            for name in (*salience.COMPETING, "memory", "actions")
-        }
         member = (Role(name="member"),)
-        before.append(len(system_prompt(stripped, member, query=message.text, **blocks)))
-        after.append(
-            len(
-                system_prompt(config, member, query=message.text, bonuses={}, **blocks)
-            )
+        context = PromptContext(
+            config=config,
+            roles=member,
+            query=message.text,
+            sender=message.sender_name,
+            language=config.soul.language,
+            topic=str(source.get("topic") or ""),
+            emotion=str(source.get("emotion") or ""),
+            vibe=str(source.get("vibe") or ""),
+            style=str(source.get("style") or ""),
+            person_style=str(source.get("person_style") or ""),
+            memory=str(source.get("memory") or ""),
+            actions=str(source.get("actions") or ""),
+            skills=str(source.get("skills") or ""),
         )
+        before.append(len(system_prompt(stripped, member, context=context)))
+        after.append(len(system_prompt(config, member, context=context)))
+        volatile = [
+            (part, str(source.get(part.name) or ""))
+            for part in CORE_PARTS
+            if not part.stable
+        ]
         _, names = salience.select(
-            {**mandatory, **blocks},
+            volatile,
             message.text,
             language=config.soul.language,
             bonuses={},

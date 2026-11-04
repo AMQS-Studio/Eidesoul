@@ -207,7 +207,7 @@ def test_vetoed_hit_is_denied_and_audit_rewrite_wins(tmp_path) -> None:
     result = review(env, inbound, "dia pernah begitu", [hit(1, vetoed=True)])
 
     assert result.handled is False
-    assert result.reply == "aman kok"
+    assert "aman kok" not in result.reply
 
 
 def test_disclosure_confirmation_sends_the_stored_draft(tmp_path) -> None:
@@ -258,7 +258,7 @@ def test_capture_level_4_stores_unconfirmed_and_asks(tmp_path) -> None:
         asked.append((thread_id, person_id, ids, level))
 
     env = capture_env(tmp_path, [assess(4, ask=True)], ask=ask)
-    capture(env, "aku pernah melakukan hal memalukan")
+    capture(env, "aku tadi nyuri di toko")
 
     found = row(env)
     assert found["state"] == "ok"
@@ -270,10 +270,47 @@ def test_capture_level_4_stores_unconfirmed_and_asks(tmp_path) -> None:
     assert asked[0][3] == 4
 
 
+def test_level_4_without_a_model_ask_is_still_unconfirmed(tmp_path) -> None:
+    """ADR-0038: `ask` is policy-owned; a model field is not part of the decision."""
+    asked: list[tuple] = []
+
+    async def ask(thread_id, person_id, ids, level, question):
+        asked.append((thread_id, person_id, ids, level))
+
+    env = capture_env(tmp_path, [assess(4, ask=False)], ask=ask)
+    capture(env, "aku tadi nyuri di toko")
+
+    found = row(env)
+    assert int(found["level"]) == 4
+    assert found["confirmed"] is False
+    assert asked
+
+
+def test_capture_persists_evidence_and_the_policy_version(tmp_path) -> None:
+    env = capture_env(tmp_path, [assess(4)])
+
+    capture(env, "aku tadi nyuri di toko")
+
+    found = row(env)
+    assert found["privacy_evidence"]
+    assert found["privacy_evidence"][0]["detector"] == "regex"
+    assert found["privacy_policy"]
+
+
+def test_privacy_review_does_not_call_the_llm_for_audit(tmp_path) -> None:
+    env = make_agent(tmp_path)
+    env.agent.llm = ScriptLLM()
+    inbound = inbound_message("halo", thread="111@g.us", dm=False)
+
+    review(env, inbound, "draft", [hit(3)])
+
+    assert env.agent.llm.decisions == 0
+
+
 def test_capture_level_3_is_stored_without_a_question(tmp_path) -> None:
     env = capture_env(tmp_path, [assess(3)])
 
-    capture(env, "aku lagi banyak pikiran")
+    capture(env, "aku punya utang besar")
 
     found = row(env)
     assert int(found["level"]) == 3
@@ -308,7 +345,7 @@ def test_assess_budget_grows_with_the_turn_and_stays_capped() -> None:
 def test_capture_retries_assess_with_a_bigger_budget(tmp_path) -> None:
     env = capture_env(tmp_path, [None, assess(3)])
 
-    capture(env, "aku lagi banyak pikiran")
+    capture(env, "aku punya utang besar")
 
     found = row(env)
     assert int(found["level"]) == 3
@@ -475,7 +512,7 @@ def test_vetoed_memory_is_excluded_from_context(tmp_path) -> None:
 def test_capture_raises_visibility_of_the_turn(tmp_path) -> None:
     env = capture_env(tmp_path, [assess(3)])
 
-    capture(env, "aku lagi banyak pikiran", message_id="m-capture")
+    capture(env, "aku punya utang besar", message_id="m-capture")
 
     assert env.history.find("628111@s.whatsapp.net", "m-capture").visibility == 3
     assert int(row(env)["level"]) == 3

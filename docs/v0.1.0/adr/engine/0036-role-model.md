@@ -6,7 +6,7 @@
 - **Context:** extends ADR-0022 (the `administrator` role), ADR-0007 (capability authorization), ADR-0018 (gateway facts), ADR-0033 (neutral core)
 - **Supersedes:** —
 - **Related:** ADR-0016 (migrations and documents), ADR-0035 (app namespace, unrelated to grants)
-- **Implementation:** draft — the role document, the identity-only selection, and the bootstrap command are decided here; the tree still accepts a role hint from any body, leaves `administrator.users` empty at init, and lets any role claim `protected`.
+- **Implementation:** implemented — protected/users validation, identity-only selection, `people add`, the neutral seed, and CLI role removal are in `access/roles.py`, `admin/people.py`, and their tests.
 - **Location note:** an engine decision (it owns identity, roles, and the boot gate), so it sits under `adr/engine/`. The Indonesian copy is `docs/v0.1.0/adr/engine/id/0036-role-model.md`.
 
 ---

@@ -6,15 +6,15 @@ Eidesoul checklist. Every item is done when the listed surface exists and works 
 
 - [x] One Python process: `eidesoul run|console|selftest|backfill`, no HTTP gateway, no bridge.
 - [x] `eidesoul/engine/` is gateway-free: no `eidesoul.gateways` or `neonize` import in core.
-- [x] One `Database` + one `MetaData`; `SCHEMA_VERSION` mirrors the Alembic head (currently 10);
+- [x] One `Database` + one `MetaData`; `SCHEMA_VERSION` mirrors the Alembic head (currently 18);
       no legacy tables, no SQLite import, no split-config migration path.
 - [x] One primary enforced by `engine_lease`; `/freeze` and takeover go through the lease only.
 
 ## soul.yaml
 
 - [x] `soul.yaml` is the only persona/host soul file; `soul_file` is a host key in `config.yaml`.
-- [x] Schema: `name`, `description`, `language`, `pronouns`, `gender`, `role`, `roles`, `locale`,
-      `background`, `persona`, `style.{patterns,facts,registers,max_patterns,max_facts}`, `examples`.
+- [x] Schema: `name`, `description`, `language`, `pronouns`, `locale`, `background`, `persona`,
+      `style.{patterns,facts,registers,max_patterns,max_facts}`, `examples`.
 - [x] `load_soul` validates genders, prepends the active role, validates pack ids, clamps per-turn
       counts to 0..6, and renders the persona in one fixed order.
 - [x] The `soul` DB document is authoritative; `soul.yaml` is seed plus mirror. No legacy persona
@@ -56,6 +56,19 @@ Eidesoul checklist. Every item is done when the listed surface exists and works 
 - [x] `AGENTS.md` states the English default, the allowed non-English data surfaces, and the
       removability rules.
 - [x] `pytest -q` and `python -m eidesoul selftest` pass.
+
+## Foundation after ADR-0034..0038
+
+- [x] Prompt blocks are `PromptPart` metadata; salience reads `pinned`/`bonus`/`order`, not name lists.
+- [x] A plugin declares static prompt parts through `provides.prompt` and `register()["prompts"]`.
+- [x] `turns.app`, `episodes.app`, and `skills.app` scope a corpus; the body supplies the app hint.
+- [x] Roles are identity-only bundles; `users` are `per_...`; `protected` belongs to `administrator`;
+      `eidesoul people add` bootstraps the first user.
+- [x] `agent.py` (787), `memory/store.py` (645), and the automation manifest/store/worker are under
+      the 800-line module cap; `LINE_CAPS` is empty.
+- [x] Privacy decisions come from local evidence plus a versioned policy; `memories.privacy_evidence`
+      and `privacy_policy` are persisted; the auditor and answer parser call no external model.
+- [ ] Presidio + spaCy entity adapter (ADR-0038 §5.1); the shipped entity layer is deterministic.
 
 ## Shipped in v1 (ADR)
 

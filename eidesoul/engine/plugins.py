@@ -27,7 +27,7 @@ import time
 import types
 import urllib.error
 import urllib.request
-from collections.abc import Iterable, Mapping, Sequence
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field, replace
 from pathlib import Path, PurePosixPath
 from typing import Any
@@ -36,6 +36,8 @@ import yaml
 
 from .config import Config, HostConfig, Paths, PluginSettings
 from .registry import Handler, validate
+from .turn import plugin_registration
+from .turn.prompts import PromptPart
 
 log = logging.getLogger(__name__)
 
@@ -65,7 +67,6 @@ class PluginError(RuntimeError):
 @dataclass(frozen=True)
 class Credits:
     """The README credits row a plugin owes (ADR-0028 §4.2)."""
-
     license: str
     author: str
     source: str
@@ -77,6 +78,7 @@ class Provides:
     tools: tuple[str, ...] = ()
     commands: tuple[str, ...] = ()
     gateways: tuple[str, ...] = ()
+    prompts: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -103,7 +105,6 @@ class Manifest:
 @dataclass(frozen=True)
 class Plugin:
     """One plugin's state; `unavailable` is the uniform answer whenever it cannot be used."""
-
     name: str
     state: str  # absent | installed | enabled | unavailable
     reason: str = ""
@@ -114,9 +115,9 @@ class Plugin:
 @dataclass(frozen=True)
 class Loaded:
     """What boot registration produced; the caller feeds these into the existing registries."""
-
     tools: tuple[Handler, ...] = ()
     commands: tuple[Handler, ...] = ()
+    prompts: tuple[PromptPart, ...] = ()
     plugins: tuple[Plugin, ...] = ()
 
     def state(self, name: str) -> str:
@@ -129,7 +130,6 @@ class Loaded:
 @dataclass(frozen=True)
 class PluginLoader:
     """The loader's whole input, built from the engine `Config` or from host files (CLI)."""
-
     root: Path
     fetch: bool = True
     source: str = ""
@@ -280,6 +280,7 @@ def read_manifest(path: Path) -> Manifest:
             tools=_names(provides_raw.get("tools"), "provides.tools"),
             commands=_names(provides_raw.get("commands"), "provides.commands"),
             gateways=_names(provides_raw.get("gateways"), "provides.gateways"),
+            prompts=_names(provides_raw.get("prompt"), "provides.prompt"),
         ),
         requires=_strings(body.get("requires"), "requires"),
         secrets=secrets,
@@ -446,15 +447,6 @@ def _handlers(result: Mapping[str, Any], key: str) -> list[Handler]:
     return found
 
 
-def _declared(manifest: Manifest, kind: str, found: list[Handler]) -> None:
-    expected = set(getattr(manifest.provides, kind))
-    actual = {handler.name for handler in found}
-    if expected != actual:
-        missing = ", ".join(sorted(expected - actual)) or "-"
-        extra = ", ".join(sorted(actual - expected)) or "-"
-        raise PluginError(f"{kind} do not match provides: missing {missing}; undeclared {extra}")
-
-
 def _purge(key: str) -> None:
     for item in [name for name in sys.modules if name == key or name.startswith(key + ".")]:
         del sys.modules[item]
@@ -486,7 +478,7 @@ def _register(
     manifest: Manifest,
     reserved_tools: set[str],
     reserved_commands: set[str],
-) -> tuple[list[Handler], list[Handler]]:
+) -> tuple[list[Handler], list[Handler], list[PromptPart]]:
     key = module_name(manifest.name)
     try:
         module = _entry_module(base, manifest)
@@ -503,8 +495,14 @@ def _register(
             raise PluginError("register() must return a mapping of tools/commands")
         tools = _handlers(result, "tools")
         commands = _handlers(result, "commands")
-        _declared(manifest, "tools", tools)
-        _declared(manifest, "commands", commands)
+        try:
+            prompts = plugin_registration.prompt_parts(
+                result, manifest.name, manifest.provides.prompts
+            )
+            plugin_registration.declared("tools", manifest.provides.tools, tools)
+            plugin_registration.declared("commands", manifest.provides.commands, commands)
+        except plugin_registration.RegistrationError as exc:
+            raise PluginError(str(exc)) from exc
         errors: list[str] = []
 
         for handler in tools:
@@ -513,23 +511,18 @@ def _register(
             errors.extend(validate(handler, handler.name, "command"))
         if errors:
             raise PluginError("; ".join(errors))
-        _collisions("tool", tools, reserved_tools)
-        _collisions("command", commands, reserved_commands)
-        return tools, commands
+        try:
+            plugin_registration.collisions("tool", tools, reserved_tools)
+            plugin_registration.collisions("command", commands, reserved_commands)
+        except plugin_registration.RegistrationError as exc:
+            raise PluginError(str(exc)) from exc
+        return tools, commands, prompts
     except PluginError:
         _purge(key)
         raise
     except Exception as exc:  # no plugin import may take the engine down
         _purge(key)
         raise PluginError(f"failed to load: {type(exc).__name__}: {exc}") from exc
-
-
-def _collisions(kind: str, handlers: Sequence[Handler], reserved: set[str]) -> None:
-    for handler in handlers:
-        for value in (handler.name, *handler.aliases):
-            if value in reserved:
-                raise PluginError(f"{kind} '{value}' collides with an existing {kind}")
-        reserved.update((handler.name, *handler.aliases))
 
 
 # ------------------------------------------------------------------- lifecycle
@@ -554,6 +547,7 @@ def load(
     reserved_commands.update(commands or ())
     found_tools: list[Handler] = []
     found_commands: list[Handler] = []
+    found_prompts: list[PromptPart] = []
     found: list[Plugin] = []
     for name in names(settings):
         plugin = _inspect(settings, name)
@@ -563,7 +557,7 @@ def load(
         base = Path(settings.root) / name
         try:
             manifest = _verify(settings, name, base)
-            plugin_tools, plugin_commands = _register(
+            plugin_tools, plugin_commands, plugin_prompts = _register(
                 base, manifest, reserved_tools, reserved_commands
             )
         except (PluginError, OSError) as exc:
@@ -572,8 +566,17 @@ def load(
             continue
         found_tools.extend(plugin_tools)
         found_commands.extend(plugin_commands)
+        found_prompts.extend(plugin_prompts)
         found.append(Plugin(name, "enabled", path=base, manifest=manifest))
-    return Loaded(tuple(found_tools), tuple(found_commands), tuple(found))
+    prompts = tuple(
+        replace(part, order=1000 + index) for index, part in enumerate(found_prompts)
+    )
+    return Loaded(
+        tools=tuple(found_tools),
+        commands=tuple(found_commands),
+        prompts=prompts,
+        plugins=tuple(found),
+    )
 
 
 def _fetch_artifact(settings: PluginLoader, name: str) -> bytes:

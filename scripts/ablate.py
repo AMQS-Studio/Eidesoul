@@ -28,7 +28,7 @@ from eidesoul.engine.stores.documents import DocumentStore
 from eidesoul.engine.stores.history import HistoryStore
 from eidesoul.engine.stores.skills import SkillStore
 from eidesoul.engine.stores.style import StyleStore
-from eidesoul.engine.turn import salience
+from eidesoul.engine.turn.prompts import CORE_PARTS
 
 
 def open_stores(config, db, memory) -> dict:
@@ -51,7 +51,7 @@ def blocks_for(chat: str, stores: dict):
     style = stores.get("style")
 
     def build(message) -> dict:
-        blocks = dict.fromkeys(salience.COMPETING, "")
+        blocks = dict.fromkeys((part.name for part in CORE_PARTS), "")
         if memory is not None and getattr(memory, "available", False):
             with suppress(Exception):
                 blocks["memory"] = asyncio.run(

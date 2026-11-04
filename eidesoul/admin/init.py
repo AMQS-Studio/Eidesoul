@@ -404,7 +404,13 @@ def report(
             "choose a model: `eidesoul models` lists the ids the provider serves, then set "
             "engine.llm.model (rerun `eidesoul init --model <id> --force` or edit config.yaml)"
         )
-    steps.extend(["eidesoul db upgrade", "eidesoul run"])
+    steps.extend(
+        [
+            "eidesoul db upgrade",
+            "eidesoul people add cli local --role administrator",
+            "eidesoul run",
+        ]
+    )
     lines.append("Next steps:")
     lines.extend(f"  {index}. {step}" for index, step in enumerate(steps, start=1))
     lines.append(f"Log: {Path(log_path) if log_path else DEFAULT_LOG}")

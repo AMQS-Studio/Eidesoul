@@ -6,7 +6,7 @@ cases:
     locale: en-US
     timezone: UTC
     section: ""
-    stable_prefix_hash: 2ebe20e1cb8f4136
+    stable_prefix_hash: 50d69771e510194d
     expect_contains:
       - "Toxicity level"
       - "Hard floor no level unlocks"
@@ -22,7 +22,7 @@ cases:
     locale: en-US
     timezone: UTC
     section_from: cli
-    stable_prefix_hash: 2a0b23a9886b0187
+    stable_prefix_hash: b58c4c9785a2d4b3
     expect_contains:
       - "## CLI interface"
     expect_absent:
@@ -33,7 +33,7 @@ cases:
     locale: en-US
     timezone: UTC
     section: "## Room\nThis thread is shared with other people; another person may be addressed."
-    stable_prefix_hash: 270d16c7ca3b075b
+    stable_prefix_hash: b14660b1ef7dd4c7
     expect_contains:
       - "This thread is shared"
     expect_absent:

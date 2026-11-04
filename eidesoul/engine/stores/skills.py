@@ -24,6 +24,7 @@ from ..schema import episodes, skill_files, skill_revisions, skills
 log = logging.getLogger(__name__)
 
 NAME = re.compile(r"^[a-z0-9][a-z0-9_-]{0,63}$")
+APP = re.compile(r"^[a-z0-9][a-z0-9-]{0,39}$")
 MAX_CONTENT = 18_000
 MAX_DESCRIPTION = 200
 SCOPES = ("thread", "person", "global")
@@ -65,6 +66,7 @@ class Skill:
     last_used: float | None = None
     stated_by: str = ""
     source_episode: str = ""
+    app: str = ""
 
 
 class SkillStore:
@@ -142,6 +144,7 @@ class SkillStore:
             last_used=float(row["last_used"]) if row["last_used"] is not None else None,
             stated_by=str(row["stated_by"] or ""),
             source_episode=str(row["source_episode"] or ""),
+            app=str(row["app"] or ""),
         )
 
     def catalog(self) -> str:
@@ -161,8 +164,12 @@ class SkillStore:
 
     # ----------------------------------------------------------- retrieval
 
-    def _visible(self, skill: Skill, *, thread_id: str, person_id: str) -> bool:
-        """ADR-0006 ceiling for procedures: this thread, this person, or global."""
+    def _visible(
+        self, skill: Skill, *, app: str, thread_id: str, person_id: str
+    ) -> bool:
+        """ADR-0035: app first, then the ADR-0006 audience ceiling."""
+        if skill.app and skill.app != str(app or ""):
+            return False
         if skill.scope == "global":
             return True
         if skill.scope == "thread":
@@ -183,6 +190,7 @@ class SkillStore:
             last_used=float(row["last_used"]) if row["last_used"] is not None else None,
             stated_by=str(row["stated_by"] or ""),
             source_episode=str(row["source_episode"] or ""),
+            app=str(row["app"] or ""),
         )
 
     def _mentions(self, body: str, known: tuple[str, ...]) -> set[str]:
@@ -212,10 +220,12 @@ class SkillStore:
         catalog_tools: tuple[str, ...] = (),
         max_chars: int = 800,
         limit: int = 3,
+        app: str = "",
     ) -> str:
         """ADR-0020 §4.6: relevance inside the readable scope, bounded by `max_chars`."""
         if self.db is None or not str(query or "").strip():
             return ""
+        app = str(app or "").strip().lower()
         rows = self.db.fetch_all(select(skills).where(skills.c.archived.is_(False)))
         if not rows:
             return ""
@@ -227,7 +237,9 @@ class SkillStore:
         scored: list[tuple[float, Skill]] = []
         for row in rows:
             skill = self._skill_row(row)
-            if not self._visible(skill, thread_id=thread_id, person_id=person_id):
+            if not self._visible(
+                skill, app=app, thread_id=thread_id, person_id=person_id
+            ):
                 continue
             if known:
                 needed = self._mentions(skill.body, known)
@@ -344,7 +356,8 @@ class SkillStore:
         stated_by: str,
         approved: bool,
         language: str,
-    ) -> tuple[str, str, str, str, str]:
+        app: str = "",
+    ) -> tuple[str, str, str, str, str, str]:
         slug = str(name or "").strip().lower()
         if not NAME.fullmatch(slug):
             raise ValueError("a skill name must be lowercase [a-z0-9_-], max 64 chars")
@@ -362,12 +375,15 @@ class SkillStore:
         wanted = str(scope or "thread").strip().lower()
         if wanted not in SCOPES:
             raise ValueError(f"unknown scope: {scope}")
+        namespace = str(app or "").strip().lower()
+        if namespace and not APP.fullmatch(namespace):
+            raise ValueError(f"unknown app: {app}")
         tier = str(trust or "T2").strip().upper()
         if tier not in TRUST:
             tier = "T2"
         if wanted == "global" and tier != "T0" and not approved:
             raise ValueError("global needs a T0 source or an approval (ADR-0020 §4.4)")
-        return slug, desc, text, wanted, tier
+        return slug, desc, text, wanted, tier, namespace
 
     def save(
         self,
@@ -383,9 +399,10 @@ class SkillStore:
         source_episode: str = "",
         approved: bool = False,
         language: str,
+        app: str = "",
     ) -> str:
         """Owner/import write: one row plus one append-only revision, never a silent overwrite."""
-        slug, desc, text, wanted, tier = self._check(
+        slug, desc, text, wanted, tier, namespace = self._check(
             name,
             description,
             body,
@@ -394,6 +411,7 @@ class SkillStore:
             stated_by=stated_by,
             approved=approved,
             language=language,
+            app=app,
         )
         now = time.time()
         with self.db.connect() as conn:
@@ -415,6 +433,7 @@ class SkillStore:
                         "created_at": now,
                         "updated_at": now,
                         "scope": wanted,
+                        "app": namespace,
                         "via": str(via or "command"),
                         "stated_by": str(stated_by or "") or None,
                         "source_episode": str(source_episode or "") or None,
@@ -431,6 +450,7 @@ class SkillStore:
                     "archived": False,
                     "updated_at": now,
                     "scope": wanted,
+                    "app": namespace,
                     "via": str(via or "command"),
                     "stated_by": str(stated_by or "") or None,
                     "source_episode": str(source_episode or "") or None,
@@ -462,8 +482,12 @@ class SkillStore:
         stated_by: str = "",
         trust: str = "T2",
         language: str,
+        app: str | None = None,
     ) -> str:
         """A derived update: the new revision is appended, the old one stays readable."""
+        if app is None:
+            current = self.get(name)
+            app = current.app if current is not None else ""
         return self.save(
             name,
             description,
@@ -475,6 +499,7 @@ class SkillStore:
             trust=trust,
             source_episode=source_episode,
             language=language,
+            app=app,
         )
 
     def revisions(self, name: str) -> list[dict]:
@@ -496,6 +521,7 @@ class SkillStore:
         )
         if row is None:
             raise KeyError(f"revision not found: {slug}@{revision}")
+        current = self.get(slug)
         return self.save(
             slug,
             str(row["description"] or ""),
@@ -504,6 +530,7 @@ class SkillStore:
             via="command",
             source_episode=str(row["source_episode"] or ""),
             language=language,
+            app=current.app if current is not None else "",
         )
 
     def archive(self, name: str) -> str:

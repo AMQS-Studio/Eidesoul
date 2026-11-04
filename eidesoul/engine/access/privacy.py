@@ -1,13 +1,12 @@
 """Agent-facing privacy service: pending confirmations, capture assessment, pre-delivery review.
 
 All level maths and veto precedence live in `memory.privacy.PrivacyPolicy`; this module only
-talks to the LLM for drafting a level/question and for spotting which memory items a draft
-mentions. Confirmation questions are phrased by the model in the soul's language, with a
-short fallback when the LLM is unavailable.
+drafts the question, detects mentions locally, and records the pending answer. No memory text
+is sent to an external model (ADR-0038 §4.5).
 """
 
 
-import json
+import hashlib
 import logging
 import re
 from collections.abc import Sequence
@@ -17,48 +16,17 @@ from ..character import lexicon
 from ..config import PrivacyConfig
 from ..i18n import t
 from ..memory import MemoryHit
+from ..memory.evidence import POLICY_VERSION
 from ..memory.privacy import AuditResult, PrivacyPolicy, clamp_level
 
 log = logging.getLogger(__name__)
 
 KINDS = ("privacy", "disclosure")
 
-ANSWER_PROMPT = """Classify the sender's answer to a pending confirmation.
-Reply ONLY with JSON: {"kind":"yes|no|level|unclear","level":0,"reason":""}
-- "level" when they name a privacy level (0-4, or public/team/personal/sensitive/secret).
-- "yes" when they agree; "no" when they refuse; "unclear" otherwise.
-"level" is 0-4 only for kind=level, otherwise 0."""
-
-AUDIT_PROMPT = """You audit one draft reply against memory entries the model was shown.
-Reply ONLY with JSON:
-{"mentions":["memory-id"],"verdict":"allow|ask|redact|deny","reply":"","question":"","reason":""}
-Rules:
-- "mentions" lists only the IDs of entries the draft actually uses or paraphrases. Never
-  invent IDs; use an empty list when the draft uses none.
-- Do not repeat any secret in "reason".
-- "reply" may hold a safer rewrite when verdict is "redact"; otherwise "".
-- "question": when the deterministic verdicts include "ask", one short question in the
-  soul's language asking permission to share; otherwise "".
-- The final decision is made deterministically from the entry levels and ownership; your job
-  is only mention detection and a safe rewrite."""
-
-
 @dataclass(frozen=True)
 class ReviewResult:
     handled: bool = False
     reply: str = ""
-
-
-def _json(text: str) -> dict | None:
-    raw = str(text or "").strip()
-    start, end = raw.find("{"), raw.rfind("}")
-    if start < 0 or end < start:
-        return None
-    try:
-        body = json.loads(raw[start : end + 1])
-    except json.JSONDecodeError:
-        return None
-    return body if isinstance(body, dict) else None
 
 
 class PrivacyService:
@@ -100,15 +68,15 @@ class PrivacyService:
         risky = [hit for hit in hits if self._risky(hit, direct=direct)]
         if not risky:
             return ReviewResult(False, reply)
-        if self.config.auditor and self.agent.llm is not None:
-            audit = await self._audit(reply, hits, inbound)
-        else:
-            audit = AuditResult(verdict="ask")
+        audit = self._audit(reply, hits, inbound) if self.config.auditor else AuditResult(
+            verdict="ask"
+        )
         selected = [hit for hit in hits if hit.id in audit.mentions] or risky
         requester = inbound.actor or self.agent._sender(inbound)
         verdicts = [
             self.policy.disclose(hit, requester=requester, direct=direct) for hit in selected
         ]
+        self._record(inbound, selected, verdicts, reply=reply, policy=POLICY_VERSION)
         if "deny" in verdicts:
             return ReviewResult(False, audit.reply or self._text("keep"))
         if "ask" in verdicts:
@@ -128,43 +96,42 @@ class PrivacyService:
             return ReviewResult(True, "")
         return ReviewResult(False, audit.reply or reply)
 
+    def _record(
+        self,
+        inbound,
+        selected: Sequence[MemoryHit],
+        verdicts: Sequence[str],
+        *,
+        reply: str,
+        policy: str,
+    ) -> None:
+        ledger = getattr(self.agent, "ledger", None)
+        if ledger is None:
+            return
+        ids = ",".join(hit.id for hit in selected)
+        levels = ",".join(str(hit.level) for hit in selected)
+        digest = hashlib.sha256(str(reply or "").encode("utf-8")).hexdigest()[:16]
+        ledger.log_action(
+            "privacy",
+            inbound.thread,
+            "privacy",
+            f"ids={ids} levels={levels} verdicts={','.join(verdicts)} "
+            f"hash={digest} policy={policy}",
+        )
+
     def _question(self, audit: AuditResult) -> str:
         question = " ".join(str(audit.question or "").split())
         return question or self._text("ask_disclosure")
 
-    async def _audit(
-        self, reply: str, hits: Sequence[MemoryHit], inbound
-    ) -> AuditResult:
-        requester = inbound.actor or self.agent._sender(inbound)
-        lines = []
+    def _audit(self, reply: str, hits: Sequence[MemoryHit], inbound) -> AuditResult:
+        """Local mention detection: no memory text leaves the host (ADR-0038 §4.5)."""
+        words = set(re.findall(r"[\w]{4,}", str(reply or "").lower()))
+        mentions: list[str] = []
         for hit in hits:
-            verdict = self.policy.disclose(
-                hit, requester=requester, direct=bool(inbound.hints.get("dm"))
-            )
-            lines.append(
-                f"- id={hit.id} level={hit.level} owner={hit.owner_id or '-'} "
-                f"subject={hit.subject_id or '-'} confirmed={hit.confirmed} "
-                f"vetoed={hit.vetoed} policy={verdict} text={hit.text}"
-            )
-        user = (
-            f"Draft reply:\n{reply}\n\nMemory entries:\n" + "\n".join(lines)
-            + f"\n\nSoul language: {self._lang}"
-        )
-        raw = await self.agent.llm.complete(AUDIT_PROMPT, user, max_tokens=300)
-        body = _json(raw)
-        if body is None:
-            return AuditResult(verdict="ask")
-        mentions = tuple(
-            str(item) for item in body.get("mentions") or [] if isinstance(item, str)
-        )
-        verdict = str(body.get("verdict") or "").strip().lower()
-        return AuditResult(
-            mentions=mentions,
-            verdict=verdict if verdict in {"allow", "ask", "redact", "deny"} else "ask",
-            reply=str(body.get("reply") or "").strip(),
-            question=str(body.get("question") or "").strip(),
-            reason=str(body.get("reason") or "")[:120],
-        )
+            tokens = set(re.findall(r"[\w]{4,}", str(hit.text or "").lower()))
+            if tokens and len(tokens & words) >= min(2, len(tokens)):
+                mentions.append(hit.id)
+        return AuditResult(mentions=tuple(mentions), verdict="allow")
 
     # ------------------------------------------------------------- questions
 
@@ -297,29 +264,6 @@ class PrivacyService:
         await self.agent.send_text(inbound.thread, reply, gateway=gateway)
 
     async def _resolve_answer(self, text: str, kind: str) -> dict:
-        if self.agent.llm is not None:
-            raw = await self.agent.llm.complete(
-                ANSWER_PROMPT, f"Pending kind: {kind}\nAnswer:\n{text}", max_tokens=80
-            )
-            body = _json(raw)
-            if body is not None:
-                parsed = str(body.get("kind") or "").strip().lower()
-                if parsed in {"yes", "no", "level", "unclear"}:
-                    level = None
-                    if parsed == "level":
-                        # A JSON null is "no level", not an exception: keep it out of `int()`.
-                        raw_level = body.get("level")
-                        if raw_level is None:
-                            number = -1
-                        else:
-                            try:
-                                number = int(raw_level)
-                            except (TypeError, ValueError):
-                                number = -1
-                        level = number if 0 <= number <= 4 else None
-                        if level is None:
-                            parsed = "unclear"
-                    return {"kind": parsed, "level": level}
         return self._regex_answer(str(text or ""))
 
     def _regex_answer(self, text: str) -> dict:
@@ -328,9 +272,9 @@ class PrivacyService:
         for word, level in pack.level_words.items():
             if word in words:
                 return {"kind": "level", "level": level}
-        if words & pack.affirmations:
+        if words and words <= pack.affirmations:
             return {"kind": "yes", "level": None}
-        if words & pack.negations:
+        if words and words <= pack.negations:
             return {"kind": "no", "level": None}
         digits = [int(ch) for ch in text if ch.isdigit() and int(ch) <= 4]
         if digits:

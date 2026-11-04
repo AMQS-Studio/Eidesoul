@@ -1,46 +1,15 @@
-"""Global-workspace style prompt block competition: pinned blocks win, references compete.
+"""Prompt block competition: pinned blocks win, references compete (ADR-0015, ADR-0034).
 
-ADR-0015 §4.1: only the reference blocks compete for the character budget. The pinned blocks
-(`base`, `self`, `roles`, `away`) and the Layer 2 capability index skip the selection.
+The registry owns names, order, and salience weight. This module only answers one question:
+which non-pinned, non-stable blocks fit the budget after stable parts have already been placed?
 """
 
+from collections.abc import Sequence
+from typing import Any
 
 from ..character import lexicon
 from .context import keyword_set
 
-PINNED = ("base", "self", "roles", "away", "capabilities")
-MANDATORY = PINNED  # the historical name; pinned is the contract
-COMPETING = (
-    "topic",
-    "emotion",
-    "vibe",
-    "style",
-    "person_style",
-    "memory",
-    "actions",
-    "skills",
-    "character",
-    "research",
-    "safety",
-)
-ORDER = (
-    "base",
-    "self",
-    "roles",
-    "away",
-    "capabilities",
-    "character",
-    "research",
-    "safety",
-    "emotion",
-    "vibe",
-    "topic",
-    "style",
-    "person_style",
-    "memory",
-    "actions",
-    "skills",
-)
 JOIN = "\n\n"
 
 
@@ -51,46 +20,44 @@ def block_score(text: str, query: str, bonus: float, *, language: str) -> float:
 
 
 def select(
-    blocks: dict[str, str],
+    blocks: Sequence[tuple[Any, str]],
     query: str = "",
     *,
     bonuses: dict[str, float] | None = None,
     max_chars: int = 9000,
     enabled: bool = True,
     language: str,
-) -> tuple[list[tuple[str, str]], list[str]]:
-    """(selected blocks in ORDER, names of the dropped blocks).
+) -> tuple[list[tuple[Any, str]], list[str]]:
+    """(selected (part, text) in order, names of dropped blocks).
 
-    Without a language pack the stopwords are unknown, so keyword scoring cannot separate the
-    candidates: selection falls back to block length (the longest block is dropped first).
+    A stable part is never passed here. Pinned parts are never dropped. Without a language
+    pack the stopwords are unknown, so selection falls back to block length.
     """
-    present = {name: text for name, text in blocks.items() if text.strip()}
-    kept = [name for name in ORDER if name in present]
+    present = [(part, text) for part, text in blocks if text.strip()]
+    kept = list(present)
     dropped: list[str] = []
     if not enabled:
-        return [(name, present[name]) for name in kept], dropped
+        return kept, dropped
     budget = int(max_chars)
     if budget <= 0:
-        # A zero/negative budget keeps the pinned blocks only; it never means "no limit".
-        dropped = [name for name in kept if name in COMPETING]
-        kept = [name for name in kept if name not in dropped]
-        return [(name, present[name]) for name in kept], dropped
+        dropped = [part.name for part, _ in kept if not part.pinned]
+        kept = [(part, text) for part, text in kept if part.pinned]
+        return kept, dropped
     scored = lexicon.load(language).ok
     bonus_map = bonuses or {}
 
-    def weight(name: str) -> tuple[float, int]:
-        score = (
-            block_score(present[name], query, bonus_map.get(name, 0.0), language=language)
-            if scored
-            else float(len(present[name]))
-        )
-        return (score, ORDER.index(name))
+    def weight(index: int) -> tuple[float, int]:
+        part, text = kept[index]
+        name = str(part.name)
+        bonus = float(getattr(part, "bonus", 0.0)) + float(bonus_map.get(name, 0.0))
+        score = block_score(text, query, bonus, language=language) if scored else float(len(text))
+        return (score, index)
 
-    while len(JOIN.join(present[name] for name in kept)) > budget:
-        candidates = [name for name in kept if name in COMPETING]
+    while len(JOIN.join(text for _, text in kept)) > budget:
+        candidates = [index for index, (part, _) in enumerate(kept) if not part.pinned]
         if not candidates:
-            break  # pinned blocks are never dropped
+            break
         weakest = min(candidates, key=weight)
-        kept.remove(weakest)
-        dropped.append(weakest)
-    return [(name, present[name]) for name in kept], dropped
+        part, _ = kept.pop(weakest)
+        dropped.append(str(part.name))
+    return kept, dropped

@@ -710,6 +710,27 @@ def _people_link(args: argparse.Namespace) -> int:
     return 2
 
 
+def _people_add(args: argparse.Namespace) -> int:
+    from .admin import people as admin_people
+    from .engine.config import load_host
+
+    _, paths = load_host(args.config)
+    db = _people_db(args)
+    try:
+        person = admin_people.add(
+            db,
+            paths,
+            args.gateway,
+            args.address,
+            args.role,
+            name=args.name or "",
+        )
+    finally:
+        db.dispose()
+    print(f"person {person} -> {args.role} ({args.gateway}:{args.address})", flush=True)
+    return 0
+
+
 def _people_unlink(args: argparse.Namespace) -> int:
     from .admin import people as admin_people
 
@@ -725,6 +746,7 @@ def _people_unlink(args: argparse.Namespace) -> int:
 def _people_dispatch(args: argparse.Namespace) -> int:
     handlers = {
         "list": _people_list,
+        "add": _people_add,
         "link": _people_link,
         "unlink": _people_unlink,
     }
@@ -904,6 +926,11 @@ def build_parser() -> argparse.ArgumentParser:
     people_sub = people.add_subparsers(dest="people_command")
     people_sub.add_parser("list", help="list identities, roles, and linked addresses")
     people_link = people_sub.add_parser("link", help="link a gateway address to an identity")
+    people_add = people_sub.add_parser("add", help="create/link the first identity for a role")
+    people_add.add_argument("gateway", help="gateway name from config.yaml")
+    people_add.add_argument("address", help="the gateway's own address for that person")
+    people_add.add_argument("--role", default="administrator", help="role document to append to")
+    people_add.add_argument("--name", default="", help="display name")
     people_link.add_argument("person_id", help="per_… identity id")
     people_link.add_argument("gateway", help="gateway name from config.yaml")
     people_link.add_argument("address", help="the gateway's own address for that person")

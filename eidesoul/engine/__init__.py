@@ -3,7 +3,7 @@
 Top level holds the handle and the seams; every other module lives in the folder that owns its
 reason to change::
 
-    agent.py          the handle: one turn, one orchestration
+    agent.py          the handle: door, identity, lifecycle; the turn phases live in turn/
     inbound.py        the body seam: Percept, Action, the protocols, refusal
     plugins.py        plugin loader (manifest, digest, one import)
     registry.py       Handler and Registry: the discovery contract
@@ -12,7 +12,9 @@ reason to change::
     embed.py  i18n.py  io.py  runtime.py  self_knowledge.py
 
     turn/       one message becomes one reply: context, decision, assembly, salience,
-                prompts, reply, observability
+                prompts, reply, observability, plus the phases loop (the turn state machine),
+                intake (identity and watchdog), delivery (the outbound path), commands
+                (command dispatch), and steps (step bookkeeping)
     character/  persona data resolution: character, knowledge, lexicon, patterns
     access/     who may do what: roles, permissions, identity, privacy, approvals,
                 relay, target

@@ -47,6 +47,7 @@ class ToolContext:
         approval_id: str = "",
         person_id: str = "",
         direct: bool = False,
+        app: str = "",
         turn_id: str = "",
     ):
         self.config = config
@@ -67,6 +68,7 @@ class ToolContext:
         self.approval_id = approval_id
         self.person_id = person_id or sender
         self.direct = bool(direct)
+        self.app = str(app or "")
         self.turn_id = str(turn_id or "")
         self.used: list[str] = []
         self.sent: list[dict] = []

@@ -31,6 +31,7 @@ class Episode:
     person_id: str
     started_at: float
     status: str = "open"
+    app: str = ""
     close_signal: str = ""
     turns: int = 0
     tool_calls: int = 0
@@ -47,6 +48,7 @@ def _episode_row(row) -> Episode:
         person_id=str(row["person_id"] or ""),
         started_at=float(row["started_at"] or 0.0),
         status=str(row["status"] or "open"),
+        app=str(row["app"] or ""),
         close_signal=str(row["close_signal"] or ""),
         turns=int(row["turns"] or 0),
         tool_calls=int(row["tool_calls"] or 0),
@@ -110,6 +112,7 @@ def _start(db: Database, thread_id: str) -> dict | None:
             "thread_id": thread_id,
             "person_id": str(first["person_id"] or ""),
             "status": "open",
+            "app": str(first["app"] or ""),
             "close_signal": "",
             "signature": "",
             "turns": 0,
@@ -155,7 +158,7 @@ def _target_of(tool: str) -> str:
     return (spec.target if spec is not None else "") or tool
 
 
-def _signature(steps: list[dict], thread_id: str = "") -> str:
+def _signature(steps: list[dict], thread_id: str = "", app: str = "") -> str:
     """`scope=…;tools=…;targets=…`: the comparable identity of one episode's work.
 
     Tool names are collapsed to one entry per run (a retry is not a different procedure), and
@@ -174,7 +177,11 @@ def _signature(steps: list[dict], thread_id: str = "") -> str:
         if target not in targets:
             targets.append(target)
     scope = "thread" if str(thread_id or "") else "global"
-    return f"scope={scope};tools={','.join(names)};targets={','.join(targets)}"
+    namespace = f";app={app}" if str(app or "") else ""
+    return (
+        f"scope={scope}{namespace};tools={','.join(names)};"
+        f"targets={','.join(targets)}"
+    )
 
 
 def _correction(steps: list[dict]) -> bool:
@@ -298,7 +305,7 @@ def scan(
             {
                 "turns": len(turn_rows),
                 "tool_calls": tool_calls,
-                "signature": _signature(steps, thread_id),
+                "signature": _signature(steps, thread_id, episode.app),
                 "refs": refs,
             },
         )
@@ -352,9 +359,12 @@ def admission(episode: Episode, steps: list[dict]) -> tuple[bool, str]:
 def slug(signature: str, limit: int = 60) -> str:
     """A readable procedure name: the tool chain of a structured signature, else the text."""
     raw = str(signature or "")
+    app = raw.split("app=", 1)[1].split(";", 1)[0] if "app=" in raw else ""
     if "tools=" in raw:
         raw = raw.split("tools=", 1)[1].split(";", 1)[0] or raw
     body = re.sub(r"[^a-z0-9]+", "-", raw.lower()).strip("-")
+    if app:
+        body = f"{re.sub(r'[^a-z0-9]+', '-', app.lower()).strip('-')}-{body}"
     if not body:
         body = "episode"
     return body[:limit].strip("-") or "episode"
