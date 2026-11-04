@@ -10,11 +10,11 @@
 # package is printed with the exact command that installs it. Everything is appended to
 # ~/.monoagens/logs/install.log. No secret value is ever logged or printed.
 #
-# Repository: https://github.com/AMQS-Studio/MonoAgens
+# Repository: https://github.com/AMQStudio/MonoAgens
 # Decision:   docs/v0.1.0/adr/0030-install-and-init.md
 set -euo pipefail
 
-REPO_URL="https://github.com/AMQS-Studio/MonoAgens"
+REPO_URL="https://github.com/AMQStudio/MonoAgens"
 REVISION="main"
 
 # --- uv pin: bump UV_VERSION and both digests together --------------------------------

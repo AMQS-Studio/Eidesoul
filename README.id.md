@@ -4,20 +4,21 @@
 
 <h1 align="center">MonoAgens</h1>
 
-<p align="center"><em>mesin jiwa: satu diri, selalu ingat, selalu belajar, orang yang sama di mana pun ia hidup.</em></p>
+<p align="center"><em>agen mono persisten, selalu ingat, selalu belajar, orang yang sama di mana pun ia hidup.</em></p>
 
 <p align="center">
   <a href="docs/v0.1.0/README.md"><img alt="Docs" src="https://img.shields.io/badge/docs-v0.1.0-111111?style=flat-square&labelColor=555555"></a>
   <a href="LICENSE"><img alt="License" src="https://img.shields.io/badge/license-Apache--2.0-2ea043?style=flat-square&labelColor=555555"></a>
   <a href="#status-hari-ini"><img alt="Status" src="https://img.shields.io/badge/status-pra--rilis-d4a017?style=flat-square&labelColor=555555"></a>
   <a href="pyproject.toml"><img alt="Python" src="https://img.shields.io/badge/python-3.14%2B-3776ab?style=flat-square&labelColor=555555"></a>
-  <a href="#credits"><img alt="Built by AMQS Studio" src="https://img.shields.io/badge/built%20by-AMQS%20Studio-6f42c1?style=flat-square&labelColor=555555"></a>
+  <a href="https://github.com/AMQStudio"><img alt="Built by AMQStudio" src="https://img.shields.io/badge/built%20by-AMQStudio-6f42c1?style=flat-square&labelColor=555555"></a>
   <a href="README.md"><img alt="English" src="https://img.shields.io/badge/lang-EN-1f6feb?style=flat-square&labelColor=555555"></a>
   <a href="README.id.md"><img alt="Bahasa Indonesia" src="https://img.shields.io/badge/lang-ID-d52b1e?style=flat-square&labelColor=555555"></a>
 </p>
 
 <p align="center">
-  <a href="#architecture">Arsitektur</a> · <a href="#tools-are-capabilities">Tool</a> ·
+  <a href="#apa-itu-monoagens">Apa itu MonoAgens</a> · <a href="#architecture">Arsitektur</a> ·
+  <a href="#tools-are-capabilities">Tool</a> ·
   <a href="#quickstart">Mulai cepat</a> ·
   <a href="#soulyaml">soul.yaml</a> · <a href="#karakter-dan-riset">Karakter dan riset</a> ·
   <a href="#supported-gateways">Gateway</a> · <a href="#roles-and-permissions">Peran dan izin</a> ·
@@ -31,6 +32,20 @@ Engine, konsol CLI, gateway WhatsApp (extra opsional), memori, affect, guard, in
 dan model plugin sudah jalan hari ini. Panel web masih rencana, belum dibangun; ia proses terpisah
 yang tidak akan pernah diimpor engine. Sisa berkas ini menggambarkan desain yang sudah dikirim;
 bagian ini adalah selisih yang berjalan sekarang.
+
+<a id="apa-itu-monoagens"></a>
+## Apa itu MonoAgens
+
+MonoAgens adalah **persistent mono agent harness**: runtime di sekitar model yang state-nya adalah satu
+diri yang berlanjut, bukan sesi. Ia menjaga satu identitas, satu memori, dan satu set izin lintas restart,
+permukaan, dan tubuh. Setiap giliran menyusun ulang working set dari Postgres, dan sebuah tubuh hanya
+menambah transport, tidak pernah menambah kepribadian. Ia bukan template chatbot, framework orkestrasi,
+atau layanan SaaS.
+
+MonoAgens dibuat dan dipelihara oleh Abdul Muqsith di bawah
+[AMQStudio](https://github.com/AMQStudio). Repositorinya ada di
+[AMQStudio/MonoAgens](https://github.com/AMQStudio/MonoAgens). Ini program yang Anda jalankan sendiri:
+deployment, data di dalamnya, dan kewajiban hukumnya milik operator.
 
 <a id="apa-arti-slogan-ini"></a>
 ## Apa arti slogan ini
@@ -52,13 +67,13 @@ bagian ini adalah selisih yang berjalan sekarang.
 
 Memori adalah lantainya, bukan seluruh jiwa. Emosi punya engine sendiri: state PAD dengan baseline
 kepribadian yang meluruh antar-giliran, drive yang berdenyut, dan relasi per orang yang bergerak lewat
-tahap. Konteks juga punya engine sendiri: fakta dipilih secara semantik tiap giliran, dan gerakan
-karakter diambil dari pack dengan gerbang register dan tingkat kasar, jadi apa yang ia tahu dan
-bagaimana ia bicara disusun, bukan diimprovisasi. Pacing yang dimanusiakan adalah timing di atasnya.
+tahap. Karakter adalah persona jiwa dan beberapa contoh nyata, bukan katalog pola lokal: model membawa
+prior stabil, `web_search` memasok fakta terkini lewat `ResearchCard` yang efemeral, dan Mem0 memasok
+fakta personal. Pacing yang dimanusiakan adalah timing di atasnya.
 
-Clean by default berlaku untuk gateway, tool, dan plugin: masing-masing mati sampai diaktifkan, dan
-spine satu-satunya pengecualian. Lapisan suara — emosi, humanize, karakter — aktif secara default,
-`init` menanyakannya sekali, dan tiap bagiannya bisa dimatikan.
+Clean by default berlaku untuk gateway, tool, plugin, dan voice: masing-masing mati sampai diaktifkan,
+dan spine satu-satunya pengecualian. Lapisan voice — emosi, gaya, karakter, dan humanize — hidup di
+`soul.voice`, mulai mati, dan satu master switch membuat setiap bagiannya inert.
 
 <a id="di-mana-posisinya"></a>
 ## Di mana posisinya di antara harness
@@ -69,14 +84,15 @@ dinamai menurut tujuannya — autonomous harness agent berjalan tanpa pengawasan
 mengubah sebuah repository — dan yang sudah matang sudah membawa memori, skill, todo, dan aturan
 approval.
 
-MonoAgens adalah **persistent agent harness**: harness yang state-nya adalah diri. Ia mengingat lintas sesi, menjaga
-satu persona, dan berperilaku sebagai satu karakter yang meyakinkan lintas setiap embodiment.
+MonoAgens adalah **persistent mono agent harness**: harness yang state-nya adalah diri. Ia mengingat
+lintas sesi, menjaga satu persona, dan berperilaku sebagai satu karakter yang meyakinkan lintas setiap
+embodiment.
 
 | | Di mana state hidup | Bagaimana satu giliran mendapat konteks | Dioptimalkan untuk |
 |---|---|---|---|
 | Autonomous harness agent | riwayat tugas dan workspace-nya, cukup untuk melanjutkan dari titik terakhir | context window, dipadatkan saat penuh | menyelesaikan pekerjaan tanpa pengawasan |
 | Developer harness agent | repository dan berkas-berkasnya | context window, diisi dari berkas dan keluaran tool | mengubah kode dengan benar |
-| MonoAgens (persistent agent harness) | satu store kanonik — Postgres dengan index vektor — memuat memori, affect, dan transkrip | dibangun ulang setiap giliran dari store itu, dibatasi pada orang dan chat; window hanya working set, bukan memorinya | tetap orang yang sama, serba bisa — ingat, belajar, privasi, izin |
+| MonoAgens (persistent mono agent harness) | satu store kanonik — Postgres dengan index vektor — memuat memori, affect, dan transkrip | dibangun ulang setiap giliran dari store itu, dibatasi pada orang dan chat; window hanya working set, bukan memorinya | tetap orang yang sama, serba bisa — ingat, belajar, privasi, izin |
 
 Harness konvensional memperlakukan context window sebagai memori kerja lalu memadatkannya saat penuh. Di
 sini store adalah memorinya dan window hanya working set giliran ini, jadi percakapan panjang tidak
@@ -122,12 +138,12 @@ Dua belas dinding. Tiap baris menyebut bangunan biasanya, lalu apa yang dilakuka
   turunan wajib berujuk sumber, penurunan satu tingkat, aturan hanya dari dokumen soul, dan memori baru
   tetap dalam karantina sampai terkorroborasi.
 - **Balasan yang mengarang apa yang tidak diketahuinya.** Biasanya model mengisi celah dengan percaya
-  diri. Di sini lapisan pengetahuan memilih fakta terkurasi tiap giliran, dengan fallback kata kunci saat
-  vektor tidak ada, dan pass karakter boleh mengubah nada tapi tidak fakta, angka, atau hasil tool.
+  diri. Di sini persona dan beberapa contoh menjadi jangkar suara; fakta terkini datang dari
+  `web_search` dengan sitasi, dan pass karakter boleh mengubah nada tapi tidak fakta, angka, atau hasil
+  tool.
 - **Balasan yang terdengar seperti mesin.** Biasanya prompt "jadilah ramah". Di sini emosi adalah engine
-  sendiri — state PAD dengan baseline yang meluruh, drive, dan relasi per orang — engine konteks memilih
-  gerakan karakter bergerbang register dan tingkat kasar, dan pass humanize mengatur pacing; semuanya
-  sakelar.
+  sendiri — state PAD dengan baseline yang meluruh, drive, dan relasi per orang — lapisan konteks
+  memoles draf yang robotik, dan pass humanize mengatur pacing; semuanya sakelar.
 - **Automation yang sebenarnya cron job.** Biasanya baris crontab tanpa pemilik, izin, atau dedupe. Di
   sini event, condition, dan daftar steps tertutup; satu run per occurrence di-key dari jadwal; otoritas
   diperiksa dua kali; jam tenang, budget harian, dan kill switch.

@@ -824,7 +824,7 @@ def _plugins_dispatch(args: argparse.Namespace) -> int:
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        prog="monoagens", description="MonoAgens persistent agent harness"
+        prog="monoagens", description="MonoAgens persistent mono agent harness"
     )
     parser.add_argument(
         "--config", default=None, help="path to config.yaml (default: ./config.yaml)"

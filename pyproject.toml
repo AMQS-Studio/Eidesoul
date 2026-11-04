@@ -1,7 +1,7 @@
 [project]
 name = "monoagens"
 version = "0.0.0.dev0"
-description = "MonoAgens: a persistent agent harness."
+description = "MonoAgens: a persistent mono agent harness."
 license = "Apache-2.0"
 license-files = ["LICENSE"]
 authors = [{ name = "Abdul Muqsith", email = "136996767+inimuqsith@users.noreply.github.com" }]
@@ -42,7 +42,7 @@ dev = [
 ]
 
 [project.urls]
-Repository = "https://github.com/AMQS-Studio/MonoAgens"
+Repository = "https://github.com/AMQStudio/MonoAgens"
 
 [project.scripts]
 monoagens = "monoagens.__main__:main"

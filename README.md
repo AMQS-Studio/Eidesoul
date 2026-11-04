@@ -11,13 +11,14 @@
   <a href="LICENSE"><img alt="License" src="https://img.shields.io/badge/license-Apache--2.0-2ea043?style=flat-square&labelColor=555555"></a>
   <a href="#status-today"><img alt="Status" src="https://img.shields.io/badge/status-pre--release-d4a017?style=flat-square&labelColor=555555"></a>
   <a href="pyproject.toml"><img alt="Python" src="https://img.shields.io/badge/python-3.14%2B-3776ab?style=flat-square&labelColor=555555"></a>
-  <a href="#credits"><img alt="Built by AMQS Studio" src="https://img.shields.io/badge/built%20by-AMQS%20Studio-6f42c1?style=flat-square&labelColor=555555"></a>
+  <a href="https://github.com/AMQStudio"><img alt="Built by AMQStudio" src="https://img.shields.io/badge/built%20by-AMQStudio-6f42c1?style=flat-square&labelColor=555555"></a>
   <a href="README.md"><img alt="English" src="https://img.shields.io/badge/lang-EN-1f6feb?style=flat-square&labelColor=555555"></a>
   <a href="README.id.md"><img alt="Bahasa Indonesia" src="https://img.shields.io/badge/lang-ID-d52b1e?style=flat-square&labelColor=555555"></a>
 </p>
 
 <p align="center">
-  <a href="#architecture">Architecture</a> · <a href="#tools-are-capabilities">Tools</a> ·
+  <a href="#what-monoagens-is">What it is</a> · <a href="#architecture">Architecture</a> ·
+  <a href="#tools-are-capabilities">Tools</a> ·
   <a href="#quickstart">Quickstart</a> ·
   <a href="#soulyaml">soul.yaml</a> · <a href="#character-and-research">Character and research</a> ·
   <a href="#supported-gateways">Gateways</a> · <a href="#roles-and-permissions">Roles and permissions</a> ·
@@ -30,6 +31,18 @@ The engine, the CLI console, the WhatsApp gateway (an optional extra), memory, a
 the on-machine installer, and the plugin model run today. The web panel is planned, not built; it is
 a separate process the engine will never import. Everything else in this file describes the shipped
 design; this section is the delta that runs today.
+
+## What MonoAgens is
+
+MonoAgens is a **persistent mono agent harness**: the runtime around a model whose state is one
+continuous self, not a session. It keeps one identity, one memory, and one set of permissions across restarts,
+surfaces, and bodies. Each turn rebuilds its working set from Postgres, and a body adds a transport,
+never a personality. It is not a chatbot template, an orchestration framework, or a hosted service.
+
+MonoAgens is created and maintained by Abdul Muqsith under
+[AMQStudio](https://github.com/AMQStudio). The repository is
+[AMQStudio/MonoAgens](https://github.com/AMQStudio/MonoAgens). It is a program you run yourself: the
+deployment, the data in it, and the legal duties around it belong to the operator.
 
 ## What the slogan means
 
@@ -64,14 +77,14 @@ keeps state and context, applies approval, and keeps work moving. Harnesses are 
 autonomous harness agent runs unattended, a developer harness agent changes a repository — and the
 mature ones already ship memory, skills, todos, and approval rules.
 
-MonoAgens is a **persistent agent harness**: a harness whose state is a self. It remembers across sessions, keeps one
-persona, and behaves as one believable character across every embodiment.
+MonoAgens is a **persistent mono agent harness**: a harness whose state is a self. It remembers
+across sessions, keeps one persona, and behaves as one believable character across every embodiment.
 
 | | Where state lives | How a turn gets its context | Optimizes for |
 |---|---|---|---|
 | Autonomous harness agent | the task's history and its workspace, enough to resume where it left off | the context window, compacted when it fills | finishing work unattended |
 | Developer harness agent | the repository and its files | the context window, filled from files and tool output | changing code correctly |
-| MonoAgens (persistent agent harness) | one canonical store — Postgres with a vector index — holding memories, affect, and transcripts | rebuilt every turn from that store, scoped to the person and the chat; the window is a working set, not the memory | staying the same person, general-purpose — remembering, learning, privacy, permission |
+| MonoAgens (persistent mono agent harness) | one canonical store — Postgres with a vector index — holding memories, affect, and transcripts | rebuilt every turn from that store, scoped to the person and the chat; the window is a working set, not the memory | staying the same person, general-purpose — remembering, learning, privacy, permission |
 
 A conventional harness treats the context window as working memory and compacts it when it fills. Here
 the store is the memory and the window is only this turn's working set, so a long conversation does not

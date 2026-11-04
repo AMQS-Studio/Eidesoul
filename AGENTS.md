@@ -60,7 +60,7 @@ Hard rules for changes in this repo.
   HTTP user agents carry no version.
 - Guard modules live only under `monoagens/engine/guard/` (`patterns.py`, `policy.py`, `sandbox.py`);
   callers import the package (`from .guard import ...`), never a module path inside it.
-- MonoAgens is an agent; its runtime is a persistent agent harness (ADR-0040). Assistant is one
+- MonoAgens is an agent; its runtime is a persistent mono agent harness (ADR-0040). Assistant is one
   role among companion, advisor, and robot embodiments; the `soul` document names the internal
   identity, never the product.
 - Tools are removable capabilities. The six core families (`shell`, `read`, `write`, `web_search`,

@@ -1,4 +1,4 @@
-> Terjemahan turunan — jangan sunting; sumber: 0040-monoagens-naming.md (sha256: 9bd1834af7b3)
+> Terjemahan turunan — jangan sunting; sumber: 0040-monoagens-naming.md (sha256: 7dd4fcdb1002)
 
 # ADR-0040: Penamaan — MonoAgens dan Persistent Agent Harness
 
@@ -58,9 +58,9 @@ Produk dan tipenya dinamai sebagai berikut:
 
 - **Nama produk:** MonoAgens.
 - **Kategori:** agent.
-- **Tipe runtime:** persistent agent harness.
+- **Tipe runtime:** persistent mono agent harness.
 - **Tagline:** *persistent mono agent, always remembering, always learning, the same person wherever it lives.*
-- **Lapisan:** MonoAgens adalah agent; persistent agent harness adalah runtime-nya. MonoAgens bukan harness.
+- **Lapisan:** MonoAgens adalah agent; persistent mono agent harness adalah runtime-nya. MonoAgens bukan harness.
 
 Nama ini satu kata di copy produk dan dua morfem di glosarium:
 
@@ -83,7 +83,7 @@ Rename adalah cutover bersih. ADR ini mencatat cakupannya; ia tidak mengeksekusi
 | Root import | `monoagens.*` | `monoagens.*` |
 | Nama distribusi | `monoagens` | `monoagens` |
 | CLI | `monoagens` | `monoagens` |
-| Repository | `github.com/inimuqsith/Eidesoul` | `github.com/AMQS-Studio/MonoAgens` |
+| Repository | `github.com/inimuqsith/Eidesoul` | `github.com/AMQStudio/MonoAgens` |
 | Direktori state | `.monoagens/` | `.monoagens/` |
 | Prefix environment | `MONOAGENS_*` | `MONOAGENS_*` |
 | Wordmark | `MONOAGENS` | `MONOAGENS` |
@@ -120,7 +120,7 @@ Tidak ada config key yang ditambahkan atau di-rename oleh keputusan ini. Kontrak
 | --- | --- |
 | Produk | MonoAgens |
 | Kategori | agent |
-| Tipe runtime | persistent agent harness |
+| Tipe runtime | persistent mono agent harness |
 | Tipe runtime pendek | continuity harness |
 | Tagline | *persistent mono agent, always remembering, always learning, the same person wherever it lives.* |
 | Paket dan CLI | `monoagens` |

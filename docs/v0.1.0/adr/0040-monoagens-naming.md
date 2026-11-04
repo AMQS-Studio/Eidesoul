@@ -66,10 +66,10 @@ The product and its type are named as follows:
 
 - **Product name:** MonoAgens.
 - **Category:** agent.
-- **Runtime type:** persistent agent harness.
+- **Runtime type:** persistent mono agent harness.
 - **Tagline:** *persistent mono agent, always remembering, always learning, the same person wherever
   it lives.*
-- **Layer:** MonoAgens is the agent; the persistent agent harness is its runtime. MonoAgens is not
+- **Layer:** MonoAgens is the agent; the persistent mono agent harness is its runtime. MonoAgens is not
   the harness.
 
 The name is one word in product copy and two morphemes in the glossary:
@@ -96,7 +96,7 @@ The rename is a clean cutover. This ADR records the scope; it does not execute i
 | Import root | `monoagens.*` | `monoagens.*` |
 | Distribution name | `monoagens` | `monoagens` |
 | CLI | `monoagens` | `monoagens` |
-| Repository | `github.com/inimuqsith/Eidesoul` | `github.com/AMQS-Studio/MonoAgens` |
+| Repository | `github.com/inimuqsith/Eidesoul` | `github.com/AMQStudio/MonoAgens` |
 | State directory | `.monoagens/` | `.monoagens/` |
 | Environment prefix | `MONOAGENS_*` | `MONOAGENS_*` |
 | Wordmark | `MONOAGENS` | `MONOAGENS` |
@@ -137,7 +137,7 @@ No configuration key is added or renamed by this decision. The naming contract i
 | --- | --- |
 | Product | MonoAgens |
 | Category | agent |
-| Runtime type | persistent agent harness |
+| Runtime type | persistent mono agent harness |
 | Short runtime type | continuity harness |
 | Tagline | *persistent mono agent, always remembering, always learning, the same person wherever it lives.* |
 | Package and CLI | `monoagens` |
