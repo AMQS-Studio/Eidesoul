@@ -1,14 +1,15 @@
 # LOG
 
-## 2026-11-04 — ADR-0039 init terminal interface and the Eidos mark
+## 2026-11-04 — ADR-0039 init terminal interface
 
 `eidesoul init` now starts at **Location**, shows the resolved directory before any write, and
 navigates with `↑`/`↓`, `j`/`k`, `/` filter, Enter, `←` back, and Escape/Ctrl-C cancel. The
 provider picker uses operator labels while IDs and key variables stay in `providers`; the model
 picker reads the provider's served ids when reachable; the credential is masked and written only
 to `.env` at `0600`; `--api-key-file` is the headless equivalent. Review keeps secrets redacted.
-The Eidos lockup replaces the `[logo]` placeholder: an open ring with a center dot, the `◈`
-terminal glyph, and SVG assets under `docs/brand/`. The writer and interaction are split:
+The `[logo]` placeholder is removed; the terminal shows the existing EIDESOUL wordmark only.
+The product logo stays `assets/logo.png`; the setup does not redraw it. The writer and interaction
+are split:
 `admin/init.py` 443 lines, `admin/wizard.py` 472, `admin/terminal.py` 281. Tests cover the
 location step, credential masking, `--api-key-file`, lockup, filter, cancel, and line fallback.
 

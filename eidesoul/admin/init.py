@@ -428,9 +428,9 @@ def report(
 # --- the wizard ---------------------------------------------------------------------------
 
 
-def banner(color: bool = False, *, ascii_only: bool = False) -> list[str]:
-    """The Eidos lockup; the mark is code, not a logo slot or a config key."""
-    return brand.banner(color, ascii_only=ascii_only)
+def banner(color: bool = False) -> list[str]:
+    """The setup wordmark; the product logo remains `assets/logo.png`."""
+    return brand.banner(color)
 
 
 def __getattr__(name: str):

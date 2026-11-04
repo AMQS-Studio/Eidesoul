@@ -339,10 +339,9 @@ def test_the_review_comes_from_the_templates_plus_answers():
     assert "EIDESOUL_DATABASE_URL=postgresql+psycopg://u:secret@h/db" in contents[".env"]
 
 
-def test_the_lockup_replaces_the_logo_placeholder() -> None:
+def test_the_header_uses_the_existing_wordmark_and_not_a_placeholder() -> None:
     screen = "\n".join(admin_init.banner())
 
-    assert "◈" in screen
     assert "EIDESOUL" in screen
     assert "a soul engine you run on your own machine" in screen
     assert "[logo]" not in screen

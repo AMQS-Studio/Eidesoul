@@ -1,37 +1,37 @@
-# ADR-0039: Init as a First-Class Terminal Interface, and the Eidos Mark
+# ADR-0039: Init as a First-Class Terminal Interface
 
 - **Status:** accepted
 - **Date:** 2026-11-04
 - **Deciders:** Muqsith (owner), omp (reviewer)
-- **Context:** fills the logo slot and the interaction debt left by ADR-0030; follows ADR-0009 (ADR home), ADR-0019 (observability), ADR-0022 (protected administrator), ADR-0027 (distribution), ADR-0033 (neutral core)
+- **Context:** removes the placeholder from the interaction layer left by ADR-0030; follows ADR-0009 (ADR home), ADR-0019 (observability), ADR-0022 (protected administrator), ADR-0027 (distribution), ADR-0033 (neutral core)
 - **Supersedes:** —
 - **Related:** ADR-0030 (install and init), ADR-0031 (module structure)
-- **Implementation:** implemented — `admin/terminal.py` (curses plus numbered fallback), `admin/wizard.py` (step machine, location, credential, provider/model pickers, review), `admin/brand.py` (Eidos lockup), `admin/provider_catalog.py` (operator labels), the `--api-key-file` flag, `tests/test_init.py`, and the SVG mark under `docs/brand/`.
-- **Location note:** setup is a host-wide surface, so this ADR sits at the root of the ADR home. The Indonesian copy is `docs/v0.1.0/adr/id/0039-setup-terminal-and-mark.md`.
+- **Implementation:** implemented — `admin/terminal.py` (curses plus numbered fallback), `admin/wizard.py` (step machine, location, credential, provider/model pickers, review), `admin/brand.py` (wordmark only), `admin/provider_catalog.py` (operator labels), the `--api-key-file` flag, `tests/test_init.py`.
+- **Location note:** setup is a host-wide surface, so this ADR sits at the root of the ADR home. The Indonesian copy is `docs/v0.1.0/adr/id/0039-setup-terminal.md`.
 
 ---
 
 ## 1. Context
 
-ADR-0030 made `eidesoul init` interactive and left a logo slot (`[logo]`) for a mark that did not
-exist. The wizard it shipped is a linear sequence of line prompts: no arrow keys, no search, no
-back navigation, and no visible location step. `eidesoul init` from an arbitrary working directory
-therefore asks for provider and model before the operator has confirmed where the files will land.
+ADR-0030 made `eidesoul init` interactive and left a logo slot (`[logo]`) in the header. The wizard
+it shipped is a linear sequence of line prompts: no arrow keys, no search, no back navigation, and
+no visible location step. `eidesoul init` from an arbitrary working directory therefore asks for
+provider and model before the operator has confirmed where the files will land.
 
 The operator direction was explicit: study the Hermes setup, then build our own interaction and
-identity rather than copy its frame or its mark. The defects are concrete:
+identity rather than copy its frame or its assets. The defects are concrete:
 
 | Fact | Evidence |
 | --- | --- |
 | The terminal is line-only | `admin/init.py` used `_ask()` and numbered choices for every step |
 | Location is implicit | `--dir` defaulted to `.` and no step showed the resolved target |
-| The logo is a placeholder | `LOGO_SLOT = "[logo]"` in `admin/init.py` |
+| The logo slot is a placeholder | `LOGO_SLOT = "[logo]"` in `admin/init.py` |
 | Provider IDs have no operator labels | the picker printed raw IDs such as `opencode` |
 | Secrets cannot be entered by the wizard | `.env` was written empty for the operator to fill later |
 | The reference has a richer loop | Hermes `hermes_cli/setup.py` and `curses_ui.py` use radiolists, checklists, fuzzy `/` search, Escape/Left navigation, and a step runner |
 
 Hermes is MIT and remains a reference for interaction discipline only. No Hermes code, glyph,
-wordmark, or asset is copied; the Eidos mark is original.
+wordmark, or asset is copied. The existing Eidesoul logo remains `assets/logo.png`.
 
 ## 2. Decision drivers
 
@@ -42,7 +42,7 @@ wordmark, or asset is copied; the Eidos mark is original.
 | Reversible decisions | Left returns to the previous step with earlier answers preserved; Escape cancels without writing |
 | Secrets stay secret | A key is masked, written only to `.env` at `0600`, and never printed in Review or the log |
 | One data source | `admin/templates.py` stays the only default source; interaction never invents a value |
-| Own identity | The Eidos mark is code and SVG, not a borrowed logo |
+| Existing identity | The terminal shows the existing wordmark; the product logo is not redrawn |
 | Testable UI | Frame/key logic is separable from the file writer; tests never need a real curses terminal |
 
 ## 3. Options considered
@@ -104,13 +104,12 @@ password. Apply is still the only path to `write_files()`; Cancel, Escape, Ctrl-
 write leave no new file. Existing files keep the `keep` / `change` / `replace` decisions from
 ADR-0030. `.env` remains `0600`.
 
-### 4.5 The Eidos mark
+### 4.5 The existing logo
 
-The mark is an open ring with a centered dot: form around a soul, with the opening as agency. The
-wordmark is `EIDESOUL`; the tagline is `a soul engine you run on your own machine`. The terminal
-prints `◈` plus the lockup; `--no-color`, `TERM=dumb`, and non-TTY output use the plain form. The SVG
-assets are `docs/brand/eidesoul-mark.svg` and `docs/brand/eidesoul-lockup.svg`; the mark is never a
-config key and never changes layout width.
+The product logo remains `assets/logo.png`; this ADR does not redraw it. The terminal cannot mount
+a PNG or SVG in GNOME Terminal without an image protocol, so the setup prints only the existing
+`EIDESOUL` wordmark and the tagline. `--no-color`, `TERM=dumb`, and non-TTY output use the plain
+form. The logo is never a config key and never changes layout width.
 
 ### 4.6 Module boundaries
 
@@ -150,7 +149,7 @@ No key is added to `config.yaml`. The API key value lives only in `.env`.
 
 ## 7. Acceptance criteria
 
-- [ ] `eidesoul init` on a POSIX TTY shows the Eidos lockup and the location-first rail.
+- [ ] `eidesoul init` on a POSIX TTY shows the EIDESOUL wordmark and the location-first rail.
 - [ ] Provider and model pickers move with arrows, filter with `/`, select with Enter, and return with Left.
 - [ ] Escape and Ctrl-C leave no new file and no partial file.
 - [ ] A custom location writes all four host files and `.eidesoul/workspace` there.
@@ -169,12 +168,12 @@ No key is added to `config.yaml`. The API key value lives only in `.env`.
 | A hidden location writes into the wrong directory | Location is step one, shows the resolved path, and is repeated in Review/Receipt |
 | A secret leaks through a frame or log | Masked input, no value in Review, `.env` `0600`; tests assert a marker is absent from stdout |
 | The split duplicates validation | `admin/init.py` remains the only validator and writer; `wizard.py` calls it |
-| The mark becomes a configuration surface | It is code and SVG only; no key and no layout dependence |
+| The logo becomes a configuration surface | The logo stays an asset; no key and no layout dependence |
 | A future Web panel needs the same flow | `--non-interactive` and the module boundary let a panel drive `init` without the curses layer |
 
 ## 9. Interaction with other ADRs
 
-- **ADR-0030**: this ADR fills its logo slot and replaces the linear interaction; the writer,
+- **ADR-0030**: this ADR removes the placeholder and replaces the linear interaction; the writer,
   never-overwrite rule, `.env` modes, and headless rule stay.
 - **ADR-0022**: Identity still asks only for the administrator label; protected-role rules do not move.
 - **ADR-0019**: the terminal layer logs no secret and no frame content.
@@ -188,12 +187,11 @@ No key is added to `config.yaml`. The API key value lives only in `.env`.
 - `eidesoul/admin/wizard.py` — location, provider, credential, model, database, identity, voice,
   review, navigation, and the numbered fallback.
 - `eidesoul/admin/terminal.py` — curses radiolist, `/` filter, Back/Cancel, masked secret.
-- `eidesoul/admin/brand.py` — the Eidos lockup and ASCII fallback.
+- `eidesoul/admin/brand.py` — the wordmark and tagline; no replacement mark.
 - `eidesoul/admin/provider_catalog.py` — operator labels and key-variable detail.
 - `eidesoul/__main__.py` — `--api-key-file` and the `init` dispatch.
-- `docs/brand/eidesoul-mark.svg`, `docs/brand/eidesoul-lockup.svg` — the mark and lockup.
 - `tests/test_init.py` — location, credential, lockup, filter, review, cancel, and fallback coverage.
 
 ---
 
-*This ADR lives at `docs/v0.1.0/adr/0039-setup-terminal-and-mark.md`.*
+*This ADR lives at `docs/v0.1.0/adr/0039-setup-terminal.md`.*

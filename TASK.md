@@ -73,7 +73,7 @@ Eidesoul checklist. Every item is done when the listed surface exists and works 
 - [ ] Cold privacy stack under 700 MiB: move the shared MiniLM to int8/ONNX (or remove a detector);
       PyTorch MiniLM plus NER measured about 929 MiB.
 - [x] `eidesoul init` has a location-first terminal wizard, provider/model pickers, masked
-      credential, back navigation, and the Eidos lockup; the writer is split from the wizard.
+      credential, back navigation, and the EIDESOUL wordmark; the writer is split from the wizard.
 
 ## Shipped in v1 (ADR)
 

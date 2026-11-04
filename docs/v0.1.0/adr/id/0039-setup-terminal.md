@@ -1,34 +1,34 @@
-> Terjemahan turunan — jangan sunting; sumber: 0039-setup-terminal-and-mark.md (sha256: 1284df8459c8)
+> Terjemahan turunan — jangan sunting; sumber: 0039-setup-terminal.md (sha256: 57c080eb0c2d)
 
-# ADR-0039: Init sebagai Antarmuka Terminal Kelas Satu, dan Mark Eidos
+# ADR-0039: Init sebagai Antarmuka Terminal Kelas Satu
 
 - **Status:** accepted
 - **Tanggal:** 2026-11-04
 - **Deciders:** Muqsith (owner), omp (reviewer)
-- **Konteks:** mengisi slot logo dan utang interaksi dari ADR-0030; mengikuti ADR-0009 (ADR home), ADR-0019 (observability), ADR-0022 (administrator terlindungi), ADR-0027 (distribusi), ADR-0033 (core netral)
+- **Konteks:** menghapus placeholder pada lapisan interaksi dari ADR-0030; mengikuti ADR-0009 (ADR home), ADR-0019 (observability), ADR-0022 (administrator terlindungi), ADR-0027 (distribusi), ADR-0033 (core netral)
 - **Supersedes:** —
 - **Terkait:** ADR-0030 (install dan init), ADR-0031 (struktur modul)
-- **Implementasi:** implemented — `admin/terminal.py` (curses plus fallback bernomor), `admin/wizard.py` (mesin langkah, location, credential, picker provider/model, review), `admin/brand.py` (lockup Eidos), `admin/provider_catalog.py` (label operator), flag `--api-key-file`, `tests/test_init.py`, dan mark SVG di `docs/brand/`.
-- **Catatan lokasi:** setup adalah permukaan host-wide, jadi ADR ini duduk di root ADR home. Salinan Indonesia di `docs/v0.1.0/adr/id/0039-setup-terminal-and-mark.md`.
+- **Implementasi:** implemented — `admin/terminal.py` (curses plus fallback bernomor), `admin/wizard.py` (mesin langkah, location, credential, picker provider/model, review), `admin/brand.py` (wordmark saja), `admin/provider_catalog.py` (label operator), flag `--api-key-file`, `tests/test_init.py`.
+- **Catatan lokasi:** setup adalah permukaan host-wide, jadi ADR ini duduk di root ADR home. Salinan Indonesia di `docs/v0.1.0/adr/id/0039-setup-terminal.md`.
 
 ---
 
 ## 1. Konteks
 
-ADR-0030 membuat `eidesoul init` interaktif dan meninggalkan slot logo (`[logo]`) untuk mark yang belum ada. Wizard yang dikirim adalah urutan prompt baris: tanpa panah, tanpa pencarian, tanpa navigasi mundur, dan tanpa langkah lokasi yang terlihat. `eidesoul init` dari direktori kerja mana pun karena itu bertanya provider dan model sebelum operator mengonfirmasi di mana file akan mendarat.
+ADR-0030 membuat `eidesoul init` interaktif dan meninggalkan slot logo (`[logo]`). Wizard yang dikirim adalah urutan prompt baris: tanpa panah, tanpa pencarian, tanpa navigasi mundur, dan tanpa langkah lokasi yang terlihat. `eidesoul init` dari direktori kerja mana pun karena itu bertanya provider dan model sebelum operator mengonfirmasi di mana file akan mendarat.
 
-Arahan operator eksplisit: pelajari setup Hermes, lalu bangun interaksi dan identitas sendiri, bukan menyalin frame atau mark-nya. Defect-nya konkret:
+Arahan operator eksplisit: pelajari setup Hermes, lalu bangun interaksi dan identitas sendiri, bukan menyalin frame atau asetnya. Defect-nya konkret:
 
 | Fakta | Bukti |
 | --- | --- |
 | Terminal hanya baris | `admin/init.py` memakai `_ask()` dan pilihan bernomor untuk setiap langkah |
 | Location implisit | `--dir` default `.` dan tidak ada langkah yang menampilkan target hasil resolve |
-| Logo masih placeholder | `LOGO_SLOT = "[logo]"` di `admin/init.py` |
+| Slot logo masih placeholder | `LOGO_SLOT = "[logo]"` di `admin/init.py` |
 | ID provider tanpa label operator | picker mencetak ID mentah seperti `opencode` |
 | Wizard tidak bisa menerima secret | `.env` ditulis kosong untuk diisi operator nanti |
 | Referensi punya loop lebih kaya | `hermes_cli/setup.py` dan `curses_ui.py` memakai radiolist, checklist, fuzzy `/`, navigasi Escape/Left, dan step runner |
 
-Hermes berlisensi MIT dan tetap hanya referensi disiplin interaksi. Tidak ada kode, glyph, wordmark, atau aset Hermes yang disalin; mark Eidos orisinal.
+Hermes berlisensi MIT dan tetap hanya referensi disiplin interaksi. Tidak ada kode, glyph, wordmark, atau aset Hermes yang disalin; Logo Eidesoul yang ada tetap `assets/logo.png`.
 
 ## 2. Decision drivers
 
@@ -39,7 +39,7 @@ Hermes berlisensi MIT dan tetap hanya referensi disiplin interaksi. Tidak ada ko
 | Keputusan bisa dibalik | Left kembali ke langkah sebelumnya dengan jawaban lama; Escape membatalkan tanpa menulis |
 | Secret tetap rahasia | Key dimasker, hanya ditulis ke `.env` mode `0600`, dan tidak pernah dicetak di Review atau log |
 | Satu sumber data | `admin/templates.py` tetap satu-satunya sumber default; interaksi tidak menciptakan nilai |
-| Identitas sendiri | Mark Eidos adalah kode dan SVG, bukan logo pinjaman |
+| Identitas yang ada | Terminal menampilkan wordmark; logo produk tidak digambar ulang |
 | UI bisa diuji | Logika frame/key terpisah dari penulis file; test tidak perlu terminal curses nyata |
 
 ## 3. Opsi yang dipertimbangkan
@@ -87,9 +87,9 @@ Lapisan curses memakai standard library saja dan hanya jalan bila stdin dan stdo
 
 Review menampilkan location, setiap file dan mode, provider, base URL, variabel key, model, nama env database, label administrator, dan status voice. Ia tidak pernah menampilkan nilai key atau password database. Apply tetap satu-satunya jalur ke `write_files()`; Cancel, Escape, Ctrl-C, dan penulisan yang terinterupsi tidak meninggalkan file baru. File yang sudah ada mempertahankan keputusan `keep` / `change` / `replace` dari ADR-0030. `.env` tetap `0600`.
 
-### 4.5 Mark Eidos
+### 4.5 Logo yang ada
 
-Mark adalah cincin terbuka dengan titik di tengah: forma mengelilingi soul, dengan celah sebagai agency. Wordmark `EIDESOUL`; tagline `a soul engine you run on your own machine`. Terminal mencetak `◈` plus lockup; `--no-color`, `TERM=dumb`, dan output non-TTY memakai bentuk polos. Aset SVG adalah `docs/brand/eidesoul-mark.svg` dan `docs/brand/eidesoul-lockup.svg`; mark tidak pernah menjadi config key dan tidak mengubah lebar layout.
+Logo produk tetap `assets/logo.png`; ADR ini tidak menggambarnya ulang. Terminal tidak bisa memasang PNG atau SVG di GNOME Terminal tanpa protokol gambar, jadi setup hanya mencetak wordmark `EIDESOUL` dan tagline. `--no-color`, `TERM=dumb`, dan output non-TTY memakai bentuk polos. Logo tidak pernah menjadi config key dan tidak mengubah lebar layout.
 
 ### 4.6 Batas modul
 
@@ -126,7 +126,7 @@ Tidak ada key yang ditambahkan ke `config.yaml`. Nilai API key hanya hidup di `.
 
 ## 7. Kriteria penerimaan
 
-- [ ] `eidesoul init` di TTY POSIX menampilkan lockup Eidos dan rail location-first.
+- [ ] `eidesoul init` di TTY POSIX menampilkan wordmark EIDESOUL dan rail location-first.
 - [ ] Picker provider dan model bergerak dengan panah, memfilter dengan `/`, memilih dengan Enter, dan kembali dengan Left.
 - [ ] Escape dan Ctrl-C tidak meninggalkan file baru atau file parsial.
 - [ ] Location kustom menulis keempat host file dan `.eidesoul/workspace` di sana.
@@ -145,12 +145,12 @@ Tidak ada key yang ditambahkan ke `config.yaml`. Nilai API key hanya hidup di `.
 | Location tersembunyi menulis ke direktori salah | Location adalah langkah pertama, menampilkan path hasil resolve, dan diulang di Review/Receipt |
 | Secret bocor lewat frame atau log | input termask, tanpa nilai di Review, `.env` `0600`; test memastikan marker tidak ada di stdout |
 | Pemisahan menduplikasi validasi | `admin/init.py` tetap satu-satunya validator dan penulis; `wizard.py` memanggilnya |
-| Mark menjadi permukaan konfigurasi | Hanya kode dan SVG; tanpa key dan tanpa ketergantungan layout |
+| Logo menjadi permukaan konfigurasi | Logo tetap aset; tanpa key dan tanpa ketergantungan layout |
 | Panel Web masa depan butuh alur sama | `--non-interactive` dan batas modul memungkinkan panel menggerakkan `init` tanpa lapisan curses |
 
 ## 9. Interaksi dengan ADR lain
 
-- **ADR-0030**: ADR ini mengisi slot logonya dan mengganti interaksi linear; penulis, aturan never-overwrite, mode `.env`, dan aturan headless tetap.
+- **ADR-0030**: ADR ini menghapus placeholder dan mengganti interaksi linear; penulis, aturan never-overwrite, mode `.env`, dan aturan headless tetap.
 - **ADR-0022**: Identity tetap hanya meminta label administrator; aturan role terlindungi tidak berpindah.
 - **ADR-0019**: lapisan terminal tidak mencatat secret dan isi frame.
 - **ADR-0031**: pemisahan menjaga kedua file di bawah cap 800 baris (`init.py` 442, `wizard.py` 475).
@@ -161,12 +161,11 @@ Tidak ada key yang ditambahkan ke `config.yaml`. Nilai API key hanya hidup di `.
 - `eidesoul/admin/init.py` — `Answers`, validasi, `build()`, `write_files()` atomik, `banner()`.
 - `eidesoul/admin/wizard.py` — location, provider, credential, model, database, identity, voice, review, navigasi, dan fallback bernomor.
 - `eidesoul/admin/terminal.py` — radiolist curses, filter `/`, Back/Cancel, secret termask.
-- `eidesoul/admin/brand.py` — lockup Eidos dan fallback ASCII.
+- `eidesoul/admin/brand.py` — wordmark dan tagline; tanpa mark pengganti.
 - `eidesoul/admin/provider_catalog.py` — label operator dan detail variabel key.
 - `eidesoul/__main__.py` — `--api-key-file` dan dispatch `init`.
-- `docs/brand/eidesoul-mark.svg`, `docs/brand/eidesoul-lockup.svg` — mark dan lockup.
 - `tests/test_init.py` — location, credential, lockup, filter, review, cancel, dan fallback.
 
 ---
 
-*ADR ini tinggal di `docs/v0.1.0/adr/0039-setup-terminal-and-mark.md`.*
+*ADR ini tinggal di `docs/v0.1.0/adr/0039-setup-terminal.md`.*

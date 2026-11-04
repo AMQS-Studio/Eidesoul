@@ -66,7 +66,7 @@ re-stamp the hash. No machine translator ships with the repo.
 | [0036](adr/engine/0036-role-model.md) | Role Model — Named Bundles, One Protected `administrator`, No Role Types | engine | implemented |
 | [0037](adr/engine/0037-module-budgets.md) | Module Budgets — Split Before the Cap, One Reason per Module | engine | implemented |
 | [0038](adr/engine/0038-privacy-layers.md) | Layered Privacy — Evidence Before Level, Deterministic Policy, Advisory Models | engine | partial |
-| [0039](adr/0039-setup-terminal-and-mark.md) | Init as a First-Class Terminal Interface, and the Eidos Mark | root | implemented |
+| [0039](adr/0039-setup-terminal.md) | Init as a First-Class Terminal Interface | root | implemented |
 | [0033](adr/0033-neutral-core.md) | Neutral Core, Specialized Edges — No Culture, Transport, or Vendor in Mechanism | root | implemented |
 
 ADRs are grouped by folder: cross-cutting decisions at the `adr/` root, engine decisions under
