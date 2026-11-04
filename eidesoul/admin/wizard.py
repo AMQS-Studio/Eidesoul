@@ -392,6 +392,8 @@ def _interactive(
     locked: set[int],
     force: bool,
 ) -> tuple[list[Path], list[Path]]:
+    # A line fallback must never print ANSI: if curses cannot run, drop colour too.
+    color = color and terminal.interactive(stdin, stdout, plain=not color)
     _say_lines(stdout, brand.banner(color))
     if not answers.location:
         answers.location = str(Path(folder).expanduser().resolve())

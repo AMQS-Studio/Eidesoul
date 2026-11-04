@@ -473,3 +473,16 @@ def test_line_menu_q_cancels_without_a_choice():
         terminal.choose(
             stdin=Tty("q\n"), stdout=io.StringIO(), title="provider", choices=choices
         )
+
+
+def test_line_fallback_never_emits_ansi(tmp_path):
+    monkeypatch = pytest.MonkeyPatch()
+    monkeypatch.setattr(admin_init, "model_ids", lambda provider: [])
+    answer = "\n".join(["", "groq", "", "", "", "", "on", "1"])
+    stdout = io.StringIO()
+    try:
+        admin_init.wizard(tmp_path, stdin=Tty(answer + "\n"), stdout=stdout, color=True)
+    finally:
+        monkeypatch.undo()
+
+    assert "\x1b" not in stdout.getvalue()

@@ -12,7 +12,7 @@ terminal glyph, and SVG assets under `docs/brand/`. The writer and interaction a
 `admin/init.py` 443 lines, `admin/wizard.py` 472, `admin/terminal.py` 281. Tests cover the
 location step, credential masking, `--api-key-file`, lockup, filter, cancel, and line fallback.
 
-Gates: `pytest -q` 878 passed; `ruff` clean; `pyright` 0 errors; `selfcheck` ok; ADR check 40/40 and
+Gates: `pytest -q` 879 passed; `ruff` clean; `pyright` 0 errors; `selfcheck` ok; ADR check 40/40 and
 translation clean.
 
 
