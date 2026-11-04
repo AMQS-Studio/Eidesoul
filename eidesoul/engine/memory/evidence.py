@@ -22,6 +22,7 @@ log = logging.getLogger(__name__)
 SCHEMA_VERSION = 1
 POLICY_VERSION = "privacy-2026-11-04.1"
 POLICY_HASH = hashlib.sha256(POLICY_VERSION.encode("utf-8")).hexdigest()
+MAX_CLASSIFY_CHARS = 4000
 DEFAULT_DIR = Path(__file__).resolve().parents[2] / "library" / "privacy"
 CREDENTIAL = "credential"
 AMBIGUOUS = "ambiguous"
@@ -241,7 +242,7 @@ DETECTORS = (PatternDetector(), SemanticDetector())
 
 def collect(text: str, language: str) -> tuple[list[Evidence], Pack]:
     pack = load_pack(language)
-    body = str(text or "")[:4000]
+    body = str(text or "")[:MAX_CLASSIFY_CHARS]
     found: list[Evidence] = []
     if body:
         found.extend(DETECTORS[0].detect(body, pack))

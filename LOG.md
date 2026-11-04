@@ -15,7 +15,7 @@ label/score/span, a versioned policy writes the level, credentials drop, `ask` i
 `memories.privacy_evidence`/`privacy_policy` persist the record. The auditor and pending-answer
 parser call no external model. The golden set is `tests/data/privacy_cases.yaml`.
 
-Gates: `pytest -q` 863 passed; `ruff` clean; `pyright` 0 errors; `selfcheck` ok; ADR check 39/39 and
+Gates: `pytest -q` 865 passed; `ruff` clean; `pyright` 0 errors; `selfcheck` ok; ADR check 39/39 and
 translation clean. ADR-0038 remains partial only because the Presidio+spaCy entity adapter named in
 §5.1 is not installed; the shipped entity layer is the deterministic language pack plus the MiniLM
 centroid layer. Closing that gap or amending §5.1 is required before claiming the fully local

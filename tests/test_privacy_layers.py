@@ -86,3 +86,20 @@ def test_golden_set_reports_per_label_precision_and_recall() -> None:
     recall = true_positive / max(1, len(expected))
     assert precision >= 0.9
     assert recall >= 0.9
+
+
+def test_classification_is_bounded_to_the_text_cap() -> None:
+    from eidesoul.engine.memory.evidence import MAX_CLASSIFY_CHARS
+
+    late = "aman. " * (MAX_CLASSIFY_CHARS // 6) + " password=secret"
+    evidence, _ = collect(late, "id")
+
+    assert "credential" not in {item.label for item in evidence}
+    assert len(late) > MAX_CLASSIFY_CHARS
+
+
+def test_one_shared_embedder_and_no_optional_detector_is_loaded() -> None:
+    import sys
+
+    for name in ("presidio_analyzer", "spacy", "gliner", "onnxruntime"):
+        assert name not in sys.modules
