@@ -5,7 +5,8 @@
 `install.sh` now asks native versus compose when `--stack` is omitted and asks for the install
 directory (recommended `~/.monoagens/app`, the current directory, or custom; `.` and `./`
 resolve to the current directory). A partial checkout with no `pyproject.toml` is offered for
-removal before a retry. It runs interactive `init` directly instead
+removal before a retry. Existing archive checkouts are refreshed from `main` on rerun while host
+files and runtime data stay. It runs interactive `init` directly instead
 of piping stdout through `tee`, so the curses navigation survives. Native keeps the engine on the
 host and starts only the Postgres service; compose runs both in containers. Both generate
 `POSTGRES_PASSWORD` and `MONOAGENS_DATABASE_URL` when empty, with the container marker so a rerun

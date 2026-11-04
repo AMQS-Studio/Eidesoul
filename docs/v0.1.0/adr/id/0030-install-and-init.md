@@ -1,4 +1,4 @@
-> Terjemahan turunan — jangan sunting; sumber: 0030-install-and-init.md (sha256: e815495a4f2c)
+> Terjemahan turunan — jangan sunting; sumber: 0030-install-and-init.md (sha256: 26c6d4d0f187)
 > Ditulis tangan (bukan mesin), mengikuti sumber English baris demi baris.
 
 # ADR-0030: Install On-Machine dan Init Interaktif — Wizard Kita Sendiri, Satu Installer, Dua Runtime
@@ -68,7 +68,7 @@ Satu skrip Bash, dipanggil dari klon (`bash install.sh`) atau dari jaringan
 | Penutup | menawarkan pilihan (§4.5): buka panel, atau tetap di command line |
 | Pengamatan | satu baris status selama child berjalan; keluaran child non-interaktif ditambahkan ke `~/.monoagens/logs/install.log`, sedangkan wizard interaktif tetap di terminal (tidak ada rahasia di log); kegagalan mencetak baris terakhir plus path log |
 | Sinyal | `INT`/`TERM`/`HUP` menandai jalannya `interrupted` dan di-raise ulang, jadi exit status tetap milik sinyalnya |
-| Jalan ulang | repair: tidak pernah menimpa berkas yang ada atau meng-clone ulang di atas perubahan lokal tanpa ditanya; checkout parsial tanpa `pyproject.toml` ditawarkan untuk dihapus sebelum retry |
+| Jalan ulang | repair: checkout yang ada di-refresh dari `main` sementara `config.yaml`, `roles.yaml`, `soul.yaml`, `.env`, `.monoagens`, `.venv`, `plugins`, dan `panel` tetap; checkout git dengan perubahan lokal dipertahankan; checkout parsial tanpa `pyproject.toml` ditawarkan untuk dihapus sebelum retry |
 | Platform | Linux x86_64 dan aarch64 di versi ini; selain itu ditolak dengan satu baris |
 | Pratinjau | `--dry-run` mencetak setiap aksi dan tidak menulis apa pun |
 

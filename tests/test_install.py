@@ -256,6 +256,31 @@ def test_sudo_is_confined_to_the_explicit_runtime_installer():
     assert "--install-runtime" in source
 
 
+def test_an_existing_archive_checkout_is_refreshed(tmp_path):
+    app = tmp_path / "app"
+    (app / "monoagens").mkdir(parents=True)
+    (app / "pyproject.toml").write_text("[project]\nname = 'monoagens'\n", encoding="utf-8")
+    code = """
+MONOAGENS_INSTALL_SOURCED=1
+source "$1/install.sh"
+dir="$2"
+source_root=""
+non_interactive=1
+refresh_archive_checkout() { echo REFRESHED; }
+prepare_dir
+"""
+    result = subprocess.run(
+        ["bash", "-c", code, "_", str(ROOT), str(app)],
+        env=clean_env(HOME=str(tmp_path)),
+        capture_output=True,
+        text=True,
+        timeout=60,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr
+    assert "REFRESHED" in result.stdout
+
+
 def test_directory_normalization_treats_dot_as_the_current_directory(tmp_path):
     code = """
 MONOAGENS_INSTALL_SOURCED=1

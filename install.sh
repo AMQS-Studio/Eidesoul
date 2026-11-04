@@ -431,10 +431,63 @@ stage_uv() {
 # --- install directory ----------------------------------------------------------------
 
 
+refresh_archive_checkout() {
+    local tmp
+    if ! command -v curl >/dev/null 2>&1 || ! command -v tar >/dev/null 2>&1; then
+        return 1
+    fi
+    tmp="$(mktemp -d)"
+    TMP_DIRS+=("$tmp")
+    local archive_url="${REPO_URL}/archive/refs/heads/${REVISION}.tar.gz"
+    detail "refresh code from $archive_url (host files stay)"
+    if ! curl -fsSL --retry 3 --proto '=https' --proto-redir '=https' "$archive_url" \
+        | tar -xz --strip-components=1 -C "$tmp"; then
+        return 1
+    fi
+    # Replace code and docs; keep the operator's host files and runtime state.
+    tar -C "$tmp" \
+        --exclude=config.yaml --exclude=roles.yaml --exclude=soul.yaml \
+        --exclude=.env --exclude=.monoagens --exclude=.venv \
+        --exclude=plugins --exclude=panel --exclude=monoagens.egg-info \
+        -cf - . | tar -C "$dir" -xf - || return 1
+    return 0
+}
+
+refresh_existing_checkout() {
+    if [[ "$dir" == "$source_root" ]]; then
+        detail "using the source checkout as-is"
+        return 0
+    fi
+    if [[ -d "$dir/.git" ]] && command -v git >/dev/null 2>&1; then
+        if [[ -n "$(git -C "$dir" status --porcelain 2>/dev/null)" ]]; then
+            warn "existing git checkout has local changes; keeping it as-is"
+            return 0
+        fi
+        detail "refresh the git checkout from $REVISION"
+        if git -C "$dir" fetch --depth 1 origin "$REVISION" >>"$log_file" 2>&1 \
+            && git -C "$dir" merge --ff-only FETCH_HEAD >>"$log_file" 2>&1; then
+            detail "code updated"
+        else
+            warn "could not update the git checkout; keeping the existing code"
+        fi
+        return 0
+    fi
+    if [[ -d "$dir/monoagens" ]]; then
+        if refresh_archive_checkout; then
+            detail "code updated"
+        else
+            warn "could not refresh the existing checkout; keeping the current code"
+        fi
+    else
+        detail "using the existing checkout"
+    fi
+    return 0
+}
+
 prepare_dir() {
     stage "install directory: $dir"
     if [[ -f "$dir/pyproject.toml" ]]; then
-        detail "using the existing checkout"
+        refresh_existing_checkout
         return 0
     fi
     if [[ -n "$source_root" && -f "$source_root/pyproject.toml" ]]; then
