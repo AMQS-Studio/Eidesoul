@@ -17,6 +17,11 @@ dependencies = [
   "ddgs>=9",
   "mem0ai>=2.2,<3",
   "sentence-transformers>=5.2,<6",
+  # ADR-0038 §4.1/§5.1: local entity layer. spaCy model packages are not on PyPI, so the
+  # verified multilingual model is a direct wheel; the fragment pins its sha256.
+  "presidio-analyzer>=2.2,<3",
+  "spacy>=3.8,<4",
+  "xx-ent-wiki-sm @ https://github.com/explosion/spacy-models/releases/download/xx_ent_wiki_sm-3.8.0/xx_ent_wiki_sm-3.8.0-py3-none-any.whl#sha256=6f3c4b853852ea9e9d2dc76cc950dddb10a7e4c42d813308caefe6c5e8be2f0a",
   # Declared directly so the pytorch-cpu index in [tool.uv.sources] applies: without it
   # the transitive torch requirement resolves to the CUDA wheels.
   "torch>=2.2",

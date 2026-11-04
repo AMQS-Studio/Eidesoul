@@ -1,4 +1,4 @@
-> Terjemahan turunan — jangan sunting; sumber: engine/0038-privacy-layers.md (sha256: b53d0fb09fd7)
+> Terjemahan turunan — jangan sunting; sumber: engine/0038-privacy-layers.md (sha256: e4efa0dbfa6e)
 
 - **Status:** accepted
 - **Tanggal:** 2026-11-04
@@ -6,7 +6,7 @@
 - **Konteks:** memperluas ADR-0006 (privasi grup dan pre-filter), ADR-0008 (integritas memori), ADR-0007 (kelas approval), ADR-0010 (refleksi dan sengketa); mengikuti ADR-0033 (core netral)
 - **Supersedes:** —
 - **Terkait:** ADR-0001 (satu port memori), ADR-0011 (durabilitas), ADR-0015 (capability), ADR-0020 (skill), ADR-0035 (scope app), ADR-0036 (role)
-- **Implementasi:** partial — evidence/policy, `privacy_evidence`/`privacy_policy` tersimpan (migrasi 0018), audit/jawaban tanpa LLM, kontrak `ask` milik policy, dan golden set ada di `memory/evidence.py`, `memory/candidates.py`, `access/privacy.py`, dan test. Adapter entity Presidio+spaCy yang disebut §5.1 belum terpasang; lapisan entity yang dikirim adalah pack bahasa deterministik plus lapisan centroid MiniLM. Menutup gap itu atau mengubah §5.1 diperlukan sebelum ini sepenuhnya implemented.
+- **Implementasi:** partial — evidence/policy, `privacy_evidence`/`privacy_policy` tersimpan (migrasi 0018), audit/jawaban tanpa LLM, kontrak `ask` milik policy, dan golden set ada di `memory/evidence.py`, `memory/candidates.py`, `access/privacy.py`, dan test. Lapisan entity kini memakai Presidio 2.2.366 + spaCy 3.8.18 + `xx_ent_wiki_sm` 3.8.0 dengan digest pohon model yang diverifikasi, load tanpa vocab, dan span `entity`; ukurannya 111 MiB incremental dan 40,4 MB di disk, di dalam baris §5.1. Status penuh masih menunggu anggaran cold-stack: MiniLM PyTorch bersama plus lapisan entity terukur sekitar 929 MiB di proses baru, di atas batas cold 700 MiB, jadi embedder bersama harus pindah ke int8/ONNX (atau satu detektor dihapus) sebelum ini sepenuhnya implemented; linear head semantik dan kalibrasi produksi juga masih terbuka.
 - **Catatan lokasi:** keputusan engine (ia memiliki klasifikasi, policy disclosure, dan audit), jadi duduk di bawah `adr/engine/`. Salinan Indonesia di `docs/v0.1.0/adr/engine/id/0038-privacy-layers.md`.
 
 ---

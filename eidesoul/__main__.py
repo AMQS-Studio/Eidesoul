@@ -347,7 +347,20 @@ async def selftest(config: Config) -> int:
             _report("memory", "SKIP", memory_status(memory))
 
         from .engine.config import PrivacyConfig
+        from .engine.memory import evidence as privacy_layers
         from .engine.memory.privacy import PrivacyPolicy
+
+        try:
+            found, _ = privacy_layers.classify(
+                "Nama saya Budi Santoso, tinggal di Jakarta.", config.soul.language
+            )
+            spans = [
+                item for item in found if item.detector == "ner" and item.span is not None
+            ]
+            detail = "" if spans else "no entity span"
+            results.append(_report("privacy_entities", _verdict(bool(spans)), detail))
+        except Exception as exc:
+            results.append(_report("privacy_entities", "FAIL", str(exc)[:200]))
 
         policy = PrivacyPolicy(PrivacyConfig())
         probe = MemoryHit(id="x", text="t", level=3, owner_id="a", subject_id="a", confirmed=True)

@@ -13,13 +13,17 @@ episodes, retrieval, and writes. Roles are identity-only bundles: `protected` is
 bootstrap. Privacy now classifies locally: `memory/evidence.py` returns detector/version/digest/
 label/score/span, a versioned policy writes the level, credentials drop, `ask` is policy-owned, and
 `memories.privacy_evidence`/`privacy_policy` persist the record. The auditor and pending-answer
-parser call no external model. The golden set is `tests/data/privacy_cases.yaml`.
+parser call no external model. The golden set is `tests/data/privacy_cases.yaml`. The entity layer is
+now Presidio 2.2.366 with spaCy 3.8.18 and `xx_ent_wiki_sm` 3.8.0: its tree digest is checked at
+boot, the model is loaded without the 300 MB vocabulary, torch/transformers are blocked during that
+import, and every result is `entity` evidence with a span. Measured entity cost is 111 MiB
+incremental and 40.4 MB on disk; `tests/test_privacy_budget.py` enforces the 200 MiB/80 MB row.
 
-Gates: `pytest -q` 865 passed; `ruff` clean; `pyright` 0 errors; `selfcheck` ok; ADR check 39/39 and
-translation clean. ADR-0038 remains partial only because the Presidio+spaCy entity adapter named in
-§5.1 is not installed; the shipped entity layer is the deterministic language pack plus the MiniLM
-centroid layer. Closing that gap or amending §5.1 is required before claiming the fully local
-default stack.
+Gates: `pytest -q` 869 passed; `ruff` clean; `pyright` 0 errors; `selfcheck` ok; ADR check 39/39 and
+translation clean. ADR-0038 remains partial: a fresh process that loads the shared PyTorch MiniLM
+plus the entity layer measured about 929 MiB, above the §5.1 700 MiB cold cap. Moving the shared
+embedder to int8/ONNX (or removing a detector) is the next budget fix; the semantic linear head and
+production calibration are still open.
 
 ## 2026-11-04 — ADR-0038 decides layered privacy
 

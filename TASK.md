@@ -68,7 +68,10 @@ Eidesoul checklist. Every item is done when the listed surface exists and works 
       the 800-line module cap; `LINE_CAPS` is empty.
 - [x] Privacy decisions come from local evidence plus a versioned policy; `memories.privacy_evidence`
       and `privacy_policy` are persisted; the auditor and answer parser call no external model.
-- [ ] Presidio + spaCy entity adapter (ADR-0038 §5.1); the shipped entity layer is deterministic.
+- [x] Presidio + spaCy entity adapter (ADR-0038 §5.1) with verified model digest, NER spans, and an
+      entity-layer budget test.
+- [ ] Cold privacy stack under 700 MiB: move the shared MiniLM to int8/ONNX (or remove a detector);
+      PyTorch MiniLM plus NER measured about 929 MiB.
 
 ## Shipped in v1 (ADR)
 

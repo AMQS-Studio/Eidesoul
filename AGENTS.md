@@ -181,12 +181,14 @@ Hard rules for changes in this repo.
   Level 5/credentials are never stored. `owner_id` is the speaker who stated the fact; `subject_id`
   is who it is about and only that subject may veto it. Level maths, veto precedence, and disclosure
   verdicts live in `eidesoul/engine/memory/privacy.py` (deterministic, no LLM). Evidence comes from
-  `eidesoul/engine/memory/evidence.py` (deterministic language pack plus the shared MiniLM
-  centroid layer) and only its policy writes the level; `memories.privacy_evidence` and
-  `privacy_policy` persist the record. `eidesoul/engine/access/privacy.py` is the only agent-facing
-  hook and detects mentions locally; no memory text is sent to an external model. The Presidio+spaCy
-  entity adapter named in ADR-0038 §5.1 is not bundled yet; the shipped entity layer is the
-  deterministic pack, so that ADR is only partial.
+  `eidesoul/engine/memory/evidence.py` (deterministic language pack, Presidio + `xx_ent_wiki_sm`
+  NER, and the shared MiniLM centroid layer) and only its policy writes the level;
+  `memories.privacy_evidence` and `privacy_policy` persist the record. The NER path verifies the
+  model-tree digest, loads without the model vocabulary, and blocks torch/transformers during its
+  import; `entity` evidence carries a span and never a level. `eidesoul/engine/access/privacy.py` is
+  the only agent-facing hook and detects mentions locally; no memory text is sent to an external
+  model. ADR-0038 is still partial because the shared PyTorch MiniLM makes the cold privacy stack
+  exceed the §5.1 700 MiB cap; moving the shared embedder to int8/ONNX is the remaining budget fix.
 - Disclosure policy: L0-L2 stay fluid everywhere; L3 in a group and L4 ask for confirmation through
   `approvals`; vetoed entries are never shown and never disclosed. The auditor pass runs only when a
   risky entry exists.

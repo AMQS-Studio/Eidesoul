@@ -532,6 +532,9 @@ installs; the last column says what Eidesoul uses it for.
 | ddgs | MIT | ddgs authors | https://github.com/deedy5/ddgs | web search |
 | Mem0 (`mem0ai`) | Apache-2.0 | Mem0 | https://github.com/mem0ai/mem0 | semantic memory |
 | sentence-transformers | Apache-2.0 | UKP Lab / Hugging Face | https://github.com/huggingface/sentence-transformers | embeddings |
+| Presidio (`presidio-analyzer`) | MIT | Microsoft | https://github.com/microsoft/presidio | NER orchestration |
+| spaCy | MIT | Explosion | https://github.com/explosion/spaCy | local NLP pipeline |
+| xx_ent_wiki_sm | MIT | Explosion (WikiNER) | https://github.com/explosion/spacy-models/releases/tag/xx_ent_wiki_sm-3.8.0 | multilingual NER weights |
 | paraphrase-multilingual-MiniLM-L12-v2 | Apache-2.0 | sentence-transformers | https://huggingface.co/sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2 | embedder weights |
 | PyTorch | Apache-2.0 AND Apache-2.0 WITH LLVM-exception AND BSD-2-Clause AND BSD-3-Clause AND BSL-1.0 AND ISC AND MIT AND Zlib | Meta / PyTorch contributors | https://github.com/pytorch/pytorch | tensor runtime |
 | Transformers | Apache-2.0 | Hugging Face | https://github.com/huggingface/transformers | model loading |

@@ -98,8 +98,38 @@ def test_classification_is_bounded_to_the_text_cap() -> None:
     assert len(late) > MAX_CLASSIFY_CHARS
 
 
-def test_one_shared_embedder_and_no_optional_detector_is_loaded() -> None:
+def test_entity_evidence_has_a_span_and_no_verdict() -> None:
+    evidence, decision = classify("Nama saya Budi Santoso, tinggal di Jakarta.", "id")
+
+    ner = [item for item in evidence if item.detector == "ner"]
+    assert any(item.span == (10, 22) for item in ner)
+    assert {item.label for item in ner} == {"entity"}
+    assert decision.level == 2
+    assert decision.ask is False
+
+
+def test_entity_model_is_the_verified_artifact() -> None:
+    from eidesoul.engine.memory.evidence import ENTITY_MODEL_DIGEST, verify_entities
+
+    assert verify_entities() == ENTITY_MODEL_DIGEST
+
+
+def test_entity_model_fits_the_disk_cap() -> None:
+    from eidesoul.engine.memory.evidence import _entity_model_root
+
+    size = sum(
+        path.stat().st_size
+        for path in _entity_model_root().rglob("*")
+        if path.is_file() and "__pycache__" not in path.parts
+    )
+    assert size <= 80 * 1024 * 1024
+
+
+def test_one_shared_entity_model_and_no_optional_detector_is_loaded() -> None:
     import sys
 
-    for name in ("presidio_analyzer", "spacy", "gliner", "onnxruntime"):
+    from eidesoul.engine.memory.evidence import _entity_engine
+
+    assert _entity_engine() is _entity_engine()
+    for name in ("gliner", "onnxruntime"):
         assert name not in sys.modules

@@ -45,6 +45,7 @@ from .inbound import (
 from .jobs import supervisor
 from .llm import LLM
 from .memory import MemoryBackend, memory_status
+from .memory import evidence as privacy_evidence
 from .memory.ledger import OutboundLedger
 from .registry import Handler, Registry
 from .runtime import ACTIVE_GENERATION, RuntimeFacts
@@ -165,6 +166,8 @@ class Agent:
         self.runtime.gateways = tuple(gateway.name for gateway in self.gateways)
         self.runtime.memory_status = memory_status(memory)
         io.configure(config.io.workers)
+        if config.memory.privacy.enabled:
+            privacy_evidence.verify_entities()
         self.privacy = PrivacyService(self)
 
     # ------------------------------------------------------------- util
