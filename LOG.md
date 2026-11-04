@@ -1,5 +1,17 @@
 # LOG
 
+## 2026-11-04 — ADR-0036 decides the role model
+
+Roles stay named, flat permission bundles: no `type`/`kind` with authority. `administrator` remains
+the only reserved, protected name (no `admin` alias); `protected: true` is rejected on any other
+role, and one `privileged(role)` predicate replaces the split `status`/prompt rules. Role selection
+becomes identity-only: the `roles` hint, `HINT_KEYS` entry, and `gateways.cli.role` go, so a body
+cannot claim authority. `users` must be `per_...` ids, the seed drops `Committee member`,
+`cari`/`memori`/`kirim`, and `google`, and a new `eidesoul people add <gateway> <address> --role
+administrator` bootstraps the first administrator in one audited transaction. Additive union is
+documented; deny, inheritance, and per-room grants are out of scope.
+
+Next: implement `people add`, remove the hint and CLI role key, update the seed and tests.
 ## 2026-11-04 — ADR-0035 decides app-scoped skills
 
 Skills carry an audience (`global|thread|person`) but no corpus, so "procedure for app A" can only
