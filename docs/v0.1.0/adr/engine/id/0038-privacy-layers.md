@@ -1,4 +1,4 @@
-> Terjemahan turunan — jangan sunting; sumber: engine/0038-privacy-layers.md (sha256: 2de0bdb58f24)
+> Terjemahan turunan — jangan sunting; sumber: engine/0038-privacy-layers.md (sha256: f5c6a36a9145)
 
 - **Status:** accepted
 - **Tanggal:** 2026-11-04
@@ -205,8 +205,22 @@ dengan menambah model. Akurasi adalah gate, bukan pilihan model.
 - Presedensi veto dan identitas subjek.
 - `MemoryStore` sebagai satu port tulis dan `memories_readable` sebagai jalur baca (ADR-0001).
 - Kelanjutan approval untuk L3/L4 (ADR-0007).
+- Engine tetap program; ia tidak menjadi pengendali data atau control plane terhosting.
 - Tidak ada kredensial yang disimpan.
 - LLM masih boleh membantu merumuskan pertanyaan konfirmasi; ia tidak memutuskan level.
+
+### 4.9 Batas deployment
+
+Engine adalah program, bukan layanan terhosting. Deployer menjalankannya, memilih transport dan
+provider LLM, dan menjadi pengendali data yang diprosesnya. Privacy notice, pencatatan consent,
+permintaan subjek data, DPO, records of processing, DPIA, notifikasi insiden, dan kontrak transfer
+lintas negara menjadi milik deployment itu, bukan engine. Deployment terhosting adalah aplikasi
+terpisah; ia memiliki alur tersebut dan isolasi tenant.
+
+Tanggung jawab engine lebih sempit dan dapat diuji: klasifikasi lokal, level deterministik,
+evidence, audit, primitif retensi dan erasure, serta default aman (tanpa telemetri, tanpa panggilan
+eksternal kecuali dikonfigurasi, tanpa kredensial bawaan). Engine tidak boleh menumbuhkan control
+plane untuk layanan yang tidak ia operasikan.
 
 ## 5. Konfigurasi
 

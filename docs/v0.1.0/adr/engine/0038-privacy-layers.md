@@ -202,8 +202,22 @@ model. Accuracy is a gate, not a model choice.
 - Veto precedence and subject identity.
 - `MemoryStore` as the single write port and `memories_readable` as the read path (ADR-0001).
 - The approval continuation for L3/L4 (ADR-0007).
+- The engine stays a program; it does not become a data controller or a hosted control plane.
 - No credential is stored.
 - The LLM may still help phrase a confirmation question; it does not decide the level.
+
+### 4.9 Deployment boundary
+
+The engine is a program, not a hosted service. The deployer runs it, chooses the transport and the
+LLM provider, and is the controller for the data it processes. Privacy notice, consent capture,
+data-subject requests, a DPO, records of processing, a DPIA, breach notification, and cross-border
+transfer contracts belong to that deployment, not to the engine. A hosted deployment is a separate
+application; it owns those workflows and tenant isolation.
+
+The engine's responsibility is narrower and testable: local classification, deterministic levels,
+evidence, audit, retention and erasure primitives, and secure defaults (no telemetry, no external
+call unless configured, no bundled credentials). It must not grow a control plane for a service it
+does not operate.
 
 ## 5. Configuration
 

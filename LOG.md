@@ -12,6 +12,9 @@ never leave raw; no external residual model is part of the decision. The
 decision record carries detector/model versions, policy hash, approver, and expiry, and maps to EU
 AI Act 12/19 and ISO 42001. `memories.privacy_evidence` becomes the persisted array; `MemoryStore`
 stays the single port. Evaluation per label/language and a 30-day detection mode gate enforcement. Amended: §5.1 caps the default privacy add-on at 300 MB incremental RSS, reuses the existing MiniLM, and removes the optional GLiNER2/Privacy Filter/SLM paths; adding a model now requires a new ADR.
+It also fixes the deployment boundary: the engine is a program, the deployer is the controller, and
+notice/consent/DSAR/DPO/DPIA/breach workflows belong to the deployment or the separate hosted app,
+not to the engine.
 ## 2026-11-04 — ADR-0037 plans the module split before the cap
 
 `agent.py` is at its 1,800-line cap, `memory/store.py` has 24 lines of headroom, and
