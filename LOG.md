@@ -1,5 +1,17 @@
 # LOG
 
+## 2026-11-04 — ADR-0038 decides layered privacy
+
+The level stays, but the label gets an evidence trail and the policy gets sole authority. A
+deterministic floor (regex/checksum/dictionary) can only be raised; entity and semantic detectors
+return evidence with spans and scores; a versioned policy writes the final level and action; L4
+goes to a human. A semantic taxonomy covers sensitivity that PII detection cannot see
+(`crime_admission`, `health`, `relationship_conflict`, `third_party_personal`, ...), with a worked
+mapping for "aku tadi nyuri" and third-party opinions. Local is the default; L4 and credentials
+never leave raw; an external residual model is off by default and sees only redacted text. The
+decision record carries detector/model versions, policy hash, approver, and expiry, and maps to EU
+AI Act 12/19 and ISO 42001. `memories.privacy_evidence` becomes the persisted array; `MemoryStore`
+stays the single port. Evaluation per label/language and a 30-day detection mode gate enforcement.
 ## 2026-11-04 — ADR-0037 plans the module split before the cap
 
 `agent.py` is at its 1,800-line cap, `memory/store.py` has 24 lines of headroom, and

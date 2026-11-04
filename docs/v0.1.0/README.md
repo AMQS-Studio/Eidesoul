@@ -65,6 +65,7 @@ re-stamp the hash. No machine translator ships with the repo.
 | [0035](adr/engine/0035-app-scoped-skills.md) | App-Scoped Skills — A Namespace Above `scope`, Not a Fourth Audience | engine | draft |
 | [0036](adr/engine/0036-role-model.md) | Role Model — Named Bundles, One Protected `administrator`, No Role Types | engine | draft |
 | [0037](adr/engine/0037-module-budgets.md) | Module Budgets — Split Before the Cap, One Reason per Module | engine | draft |
+| [0038](adr/engine/0038-privacy-layers.md) | Layered Privacy — Evidence Before Level, Deterministic Policy, Advisory Models | engine | draft |
 | [0033](adr/0033-neutral-core.md) | Neutral Core, Specialized Edges — No Culture, Transport, or Vendor in Mechanism | root | implemented |
 
 ADRs are grouped by folder: cross-cutting decisions at the `adr/` root, engine decisions under
