@@ -14,9 +14,9 @@ TAGLINE = "a soul engine you run on your own machine"
 def banner(color: bool = False, *, ascii_only: bool = False) -> list[str]:
     """The setup header: an open-ring mark, wordmark, tagline, then a hairline."""
     if ascii_only:
-        art = ["  +-----+", "  | (*) |", "  +-----+"]
+        art = ["  +-----+", "  |     |", "  | (*)", "  |     |", "  +-----+"]
     else:
-        art = ["   ▄▄▄▄▄", "  █  ◈  █", "  █     ▀", "   ▀▀▀▀"]
+        art = ["   ▄▄▄▄▄", "  █     ▀", "  █  ◈", "  █     ▄", "   ▀▀▀▀▀"]
     lines = [
         f"{art[0]}   {WORDMARK}",
         f"{art[1]}   {TAGLINE}",
