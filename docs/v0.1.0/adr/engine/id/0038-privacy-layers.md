@@ -1,4 +1,4 @@
-> Terjemahan turunan — jangan sunting; sumber: engine/0038-privacy-layers.md (sha256: 75c3bd0071dc)
+> Terjemahan turunan — jangan sunting; sumber: engine/0038-privacy-layers.md (sha256: 45c2cd52d1a6)
 
 - **Status:** accepted
 - **Tanggal:** 2026-11-04
@@ -216,6 +216,34 @@ Aktivasi detektor dan threshold adalah data konfigurasi di bawah `privacy`, deng
 Tidak ada secret yang masuk ke prompt, record evidence, atau model. Kredensial dalam teks di-drop
 sebelum penyimpanan.
 
+### 5.1 Anggaran sumber daya
+
+Privasi harus muat dalam anggaran memori spine; ia tidak mengubah engine menjadi host model.
+
+- **RSS inkremental default:** paling banyak 300 MB di atas proses yang sudah memuat MiniLM; proses
+  dingin yang memuat encoder untuk privasi tetap di 700 MB atau kurang.
+- **Satu model entitas dan satu model semantik per proses.** Tanpa instance ganda, tanpa load per
+  request, tanpa model per thread.
+- **Entitas default:** Presidio plus model spaCy kecil (paling banyak 80 MB di disk). Tanpa
+  transformer NER secara default.
+- **Semantik default:** MiniLM yang sudah dimuat `embed.py` plus head linear (paling banyak 5 MB);
+  bukan encoder kedua.
+- **Detektor opsional** (GLiNER2, OpenAI Privacy Filter, SLM lokal) adalah extra atau plugin, mati
+  secara default, lazy-load, dan di-unload setelah sepuluh menit idle.
+- **Batas teks:** 4.000 karakter per klasifikasi, 512 token per segmen, batch paling banyak 8; tidak
+  pernah mengklasifikasi seluruh thread dalam satu panggilan.
+- Jika stack default melewati 300 MB inkremental, responsnya adalah int8/ONNX atau lebih sedikit
+  detektor, bukan anggaran yang dinaikkan.
+
+| Komponen | Default | Cap RSS inkremental | Cap disk |
+| --- | --- | ---: | ---: |
+| Presidio + spaCy kecil | ya | 200 MB | 80 MB |
+| MiniLM (dipakai ulang) | ya | 0 MB hangat / 400 MB dingin | 120 MB |
+| Head linear | ya | 5 MB | 5 MB |
+| GLiNER2 | opsional | 500 MB | 600 MB |
+| OpenAI Privacy Filter | opsional | 2 GB | 2 GB |
+| SLM lokal | opsional | bukan default | — |
+
 ## 6. Metrik dan gate
 
 Hitungan yang harus didorong ke nol, diukur 2026-11-04:
@@ -242,6 +270,8 @@ Gate-nya:
 8. Golden set melaporkan precision/recall/FPR per label dan kalibrasi; regresi adalah gate.
 9. Instalasi baru berjalan tanpa LLM eksternal dan tanpa SLM.
 10. `pytest -q`, `ruff`, `pyright`, `selfcheck`, dan gate ADR tetap hijau.
+11. Smoke privasi default tetap di dalam anggaran §5.1; model opsional tidak ada di proses sampai
+    diaktifkan secara eksplisit.
 
 ## 7. Kriteria penerimaan
 
@@ -253,7 +283,8 @@ Gate-nya:
 - Model residual eksternal mati secara default dan tidak dapat menerima teks L4/kredensial mentah.
 - Record audit dapat merekonstruksi keputusan tanpa memanggil model lagi.
 - Golden set dan metrik per label menjadi bagian repositori.
-- Deployment sepenuhnya lokal lolos smoke test tanpa model jaringan.
+- Deployment sepenuhnya lokal lolos smoke test tanpa model jaringan dan di dalam anggaran memori
+  §5.1.
 
 ## 8. Risiko dan mitigasi
 

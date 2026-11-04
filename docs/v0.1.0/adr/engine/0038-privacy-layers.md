@@ -215,6 +215,34 @@ Detector enablement and thresholds are configuration data under `privacy`, with 
 No secret enters a prompt, evidence record, or model. Credentials in text are dropped before
 storage.
 
+### 5.1 Resource budget
+
+Privacy must fit the spine's memory budget; it does not turn the engine into a model host.
+
+- **Default incremental RSS:** at most 300 MB over a process that already loaded MiniLM; a cold
+  process that loads the encoder for privacy stays at or below 700 MB.
+- **One entity model and one semantic model per process.** No duplicate instance, no per-request
+  load, no per-thread model.
+- **Default entity:** Presidio plus a small spaCy model (at most 80 MB on disk). No transformer NER
+  by default.
+- **Default semantic:** the MiniLM already loaded by `embed.py` plus a linear head (at most 5 MB);
+  not a second encoder.
+- **Optional detectors** (GLiNER2, OpenAI Privacy Filter, a local SLM) are extras or plugins, off by
+  default, lazy-loaded, and unloaded after ten minutes idle.
+- **Text caps:** 4,000 characters per classification, 512 tokens per segment, batch at most 8; never
+  classify a whole thread in one call.
+- If the default stack exceeds 300 MB incremental, the response is int8/ONNX or fewer detectors,
+  never a raised budget.
+
+| Component | Default | Incremental RSS cap | Disk cap |
+| --- | --- | ---: | ---: |
+| Presidio + small spaCy | yes | 200 MB | 80 MB |
+| MiniLM (reused) | yes | 0 MB warm / 400 MB cold | 120 MB |
+| Linear head | yes | 5 MB | 5 MB |
+| GLiNER2 | optional | 500 MB | 600 MB |
+| OpenAI Privacy Filter | optional | 2 GB | 2 GB |
+| Local SLM | optional | not default | — |
+
 ## 6. Metrics and gates
 
 Counts to drive to zero, measured 2026-11-04:
@@ -240,6 +268,8 @@ The gate:
 8. The golden set reports per-label precision/recall/FPR and calibration; a regression is a gate.
 9. A fresh install runs with no external LLM and no SLM.
 10. `pytest -q`, `ruff`, `pyright`, `selfcheck`, and the ADR gates stay green.
+11. The default privacy smoke stays inside the §5.1 budget; optional models are absent from the
+    process until explicitly enabled.
 
 ## 7. Acceptance criteria
 
@@ -251,7 +281,8 @@ The gate:
 - An external residual model is off by default and cannot receive raw L4/credential text.
 - The audit record can reconstruct a decision without calling the model again.
 - The golden set and its per-label metrics are part of the repository.
-- The fully local deployment passes the smoke test without any network model.
+- The fully local deployment passes the smoke test without any network model and within the §5.1
+  memory budget.
 
 ## 8. Risks and mitigations
 

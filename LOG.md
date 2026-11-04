@@ -11,7 +11,7 @@ mapping for "aku tadi nyuri" and third-party opinions. Local is the default; L4 
 never leave raw; an external residual model is off by default and sees only redacted text. The
 decision record carries detector/model versions, policy hash, approver, and expiry, and maps to EU
 AI Act 12/19 and ISO 42001. `memories.privacy_evidence` becomes the persisted array; `MemoryStore`
-stays the single port. Evaluation per label/language and a 30-day detection mode gate enforcement.
+stays the single port. Evaluation per label/language and a 30-day detection mode gate enforcement. Amended: §5.1 caps the default privacy add-on at 300 MB incremental RSS, reuses the existing MiniLM, and makes GLiNER2, Privacy Filter, and SLM optional lazy-loaded extras.
 ## 2026-11-04 — ADR-0037 plans the module split before the cap
 
 `agent.py` is at its 1,800-line cap, `memory/store.py` has 24 lines of headroom, and
