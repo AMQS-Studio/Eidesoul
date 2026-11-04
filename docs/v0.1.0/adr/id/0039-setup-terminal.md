@@ -1,4 +1,4 @@
-> Terjemahan turunan — jangan sunting; sumber: 0039-setup-terminal.md (sha256: b887874e7643)
+> Terjemahan turunan — jangan sunting; sumber: 0039-setup-terminal.md (sha256: b614667655a7)
 
 # ADR-0039: Init sebagai Antarmuka Terminal Kelas Satu
 
@@ -100,6 +100,7 @@ Logo produk tetap `assets/logo.png`; ADR ini tidak menggambarnya ulang. Setup me
 | Flag | Arti |
 | --- | --- |
 | `--dir PATH` | isi langkah Location; default `.` |
+| `--no-location` | lewati langkah Location dan pakai `--dir` (installer sudah bertanya) |
 | `--provider NAME` | jawab Provider |
 | `--api-key-file PATH` | baca key dari file; jangan pernah nilai di command line |
 | `--model ID` | jawab Model |

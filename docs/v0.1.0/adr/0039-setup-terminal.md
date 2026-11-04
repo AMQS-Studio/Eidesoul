@@ -125,6 +125,7 @@ No engine module imports a terminal library.
 | Flag | Meaning |
 | --- | --- |
 | `--dir PATH` | seed the Location step; default `.` |
+| `--no-location` | skip the Location step and use `--dir` (the installer already asked) |
 | `--provider NAME` | pre-answer Provider |
 | `--api-key-file PATH` | read the key from a file; never a command-line value |
 | `--model ID` | pre-answer Model |

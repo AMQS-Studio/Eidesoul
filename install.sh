@@ -33,6 +33,7 @@ log_file="${monoagens_home}/logs/install.log"
 uv_bin="${monoagens_home}/bin/uv"
 
 dir="$default_dir"
+dir_set=0
 stack="native"
 stack_set=0
 install_runtime=0
@@ -187,7 +188,12 @@ install_traps() {
 parse_args() {
     while (($#)); do
         case "$1" in
-            --dir) [[ $# -ge 2 ]] || usage 2 "missing value for --dir"; dir="$2"; shift 2 ;;
+            --dir)
+                [[ $# -ge 2 ]] || usage 2 "missing value for --dir"
+                dir="$2"
+                dir_set=1
+                shift 2
+                ;;
             --stack)
                 [[ $# -ge 2 ]] || usage 2 "missing value for --stack"
                 stack="$2"
@@ -207,7 +213,7 @@ parse_args() {
                 voice_layer="$2"
                 shift 2
                 ;;
-            --dir=*) dir="${1#*=}"; shift ;;
+            --dir=*) dir="${1#*=}"; dir_set=1; shift ;;
             --stack=*) stack="${1#*=}"; stack_set=1; shift ;;
             --install-runtime) install_runtime=1; shift ;;
             --provider=*) provider="${1#*=}"; shift ;;
@@ -252,6 +258,32 @@ ask_runtime() {
         *) usage 2 "runtime must be 1/native or 2/compose" ;;
     esac
     stack_set=1
+}
+
+ask_directory() {
+    local answer="" choice=""
+    (( dir_set || non_interactive || dry_run )) && return 0
+    [[ -t 0 ]] || return 0
+    say ""
+    say "Where should MonoAgens live?"
+    say "  config.yaml, roles.yaml, soul.yaml, .env, and the runtime state are written there."
+    say "  1) $default_dir (recommended)"
+    say "  2) custom directory"
+    read -r -p "  location [1]: " choice || choice="1"
+    case "$choice" in
+        "" | 1 | recommended) dir="$default_dir" ;;
+        2 | custom)
+            read -r -p "  custom directory: " answer || answer=""
+            if [[ -n "$answer" ]]; then
+                dir="$answer"
+            fi
+            ;;
+        *) dir="$choice" ;;
+    esac
+    dir="${dir/#\~/$HOME}"
+    [[ "$dir" = /* ]] || dir="${PWD}/${dir}"
+    [[ -n "$dir" ]] || usage 2 "install directory must not be empty"
+    dir_set=1
 }
 
 # --- platform and preflight -----------------------------------------------------------
@@ -482,7 +514,7 @@ uv_run_in_dir() {
 
 
 build_init_args() {
-    INIT_ARGS=(init --dir "$dir")
+    INIT_ARGS=(init --dir "$dir" --no-location)
     if [[ -n "$voice_layer" ]]; then INIT_ARGS+=(--voice-layer "$voice_layer"); fi
     if [[ -n "$provider" ]]; then INIT_ARGS+=(--provider "$provider"); fi
     if [[ -n "$model" ]]; then INIT_ARGS+=(--model "$model"); fi
@@ -516,7 +548,11 @@ run_init() {
     if (( attached )); then
         detail "interactive setup; answers are written only after the review step"
         local code=0
-        uv_run_in_dir "${INIT_ARGS[@]}" 2>&1 | tee -a "$log_file" || code=$?
+        # Do not pipe stdout through tee here: init uses curses only when both
+        # stdin and stdout are terminals. The interactive screen stays on the
+        # terminal; the log records the stage, never the wizard's secrets.
+        uv_run_in_dir "${INIT_ARGS[@]}" || code=$?
+        log "interactive init exited with status $code; wizard output stayed on the terminal"
         if (( code == 130 )); then
             say ""
             say "cancelled; nothing was written"
@@ -916,6 +952,7 @@ main() {
     parse_args "$@"
     setup_colors
     ask_runtime
+    ask_directory
     detect_arch
     say "MonoAgens installer - $REPO_URL ($(revision_label))"
     say "stack: $stack | uv pin: $UV_VERSION | arch: $arch | dry-run: $([[ $dry_run == 1 ]] && echo yes || echo no)"

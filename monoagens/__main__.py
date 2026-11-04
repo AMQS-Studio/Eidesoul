@@ -612,6 +612,7 @@ def _init(args: argparse.Namespace) -> int:
                 locale=args.locale,
                 timezone=args.timezone,
                 force=args.force,
+                ask_location=not args.no_location,
                 color=color,
             )
         else:
@@ -844,6 +845,11 @@ def build_parser() -> argparse.ArgumentParser:
     sub.add_parser("backfill", help="pull old history through a throwaway device")
     init = sub.add_parser("init", help="write config.yaml, roles.yaml, soul.yaml, and .env")
     init.add_argument("--dir", default=".", help="target directory")
+    init.add_argument(
+        "--no-location",
+        action="store_true",
+        help="use --dir without asking where the soul lives (for an installer-owned directory)",
+    )
     init.add_argument("--force", action="store_true", help="replace existing files without asking")
     init.add_argument(
         "--provider", default=None, help="provider name (asked on a terminal; required when piped)"

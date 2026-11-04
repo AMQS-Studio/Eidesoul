@@ -227,9 +227,9 @@ satu giliran, dan kemampuan yang dipegang saat itu.
 Kebutuhan: Python 3.14, Postgres 14+ dengan `pgvector`, dan endpoint LLM yang kompatibel dengan
 OpenAI. Image container memakai Python 3.14; menjalankan dari source butuh 3.14 atau lebih baru.
 
-Jalur terpendek adalah installer. Ia menanyakan di mana engine berjalan, memakai Postgres
-Podman/Docker untuk kedua pilihan, dan bertanya sebelum memasang runtime container yang hilang
-dengan `sudo`:
+Jalur terpendek adalah installer. Ia menanyakan di mana engine berjalan dan di mana berkas
+disimpan (`~/.monoagens/app` yang disarankan atau direktori custom), memakai Postgres Podman/Docker
+untuk kedua pilihan, dan bertanya sebelum memasang runtime container yang hilang dengan `sudo`:
 
 ```bash
 bash install.sh                 # pilihan runtime interaktif

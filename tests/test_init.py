@@ -180,6 +180,24 @@ def test_the_wizard_shows_the_rail_and_the_review_then_writes(tmp_path, monkeypa
     assert "MARKER-PASSWORD" in env  # the value lives in .env, at 0600
 
 
+def test_no_location_uses_the_installer_owned_directory(tmp_path, monkeypatch, capsys):
+    monkeypatch.setattr(admin_init, "model_ids", lambda provider: [])
+    answer = "\n".join(["groq", "", "llama-operator", "", "", "off", "1"]) + "\n"
+    monkeypatch.setattr(sys, "stdin", Tty(answer))
+    output = io.StringIO()
+    monkeypatch.setattr(sys, "stdout", output)
+
+    code = main(
+        ["--env", "absent.env", "init", "--dir", str(tmp_path), "--no-location"]
+    )
+
+    assert code == 0
+    screen = output.getvalue()
+    assert "where should this soul live?" not in screen
+    assert "[2/7] provider" in screen
+    assert (tmp_path / "config.yaml").is_file()
+
+
 def test_a_piped_wizard_run_through_the_command_writes_the_host(tmp_path, monkeypatch):
     monkeypatch.setattr(admin_init, "model_ids", lambda provider: [])
     monkeypatch.setattr(admin_init, "DEFAULT_LOG", tmp_path / "install.log")

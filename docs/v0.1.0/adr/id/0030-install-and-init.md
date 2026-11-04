@@ -1,4 +1,4 @@
-> Terjemahan turunan — jangan sunting; sumber: 0030-install-and-init.md (sha256: a953e2045532)
+> Terjemahan turunan — jangan sunting; sumber: 0030-install-and-init.md (sha256: fc9dbf30ae99)
 > Ditulis tangan (bukan mesin), mengikuti sumber English baris demi baris.
 
 # ADR-0030: Install On-Machine dan Init Interaktif — Wizard Kita Sendiri, Satu Installer, Dua Runtime
@@ -62,11 +62,11 @@ Satu skrip Bash, dipanggil dari klon (`bash install.sh`) atau dari jaringan
 | `uv` | kalau absen: unduh rilis yang dipin untuk arsitektur yang berjalan dan verifikasi SHA-256 sebelum dipakai; pin hidup di satu blok berkomentar dengan baris "cara menaikkannya" |
 | Python | menuntut 3.14+ dan melaporkan interpreter yang ia temukan; image container mempertahankan floor 3.14 yang sama — perbedaannya dinyatakan, tidak disembunyikan |
 | Dependency | `uv sync --locked` di dalam direktori instalasi (`--dir`, default `~/.monoagens/app`); tak ada dependency yang dipasang di luarnya |
-| Setup | menanyakan runtime, lalu menyerahkan ke `monoagens init` (§4.3): interaktif di terminal, digerakkan flag kalau bukan |
+| Setup | menanyakan runtime dan direktori instalasi, lalu menyerahkan ke `monoagens init` dengan lokasi terkunci (§4.3): interaktif di terminal, digerakkan flag kalau bukan |
 | Database | kedua stack memakai Postgres Podman/Docker secara default. Installer membuat `POSTGRES_PASSWORD` dan `MONOAGENS_DATABASE_URL` saat kosong; `--database-url` eksternal yang eksplisit melewati container di mode native |
 | Lanjutan | nyalakan Postgres (atau seluruh stack compose), `monoagens db upgrade`, lalu `monoagens selftest` |
 | Penutup | menawarkan pilihan (§4.5): buka panel, atau tetap di command line |
-| Pengamatan | satu baris status selama child berjalan, semuanya ditambahkan ke `~/.monoagens/logs/install.log`, dan kegagalan mencetak baris terakhir plus path log |
+| Pengamatan | satu baris status selama child berjalan; keluaran child non-interaktif ditambahkan ke `~/.monoagens/logs/install.log`, sedangkan wizard interaktif tetap di terminal (tidak ada rahasia di log); kegagalan mencetak baris terakhir plus path log |
 | Sinyal | `INT`/`TERM`/`HUP` menandai jalannya `interrupted` dan di-raise ulang, jadi exit status tetap milik sinyalnya |
 | Jalan ulang | repair: tidak pernah menimpa berkas yang ada atau meng-clone ulang di atas perubahan lokal tanpa ditanya |
 | Platform | Linux x86_64 dan aarch64 di versi ini; selain itu ditolak dengan satu baris |
@@ -88,7 +88,7 @@ Setup interaktif dirancang di sini, bukan dipinjam. Yang dipinjam dari referensi
 
 ### 4.3 `monoagens init` jadi interaktif di terminal
 
-- Di TTY, `init` menanyakan hal yang sama seperti yang dibawa flag-nya: provider, model (opsional), URL database, label administrator pertama, dan **lapisan suara** — tetap nyalakan emosi, humanize, dan karakter (jawaban default) atau matikan salah satunya. Berkas yang sudah ada ditawarkan sebagai `keep` / `change` / `replace`.
+- Di TTY, `init` menanyakan hal yang sama seperti yang dibawa flag-nya: lokasi (kecuali installer sudah menanyakannya dan mengirim `--no-location`), provider, model (opsional), URL database, label administrator pertama, dan **lapisan suara** — tetap nyalakan emosi, humanize, dan karakter (jawaban default) atau matikan salah satunya. Berkas yang sudah ada ditawarkan sebagai `keep` / `change` / `replace`.
 - Di luar terminal (pipa, CI, `--non-interactive`), ia **gagal tertutup**: ia menyebut flag yang dibutuhkan alih-alih menunggu input yang tak mungkin datang.
 - Rahasia tidak pernah masuk YAML: wizard menulis **nama** env dan menaruh nilainya di `.env` (`0600`), tepat seperti jalur non-interaktif sekarang (`monoagens/admin/init.py:14-20`).
 - Setiap nilai yang ditulisnya berasal dari `monoagens/admin/templates.py` plus jawaban operator — wizard tidak memiliki default sendiri.

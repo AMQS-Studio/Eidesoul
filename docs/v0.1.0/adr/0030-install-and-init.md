@@ -61,11 +61,11 @@ form downloads the script first or uses process substitution; `curl | bash` stay
 | `uv` | if absent, download the pinned release for the running architecture and verify its SHA-256 before use; the pin lives in one commented block with a "how to bump" line |
 | Python | requires 3.14+ and reports the interpreter it found; the container image keeps the same 3.14 floor — the difference is stated, not hidden |
 | Dependencies | `uv sync --locked` inside the install directory (`--dir`, default `~/.monoagens/app`); no dependency is installed outside it |
-| Setup | asks the runtime, then hands over to `monoagens init` (§4.3): interactive on a terminal, flag-driven otherwise |
+| Setup | asks the runtime and install directory, then hands over to `monoagens init` with the location locked (§4.3): interactive on a terminal, flag-driven otherwise |
 | Database | both stacks use a Podman/Docker Postgres by default. The installer generates `POSTGRES_PASSWORD` and `MONOAGENS_DATABASE_URL` when they are empty; an explicit external `--database-url` skips the container in native mode |
 | Continue | start Postgres (or the full compose stack), `monoagens db upgrade`, then `monoagens selftest` |
 | Finish | offers a choice (§4.5): open the panel, or stay on the command line |
-| Observation | one status line while a child runs, everything appended to `~/.monoagens/logs/install.log`, and a failure prints the last lines plus the log path |
+| Observation | one status line while a child runs; non-interactive child output is appended to `~/.monoagens/logs/install.log`, while the interactive wizard stays on the terminal (no secret in the log); a failure prints the last lines plus the log path |
 | Signals | `INT`/`TERM`/`HUP` mark the run `interrupted` and are re-raised, so the exit status stays the signal's |
 | Re-run | a repair: it never overwrites an existing file or re-clones over local changes without being asked |
 | Platform | Linux x86_64 and aarch64 in this version; anything else is refused with one line |
@@ -88,8 +88,9 @@ The interactive setup is designed here, not borrowed. What it borrows from the r
 
 ### 4.3 `monoagens init` becomes interactive on a terminal
 
-- On a TTY, `init` asks the same questions the flags carry: provider, model (optional), database URL,
-  the first administrator's label, and the **voice layer** — keep emotion, humanize, and character on
+- On a TTY, `init` asks the same questions the flags carry: location (unless the installer already
+  asked and passes `--no-location`), provider, model (optional), database URL, the first
+  administrator's label, and the **voice layer** — keep emotion, humanize, and character on
   (the default answer) or turn any of them off. Existing files are offered as `keep` / `change` / `replace`.
 - Off a terminal (piped, CI, `--non-interactive`), it **fails closed**: it names the flags it needs
   instead of waiting for input that cannot arrive.
