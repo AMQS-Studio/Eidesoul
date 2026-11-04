@@ -1,4 +1,4 @@
-> Terjemahan turunan — jangan sunting; sumber: engine/0038-privacy-layers.md (sha256: 1cb898c7582b)
+> Terjemahan turunan — jangan sunting; sumber: engine/0038-privacy-layers.md (sha256: bbef60bfd8d3)
 
 - **Status:** accepted
 - **Tanggal:** 2026-11-04
@@ -325,6 +325,27 @@ Gate-nya:
 12. Perubahan sentimen saja membuat `level` tetap; ucapan afektif yang ambigu diarahkan ke
     `staged`/`needs_review`, bukan tebakan L4.
 
+### 6.1 Kewajiban test
+
+Setiap gate bernomor dan setiap kriteria penerimaan adalah test otomatis, bukan checklist review.
+Aturan tanpa test belum implemented; statusnya tetap draft.
+
+- Test berada di `tests/` dan berjalan di `pytest -q` default; test gate yang di-skip atau xfail
+  tidak dihitung.
+- Perbaikan bug kontrak (`ask`, teks audit mentah, evidence hilang, policy version hilang) dikirim
+  dengan regression test di commit yang sama; test harus gagal pada kode sebelum perbaikan dan
+  lulus sesudahnya.
+- Tidak ada test yang memanggil provider nyata dan tidak ada test yang butuh jaringan. Provider
+  palsu mencatat panggilan dan memastikan nol payload L4/kredensial mentah.
+- Golden set adalah fixture yang di-commit dengan label yang diharapkan; test mencatat
+  precision/recall/FPR per label dan gagal saat regresi. Setelah baseline dicatat, floor numerik
+  menjadi bagian dari versi policy; mengubahnya adalah perubahan policy, bukan edit test.
+- Test menguji perilaku, bukan prosa: level, aksi, field evidence, rute, dan panggilan provider.
+- Test wajib mencakup minimal: level hanya ditulis policy; `ask` diturunkan dari policy, bukan
+  output model; perubahan sentimen saja tidak mengubah level; teks afektif ambigu diarahkan ke
+  `staged`/`needs_review`; audit tidak mengirim teks L4/kredensial mentah; evidence dan policy
+  version tersimpan; jalur lokal membuat nol panggilan eksternal; metrik golden set berjalan.
+
 ## 7. Kriteria penerimaan
 
 - `memories.privacy_evidence` ada, diisi detektor, dan dapat di-query untuk audit.
@@ -340,6 +361,8 @@ Gate-nya:
   §5.1.
 - Afek tidak pernah menentukan level: skor afek dan policy privasi punya input terpisah, dan
   perubahan sentimen saja adalah no-op untuk `level`.
+- Setiap kriteria penerimaan di atas punya test di `pytest` default; test yang hilang atau
+  di-skip/xfail berarti kriteria belum terpenuhi.
 
 ## 8. Risiko dan mitigasi
 

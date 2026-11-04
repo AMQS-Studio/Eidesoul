@@ -16,6 +16,8 @@ It also fixes the deployment boundary: the engine is a program, the deployer is 
 notice/consent/DSAR/DPO/DPIA/breach workflows belong to the deployment or the separate hosted app,
 not to the engine. §4.10 adds the affect boundary: sentiment may shape tone, salience, or a crisis
 route but never the privacy level; ambiguous affective text is staged or reviewed, not guessed.
+§6.1 makes every gate and acceptance criterion an automated test; a rule without a passing test is
+not implemented, and bug fixes ship with a regression test that fails before and passes after.
 ## 2026-11-04 — ADR-0037 plans the module split before the cap
 
 `agent.py` is at its 1,800-line cap, `memory/store.py` has 24 lines of headroom, and

@@ -6,7 +6,7 @@
 - **Context:** extends ADR-0006 (group privacy and pre-filter), ADR-0008 (memory integrity), ADR-0007 (approval classes), ADR-0010 (reflection and disputes); follows ADR-0033 (neutral core)
 - **Supersedes:** —
 - **Related:** ADR-0001 (single memory port), ADR-0011 (durability), ADR-0015 (capability), ADR-0020 (skills), ADR-0035 (app scope), ADR-0036 (roles)
-- **Implementation:** draft — the layer contract, the evidence record, and the policy authority are decided here; the engine still lets the LLM propose a level without a stored evidence trail, has no semantic sensitivity classifier, and does not record a policy version per decision.
+- **Implementation:** draft — the layer contract, the evidence record, and the policy authority are decided here; the engine still lets the LLM propose a level without a stored evidence trail, has no semantic sensitivity classifier, and does not record a policy version per decision. A rule is not implemented until its §6.1 test exists and passes.
 - **Location note:** an engine decision (it owns classification, disclosure policy, and audit), so it sits under `adr/engine/`. The Indonesian copy is `docs/v0.1.0/adr/engine/id/0038-privacy-layers.md`.
 
 ---
@@ -321,6 +321,27 @@ The gate:
 12. A sentiment-only change leaves `level` unchanged; an ambiguous affective utterance routes to
     `staged`/`needs_review`, never to a guessed L4.
 
+### 6.1 Test obligation
+
+Every numbered gate and every acceptance criterion is an automated test, not a review checklist.
+A rule without a test is not implemented; it stays draft.
+
+- The test lives in `tests/` and runs in the default `pytest -q`; a skipped or xfail gate test does
+  not count.
+- A fix for a contract bug (`ask`, raw audit text, missing evidence, missing policy version) ships
+  with a regression test in the same commit; the test must fail on the pre-fix code and pass after.
+- No test calls a real provider and no test needs the network. A fake provider records the calls
+  and asserts zero raw L4/credential payloads.
+- The golden set is a checked-in fixture with expected labels; the test records per-label
+  precision/recall/FPR and fails on regression. Once a baseline is recorded, the numeric floor is
+  part of the policy version; changing it is a policy change, not a test edit.
+- Tests assert behavior, not prose: the level, the action, the evidence fields, the route, and the
+  provider calls.
+- The required tests include, at minimum: level written only by policy; `ask` derived from policy
+  rather than model output; sentiment-only change leaves the level unchanged; ambiguous affective
+  text routes to `staged`/`needs_review`; audit sends no raw L4/credential text; evidence and policy
+  version are persisted; the local path makes zero external calls; the golden-set metrics run.
+
 ## 7. Acceptance criteria
 
 - `memories.privacy_evidence` exists, is populated by the detectors, and is queryable for an audit.
@@ -336,6 +357,8 @@ The gate:
   memory budget.
 - Affect never determines a level: the affect score and the privacy policy have separate inputs,
   and a sentiment-only change is a no-op for `level`.
+- Every acceptance criterion above has a test in the default `pytest` run; a missing test or a
+  skipped/xfail test leaves the criterion unmet.
 
 ## 8. Risks and mitigations
 
