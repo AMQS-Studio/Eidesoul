@@ -1,5 +1,19 @@
 # LOG
 
+## 2026-11-04 — ADR-0037 plans the module split before the cap
+
+`agent.py` is at its 1,800-line cap, `memory/store.py` has 24 lines of headroom, and
+`jobs/automation.py` has 29; the next feature edit is a red gate. ADR-0037 keeps the ADR-0031 rule
+and lowers the ceilings instead of raising them: automation splits at its existing class boundaries
+(manifest, store, worker), the turn loop moves into `turn/loop.py` with intake/delivery/commands/steps,
+and the memory port stays one facade over writes, candidates, reads, maintenance, and disputes.
+Each split is one behavior-preserving commit that lowers the cap in the same change; the three
+private `LINE_CAPS` entries go away.
+
+The golden prompt contract was already decided in ADR-0033 §6.11 and exists in
+`tests/test_prompt_contract.py` + `tests/data/prompt_cases.yaml`; the missing crisis/approval cases
+are implementation, not a new decision. Panel and release stay out of scope per the current focus.
+
 ## 2026-11-04 — ADR-0036 decides the role model
 
 Roles stay named, flat permission bundles: no `type`/`kind` with authority. `administrator` remains
