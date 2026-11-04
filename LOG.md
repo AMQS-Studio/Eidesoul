@@ -83,10 +83,9 @@ import, and every result is `entity` evidence with a span. Measured entity cost 
 incremental and 40.4 MB on disk; `tests/test_privacy_budget.py` enforces the 200 MiB/80 MB row.
 
 Gates: `pytest -q` 869 passed; `ruff` clean; `pyright` 0 errors; `selfcheck` ok; ADR check 39/39 and
-translation clean. ADR-0038 remains partial: a fresh process that loads the shared PyTorch MiniLM
-plus the entity layer measured about 929 MiB, above the §5.1 700 MiB cold cap. Moving the shared
-embedder to int8/ONNX (or removing a detector) is the next budget fix; the semantic linear head and
-production calibration are still open.
+translation clean. ADR-0038 was partial: a fresh process that loads the shared PyTorch MiniLM plus
+the entity layer measured about 929 MiB, above the then-current §5.1 cold cap. The budget was later
+revised to 1536 MiB; the semantic linear head and production calibration remained open.
 
 ## 2026-11-04 — ADR-0038 decides layered privacy
 
