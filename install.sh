@@ -441,9 +441,30 @@ prepare_dir() {
         if [[ "$dir" == "$source_root" || "$dir" == "$source_root"/* ]]; then
             die "--dir must sit beside this checkout, not inside it; pass --dir at the checkout itself or somewhere outside"
         fi
-        if [[ -d "$dir" && -n "$(ls -A -- "$dir" 2>/dev/null)" ]]; then
-            die "$dir is not empty and has no pyproject.toml; pass --dir at an empty directory or at this checkout"
+    fi
+    if [[ -d "$dir" && -n "$(ls -A -- "$dir" 2>/dev/null)" ]]; then
+        warn "$dir is not empty and has no pyproject.toml."
+        warn "This is usually a partial checkout from an interrupted install."
+        if (( dry_run )); then
+            detail "would ask before removing the partial contents"
+            return 0
         fi
+        if [[ -t 0 ]] && (( ! non_interactive )); then
+            local answer=""
+            read -r -p "  remove the contents and install there? [y/N]: " answer || answer=""
+            case "$answer" in
+                y | Y | yes | YES)
+                    rm -rf -- "$dir"
+                    mkdir -p -- "$dir"
+                    detail "removed the partial contents"
+                    ;;
+                *) die "install directory is not empty; choose another one or clear it yourself" ;;
+            esac
+        else
+            die "$dir is not empty and has no pyproject.toml; pass --dir at an empty directory"
+        fi
+    fi
+    if [[ -n "$source_root" && -f "$source_root/pyproject.toml" ]]; then
         detail "copy this checkout from $source_root (no .git, .venv, .env, or runtime data)"
         (( dry_run )) && return 0
         mkdir -p -- "$dir"
@@ -452,9 +473,6 @@ prepare_dir() {
             --exclude=.env --exclude=.monoagens --exclude='*.egg-info' \
             -cf - . | tar -C "$dir" -xf - || die "cannot copy the checkout into $dir"
         return 0
-    fi
-    if [[ -d "$dir" && -n "$(ls -A -- "$dir" 2>/dev/null)" ]]; then
-        die "$dir is not empty and has no pyproject.toml; pass --dir at an empty directory"
     fi
     if command -v curl >/dev/null 2>&1 && command -v tar >/dev/null 2>&1; then
         local archive_url="${REPO_URL}/archive/refs/heads/${REVISION}.tar.gz"
