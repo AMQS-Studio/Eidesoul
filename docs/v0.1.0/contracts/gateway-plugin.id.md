@@ -341,6 +341,41 @@ Inilah aturan yang menjaga "modular" tidak berarti "tumpang tindih".
 
 ---
 
+### 5.3 Ketika gateway dan plugin bekerja bersama
+
+Keduanya boleh berkolaborasi; keduanya tidak boleh saling bergantung dua arah.
+
+1. **Dependensi satu arah.** Entah gateway berdiri sendiri dan plugin memperkuatnya, atau satu
+   plugin mengirim keduanya. Plugin tidak boleh menjadi syarat body start, dan body tidak boleh
+   menjadi syarat plugin registrasi.
+2. **Satu paket berarti satu plugin, satu digest.** Jika keduanya satu produk dan berversi bersama,
+   kirim sebagai satu plugin yang mendeklarasikan `provides.gateways`. Gateway tetap didaftarkan dan
+   diaktifkan sebagai gateway, bukan sebagai tool plugin. Satu instalasi memverifikasi satu pohon;
+   config gateway tetap yang mengaktifkan body. Menonaktifkan plugin itu juga membuat body yang
+   dikirimnya unavailable, dan operator melihat kopling itu di manifest.
+3. **Terpisah berarti dua unit.** Jika gateway generik dan capability opsional, pertahankan dua
+   paket: gateway di pohonnya, plugin di pohonnya. Plugin boleh mendokumentasikan bahwa ia
+   mengharapkan gateway, tetapi engine tidak menegakkan tautan itu; gateway yang hilang membuat
+   capability `unavailable`, bukan engine rusak.
+4. **Tanpa import silang.** Kode gateway tidak pernah mengimpor kode plugin; kode plugin tidak
+   pernah mengimpor internal gateway. Seam-nya adalah `Percept`/`Action`, `ToolContext`, dan hint
+   (`app`), bukan objek Python.
+5. **Tanpa izin implisit.** Plugin yang memanggil aksi body melewati pemeriksaan `execute`/role
+   yang sama; ia tidak memanggil `gateway.dispatch` langsung untuk melewati policy. Jika butuh aksi
+   body, body mengeksposnya sebagai tool dan role memberikannya.
+6. **Menurun, bukan crash.** Menonaktifkan atau menghapus plugin membuat capability-nya absen;
+   loop gateway tetap berjalan ketika ia berada di pohonnya sendiri. Menghentikan gateway
+   meninggalkan tool plugin tetap dapat dipanggil kecuali yang membutuhkan body. Kegagalan mana pun
+   adalah `unavailable`, bukan traceback.
+7. **Satu pemilik prompt per fakta.** Gateway memiliki bagian body; plugin hanya memiliki part
+   statisnya. Keduanya tidak pernah menduplikasi instruksi yang sama; satu menyatakannya dan yang
+   lain merujuk capability.
+
+Contoh: gateway robot guard plus plugin `guard-playbooks`. Gateway memiliki transport, alarm, dan
+latch serta berjalan tanpa plugin. Plugin menambah panduan statis dan pencarian pengunjung; tanpa
+gateway ia tetap registrasi, tetapi tool yang membutuhkan body menolak. Gateway menetapkan
+`hints["app"]`; plugin membacanya sebagai `ctx.app` dan tidak pernah menyimpulkannya dari nama body.
+
 ## 6. Izin dan kepercayaan
 
 - **Role adalah satu-satunya sumber izin.** Handler gateway atau plugin tidak punya grant default;

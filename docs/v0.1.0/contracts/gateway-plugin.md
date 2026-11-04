@@ -336,6 +336,41 @@ These are the rules that keep "modular" from meaning "overlapping".
 
 ---
 
+### 5.3 When a gateway and a plugin work together
+
+They may collaborate; they may not depend on each other in both directions.
+
+1. **One-way dependency.** Either the gateway stands alone and the plugin enhances it, or one plugin
+   ships both. A plugin must not be required for the body to start, and a body must not be required
+   for the plugin to register.
+2. **Co-packaged is one plugin, one digest.** If they are one product and version together, ship
+   them as one plugin declaring `provides.gateways`. The gateway is still registered and enabled as
+   a gateway, never as a plugin tool. One install verifies one tree; the gateway config still
+   enables the body. Disabling that plugin also makes the shipped body unavailable, and the
+   operator sees that coupling in the manifest.
+3. **Separate is two units.** If the gateway is generic and the capability optional, keep two
+   packages: the gateway in its own tree, the plugin in its own. A plugin may document that it
+   expects a gateway, but the engine does not enforce that link; a missing gateway makes the
+   capability `unavailable`, not the engine broken.
+4. **No cross-imports.** Gateway code never imports plugin code; plugin code never imports gateway
+   internals. The seams are `Percept`/`Action`, `ToolContext`, and hints (`app`), not Python
+   objects.
+5. **No implicit permission.** A plugin that calls a body action goes through the same
+   `execute`/role check; it does not call `gateway.dispatch` directly to skip policy. If it needs a
+   body action, the body exposes it as a tool and the role grants it.
+6. **Degrade, do not crash.** Disabling or removing the plugin makes its capabilities absent; the
+   gateway loop keeps running when it lives in its own tree. Stopping the gateway leaves plugin
+   tools callable unless they need the body. Either failure is `unavailable`, never a traceback.
+7. **One prompt owner per fact.** The gateway owns the body section; the plugin owns only its
+   static parts. They never duplicate the same instruction; one states it and the other references
+   the capability.
+
+Example: a robot guard gateway plus a `guard-playbooks` plugin. The gateway owns the transport,
+the alarm, and the latch and runs with no plugin. The plugin adds static guidance and a visitor
+lookup; without the gateway it still registers, but any tool that needs the body refuses. The
+gateway sets `hints["app"]`; the plugin reads it as `ctx.app` and never infers it from the body
+name.
+
 ## 6. Permissions and trust
 
 - **Roles are the only source of permission.** A gateway's or plugin's handler has no default
