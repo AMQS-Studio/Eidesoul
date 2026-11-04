@@ -1,14 +1,16 @@
 #!/usr/bin/env bash
-# MonoAgens installer: one path, two stacks (native and compose).
+# MonoAgens installer: one path, two runtimes (native and compose).
 #
 #   bash install.sh                  # install on this machine, interactive setup
 #   bash install.sh --dry-run        # print every action, write nothing
 #   bash install.sh --dir "$PWD"     # install into an existing checkout
-#   bash install.sh --stack compose  # install the compose stack instead
+#   bash install.sh --stack compose  # run the engine and Postgres in containers
+#   bash install.sh --stack native   # run the engine on this host, Postgres in a container
 #
-# It never runs sudo, never installs a system package, and never edits PATH: a missing
-# package is printed with the exact command that installs it. Everything is appended to
-# ~/.monoagens/logs/install.log. No secret value is ever logged or printed.
+# Both stacks put Postgres in Podman/Docker by default. The installer asks before it installs
+# a missing runtime with sudo; without consent it prints the exact command and stops that
+# stage. Everything is appended to ~/.monoagens/logs/install.log. No secret value is ever
+# logged or printed.
 #
 # Repository: https://github.com/AMQStudio/MonoAgens
 # Decision:   docs/v0.1.0/adr/0030-install-and-init.md
@@ -32,6 +34,8 @@ uv_bin="${monoagens_home}/bin/uv"
 
 dir="$default_dir"
 stack="native"
+stack_set=0
+install_runtime=0
 dry_run=0
 non_interactive=0
 skip_selftest=0
@@ -87,25 +91,29 @@ usage() {
         printf 'monoagens install: %s\n\n' "$message" >&2
     fi
     cat <<'EOF'
-MonoAgens installer - one path, two stacks.
+MonoAgens installer - one path, two runtimes.
 
 Usage: bash install.sh [options]
 
   --dir PATH             install directory (default: ~/.monoagens/app)
-  --stack STACK          native (this machine) or compose (the stack in --dir)
+  --stack STACK          native (engine on host, Postgres in a container) or compose
+                         (engine and Postgres in containers); asks when omitted
+  --install-runtime      allow installing Podman/Docker and compose with sudo when missing
   --dry-run              print every action and write nothing
   --non-interactive      never prompt; fail when a required value is missing
   --provider NAME        provider for `monoagens init`
   --model ID             model id for `monoagens init` (optional)
-  --database-url URL     Postgres URL; written to .env, never to YAML or the log
+  --database-url URL     external Postgres URL; skips the container database in native mode
   --label TEXT           label for the first administrator (roles.yaml)
   --voice-layer on|off   keep emotion, humanize, character (default on) or turn them off
   --skip-selftest        skip the closing `monoagens selftest`
   --no-color             plain output (also honoured via NO_COLOR)
   -h, --help             this text
 
-The script never runs sudo and never installs a package: when Postgres, git, or Python is
-missing it prints the exact command and stops that stage. Log: ~/.monoagens/logs/install.log
+Both stacks use Podman/Docker for Postgres unless --database-url names an external server.
+The script never runs sudo without explicit consent: a missing runtime prints the exact
+command and stops that stage, or is installed after a yes or --install-runtime. Log:
+~/.monoagens/logs/install.log
 EOF
     exit "$code"
 }
@@ -180,7 +188,12 @@ parse_args() {
     while (($#)); do
         case "$1" in
             --dir) [[ $# -ge 2 ]] || usage 2 "missing value for --dir"; dir="$2"; shift 2 ;;
-            --stack) [[ $# -ge 2 ]] || usage 2 "missing value for --stack"; stack="$2"; shift 2 ;;
+            --stack)
+                [[ $# -ge 2 ]] || usage 2 "missing value for --stack"
+                stack="$2"
+                stack_set=1
+                shift 2
+                ;;
             --provider) [[ $# -ge 2 ]] || usage 2 "missing value for --provider"; provider="$2"; shift 2 ;;
             --model) [[ $# -ge 2 ]] || usage 2 "missing value for --model"; model="$2"; shift 2 ;;
             --database-url)
@@ -195,7 +208,8 @@ parse_args() {
                 shift 2
                 ;;
             --dir=*) dir="${1#*=}"; shift ;;
-            --stack=*) stack="${1#*=}"; shift ;;
+            --stack=*) stack="${1#*=}"; stack_set=1; shift ;;
+            --install-runtime) install_runtime=1; shift ;;
             --provider=*) provider="${1#*=}"; shift ;;
             --model=*) model="${1#*=}"; shift ;;
             --database-url=*) database_url="${1#*=}"; shift ;;
@@ -220,6 +234,24 @@ parse_args() {
     else
         source_root=""
     fi
+}
+
+ask_runtime() {
+    local answer=""
+    (( stack_set )) && return 0
+    (( non_interactive || dry_run )) && return 0
+    [[ -t 0 ]] || return 0
+    say ""
+    say "Where should the engine run? Postgres always uses Podman/Docker unless --database-url names an external server."
+    say "  1) native  - engine on this host, Postgres in a container"
+    say "  2) compose - engine and Postgres in containers"
+    read -r -p "  runtime [1]: " answer || answer="1"
+    case "$answer" in
+        "" | 1 | native) stack="native" ;;
+        2 | compose) stack="compose" ;;
+        *) usage 2 "runtime must be 1/native or 2/compose" ;;
+    esac
+    stack_set=1
 }
 
 # --- platform and preflight -----------------------------------------------------------
@@ -362,17 +394,31 @@ prepare_dir() {
         if [[ -d "$dir" && -n "$(ls -A -- "$dir" 2>/dev/null)" ]]; then
             die "$dir is not empty and has no pyproject.toml; pass --dir at an empty directory or at this checkout"
         fi
-        detail "copy this checkout from $source_root (no .git, no .venv)"
+        detail "copy this checkout from $source_root (no .git, .venv, .env, or runtime data)"
         (( dry_run )) && return 0
         mkdir -p -- "$dir"
-        tar -C "$source_root" --exclude=.git --exclude=.venv --exclude=__pycache__ -cf - . \
-            | tar -C "$dir" -xf - || die "cannot copy the checkout into $dir"
+        tar -C "$source_root" \
+            --exclude=.git --exclude=.venv --exclude=__pycache__ \
+            --exclude=.env --exclude=.monoagens --exclude='*.egg-info' \
+            -cf - . | tar -C "$dir" -xf - || die "cannot copy the checkout into $dir"
         return 0
     fi
-    if command -v git >/dev/null 2>&1; then
-        if [[ -d "$dir" && -n "$(ls -A -- "$dir" 2>/dev/null)" ]]; then
-            die "$dir is not empty and has no pyproject.toml; pass --dir at an empty directory"
+    if [[ -d "$dir" && -n "$(ls -A -- "$dir" 2>/dev/null)" ]]; then
+        die "$dir is not empty and has no pyproject.toml; pass --dir at an empty directory"
+    fi
+    if command -v curl >/dev/null 2>&1 && command -v tar >/dev/null 2>&1; then
+        local archive_url="${REPO_URL}/archive/refs/heads/${REVISION}.tar.gz"
+        detail "download $archive_url into $dir"
+        (( dry_run )) && return 0
+        mkdir -p -- "$dir"
+        if curl -fsSL --retry 3 --proto '=https' --proto-redir '=https' "$archive_url" \
+            | tar -xz --strip-components=1 -C "$dir"; then
+            return 0
         fi
+        rm -rf -- "$dir"
+        warn "archive download failed; trying git"
+    fi
+    if command -v git >/dev/null 2>&1; then
         detail "clone $REPO_URL into $dir (no local changes exist to protect)"
         (( dry_run )) && return 0
         mkdir -p -- "$(dirname -- "$dir")"
@@ -380,7 +426,7 @@ prepare_dir() {
             || die "git clone failed; see $log_file"
         return 0
     fi
-    warn "nothing to install at $dir and no git to fetch a checkout. Install git, then re-run:"
+    warn "nothing to install at $dir and no curl/git to fetch a checkout. Install git, then re-run:"
     warn "  dnf install git"
     die "no checkout at $dir"
 }
@@ -508,6 +554,97 @@ database_configured() {
     grep -Eq '^MONOAGENS_DATABASE_URL=[^[:space:]]' "$dir/.env"
 }
 
+# `prepare_database_env MODE` fills .env with one generated password and one URL.
+# MODE is native (engine on host) or compose (engine in the stack). It prints
+# "container" when the database belongs to compose, "external" when the operator
+# supplied their own server. A generated URL carries MONOAGENS_DB_CONTAINER=1 so a
+# later run repairs the container instead of mistaking it for an external server.
+prepare_database_env() {
+    local mode="$1" result
+    if (( dry_run )); then
+        detail "would prepare the $mode database credentials in $dir/.env" >&2
+        printf 'container'
+        return 0
+    fi
+    result="$(
+        "$python_bin" - "$dir/.env" "$mode" <<'PY'
+import os
+import secrets
+import sys
+from pathlib import Path
+from urllib.parse import quote, unquote, urlsplit, urlunsplit
+
+path = Path(sys.argv[1])
+mode = sys.argv[2]
+lines = path.read_text(encoding="utf-8").splitlines() if path.exists() else []
+
+
+def get(name: str) -> str:
+    for line in lines:
+        if line.partition("=")[0].strip() == name and "=" in line:
+            return line.partition("=")[2].strip()
+    return ""
+
+
+def set_key(name: str, value: str) -> None:
+    for index, line in enumerate(lines):
+        if line.partition("=")[0].strip() == name and "=" in line:
+            lines[index] = f"{name}={value}"
+            return
+    lines.append(f"{name}={value}")
+
+
+url = get("MONOAGENS_DATABASE_URL")
+password = get("POSTGRES_PASSWORD")
+container_marker = get("MONOAGENS_DB_CONTAINER") == "1"
+if mode == "native" and url and not container_marker:
+    print("external")
+    sys.exit(0)
+if not url:
+    port = get("POSTGRES_PORT") or "5432"
+    name = get("POSTGRES_DB") or "monoagens"
+    url = f"postgresql+psycopg://monoagens@127.0.0.1:{port}/{name}"
+parts = urlsplit(url)
+if parts.scheme != "postgresql+psycopg":
+    print("database URL must use postgresql+psycopg://", file=sys.stderr)
+    sys.exit(2)
+if not parts.hostname:
+    print("database URL needs a host", file=sys.stderr)
+    sys.exit(2)
+if parts.username and parts.username != "monoagens":
+    print("the container database user must be monoagens", file=sys.stderr)
+    sys.exit(2)
+try:
+    port = parts.port or 5432
+except ValueError:
+    print("database URL has an invalid port", file=sys.stderr)
+    sys.exit(2)
+name = parts.path.lstrip("/") or "monoagens"
+url_password = unquote(parts.password) if parts.password else ""
+if password and url_password and password != url_password:
+    print("POSTGRES_PASSWORD does not match the database URL", file=sys.stderr)
+    sys.exit(2)
+password = password or url_password or secrets.token_hex(24)
+host = parts.hostname
+if host not in ("127.0.0.1", "localhost", "::1"):
+    print("compose mode needs a local Postgres URL; omit --database-url", file=sys.stderr)
+    sys.exit(2)
+netloc = f"monoagens:{quote(password, safe='')}@{host}:{port}"
+url = urlunsplit((parts.scheme, netloc, f"/{name}", parts.query, parts.fragment))
+set_key("POSTGRES_PASSWORD", password)
+set_key("POSTGRES_PORT", str(port))
+set_key("POSTGRES_DB", name)
+set_key("MONOAGENS_DATABASE_URL", url)
+set_key("MONOAGENS_DB_CONTAINER", "1")
+path.parent.mkdir(parents=True, exist_ok=True)
+path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+os.chmod(path, 0o600)
+print("container")
+PY
+    )" || die "cannot prepare the database environment"
+    printf '%s' "$result"
+}
+
 stage_database() {
     if ! database_configured; then
         stage "schema: waiting for .env"
@@ -539,15 +676,101 @@ stage_selftest() {
 
 
 detect_compose() {
-    if command -v podman >/dev/null 2>&1; then
+    if command -v podman >/dev/null 2>&1 && podman compose version >/dev/null 2>&1; then
         COMPOSE=(podman compose)
         return 0
     fi
-    if command -v docker >/dev/null 2>&1; then
+    if command -v docker >/dev/null 2>&1 && docker compose version >/dev/null 2>&1; then
         COMPOSE=(docker compose)
         return 0
     fi
+    if command -v podman-compose >/dev/null 2>&1; then
+        COMPOSE=(podman-compose)
+        return 0
+    fi
     return 1
+}
+
+runtime_hint() {
+    local runtime="podman" compose="podman-compose"
+    if command -v docker >/dev/null 2>&1 && ! command -v podman >/dev/null 2>&1; then
+        runtime="docker"
+        compose="docker-compose"
+    fi
+    warn "Podman or Docker with compose is required for the database container."
+    if command -v pacman >/dev/null 2>&1; then
+        warn "  sudo pacman -S --needed $runtime $compose"
+    elif command -v dnf >/dev/null 2>&1; then
+        warn "  sudo dnf install -y $runtime $compose"
+    elif command -v apt-get >/dev/null 2>&1; then
+        warn "  sudo apt-get update && sudo apt-get install -y $runtime $compose"
+    elif command -v zypper >/dev/null 2>&1; then
+        warn "  sudo zypper install -y $runtime $compose"
+    else
+        warn "  install $runtime and $compose, then re-run"
+    fi
+    warn "or re-run with --install-runtime to install it now"
+}
+
+install_runtime() {
+    local packages=()
+    if ! command -v podman >/dev/null 2>&1 && ! command -v docker >/dev/null 2>&1; then
+        packages+=(podman)
+    fi
+    if ! detect_compose; then
+        if command -v docker >/dev/null 2>&1; then
+            packages+=(docker-compose)
+        else
+            packages+=(podman-compose)
+        fi
+    fi
+    if ((${#packages[@]} == 0)); then
+        return 0
+    fi
+    if command -v pacman >/dev/null 2>&1; then
+        run_logged "install the container runtime" \
+            "sudo pacman -S --needed --noconfirm ${packages[*]}" \
+            sudo pacman -S --needed --noconfirm "${packages[@]}"
+    elif command -v dnf >/dev/null 2>&1; then
+        run_logged "install the container runtime" \
+            "sudo dnf install -y ${packages[*]}" \
+            sudo dnf install -y "${packages[@]}"
+    elif command -v apt-get >/dev/null 2>&1; then
+        run_logged "install the container runtime" \
+            "sudo apt-get update && sudo apt-get install -y ${packages[*]}" \
+            sudo bash -c 'apt-get update && apt-get install -y "$@"' _ "${packages[@]}"
+    elif command -v zypper >/dev/null 2>&1; then
+        run_logged "install the container runtime" \
+            "sudo zypper install -y ${packages[*]}" \
+            sudo zypper install -y "${packages[@]}"
+    else
+        runtime_hint
+        die "no supported package manager; install the runtime yourself and re-run"
+    fi
+}
+
+ensure_compose() {
+    detect_compose && return 0
+    if (( dry_run )); then
+        detail "would install Podman/Docker compose if missing"
+        return 0
+    fi
+    if (( install_runtime )); then
+        install_runtime
+    elif [[ -t 0 ]] && (( ! non_interactive )); then
+        local answer=""
+        say ""
+        say "Podman/Docker with compose is not available."
+        read -r -p "  install Podman now with sudo? [y/N]: " answer || answer=""
+        case "$answer" in
+            y | Y | yes | YES) install_runtime ;;
+            *) runtime_hint; die "container runtime is required for the database" ;;
+        esac
+    else
+        runtime_hint
+        die "container runtime is required; pass --install-runtime or install it yourself"
+    fi
+    detect_compose || die "the runtime installed but compose is still unavailable"
 }
 
 postgres_password_set() {
@@ -556,33 +779,53 @@ postgres_password_set() {
 }
 
 compose_up() {
-    ( cd -- "$dir" && exec "${COMPOSE[@]}" up -d )
+    ( cd -- "$dir" && exec "${COMPOSE[@]}" up -d "$@" )
 }
 
 compose_run() {
     ( cd -- "$dir" && exec "${COMPOSE[@]}" exec -T monoagens monoagens "$@" )
 }
 
+wait_for_postgres() {
+    local attempt
+    for attempt in {1..30}; do
+        if "${COMPOSE[@]}" exec -T postgres pg_isready -U monoagens >/dev/null 2>&1; then
+            return 0
+        fi
+        sleep 1
+    done
+    return 1
+}
+
+stage_postgres() {
+    ensure_compose
+    run_logged "start the Postgres container" \
+        "${COMPOSE[*]:-podman compose} up -d postgres" compose_up postgres
+    run_logged "wait for Postgres" "compose exec postgres pg_isready" wait_for_postgres
+}
+
+stage_native_database() {
+    local mode
+    mode="$(prepare_database_env native)"
+    if [[ "$mode" == "container" ]]; then
+        stage_postgres
+    fi
+    stage_database
+    stage_selftest
+}
+
 stage_compose() {
-    if ! detect_compose; then
-        stage "compose: unavailable"
-        warn "no podman or docker compose found; the files are written and ready."
-        return 0
-    fi
-    if ! postgres_password_set; then
-        stage "compose: waiting for .env"
-        warn "the stack needs POSTGRES_PASSWORD in $dir/.env"
-        detail "fill it, then re-run: bash install.sh --stack compose --dir $dir"
-        return 0
-    fi
-    run_logged "bring the stack up" "${COMPOSE[*]} up -d" compose_up
-    run_logged "publish the schema (docker compose exec)" \
-        "${COMPOSE[*]} exec monoagens monoagens db upgrade" compose_run db upgrade
+    prepare_database_env compose >/dev/null
+    ensure_compose
+    run_logged "bring the stack up" "${COMPOSE[*]:-podman compose} up -d" compose_up
+    run_logged "wait for Postgres" "compose exec postgres pg_isready" wait_for_postgres
+    run_logged "publish the schema (compose exec)" \
+        "${COMPOSE[*]:-podman compose} exec monoagens monoagens db upgrade" compose_run db upgrade
     if (( skip_selftest )); then
         detail "self-check skipped (--skip-selftest)"
     else
-        run_soft "self-check (docker compose exec)" \
-            "${COMPOSE[*]} exec monoagens monoagens selftest" compose_run selftest || true
+        run_soft "self-check (compose exec)" \
+            "${COMPOSE[*]:-podman compose} exec monoagens monoagens selftest" compose_run selftest || true
     fi
 }
 
@@ -672,6 +915,7 @@ finish() {
 main() {
     parse_args "$@"
     setup_colors
+    ask_runtime
     detect_arch
     say "MonoAgens installer - $REPO_URL ($(revision_label))"
     say "stack: $stack | uv pin: $UV_VERSION | arch: $arch | dry-run: $([[ $dry_run == 1 ]] && echo yes || echo no)"
@@ -685,8 +929,7 @@ main() {
     if [[ "$stack" == "compose" ]]; then
         stage_compose
     else
-        stage_database
-        stage_selftest
+        stage_native_database
     fi
     finish
     stage "done"

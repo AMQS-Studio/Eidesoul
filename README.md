@@ -211,14 +211,24 @@ and never hardcodes an agent loop: no planner to configure, no task graph to lau
 Requirements: Python 3.14, Postgres 14+ with `pgvector`, and a reachable OpenAI-compatible LLM
 endpoint. The container image pins Python 3.14; running from source needs 3.14 or newer.
 
-The shortest path is the installer; it never runs `sudo`, pins `uv`, writes the four host files,
-and hands over to `monoagens init`:
+The shortest path is the installer. It asks where the engine should run, uses a Podman/Docker
+Postgres for both choices, and asks before installing a missing container runtime with `sudo`:
 
 ```bash
-bash install.sh                 # native
-bash install.sh --stack compose # Postgres and the engine in containers
+bash install.sh                 # interactive runtime choice
+bash install.sh --stack native  # engine on this host, Postgres in a container
+bash install.sh --stack compose # engine and Postgres in containers
 bash install.sh --dry-run       # print every action, write nothing
 ```
+
+From the network, download the script first so the wizard keeps a terminal:
+
+```bash
+bash <(curl -fsSL https://raw.githubusercontent.com/AMQStudio/MonoAgens/main/install.sh)
+```
+
+A plain `curl ... | bash` has no TTY, so the wizard fails closed; pass `--provider` and the other
+flags for a headless install.
 
 From source, the same steps by hand:
 
@@ -229,7 +239,8 @@ monoagens init --provider openai
 # 2. Make it this soul, not the default one
 $EDITOR soul.yaml
 
-# 3. Fill .env: the provider key, the database URL, and POSTGRES_PASSWORD for compose
+# 3. Fill .env: the provider key; the installer fills the database values when
+#    it creates the container database, or set an external URL yourself
 #      MONOAGENS_DATABASE_URL=postgresql+psycopg://monoagens:<password>@127.0.0.1:5432/monoagens
 #      POSTGRES_PASSWORD=<same password>
 #      OPENAI_API_KEY=...

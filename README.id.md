@@ -227,14 +227,25 @@ satu giliran, dan kemampuan yang dipegang saat itu.
 Kebutuhan: Python 3.14, Postgres 14+ dengan `pgvector`, dan endpoint LLM yang kompatibel dengan
 OpenAI. Image container memakai Python 3.14; menjalankan dari source butuh 3.14 atau lebih baru.
 
-Jalur terpendek adalah installer; ia tidak pernah menjalankan `sudo`, mem-pin `uv`, menulis empat
-berkas host, lalu menyerahkan ke `monoagens init`:
+Jalur terpendek adalah installer. Ia menanyakan di mana engine berjalan, memakai Postgres
+Podman/Docker untuk kedua pilihan, dan bertanya sebelum memasang runtime container yang hilang
+dengan `sudo`:
 
 ```bash
-bash install.sh                 # native
-bash install.sh --stack compose # Postgres dan engine dalam container
+bash install.sh                 # pilihan runtime interaktif
+bash install.sh --stack native  # engine di host, Postgres di container
+bash install.sh --stack compose # engine dan Postgres di container
 bash install.sh --dry-run       # cetak setiap aksi, tulis apa pun
 ```
+
+Dari jaringan, unduh skripnya dulu supaya wizard tetap punya terminal:
+
+```bash
+bash <(curl -fsSL https://raw.githubusercontent.com/AMQStudio/MonoAgens/main/install.sh)
+```
+
+`curl ... | bash` tidak punya TTY, jadi wizard fail-closed; berikan `--provider` dan flag lain
+untuk instalasi headless.
 
 Dari source, langkah yang sama secara manual:
 
@@ -245,7 +256,8 @@ monoagens init --provider openai
 # 2. Jadikan ini jiwa Anda, bukan jiwa default
 $EDITOR soul.yaml
 
-# 3. Isi .env: kunci provider, URL database, dan POSTGRES_PASSWORD untuk compose
+# 3. Isi .env: kunci provider; installer mengisi nilai database saat ia
+#    membuat container database, atau isi URL eksternal sendiri
 #      MONOAGENS_DATABASE_URL=postgresql+psycopg://monoagens:<password>@127.0.0.1:5432/monoagens
 #      POSTGRES_PASSWORD=<password yang sama>
 #      OPENAI_API_KEY=...

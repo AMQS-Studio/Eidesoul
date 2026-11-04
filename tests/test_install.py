@@ -1,8 +1,8 @@
-"""Installer contract: dry-run writes nothing, no sudo, no secret in the log, pin verified.
+"""Installer contract: dry-run writes nothing, sudo needs consent, no secret in the log.
 
 ADR-0030 §4.1/§7: `bash install.sh --dry-run` prints the plan and leaves the filesystem
-unchanged; the script performs no `sudo` call; a marker password never reaches the install log;
-the pinned uv archive is checked before anything else happens.
+unchanged; a normal run performs no `sudo` call; a marker password never reaches the install
+log; the pinned uv archive is checked before anything else happens.
 """
 
 
@@ -243,11 +243,80 @@ if panel_available; then echo yes; else echo no; fi
     assert withheld.stdout.strip() == "no"
 
 
-def test_the_script_has_no_sudo_command():
-    executed = [
-        line
-        for line in SCRIPT.read_text(encoding="utf-8").splitlines()
-        if re.match(r"\s*sudo\b", line)
-    ]
+def test_sudo_is_confined_to_the_explicit_runtime_installer():
+    lines = SCRIPT.read_text(encoding="utf-8").splitlines()
+    start = next(i for i, line in enumerate(lines) if line.startswith("install_runtime() {"))
+    end = next(i for i in range(start + 1, len(lines)) if lines[i] == "}")
+    sudo_lines = [i for i, line in enumerate(lines) if re.match(r"\s*sudo\b", line)]
 
-    assert executed == []
+    assert sudo_lines, "the opt-in runtime installer should carry the sudo commands"
+    assert all(start < i < end for i in sudo_lines)
+    source = "\n".join(lines)
+    assert "install Podman now with sudo?" in source
+    assert "--install-runtime" in source
+
+
+def test_database_env_generation_is_idempotent_and_external_is_untouched(tmp_path):
+    app = tmp_path / "app"
+    app.mkdir()
+    code = """
+MONOAGENS_INSTALL_SOURCED=1
+source "$1/install.sh"
+dir="$2"
+python_bin="$3"
+mode="$(prepare_database_env native)"
+printf '%s\n' "$mode"
+"""
+    result = subprocess.run(
+        ["bash", "-c", code, "_", str(ROOT), str(app), sys.executable],
+        env=clean_env(),
+        capture_output=True,
+        text=True,
+        timeout=60,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.strip() == "container"
+    env = app / ".env"
+    assert env.stat().st_mode & 0o777 == 0o600
+    text = env.read_text(encoding="utf-8")
+    password = next(
+        line.partition("=")[2]
+        for line in text.splitlines()
+        if line.startswith("POSTGRES_PASSWORD=")
+    )
+    assert password
+    assert password not in result.stdout + result.stderr
+    assert "MONOAGENS_DB_CONTAINER=1" in text
+    assert f"monoagens:{password}@127.0.0.1:5432/monoagens" in text
+
+    second = subprocess.run(
+        ["bash", "-c", code, "_", str(ROOT), str(app), sys.executable],
+        env=clean_env(),
+        capture_output=True,
+        text=True,
+        timeout=60,
+        check=False,
+    )
+    assert second.returncode == 0, second.stderr
+    assert second.stdout.strip() == "container"
+    assert env.read_text(encoding="utf-8") == text
+
+    external = tmp_path / "external"
+    external.mkdir()
+    (external / ".env").write_text(
+        "MONOAGENS_DATABASE_URL=postgresql+psycopg://monoagens:secret@db.example:5432/monoagens\n",
+        encoding="utf-8",
+    )
+    before = (external / ".env").read_text(encoding="utf-8")
+    external_result = subprocess.run(
+        ["bash", "-c", code, "_", str(ROOT), str(external), sys.executable],
+        env=clean_env(),
+        capture_output=True,
+        text=True,
+        timeout=60,
+        check=False,
+    )
+    assert external_result.returncode == 0, external_result.stderr
+    assert external_result.stdout.strip() == "external"
+    assert (external / ".env").read_text(encoding="utf-8") == before

@@ -1,5 +1,17 @@
 # LOG
 
+## 2026-11-05 — Installer runtime choice and container database
+
+`install.sh` now asks native versus compose when `--stack` is omitted. Native keeps the engine on
+the host and starts only the Postgres service; compose runs both in containers. Both generate
+`POSTGRES_PASSWORD` and `MONOAGENS_DATABASE_URL` when empty, with the container marker so a rerun
+repairs rather than mistakes the generated URL for an external server. A missing Podman/Docker
+compose runtime is installed only after a `y/N` prompt or `--install-runtime`; a normal run still
+performs no `sudo`. The network path supports `bash <(curl ...)` and a curl archive fallback when
+git is absent. `--dry-run`, the installer tests, ADR-0030, and both quickstarts are updated.
+`pytest -q` 865 passed; ruff, pyright, neutral, selfcheck, ADR check, translation, and the lock
+check are clean.
+
 ## 2026-11-05 — ADR-0040..0045 implemented
 
 **Naming (ADR-0040)** — package `monoagens/`, CLI `monoagens`, distribution `monoagens`, state
