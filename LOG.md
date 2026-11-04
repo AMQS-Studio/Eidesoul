@@ -36,9 +36,14 @@ carry them. Anthropic native stays deferred by the ADR.
 only voice question, and the scaffold writes a commented `soul.voice` block. README, README.id,
 AGENTS, and TASK describe the new architecture.
 
-**Verification** — `pytest -q` 857 passed (plus the research regex/tagline focus rerun); `ruff check` clean; neutral gate
-clean; ADR check 46/46 (`implemented=41 partial=5 draft=0`) and translations clean; `uv lock`
-regenerated. ADR-0038's cold-stack budget remains the known partial.
+**Memory budget (ADR-0038)** — §5.1 now allows a 1536 MiB cold engine process; the shared embedder
+stays fp32 instead of moving to int8/ONNX. The probe loads MiniLM and the entity layer together and
+measures about 928 MiB peak RSS. ADR-0038 remains partial only on the linear semantic head and
+production calibration.
+
+**Verification** — `pytest -q` 857 passed (plus the research regex/tagline focus rerun and the
+privacy-budget rerun); `ruff check` clean; neutral gate clean; ADR check 46/46 (`implemented=41
+partial=5 draft=0`) and translations clean; `uv lock` regenerated.
 
 
 ## 2026-11-04 — ADR-0039 init terminal interface

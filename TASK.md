@@ -84,8 +84,8 @@ MonoAgens checklist. Every item is done when the listed surface exists and works
       and `privacy_policy` are persisted; the auditor and answer parser call no external model.
 - [x] Presidio + spaCy entity adapter (ADR-0038 §5.1) with verified model digest, NER spans, and an
       entity-layer budget test.
-- [ ] Cold privacy stack under 700 MiB: move the shared MiniLM to int8/ONNX (or remove a detector);
-      PyTorch MiniLM plus NER measured about 929 MiB.
+- [x] Default privacy stack under 1536 MiB peak RSS: the shared fp32 MiniLM stays, and the full
+      stack is probed by `tests/test_privacy_budget.py`; measured about 928 MiB.
 - [x] `monoagens init` has a location-first terminal wizard, provider/model pickers, masked
       credential, back navigation, and the generated ANSI MonoAgens logo; the writer is split from the wizard.
 

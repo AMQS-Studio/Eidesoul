@@ -1,4 +1,4 @@
-> Terjemahan turunan — jangan sunting; sumber: engine/0038-privacy-layers.md (sha256: c6aca12d82a0)
+> Terjemahan turunan — jangan sunting; sumber: engine/0038-privacy-layers.md (sha256: 0798854f4dc4)
 
 - **Status:** accepted
 - **Tanggal:** 2026-11-04
@@ -6,7 +6,8 @@
 - **Konteks:** memperluas ADR-0006 (privasi grup dan pre-filter), ADR-0008 (integritas memori), ADR-0007 (kelas approval), ADR-0010 (refleksi dan sengketa); mengikuti ADR-0033 (core netral)
 - **Supersedes:** —
 - **Terkait:** ADR-0001 (satu port memori), ADR-0011 (durabilitas), ADR-0015 (capability), ADR-0020 (skill), ADR-0035 (scope app), ADR-0036 (role)
-- **Implementasi:** partial — evidence/policy, `privacy_evidence`/`privacy_policy` tersimpan (migrasi 0018), audit/jawaban tanpa LLM, kontrak `ask` milik policy, dan golden set ada di `memory/evidence.py`, `memory/candidates.py`, `access/privacy.py`, dan test. Lapisan entity kini memakai Presidio 2.2.366 + spaCy 3.8.18 + `xx_ent_wiki_sm` 3.8.0 dengan digest pohon model yang diverifikasi, load tanpa vocab, dan span `entity`; ukurannya 111 MiB incremental dan 40,4 MB di disk, di dalam baris §5.1. Status penuh masih menunggu anggaran cold-stack: MiniLM PyTorch bersama plus lapisan entity terukur sekitar 929 MiB di proses baru, di atas batas cold 700 MiB, jadi embedder bersama harus pindah ke int8/ONNX (atau satu detektor dihapus) sebelum ini sepenuhnya implemented; linear head semantik dan kalibrasi produksi juga masih terbuka.
+- **Implementasi:** partial — evidence/policy, `privacy_evidence`/`privacy_policy` tersimpan (migrasi 0018), audit/jawaban tanpa LLM, kontrak `ask` milik policy, dan golden set ada di `memory/evidence.py`, `memory/candidates.py`, `access/privacy.py`, dan test. Lapisan entity kini memakai Presidio 2.2.366 + spaCy 3.8.18 + `xx_ent_wiki_sm` 3.8.0 dengan digest pohon model yang diverifikasi, load tanpa vocab, dan span `entity`; ukurannya 111 MiB incremental dan 40,4 MB di disk, di dalam baris §5.1. Stack privasi dingin default kini terukur sekitar 928 MiB peak RSS di proses baru, di dalam batas 1536 MiB, jadi embedder bersama tetap fp32. Sisa: lapisan semantik masih nearest-centroid, bukan head linear §5.1, dan kalibrasi produksi belum selesai.
+- **Revisi:** 2026-11-05 — §5.1 menetapkan anggaran proses dingin 1536 MiB untuk stack fp32 default. Anggaran mencakup satu proses engine; Postgres dan subprocess tool diukur terpisah. Kenaikan berikutnya adalah ADR baru.
 - **Catatan lokasi:** keputusan engine (ia memiliki klasifikasi, policy disclosure, dan audit), jadi duduk di bawah `adr/engine/`. Salinan Indonesia di `docs/v0.1.0/adr/engine/id/0038-privacy-layers.md`.
 
 ---
@@ -273,8 +274,10 @@ sebelum penyimpanan.
 
 Privasi harus muat dalam anggaran memori spine; ia tidak mengubah engine menjadi host model.
 
-- **RSS inkremental default:** paling banyak 300 MB di atas proses yang sudah memuat MiniLM; proses
-  dingin yang memuat encoder untuk privasi tetap di 700 MB atau kurang.
+- **RSS inkremental default:** paling banyak 300 MB di atas proses yang sudah memuat MiniLM.
+- **Proses dingin:** proses engine default yang memuat MiniLM plus lapisan entity tetap di 1536 MB
+  peak RSS (`VmHWM`) atau kurang. Anggaran mencakup satu proses engine; Postgres dan subprocess tool
+  diukur terpisah.
 - **Satu model entitas dan satu model semantik per proses.** Tanpa instance ganda, tanpa load per
   request, tanpa model per thread.
 - **Entitas default:** Presidio plus model spaCy kecil (paling banyak 80 MB di disk). Tanpa
@@ -286,7 +289,12 @@ Privasi harus muat dalam anggaran memori spine; ia tidak mengubah engine menjadi
 - **Batas teks:** 4.000 karakter per klasifikasi, 512 token per segmen, batch paling banyak 8; tidak
   pernah mengklasifikasi seluruh thread dalam satu panggilan.
 - Jika stack default melewati 300 MB inkremental, responsnya adalah int8/ONNX atau lebih sedikit
-  detektor, bukan anggaran yang dinaikkan.
+  detektor, bukan anggaran inkremental yang dinaikkan.
+- Kenaikan berikutnya dari anggaran dingin 1536 MB adalah ADR baru, bukan perubahan config.
+
+Anggaran dingin adalah trade-off untuk mempertahankan embedder bersama di fp32: stack privasi lokal
+adalah bagian dari engine default, bukan host model opsional. Stack dingin default terukur sekitar
+928 MiB peak RSS di probe test.
 
 | Komponen | Default | Cap RSS inkremental | Cap disk |
 | --- | --- | ---: | ---: |

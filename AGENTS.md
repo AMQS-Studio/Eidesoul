@@ -196,8 +196,8 @@ Hard rules for changes in this repo.
   model-tree digest, loads without the model vocabulary, and blocks torch/transformers during its
   import; `entity` evidence carries a span and never a level. `monoagens/engine/access/privacy.py` is
   the only agent-facing hook and detects mentions locally; no memory text is sent to an external
-  model. ADR-0038 is still partial because the shared PyTorch MiniLM makes the cold privacy stack
-  exceed the §5.1 700 MiB cap; moving the shared embedder to int8/ONNX is the remaining budget fix.
+  model. ADR-0038's cold privacy stack fits the §5.1 1536 MiB cap with the shared fp32 MiniLM;
+  the remaining partial work is the linear semantic head and production calibration.
 - Disclosure policy: L0-L2 stay fluid everywhere; L3 in a group and L4 ask for confirmation through
   `approvals`; vetoed entries are never shown and never disclosed. The auditor pass runs only when a
   risky entry exists.

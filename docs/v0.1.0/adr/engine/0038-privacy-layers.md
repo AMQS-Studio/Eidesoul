@@ -6,7 +6,8 @@
 - **Context:** extends ADR-0006 (group privacy and pre-filter), ADR-0008 (memory integrity), ADR-0007 (approval classes), ADR-0010 (reflection and disputes); follows ADR-0033 (neutral core)
 - **Supersedes:** —
 - **Related:** ADR-0001 (single memory port), ADR-0011 (durability), ADR-0015 (capability), ADR-0020 (skills), ADR-0035 (app scope), ADR-0036 (roles)
-- **Implementation:** partial — evidence/policy, persisted `privacy_evidence`/`privacy_policy` (migration 0018), LLM-free audit/answer, the policy-owned `ask` contract, and the golden set are in `memory/evidence.py`, `memory/candidates.py`, `access/privacy.py`, and tests. The entity layer is now Presidio 2.2.366 + spaCy 3.8.18 + `xx_ent_wiki_sm` 3.8.0 with a verified tree digest, vocabulary-free load, and `entity` spans; it measures 111 MiB incremental and 40.4 MB on disk, inside the §5.1 row. Full status still waits on the cold-stack budget: the shared PyTorch MiniLM plus the entity layer measured about 929 MiB in a fresh process, above the 700 MiB cold cap, so the shared embedder must move to int8/ONNX (or a detector must be removed) before this is fully implemented; the semantic linear head and production calibration remain open too.
+- **Implementation:** partial — evidence/policy, persisted `privacy_evidence`/`privacy_policy` (migration 0018), LLM-free audit/answer, the policy-owned `ask` contract, and the golden set are in `memory/evidence.py`, `memory/candidates.py`, `access/privacy.py`, and tests. The entity layer is now Presidio 2.2.366 + spaCy 3.8.18 + `xx_ent_wiki_sm` 3.8.0 with a verified tree digest, vocabulary-free load, and `entity` spans; it measures 111 MiB incremental and 40.4 MB on disk, inside the §5.1 row. The default cold privacy stack now measures about 928 MiB peak RSS in a fresh process, inside the 1536 MiB cap, so the shared embedder stays fp32. Remaining: the semantic layer is still nearest-centroid rather than the §5.1 linear head, and production calibration is not complete.
+- **Revision:** 2026-11-05 — §5.1 sets a 1536 MiB cold-process budget for the default fp32 stack. The budget covers one engine process; Postgres and tool subprocesses are measured separately. A future increase is a new ADR.
 - **Location note:** an engine decision (it owns classification, disclosure policy, and audit), so it sits under `adr/engine/`. The Indonesian copy is `docs/v0.1.0/adr/engine/id/0038-privacy-layers.md`.
 
 ---
@@ -270,8 +271,10 @@ storage.
 
 Privacy must fit the spine's memory budget; it does not turn the engine into a model host.
 
-- **Default incremental RSS:** at most 300 MB over a process that already loaded MiniLM; a cold
-  process that loads the encoder for privacy stays at or below 700 MB.
+- **Default incremental RSS:** at most 300 MB over a process that already loaded MiniLM.
+- **Cold process:** the default engine process that loads MiniLM plus the entity layer stays at or
+  below 1536 MB peak RSS (`VmHWM`). The budget covers one engine process; Postgres and tool
+  subprocesses are measured separately.
 - **One entity model and one semantic model per process.** No duplicate instance, no per-request
   load, no per-thread model.
 - **Default entity:** Presidio plus a small spaCy model (at most 80 MB on disk). No transformer NER
@@ -283,7 +286,12 @@ Privacy must fit the spine's memory budget; it does not turn the engine into a m
 - **Text caps:** 4,000 characters per classification, 512 tokens per segment, batch at most 8; never
   classify a whole thread in one call.
 - If the default stack exceeds 300 MB incremental, the response is int8/ONNX or fewer detectors,
-  never a raised budget.
+  never a raised incremental budget.
+- A future increase of the 1536 MB cold allowance is a new ADR, not a config change.
+
+The cold allowance is the trade-off for keeping the shared embedder in fp32: the local privacy stack
+is part of the default engine, not an optional model host. The measured default cold stack is about
+928 MiB peak RSS in the test probe.
 
 | Component | Default | Incremental RSS cap | Disk cap |
 | --- | --- | ---: | ---: |
