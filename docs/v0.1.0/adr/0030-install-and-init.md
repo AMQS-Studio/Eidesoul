@@ -61,7 +61,7 @@ form downloads the script first or uses process substitution; `curl | bash` stay
 | `uv` | if absent, download the pinned release for the running architecture and verify its SHA-256 before use; the pin lives in one commented block with a "how to bump" line |
 | Python | requires 3.14+ and reports the interpreter it found; the container image keeps the same 3.14 floor — the difference is stated, not hidden |
 | Dependencies | `uv sync --locked` inside the install directory (`--dir`, default `~/.monoagens/app`); no dependency is installed outside it |
-| Setup | asks the runtime and install directory, then hands over to `monoagens init` with the location locked (§4.3): interactive on a terminal, flag-driven otherwise |
+| Setup | asks the runtime and install directory (default, current directory, or custom), then hands over to `monoagens init` with the location locked (§4.3): interactive on a terminal, flag-driven otherwise |
 | Database | both stacks use a Podman/Docker Postgres by default. The installer generates `POSTGRES_PASSWORD` and `MONOAGENS_DATABASE_URL` when they are empty; an explicit external `--database-url` skips the container in native mode |
 | Continue | start Postgres (or the full compose stack), `monoagens db upgrade`, then `monoagens selftest` |
 | Finish | offers a choice (§4.5): open the panel, or stay on the command line |

@@ -256,6 +256,25 @@ def test_sudo_is_confined_to_the_explicit_runtime_installer():
     assert "--install-runtime" in source
 
 
+def test_directory_normalization_treats_dot_as_the_current_directory(tmp_path):
+    code = """
+MONOAGENS_INSTALL_SOURCED=1
+source "$1/install.sh"
+normalize_directory "./"
+"""
+    result = subprocess.run(
+        ["bash", "-c", code, "_", str(ROOT)],
+        cwd=tmp_path,
+        env=clean_env(HOME=str(tmp_path)),
+        capture_output=True,
+        text=True,
+        timeout=60,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.strip() == str(tmp_path)
+
+
 def test_database_env_generation_is_idempotent_and_external_is_untouched(tmp_path):
     app = tmp_path / "app"
     app.mkdir()

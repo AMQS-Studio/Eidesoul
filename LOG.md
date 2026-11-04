@@ -3,7 +3,8 @@
 ## 2026-11-05 — Installer runtime choice and container database
 
 `install.sh` now asks native versus compose when `--stack` is omitted and asks for the install
-directory (recommended `~/.monoagens/app` or custom). It runs interactive `init` directly instead
+directory (recommended `~/.monoagens/app`, the current directory, or custom; `.` and `./`
+resolve to the current directory). It runs interactive `init` directly instead
 of piping stdout through `tee`, so the curses navigation survives. Native keeps the engine on the
 host and starts only the Postgres service; compose runs both in containers. Both generate
 `POSTGRES_PASSWORD` and `MONOAGENS_DATABASE_URL` when empty, with the container marker so a rerun
@@ -12,7 +13,7 @@ compose runtime is installed only after a `y/N` prompt or `--install-runtime`; a
 performs no `sudo`. The installer passes `--no-location` so `init` does not ask the same directory
 twice. The network path supports `bash <(curl ...)` and a curl archive fallback when
 git is absent. `--dry-run`, the installer tests, ADR-0030, and both quickstarts are updated.
-`pytest -q` 866 passed; ruff, pyright, neutral, selfcheck, ADR check, translation, and the lock
+`pytest -q` 867 passed; ruff, pyright, neutral, selfcheck, ADR check, translation, and the lock
 check are clean.
 
 ## 2026-11-05 — ADR-0040..0045 implemented

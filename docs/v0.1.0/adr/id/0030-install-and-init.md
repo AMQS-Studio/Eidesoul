@@ -1,4 +1,4 @@
-> Terjemahan turunan — jangan sunting; sumber: 0030-install-and-init.md (sha256: fc9dbf30ae99)
+> Terjemahan turunan — jangan sunting; sumber: 0030-install-and-init.md (sha256: 91bfdce91c48)
 > Ditulis tangan (bukan mesin), mengikuti sumber English baris demi baris.
 
 # ADR-0030: Install On-Machine dan Init Interaktif — Wizard Kita Sendiri, Satu Installer, Dua Runtime
@@ -62,7 +62,7 @@ Satu skrip Bash, dipanggil dari klon (`bash install.sh`) atau dari jaringan
 | `uv` | kalau absen: unduh rilis yang dipin untuk arsitektur yang berjalan dan verifikasi SHA-256 sebelum dipakai; pin hidup di satu blok berkomentar dengan baris "cara menaikkannya" |
 | Python | menuntut 3.14+ dan melaporkan interpreter yang ia temukan; image container mempertahankan floor 3.14 yang sama — perbedaannya dinyatakan, tidak disembunyikan |
 | Dependency | `uv sync --locked` di dalam direktori instalasi (`--dir`, default `~/.monoagens/app`); tak ada dependency yang dipasang di luarnya |
-| Setup | menanyakan runtime dan direktori instalasi, lalu menyerahkan ke `monoagens init` dengan lokasi terkunci (§4.3): interaktif di terminal, digerakkan flag kalau bukan |
+| Setup | menanyakan runtime dan direktori instalasi (default, direktori saat ini, atau custom), lalu menyerahkan ke `monoagens init` dengan lokasi terkunci (§4.3): interaktif di terminal, digerakkan flag kalau bukan |
 | Database | kedua stack memakai Postgres Podman/Docker secara default. Installer membuat `POSTGRES_PASSWORD` dan `MONOAGENS_DATABASE_URL` saat kosong; `--database-url` eksternal yang eksplisit melewati container di mode native |
 | Lanjutan | nyalakan Postgres (atau seluruh stack compose), `monoagens db upgrade`, lalu `monoagens selftest` |
 | Penutup | menawarkan pilihan (§4.5): buka panel, atau tetap di command line |

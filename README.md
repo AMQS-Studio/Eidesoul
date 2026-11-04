@@ -212,8 +212,9 @@ Requirements: Python 3.14, Postgres 14+ with `pgvector`, and a reachable OpenAI-
 endpoint. The container image pins Python 3.14; running from source needs 3.14 or newer.
 
 The shortest path is the installer. It asks where the engine should run and where the files should
-live (the recommended `~/.monoagens/app` or a custom directory), uses a Podman/Docker Postgres for
-both choices, and asks before installing a missing container runtime with `sudo`:
+live (the recommended `~/.monoagens/app`, the current directory, or a custom path), uses a
+Podman/Docker Postgres for both choices, and asks before installing a missing container runtime with
+`sudo`:
 
 ```bash
 bash install.sh                 # interactive runtime choice

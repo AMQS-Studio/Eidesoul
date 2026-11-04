@@ -260,6 +260,22 @@ ask_runtime() {
     stack_set=1
 }
 
+normalize_directory() {
+    local value="$1"
+    value="${value/#\~/$HOME}"
+    [[ "$value" = /* ]] || value="${PWD}/${value}"
+    # A typed "." or "./" means the current directory, never a literal "./" folder.
+    if command -v realpath >/dev/null 2>&1; then
+        value="$(realpath -m -- "$value")"
+    else
+        case "$value" in
+            */.) value="${value%/.}" ;;
+        esac
+        [[ "$value" != "/" ]] && value="${value%/}"
+    fi
+    printf '%s' "$value"
+}
+
 ask_directory() {
     local answer="" choice=""
     (( dir_set || non_interactive || dry_run )) && return 0
@@ -267,12 +283,14 @@ ask_directory() {
     say ""
     say "Where should MonoAgens live?"
     say "  config.yaml, roles.yaml, soul.yaml, .env, and the runtime state are written there."
-    say "  1) $default_dir (recommended)"
-    say "  2) custom directory"
+    say "  1) default  - $default_dir (recommended)"
+    say "  2) here     - $PWD"
+    say "  3) custom   - enter a path"
     read -r -p "  location [1]: " choice || choice="1"
     case "$choice" in
-        "" | 1 | recommended) dir="$default_dir" ;;
-        2 | custom)
+        "" | 1 | default | recommended) dir="$default_dir" ;;
+        2 | here) dir="$PWD" ;;
+        3 | custom)
             read -r -p "  custom directory: " answer || answer=""
             if [[ -n "$answer" ]]; then
                 dir="$answer"
@@ -280,9 +298,9 @@ ask_directory() {
             ;;
         *) dir="$choice" ;;
     esac
-    dir="${dir/#\~/$HOME}"
-    [[ "$dir" = /* ]] || dir="${PWD}/${dir}"
+    dir="$(normalize_directory "$dir")"
     [[ -n "$dir" ]] || usage 2 "install directory must not be empty"
+    [[ "$dir" != "/" ]] || usage 2 "refusing to install directly at /"
     dir_set=1
 }
 
