@@ -6,7 +6,7 @@
 - **Context:** follows ADR-0001 (surfaces and bodies), ADR-0015 (capability manifest), ADR-0016 (schema), ADR-0018 (gateway contract), ADR-0022 (`administrator`), ADR-0028 (plugins)
 - **Supersedes:** —
 - **Related:** ADR-0009 (document home), ADR-0012 (lease), ADR-0019 (observability), ADR-0028 (the plugin unit that this ADR distributes)
-- **Implementation:** partial — present: the local image build (core-only, `EXTRAS` empty), the plugin/gateway separation, `eidesoul selftest` image contents, the installer's panel-or-CLI finish gate; remaining: `panel/` (operator-owned; `web.enabled: false` until it lands) and publishing the image to GHCR (no registry credentials here)
+- **Implementation:** partial — present: the local image build (core-only, `EXTRAS` empty), the plugin/gateway separation, `monoagens selftest` image contents, the installer's panel-or-CLI finish gate; remaining: `panel/` (operator-owned; `web.enabled: false` until it lands) and publishing the image to GHCR (no registry credentials here)
 - **Location note:** this ADR is cross-cutting (it binds every surface and every deployment), so it sits at the root of the ADR home. The Indonesian copy is `docs/v0.1.0/adr/id/0027-distribution-web-config.md`.
 - **Amendments:** 2026-11-03 — first version. 2026-11-03 — the voice layer (emotion, humanize, character) is stated as on by default and switchable off per part; clean by default still covers only gateway, tool, and plugin. 2026-11-03 — the fetched-code keys in §5 are `plugin.root`/`plugin.fetch`/`plugin.source`, following the plugin rename (ADR-0028 §5); the default install root is `<workspace>/plugins`.
 
@@ -18,9 +18,9 @@
 |---|---|
 | The image is built but not published | `Dockerfile:1,28-35` builds from `python:3.12-slim` with `ARG EXTRAS=""`; no `.github/workflows` exists |
 | Optional capability is compiled into the image today | `pyproject.toml` extras `whatsapp`, `google`; `Dockerfile:28` documents `--extra google` |
-| Some capabilities live in the core as if they were first class | `eidesoul/engine/tools/google.py`, `chat_history.py` |
+| Some capabilities live in the core as if they were first class | `monoagens/engine/tools/google.py`, `chat_history.py` |
 | Every tool and command is already deny-by-default | roles carry `tools`/`commands`; a missing entry denies (repo rule) |
-| There is no operator surface for configuration | configuration is `eidesoul init`, `eidesoul config import`, `roles.yaml`/`soul.yaml` mirrors, and `.env` |
+| There is no operator surface for configuration | configuration is `monoagens init`, `monoagens config import`, `roles.yaml`/`soul.yaml` mirrors, and `.env` |
 | The spine is not optional | Postgres+pgvector, Mem0, the shared embedder, affect prototypes, the guard, and the lease (`AGENTS.md` §Capability spine) |
 
 The owner's decision: distribution happens through `ghcr.io`, the web surface is the primary way to
@@ -62,7 +62,7 @@ based — no release-looking tag is invented (§Versioning in `AGENTS.md`).
   `web_search`, `mcp`, `memory`, `recipe`, `settings`, `grep`, `fetch`, `info`, plus the core commands.
 - The image contains **no gateway, no provider extra, and no plugin**; those are enabled later
   (§4.3) and their Python dependencies are not part of the locked core set.
-- The image declares its contents in a build label and prints them in `eidesoul selftest`, so what a
+- The image declares its contents in a build label and prints them in `monoagens selftest`, so what a
   running container can do is checkable, not assumed.
 
 ### 4.2 The web surface is the primary configuration path
@@ -70,14 +70,14 @@ based — no release-looking tag is invented (§Versioning in `AGENTS.md`).
 The web panel is the operator surface for init and configuration: first run (database, workspace,
 provider and model, first administrator), inspection (`/status` data, ledger, automations, memory
 truth), and plugin enablement (§4.3). The CLI keeps parity for headless installs
-(`eidesoul init`, `eidesoul config import`, `eidesoul selftest`, `eidesoul models`).
+(`monoagens init`, `monoagens config import`, `monoagens selftest`, `monoagens models`).
 
 - The panel is a **separate process** at the repository root (`panel/`), never a module inside
-  `eidesoul/engine/`, and the engine never imports it. `AGENTS.md` §Shape is amended accordingly: the
+  `monoagens/engine/`, and the engine never imports it. `AGENTS.md` §Shape is amended accordingly: the
   ban on an HTTP gateway stays for the **engine**, while the panel is an operator application that
   reads and writes the same documents.
 - Configurations written from the panel take the same path as a manual edit plus
-  `eidesoul config import`: documents are the source of truth, YAML files are seed + mirror, secrets
+  `monoagens config import`: documents are the source of truth, YAML files are seed + mirror, secrets
   stay in `.env` (the panel writes env **names**, never secret values into YAML).
 - Every change is recorded in `config_changes` with actor and diff, and the panel shows the effective
   value next to its source (`document`, `yaml mirror`, `env`, `default`).
@@ -139,12 +139,12 @@ secret in `.env`; the panel never enables remote access on its own.
 ### 4.6 Defaults, not examples
 
 A file we ship must be usable as it stands; a file that only demonstrates is deleted. The default
-lives in code, `eidesoul init` is the only writer of the host files, and the panel writes through the
+lives in code, `monoagens init` is the only writer of the host files, and the panel writes through the
 same path (§4.2).
 
-- `eidesoul/admin/templates.py` is the single source: `config.yaml`, `roles.yaml`, `soul.yaml`, and
+- `monoagens/admin/templates.py` is the single source: `config.yaml`, `roles.yaml`, `soul.yaml`, and
   `.env` are generated from it, with `.env` and `roles.yaml` written `0600` and never overwritten
-  unless `--force`. `.env` carries **names with empty values** (`EIDESOL_DATABASE_URL=`,
+  unless `--force`. `.env` carries **names with empty values** (`MONOAGENS_DATABASE_URL=`,
   `POSTGRES_PASSWORD=`) and no placeholder secret, so a half-filled file cannot be mistaken for a
   working one.
 - No `*.example` file is shipped. `config.example.yaml` and `.env.example` duplicated `templates.py` and
@@ -169,7 +169,7 @@ same path (§4.2).
 | `web.port` | operator-chosen at first run | panel listener |
 | `plugin.root` | `<workspace>/plugins` | where fetched gateway/plugin code lands (§ADR-0028) |
 | `plugin.fetch` | `true` | allow fetching code on enable; `false` = offline installs only |
-| `image.tag` | unset while unreleased | the running image tag, reported by `eidesoul selftest` |
+| `image.tag` | unset while unreleased | the running image tag, reported by `monoagens selftest` |
 
 Secrets live in `.env` only (`WEB_TOKEN`, provider keys); YAML carries names, never values.
 
@@ -178,7 +178,7 @@ Secrets live in `.env` only (`WEB_TOKEN`, provider keys); YAML carries names, ne
 | Metric | Initial target |
 |---|---|
 | Capabilities active on a fresh install (outside the spine and permission grants) | 0 |
-| Image contents checkable | `eidesoul selftest` lists gateway/plugin presence; label matches |
+| Image contents checkable | `monoagens selftest` lists gateway/plugin presence; label matches |
 | Panel ↔ CLI divergence on the same change | 0 (one import path) |
 | Fetched plugin without digest verification | 0 (fails closed) |
 | Changes without a `config_changes` row | 0 |
@@ -189,19 +189,19 @@ Secrets live in `.env` only (`WEB_TOKEN`, provider keys); YAML carries names, ne
 
 ## 7. Acceptance criteria
 
-- [ ] One image builds locally with `EXTRAS` empty and runs `eidesoul selftest`; the release tag is published only when a release exists.
+- [ ] One image builds locally with `EXTRAS` empty and runs `monoagens selftest`; the release tag is published only when a release exists.
 - [ ] The image contains no gateway/plugin dependency: `pip list` in the container shows no `neonize`, no `google-api-python-client`.
 - [ ] A fresh install starts with the spine only: `/status` reports every gateway and plugin as absent/off, and no capability is granted.
 - [ ] Enabling a plugin fetches code by digest; a wrong digest aborts with no config change and no files installed.
 - [ ] Enabling a plugin without a role grant leaves it inert (unavailable, not denied) and `/tools` says why.
 - [ ] Disabling a plugin keeps its files and stops the capability; removing deletes both code and state, and both actions appear in the ledger.
-- [ ] The panel writes a configuration change that `eidesoul config import` would have written, with a `config_changes` row; a manual YAML edit shows up as drift until imported.
+- [ ] The panel writes a configuration change that `monoagens config import` would have written, with a `config_changes` row; a manual YAML edit shows up as drift until imported.
 - [ ] `web.enabled: false` stops the panel and leaves the engine and its gateways running.
 - [ ] No secret value appears in `config.yaml`, `roles.yaml`, or `soul.yaml` after a panel session (test).
 - [ ] `AGENTS.md` §Shape states that the engine is not a server while the panel is a separate operator app; `docs/**` joins the tracked document list.
 - [ ] No `*.example` file is tracked, and `templates.files()` writes exactly `config.yaml`, `roles.yaml`, `soul.yaml`, and `.env`.
 - [ ] `compose.yaml` starts Postgres with only `POSTGRES_PASSWORD` set in `.env`, and no `CHANGE_ME` literal ships anywhere.
-- [ ] A key added to `eidesoul/admin/templates.py` reaches the file `init` writes, with no second copy to update.
+- [ ] A key added to `monoagens/admin/templates.py` reaches the file `init` writes, with no second copy to update.
 
 ## 8. Risks and mitigations
 
@@ -211,7 +211,7 @@ Secrets live in `.env` only (`WEB_TOKEN`, provider keys); YAML carries names, ne
 | Fetch-on-enable needs network at an awkward time | `plugin.fetch: false` allows an operator to pre-place verified artifacts; the failure is explicit |
 | The panel becomes a second, parallel configuration path | One import path (§4.2), `config_changes` rows, and a drift view in the panel |
 | A panel exposed beyond loopback becomes an attack surface | Loopback default, explicit `remote_ack`, `.env` secret, no anonymous mode |
-| Web-first tempts engine logic into the panel | §4.5 plus the repo rule that `eidesoul/engine/` never imports the panel |
+| Web-first tempts engine logic into the panel | §4.5 plus the repo rule that `monoagens/engine/` never imports the panel |
 | On-by-default panel surprises headless operators | One switch, documented as the first line of the runbook; the CLI never depends on the panel |
 | Unpublished image treated as a release | Dev version rule (§Versioning); no release-looking tag while nothing is released |
 
@@ -231,13 +231,13 @@ Secrets live in `.env` only (`WEB_TOKEN`, provider keys); YAML carries names, ne
 
 - `Dockerfile:1,28-35` — current image build with `ARG EXTRAS=""`.
 - `pyproject.toml` `[project.optional-dependencies]` — `whatsapp`, `google`, `dev` extras.
-- `plugins/google/` — the Google capability after the move; `eidesoul/gateways/whatsapp/tools/chat_history.py` — the archive tool after the move.
-- `eidesoul/__main__.py` — `init`, `models`, `config import`, `selftest` (the CLI parity surface).
-- `eidesoul/admin/templates.py:1,151,253` — the single default source for the four host files.
-- `eidesoul/admin/init.py:26-46` — the only writer (`0600` for `.env`/`roles.yaml`, `--force` to overwrite).
+- `plugins/google/` — the Google capability after the move; `monoagens/gateways/whatsapp/tools/chat_history.py` — the archive tool after the move.
+- `monoagens/__main__.py` — `init`, `models`, `config import`, `selftest` (the CLI parity surface).
+- `monoagens/admin/templates.py:1,151,253` — the single default source for the four host files.
+- `monoagens/admin/init.py:26-46` — the only writer (`0600` for `.env`/`roles.yaml`, `--force` to overwrite).
 - `compose.yaml`, `.dockerignore` — the real deployment default, kept out of the image.
-- `eidesoul/engine/config.py`, `eidesoul/engine/stores/documents.py` — the configuration path the panel reuses.
-- `eidesoul/engine/schema.py` — `config_changes` ledger.
+- `monoagens/engine/config.py`, `monoagens/engine/stores/documents.py` — the configuration path the panel reuses.
+- `monoagens/engine/schema.py` — `config_changes` ledger.
 - `panel/` — new tree at the repository root (proposal, not created yet).
 
 ---

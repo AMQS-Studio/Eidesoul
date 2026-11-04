@@ -19,9 +19,9 @@ BASELINE = Path(__file__).resolve().parent / "types-baseline.json"
 
 
 def key_of(relative: str) -> str:
-    """`eidesoul/engine/agent.py` -> `eidesoul/engine`; `scripts/types.py` -> `scripts`."""
+    """`monoagens/engine/agent.py` -> `monoagens/engine`; `scripts/types.py` -> `scripts`."""
     parts = Path(relative).parts
-    if len(parts) >= 2 and parts[0] == "eidesoul":
+    if len(parts) >= 2 and parts[0] == "monoagens":
         return "/".join(parts[:2])
     return parts[0] if parts else ""
 

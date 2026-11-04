@@ -1,4 +1,4 @@
-> Terjemahan turunan — jangan sunting; sumber: engine/0035-app-scoped-skills.md (sha256: a1754183b748)
+> Terjemahan turunan — jangan sunting; sumber: engine/0035-app-scoped-skills.md (sha256: cacfd1143d39)
 > Ditulis tangan (bukan mesin), mengikuti sumber English baris demi baris.
 
 # ADR-0035: Skill Ber-scope App — Namespace di Atas `scope`, Bukan Audiens Keempat
@@ -126,7 +126,7 @@ Gate-nya:
 4. Dua episode dengan tool dan target yang sama tetapi `turns.app` berbeda menghasilkan signature berbeda dan tidak melebur.
 5. Kandidat refleksi dari episode `a` disimpan dengan `app='a'`; episode bersama menyimpan `''`.
 6. Turn tanpa hint tidak pernah gagal dan tidak pernah melihat skill ber-scope app.
-7. Gate netral tidak menemukan literal nama app di `eidesoul/engine/**`; hanya konstanta pola yang ada.
+7. Gate netral tidak menemukan literal nama app di `monoagens/engine/**`; hanya konstanta pola yang ada.
 8. `tests/test_migrations.py` mencakup `0017`; `pytest -q` dan suite kontrak prompt tetap hijau.
 
 ## 7. Kriteria penerimaan
@@ -160,15 +160,15 @@ Gate-nya:
 
 ## 10. Referensi kode
 
-- `eidesoul/engine/schema.py:467-489` — `skills`, CHECK scope, dan index scope; `:827-845` episodes; `:854-878` turns.
-- `eidesoul/engine/stores/skills.py:164-170,188-260` — `_visible`, `_mentions`, `_vector`, `retrieve`, `_inject`.
-- `eidesoul/engine/stores/skills.py:303-330` — `view`/`read`; jalur operator yang juga harus menyebut app.
-- `eidesoul/engine/agent.py:1306-1316` — satu-satunya call retrieval yang akan mengirim `hints["app"]`.
-- `eidesoul/engine/stores/history.py:273-283` — transaksi intake yang mencatat `turns.app`.
-- `eidesoul/engine/memory/episodes.py:90-122,158-177` — awal episode dan signature.
-- `eidesoul/engine/jobs/cognition.py:948-980,1069-1078` — promote/merge dan tulisan distill yang harus menyalin app.
-- `eidesoul/engine/inbound.py:13-20` — key hint yang terdokumentasi.
-- `eidesoul/engine/tools/__init__.py:28-100` — `ToolContext`, yang memperoleh `app`.
+- `monoagens/engine/schema.py:467-489` — `skills`, CHECK scope, dan index scope; `:827-845` episodes; `:854-878` turns.
+- `monoagens/engine/stores/skills.py:164-170,188-260` — `_visible`, `_mentions`, `_vector`, `retrieve`, `_inject`.
+- `monoagens/engine/stores/skills.py:303-330` — `view`/`read`; jalur operator yang juga harus menyebut app.
+- `monoagens/engine/agent.py:1306-1316` — satu-satunya call retrieval yang akan mengirim `hints["app"]`.
+- `monoagens/engine/stores/history.py:273-283` — transaksi intake yang mencatat `turns.app`.
+- `monoagens/engine/memory/episodes.py:90-122,158-177` — awal episode dan signature.
+- `monoagens/engine/jobs/cognition.py:948-980,1069-1078` — promote/merge dan tulisan distill yang harus menyalin app.
+- `monoagens/engine/inbound.py:13-20` — key hint yang terdokumentasi.
+- `monoagens/engine/tools/__init__.py:28-100` — `ToolContext`, yang memperoleh `app`.
 - `tests/test_skills.py`, `tests/test_prompt_contract.py`, `tests/test_migrations.py` — tiga suite yang diperluas keputusan ini.
 
 ---

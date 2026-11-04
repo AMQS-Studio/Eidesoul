@@ -6,10 +6,10 @@ from pathlib import Path
 
 from support import make_agent, role
 
-from eidesoul.engine.registry import Handler
-from eidesoul.engine.tools import execute, safe_chat
-from eidesoul.gateways.whatsapp.tools.send import _send
-from eidesoul.gateways.whatsapp.tools.send_to import _send_to
+from monoagens.engine.registry import Handler
+from monoagens.engine.tools import execute, safe_chat
+from monoagens.gateways.whatsapp.tools.send import _send
+from monoagens.gateways.whatsapp.tools.send_to import _send_to
 
 SEND = Handler(
     name="send",

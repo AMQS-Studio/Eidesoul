@@ -225,7 +225,7 @@ Sentiment and affect are context, not confidentiality. A sad sentence is not aut
 sensitive, and a flat sentence is not automatically public. The level answers "who may see this",
 not "how strongly does the speaker feel".
 
-- **No affect-to-level path.** The affect prototypes under `eidesoul/library/affect/` may shape
+- **No affect-to-level path.** The affect prototypes under `monoagens/library/affect/` may shape
   reply tone, salience, or a crisis route; their score never enters `level` or the disclosure
   verdict. A sentiment-only change must leave the level unchanged.
 - **Propositions, not adjectives.** The detectors report labels, spans, and scores for what is
@@ -393,14 +393,14 @@ A rule without a test is not implemented; it stays draft.
 
 ## 10. Code references
 
-- `eidesoul/engine/memory/privacy.py` — `clamp_level`, `PrivacyVerdict`, `AuditResult`,
+- `monoagens/engine/memory/privacy.py` — `clamp_level`, `PrivacyVerdict`, `AuditResult`,
   `PrivacyPolicy`.
-- `eidesoul/engine/access/privacy.py` — the agent-facing review, audit, ask, and disclosure path.
-- `eidesoul/engine/memory/store.py` — the labeling/capture path and the level write.
-- `eidesoul/engine/schema.py:575-620` — `memories.level` and the row that will carry
+- `monoagens/engine/access/privacy.py` — the agent-facing review, audit, ask, and disclosure path.
+- `monoagens/engine/memory/store.py` — the labeling/capture path and the level write.
+- `monoagens/engine/schema.py:575-620` — `memories.level` and the row that will carry
   `privacy_evidence`.
-- `eidesoul/engine/access/approvals.py` — the L3/L4 continuation.
-- `eidesoul/engine/access/ledger.py` — the action ledger that carries the decision record.
+- `monoagens/engine/access/approvals.py` — the L3/L4 continuation.
+- `monoagens/engine/access/ledger.py` — the action ledger that carries the decision record.
 - External: ICML 2026 `Confidence is Not Universal`
   (https://proceedings.mlr.press/v306/jang26a.html); SafeGPT (https://arxiv.org/html/2601.06366v3);
   OWASP LLM Top 10 2026 (https://www.forcepoint.com/blog/insights/owasp-llm-top-10); EU AI Act

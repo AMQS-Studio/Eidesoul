@@ -23,7 +23,7 @@ MARKER = "MARKER-PASSWORD-9f1c"
 
 def clean_env(**overrides: str) -> dict[str, str]:
     env = os.environ.copy()
-    for name in ("EIDESOL_DATABASE_URL", "EIDESOUL_DATABASE_URL", "EIDESOUL_INSTALL_SOURCED"):
+    for name in ("MONOAGENS_DATABASE_URL", "MONOAGENS_DATABASE_URL", "MONOAGENS_INSTALL_SOURCED"):
         env.pop(name, None)
     env["NO_COLOR"] = "1"
     env.update(overrides)
@@ -49,7 +49,7 @@ def run_script(args: list[str], env: dict[str, str]) -> subprocess.CompletedProc
 def stub_bin(tmp_path: Path) -> tuple[Path, Path]:
     """A PATH with a no-op uv, a Python 3.14, and a sudo that shouts when it is called.
 
-    `uv run eidesoul init` is delegated to the interpreter in `STUB_EIDESOUL_PYTHON` so the
+    `uv run monoagens init` is delegated to the interpreter in `STUB_MONOAGENS_PYTHON` so the
     end-to-end test exercises the real init; every other child exits 0.
     """
     folder = tmp_path / "bin"
@@ -58,10 +58,10 @@ def stub_bin(tmp_path: Path) -> tuple[Path, Path]:
     uv.write_text(
         '#!/usr/bin/env bash\n'
         'if [[ "${1:-}" == "--version" ]]; then echo "uv 0.13.7 (fake)"; exit 0; fi\n'
-        'if [[ "${1:-}" == "run" && "${2:-}" == "eidesoul" && "${3:-}" == "init" '
-        '&& -n "${STUB_EIDESOUL_PYTHON:-}" ]]; then\n'
+        'if [[ "${1:-}" == "run" && "${2:-}" == "monoagens" && "${3:-}" == "init" '
+        '&& -n "${STUB_MONOAGENS_PYTHON:-}" ]]; then\n'
         '    shift 3\n'
-        '    exec "$STUB_EIDESOUL_PYTHON" -m eidesoul init "$@"\n'
+        '    exec "$STUB_MONOAGENS_PYTHON" -m monoagens init "$@"\n'
         'fi\n'
         "exit 0\n",
         encoding="utf-8",
@@ -93,7 +93,7 @@ def test_dry_run_prints_the_plan_and_writes_nothing(tmp_path):
     assert result.returncode == 0, result.stderr
     assert "dry-run: yes" in result.stdout
     assert "would run: uv sync --locked" in result.stdout
-    assert "would run: uv run eidesoul init" in result.stdout
+    assert "would run: uv run monoagens init" in result.stdout
     assert "\x1b[" not in result.stdout
     assert listing(tmp_path) == before == []
 
@@ -107,10 +107,10 @@ def test_a_stubbed_run_keeps_the_secret_out_of_the_log_and_never_calls_sudo(tmp_
         HOME=str(tmp_path / "home"),
         PATH=f"{folder}:/usr/bin:/bin",
         SUDO_MARKER=str(sudo_marker),
-        STUB_EIDESOUL_PYTHON=sys.executable,
+        STUB_MONOAGENS_PYTHON=sys.executable,
         PYTHONPATH=str(ROOT),
     )
-    url = f"postgresql+psycopg://eidesoul:{MARKER}@127.0.0.1:5433/eidesoul"
+    url = f"postgresql+psycopg://monoagens:{MARKER}@127.0.0.1:5433/monoagens"
 
     result = run_script(
         [
@@ -129,16 +129,16 @@ def test_a_stubbed_run_keeps_the_secret_out_of_the_log_and_never_calls_sudo(tmp_
     output = result.stdout + result.stderr
     assert result.returncode == 0, output
     assert not sudo_marker.exists(), "install.sh called sudo"
-    log = tmp_path / "home" / ".eidesoul" / "logs" / "install.log"
+    log = tmp_path / "home" / ".monoagens" / "logs" / "install.log"
     assert log.is_file()
     assert log.stat().st_mode & 0o777 == 0o600
     text = log.read_text(encoding="utf-8")
     assert MARKER not in text
     assert MARKER not in output
     assert "database-url=<provided>" in text
-    assert "eidesoul init" in text
+    assert "monoagens init" in text
     assert "panel: not built in this version" in output
-    assert "uv run eidesoul run" in output
+    assert "uv run monoagens run" in output
     for name, mode in (
         ("config.yaml", 0o644),
         ("roles.yaml", 0o600),
@@ -175,7 +175,7 @@ def test_the_pinned_uv_digest_is_checked_before_anything_else(tmp_path):
 
 def test_the_pin_block_holds_real_digests_and_verification_works(tmp_path):
     code = """
-EIDESOUL_INSTALL_SOURCED=1
+MONOAGENS_INSTALL_SOURCED=1
 source "$1/install.sh"
 printf 'payload' > "$2/archive"
 digest="$(sha256sum "$2/archive" | awk '{print $1}')"
@@ -200,7 +200,7 @@ uv_digest
 
 def test_a_missing_package_is_printed_not_installed(tmp_path):
     code = """
-EIDESOUL_INSTALL_SOURCED=1
+MONOAGENS_INSTALL_SOURCED=1
 source "$1/install.sh"
 postgres_hint
 """
@@ -224,7 +224,7 @@ def test_the_closing_choice_offers_the_panel_only_when_it_is_built(tmp_path):
     (app / "panel" / "pyproject.toml").write_text("[project]\nname = 'panel'\n", encoding="utf-8")
     (app / "config.yaml").write_text("web:\n  enabled: true\n  host: 127.0.0.1\n", encoding="utf-8")
     code = """
-EIDESOUL_INSTALL_SOURCED=1
+MONOAGENS_INSTALL_SOURCED=1
 source "$1/install.sh"
 dir="$2"
 if panel_available; then echo yes; else echo no; fi

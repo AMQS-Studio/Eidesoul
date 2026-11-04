@@ -1,4 +1,4 @@
-> Terjemahan turunan — jangan sunting; sumber: engine/0019-observability.md (sha256: 992d9f7a32a7)
+> Terjemahan turunan — jangan sunting; sumber: engine/0019-observability.md (sha256: c19498ada933)
 > Teks ini ditulis manusia; baris yang tidak bisa diterjemahkan mesin disalin apa adanya ke sumber English, jadi sumber bercampur dua bahasa.
 
 # ADR-0019: Observability — Log Terstruktur, Token, dan `/status`
@@ -20,7 +20,7 @@
 |---|---|
 | Log hanya teks bebas, tanpa id korelasi | `__main__.py:22` `logging.basicConfig(level=INFO, format="%(asctime)s %(levelname)s %(message)s")` |
 | Token tidak pernah dibaca | `llm.py:150-200` hanya mengembalikan `content`; tidak ada `response.usage` |
-| Tidak ada metrik | tidak ada counter/latensi di `eidesoul/`; `ablate.replay_metrics` hanya analisis offline |
+| Tidak ada metrik | tidak ada counter/latensi di `monoagens/`; `ablate.replay_metrics` hanya analisis offline |
 | Diagnosa hari ini | membaca log dan menebak; tidak bisa menjawab "turn ini berapa token" atau "antrean kognisi berapa" |
 
 Ini bukan kerapian: tanpa token terukur, keputusan biaya di ADR-0014/0015 (budget, `run_budget_seconds`, pemadatan) berjalan tanpa umpan balik; tanpa `turn_id`, satu keluhan pengguna tidak bisa dilacak ke satu turn.
@@ -134,12 +134,12 @@ engine:
 
 ## 10. Referensi kode
 
-- `eidesoul/__main__.py:22` — satu-satunya konfigurasi logging saat ini.
-- `eidesoul/engine/llm.py:150-200` — `run()` mengembalikan `content`; titik pembacaan `response.usage`.
-- `eidesoul/engine/agent.py:413` — awal `handle()` (tempat `turn_id` dibuat).
-- `eidesoul/engine/schema.py` — tabel `turns`/`cognition_jobs` (sumber `turn_id` dan `queue_depth`).
-- `eidesoul/engine/commands/status.py` — command `status` yang diperluas.
-- `eidesoul/engine/db.py:24` — `redact_dsn` (dipakai redaksi `/status`).
+- `monoagens/__main__.py:22` — satu-satunya konfigurasi logging saat ini.
+- `monoagens/engine/llm.py:150-200` — `run()` mengembalikan `content`; titik pembacaan `response.usage`.
+- `monoagens/engine/agent.py:413` — awal `handle()` (tempat `turn_id` dibuat).
+- `monoagens/engine/schema.py` — tabel `turns`/`cognition_jobs` (sumber `turn_id` dan `queue_depth`).
+- `monoagens/engine/commands/status.py` — command `status` yang diperluas.
+- `monoagens/engine/db.py:24` — `redact_dsn` (dipakai redaksi `/status`).
 
 ---
 

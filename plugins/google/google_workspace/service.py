@@ -292,7 +292,7 @@ class GoogleWorkspace:
                     ]
                 )
             )
-        return "\n".join(lines) or "No files shared with Eidesoul and your Google account."
+        return "\n".join(lines) or "No files shared with MonoAgens and your Google account."
 
     async def read(self, file_id: str, email: str, trusted: bool, range_value: str) -> str:
         file = await self._authorize(file_id, email, trusted, write=False)
@@ -366,7 +366,7 @@ class GoogleWorkspace:
         permissions = file.get("permissions") or []
         if any(item.get("type") in {"anyone", "domain"} for item in permissions):
             raise GoogleError(
-                "link-sharing is not allowed; share explicitly with your email and Eidesoul"
+                "link-sharing is not allowed; share explicitly with your email and MonoAgens"
             )
         if trusted:
             return "owner"
@@ -403,7 +403,7 @@ class GoogleWorkspace:
                 )
             except HttpError as exc:
                 raise GoogleError(
-                    "file is not shared with Eidesoul's service account"
+                    "file is not shared with MonoAgens's service account"
                 ) from exc
 
         file = await self._call(fetch)

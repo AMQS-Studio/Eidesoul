@@ -1,7 +1,7 @@
 [project]
-name = "eidesoul"
+name = "monoagens"
 version = "0.0.0.dev0"
-description = "Eidesoul: a persistent soul engine."
+description = "MonoAgens: a persistent agent harness."
 license = "Apache-2.0"
 license-files = ["LICENSE"]
 authors = [{ name = "Abdul Muqsith", email = "136996767+inimuqsith@users.noreply.github.com" }]
@@ -12,6 +12,7 @@ dependencies = [
   "psycopg[binary]>=3.2,<4",
   "psycopg-pool>=3.2,<4",
   "openai>=2,<4",
+  "httpx>=0.27,<1",
   "mcp>=2.3,<3",
   "PyYAML>=6",
   "ddgs>=9",
@@ -37,15 +38,14 @@ dev = [
   "ruff>=0.17",
   "neonize>=0.5.2,<0.6",
   "segno>=1.6",
-  "httpx>=0.27,<1",
   "pyright>=1.1.390",
 ]
 
 [project.urls]
-Repository = "https://github.com/inimuqsith/Eidesoul"
+Repository = "https://github.com/AMQS-Studio/MonoAgens"
 
 [project.scripts]
-eidesoul = "eidesoul.__main__:main"
+monoagens = "monoagens.__main__:main"
 
 [build-system]
 # PEP 639 license metadata (`license` string plus `license-files`) needs setuptools 77.
@@ -53,10 +53,10 @@ requires = ["setuptools>=77"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
-include = ["eidesoul*"]
+include = ["monoagens*"]
 
 [tool.setuptools.package-data]
-eidesoul = ["lang/*.yaml", "library/patterns/*.json", "library/facts/*.json", "library/affect/*.json", "library/privacy/*.json"]
+monoagens = ["lang/*.yaml", "library/affect/*.json", "library/privacy/*.json", "library/safety/*.json", "library/style/*.json", "library/lexicon/*.json", "library/intent/*.json"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
@@ -64,7 +64,7 @@ testpaths = ["tests"]
 [tool.ruff]
 line-length = 100
 target-version = "py314"
-extend-exclude = ["eidesoul/vendor"]
+extend-exclude = ["monoagens/vendor"]
 
 [tool.ruff.lint]
 select = [
@@ -88,7 +88,7 @@ max-complexity = 12
 
 [tool.ruff.lint.per-file-ignores]
 # Long prose lines inside the soul loader template and prompt scaffolding.
-"eidesoul/engine/soul.py" = ["E501"]
+"monoagens/engine/soul.py" = ["E501"]
 # Prompt copy reads as one sentence per line; wrapping the literal would hurt it.
 "**/prompts.py" = ["E501"]
 "**/decision.py" = ["E501"]
@@ -104,40 +104,41 @@ max-complexity = 12
 # The list is per file on purpose, so a new module is still held to the rule. ADR-0037 §4.3
 # moved `Agent._run_turn`/`Agent._handle_message` verbatim into `turn/loop.py` and
 # `turn/intake.py`: the debt follows the function, not the file it used to sit in.
-"eidesoul/__main__.py" = ["C901", "PLR0912", "PLR0915"]
-"eidesoul/engine/agent.py" = ["C901", "PLR0912", "PLR0915"]
-"eidesoul/engine/turn/loop.py" = ["C901", "PLR0912", "PLR0915"]
-"eidesoul/engine/turn/intake.py" = ["C901", "PLR0912", "PLR0915"]
-"eidesoul/engine/jobs/ambient.py" = ["C901", "PLR0912"]
-"eidesoul/engine/commands/approve.py" = ["C901", "PLR0912", "PLR0915"]
-"eidesoul/engine/commands/help.py" = ["C901", "PLR0912"]
-"eidesoul/engine/commands/memory.py" = ["C901", "PLR0912"]
-"eidesoul/engine/config.py" = ["C901", "PLR0915"]
-"eidesoul/engine/registry.py" = ["C901", "PLR0912"]
-"eidesoul/engine/plugins.py" = ["C901", "PLR0912"]
-"eidesoul/gateways/whatsapp/cli.py" = ["PLR0915"]
+"monoagens/__main__.py" = ["C901", "PLR0912", "PLR0915"]
+"monoagens/engine/agent.py" = ["C901", "PLR0912", "PLR0915"]
+"monoagens/engine/turn/loop.py" = ["C901", "PLR0912", "PLR0915"]
+"monoagens/engine/turn/intake.py" = ["C901", "PLR0912", "PLR0915"]
+"monoagens/engine/jobs/ambient.py" = ["C901", "PLR0912"]
+"monoagens/engine/commands/approve.py" = ["C901", "PLR0912", "PLR0915"]
+"monoagens/engine/commands/help.py" = ["C901", "PLR0912"]
+"monoagens/engine/commands/memory.py" = ["C901", "PLR0912"]
+"monoagens/engine/config.py" = ["C901", "PLR0912", "PLR0915"]
+"monoagens/engine/registry.py" = ["C901", "PLR0912"]
+"monoagens/engine/plugins.py" = ["C901", "PLR0912"]
+"monoagens/gateways/whatsapp/cli.py" = ["PLR0915"]
 "scripts/neutral.py" = ["C901", "PLR0912"]
-"eidesoul/engine/turn/reply.py" = ["C901"]
-"eidesoul/engine/stores/affect.py" = ["C901", "PLR0912", "PLR0915"]
-"eidesoul/engine/stores/recipes.py" = ["C901", "PLR0912"]
-"eidesoul/engine/stores/style.py" = ["C901", "PLR0912"]
-"eidesoul/engine/tools/__init__.py" = ["C901", "PLR0912"]
-"eidesoul/engine/tools/memory.py" = ["C901", "PLR0912", "PLR0915"]
-"eidesoul/engine/tools/settings.py" = ["C901", "PLR0912"]
-"eidesoul/gateways/whatsapp/commands/backfill.py" = ["C901", "PLR0915"]
-"eidesoul/gateways/whatsapp/gateway.py" = ["C901", "PLR0915"]
-"eidesoul/gateways/whatsapp/tools/chat_history.py" = ["C901", "PLR0912"]
-"eidesoul/gateways/whatsapp/tools/send_to.py" = ["C901", "PLR0912"]
+"monoagens/engine/turn/reply.py" = ["C901"]
+"monoagens/engine/stores/affect.py" = ["C901", "PLR0912", "PLR0915"]
+"monoagens/engine/stores/recipes.py" = ["C901", "PLR0912"]
+"monoagens/engine/stores/style.py" = ["C901", "PLR0912"]
+"monoagens/engine/stores/documents.py" = ["C901", "PLR0912"]
+"monoagens/engine/tools/__init__.py" = ["C901", "PLR0912"]
+"monoagens/engine/tools/memory.py" = ["C901", "PLR0912", "PLR0915"]
+"monoagens/engine/tools/settings.py" = ["C901", "PLR0912"]
+"monoagens/gateways/whatsapp/commands/backfill.py" = ["C901", "PLR0915"]
+"monoagens/gateways/whatsapp/gateway.py" = ["C901", "PLR0915"]
+"monoagens/gateways/whatsapp/tools/chat_history.py" = ["C901", "PLR0912"]
+"monoagens/gateways/whatsapp/tools/send_to.py" = ["C901", "PLR0912"]
 "scripts/ablate.py" = ["PLR0915"]
 "scripts/ablate_engine.py" = ["PLR0915"]
 
 [tool.coverage.run]
 branch = true
-source = ["eidesoul"]
+source = ["monoagens"]
 
 [tool.pyright]
-include = ["eidesoul", "scripts"]
-exclude = ["eidesoul/vendor", "**/__pycache__"]
+include = ["monoagens", "scripts"]
+exclude = ["monoagens/vendor", "**/__pycache__"]
 typeCheckingMode = "basic"
 pythonVersion = "3.14"
 venvPath = "."

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Intent prototype tool: validation and statistics (ADR-0005 §4.6).
 
-Each file under `eidesoul/library/intent/` holds one intent's prototype sentences for one
+Each file under `monoagens/library/intent/` holds one intent's prototype sentences for one
 language; the classifier embeds the incoming text once and scores it against both the intent's
 prototypes and the negatives. A prototype is a short sentence, never a name, a URL, or a phone
 number, and each file needs at least `MIN_PROTOTYPES` entries. The vectors are computed at
@@ -18,7 +18,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from eidesoul.engine.memory.intent import (
+from monoagens.engine.memory.intent import (
     KINDS,
     LIBRARY,
     MIN_PROTOTYPES,

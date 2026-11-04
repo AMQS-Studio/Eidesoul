@@ -6,9 +6,9 @@ import asyncio
 from support import make_agent, role, specs
 from test_whatsapp_gateway import make_gateway
 
-from eidesoul.engine.tools import execute
-from eidesoul.engine.turn.context import Message
-from eidesoul.gateways.whatsapp import directory
+from monoagens.engine.tools import execute
+from monoagens.engine.turn.context import Message
+from monoagens.gateways.whatsapp import directory
 
 
 def test_unknown_target_never_falls_back_to_the_only_contact(tmp_path) -> None:

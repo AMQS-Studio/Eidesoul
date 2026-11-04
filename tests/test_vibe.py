@@ -9,17 +9,18 @@ from pathlib import Path
 import pytest
 from support import build_config, database, role
 
-from eidesoul.engine.access.roles import Role
-from eidesoul.engine.config import Config, VibeConfig
-from eidesoul.engine.stores.vibe import (
+from monoagens.engine.access.roles import Role
+from monoagens.engine.config import Config
+from monoagens.engine.soul import VibeConfig
+from monoagens.engine.stores.vibe import (
     PrototypeSource,
     VibeRunner,
     VibeState,
     advance,
     load_bank,
 )
-from eidesoul.engine.turn.decision import build_context
-from eidesoul.engine.turn.prompts import system_prompt
+from monoagens.engine.turn.decision import build_context
+from monoagens.engine.turn.prompts import system_prompt
 
 
 def make_config() -> Config:
@@ -97,7 +98,7 @@ def test_advance_pulls_current_to_baseline() -> None:
 def test_vibe_block_in_prompts() -> None:
     block = "Vibe ruangan: netral, tenang, seimbang."
 
-    from eidesoul.engine.turn.prompts import PromptContext
+    from monoagens.engine.turn.prompts import PromptContext
 
     config = make_config()
     roles = (Role("member"),)

@@ -6,15 +6,8 @@ from dataclasses import replace
 
 from support import build_config
 
-from eidesoul.engine.character.character import (
-    effective_limits,
-    needs_polish,
-    over_level,
-    polish,
-    regulate,
-    unwrap_quotes,
-)
-from eidesoul.engine.config import CharacterConfig
+from monoagens.engine.character.character import needs_polish, polish, unwrap_quotes
+from monoagens.engine.soul import CharacterConfig
 
 NATURAL = "capeknya di bagian mana?"
 
@@ -43,7 +36,9 @@ def test_wrapped_quotes_are_unwrapped_without_backtracking() -> None:
 
 def config_with(tmp_path, **character):
     settings = CharacterConfig(enabled=True, **character)
-    return replace(build_config(tmp_path), character=settings)
+    config = build_config(tmp_path)
+    voice = replace(config.soul.voice, enabled=True, character=settings)
+    return replace(config, soul=replace(config.soul, voice=voice))
 
 
 def run_polish(config, llm, draft: str) -> str:
@@ -73,7 +68,16 @@ def test_assistant_tell_markdown_and_lengths_trigger_polish() -> None:
 
 def test_disabled_layer_returns_the_draft_without_calling_the_model(tmp_path) -> None:
     llm = StubLLM("versi karakter")
-    config = replace(config_with(tmp_path), character=CharacterConfig(enabled=False))
+    config = config_with(tmp_path)
+    config = replace(
+        config,
+        soul=replace(
+            config.soul,
+            voice=replace(
+                config.soul.voice, character=CharacterConfig(enabled=False)
+            ),
+        ),
+    )
 
     assert run_polish(config, llm, long_draft()) == long_draft()
     assert llm.calls == 0
@@ -118,116 +122,4 @@ def test_fenced_draft_is_never_rewritten(tmp_path) -> None:
     draft = "Tentu, ini contohnya:\n```\nsatu --- dua\n```\nsekian laporan lengkapnya ya"
 
     assert run_polish(config_with(tmp_path), llm, draft) == draft
-    assert llm.calls == 0
-
-
-def limits_config(tmp_path, toxicity: int = 3, adult_memes: int = 3, **values):
-    return replace(
-        build_config(tmp_path),
-        character=CharacterConfig(
-            enabled=True, toxicity=toxicity, adult_memes=adult_memes, **values
-        ),
-    )
-
-
-def run_regulate(config, llm, reply: str, **kwargs) -> str:
-    return asyncio.run(
-        regulate(
-            llm,
-            config,
-            reply,
-            latest="dasar goblok",
-            session="s",
-            **kwargs,
-        )
-    )
-
-
-def test_limits_come_from_the_room_configuration() -> None:
-    settings = CharacterConfig(toxicity=3, adult_memes=3)
-    assert effective_limits(settings) == (3, 3)
-    quiet = CharacterConfig(toxicity=0, adult_memes=0)
-    assert effective_limits(quiet) == (0, 0)
-
-
-def test_over_level_lists_markers_by_appearance() -> None:
-    assert over_level("dasar goblok", toxicity=1, adult_memes=0, language="id") == [
-        "goblok"
-    ]
-    assert over_level("dasar goblok", toxicity=2, adult_memes=0, language="id") == []
-    assert over_level("ngokang linggis", toxicity=4, adult_memes=2, language="id") == [
-        "ngokang linggis"
-    ]
-    # ordinary meme, not adult
-    assert over_level("jomok", toxicity=4, adult_memes=1, language="id") == []
-    assert over_level("jomok dulu, baru goblok", toxicity=0, adult_memes=3, language="id") == [
-        "goblok"
-    ]
-    assert over_level("", toxicity=0, adult_memes=0, language="id") == []
-
-
-def test_regulate_within_level_never_calls_the_model(tmp_path) -> None:
-    llm = StubLLM("bersih")
-
-    assert run_regulate(limits_config(tmp_path), llm, "iya, goblok dikit gapapa") == (
-        "iya, goblok dikit gapapa"
-    )
-    assert llm.calls == 0
-
-
-def test_regulate_rewrites_an_over_level_reply_once(tmp_path) -> None:
-    llm = StubLLM("yaelah, gitu doang")
-
-    reply = run_regulate(
-        limits_config(tmp_path, toxicity=1, adult_memes=0), llm, "dasar goblok, jomok juga"
-    )
-
-    assert reply == "yaelah, gitu doang"
-    assert llm.calls == 1
-    assert "reasoning_effort" not in llm.kwargs
-    assert llm.kwargs["temperature"] == 0.4
-
-
-def test_regulate_keeps_the_reply_when_the_rewrite_still_trips(tmp_path) -> None:
-    llm = StubLLM("dasar goblok lagi")
-
-    assert (
-        run_regulate(limits_config(tmp_path), llm, "dasar goblok")
-        == "dasar goblok"
-    )
-
-
-def test_regulate_keeps_the_reply_when_the_model_fails(tmp_path) -> None:
-    assert (
-        run_regulate(limits_config(tmp_path), StubLLM(""), "dasar goblok")
-        == "dasar goblok"
-    )
-
-
-def test_regulate_collapses_extra_questions_except_in_professional_mode(tmp_path) -> None:
-    llm = StubLLM("capeknya di bagian mana?")
-    reply = "capek ya? terus gimana?"
-
-    assert run_regulate(limits_config(tmp_path), llm, reply) == "capeknya di bagian mana?"
-    assert llm.calls == 1
-    llm = StubLLM("capeknya di bagian mana?")
-    assert (
-        run_regulate(limits_config(tmp_path), llm, reply, is_professional=True) == reply
-    )
-    assert llm.calls == 0
-
-
-def test_a_mild_curse_stays_inside_the_level(tmp_path) -> None:
-    llm = StubLLM("harusnya nggak dipakai")
-    settings = CharacterConfig(enabled=True, toxicity=3, adult_memes=0)
-    reply = asyncio.run(
-        regulate(
-            llm,
-            replace(build_config(tmp_path), character=settings),
-            "anjir, capek banget",
-            latest="capek banget",
-            session="s",
-        )
-    )
-    assert reply == "anjir, capek banget"
     assert llm.calls == 0

@@ -1,6 +1,6 @@
 """ADR-0038: evidence before level, local policy, and affect kept out of the decision."""
 
-from eidesoul.engine.memory.evidence import classify, collect, decide
+from monoagens.engine.memory.evidence import classify, collect, decide
 
 
 def labels(text: str, language: str = "id") -> set[str]:
@@ -42,7 +42,7 @@ def test_ambiguous_text_goes_to_review_instead_of_a_guessed_level() -> None:
 
 
 def test_policy_cannot_lower_a_deterministic_floor() -> None:
-    from eidesoul.engine.memory.evidence import Evidence
+    from monoagens.engine.memory.evidence import Evidence
 
     evidence = [
         Evidence("regex", "pack-1", "d", "health", 1.0, (0, 1)),
@@ -89,7 +89,7 @@ def test_golden_set_reports_per_label_precision_and_recall() -> None:
 
 
 def test_classification_is_bounded_to_the_text_cap() -> None:
-    from eidesoul.engine.memory.evidence import MAX_CLASSIFY_CHARS
+    from monoagens.engine.memory.evidence import MAX_CLASSIFY_CHARS
 
     late = "aman. " * (MAX_CLASSIFY_CHARS // 6) + " password=secret"
     evidence, _ = collect(late, "id")
@@ -109,13 +109,13 @@ def test_entity_evidence_has_a_span_and_no_verdict() -> None:
 
 
 def test_entity_model_is_the_verified_artifact() -> None:
-    from eidesoul.engine.memory.evidence import ENTITY_MODEL_DIGEST, verify_entities
+    from monoagens.engine.memory.evidence import ENTITY_MODEL_DIGEST, verify_entities
 
     assert verify_entities() == ENTITY_MODEL_DIGEST
 
 
 def test_entity_model_fits_the_disk_cap() -> None:
-    from eidesoul.engine.memory.evidence import _entity_model_root
+    from monoagens.engine.memory.evidence import _entity_model_root
 
     size = sum(
         path.stat().st_size
@@ -128,7 +128,7 @@ def test_entity_model_fits_the_disk_cap() -> None:
 def test_one_shared_entity_model_and_no_optional_detector_is_loaded() -> None:
     import sys
 
-    from eidesoul.engine.memory.evidence import _entity_engine
+    from monoagens.engine.memory.evidence import _entity_engine
 
     assert _entity_engine() is _entity_engine()
     for name in ("gliner", "onnxruntime"):

@@ -1,4 +1,4 @@
-> Terjemahan turunan — jangan sunting; sumber: engine/0038-privacy-layers.md (sha256: e4efa0dbfa6e)
+> Terjemahan turunan — jangan sunting; sumber: engine/0038-privacy-layers.md (sha256: c6aca12d82a0)
 
 - **Status:** accepted
 - **Tanggal:** 2026-11-04
@@ -228,7 +228,7 @@ Sentimen dan afek adalah konteks, bukan kerahasiaan. Kalimat sedih tidak otomati
 kalimat datar tidak otomatis publik. Level menjawab "siapa yang boleh melihat ini", bukan
 "seberapa kuat pembicara merasakannya".
 
-- **Tidak ada jalur afek-ke-level.** Prototipe afek di `eidesoul/library/affect/` boleh membentuk
+- **Tidak ada jalur afek-ke-level.** Prototipe afek di `monoagens/library/affect/` boleh membentuk
   nada balasan, salience, atau jalur krisis; skornya tidak pernah masuk ke `level` atau verdict
   disclosure. Perubahan sentimen saja harus membuat level tetap.
 - **Proposisi, bukan kata sifat.** Detektor melaporkan label, span, dan skor untuk apa yang
@@ -396,14 +396,14 @@ Aturan tanpa test belum implemented; statusnya tetap draft.
 
 ## 10. Referensi kode
 
-- `eidesoul/engine/memory/privacy.py` — `clamp_level`, `PrivacyVerdict`, `AuditResult`,
+- `monoagens/engine/memory/privacy.py` — `clamp_level`, `PrivacyVerdict`, `AuditResult`,
   `PrivacyPolicy`.
-- `eidesoul/engine/access/privacy.py` — jalur review, audit, ask, dan disclosure agent-facing.
-- `eidesoul/engine/memory/store.py` — jalur labeling/capture dan penulisan level.
-- `eidesoul/engine/schema.py:575-620` — `memories.level` dan baris yang akan membawa
+- `monoagens/engine/access/privacy.py` — jalur review, audit, ask, dan disclosure agent-facing.
+- `monoagens/engine/memory/store.py` — jalur labeling/capture dan penulisan level.
+- `monoagens/engine/schema.py:575-620` — `memories.level` dan baris yang akan membawa
   `privacy_evidence`.
-- `eidesoul/engine/access/approvals.py` — kelanjutan L3/L4.
-- `eidesoul/engine/access/ledger.py` — action ledger yang membawa record keputusan.
+- `monoagens/engine/access/approvals.py` — kelanjutan L3/L4.
+- `monoagens/engine/access/ledger.py` — action ledger yang membawa record keputusan.
 - Eksternal: ICML 2026 `Confidence is Not Universal`
   (https://proceedings.mlr.press/v306/jang26a.html); SafeGPT (https://arxiv.org/html/2601.06366v3);
   OWASP LLM Top 10 2026 (https://www.forcepoint.com/blog/insights/owasp-llm-top-10); EU AI Act

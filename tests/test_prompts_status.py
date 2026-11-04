@@ -7,16 +7,18 @@ from dataclasses import replace
 import pytest
 from support import inbound_message, make_agent, make_runtime
 
-from eidesoul.engine.access.roles import Role
-from eidesoul.engine.config import PromptConfig
-from eidesoul.engine.runtime import RuntimeFacts
-from eidesoul.engine.soul import Soul, language_line, normalize_language
-from eidesoul.engine.turn.prompts import (
+from monoagens.engine.access.roles import Role
+from monoagens.engine.config import PromptConfig
+from monoagens.engine.runtime import RuntimeFacts
+from monoagens.engine.soul import Soul, language_line, normalize_language
+from monoagens.engine.turn.prompts import (
     PromptContext,
-    character_block,
     research_block,
     self_block,
     system_prompt,
+)
+from monoagens.engine.turn.prompts import (
+    voice_block as _voice_block,
 )
 
 
@@ -45,7 +47,7 @@ def test_system_prompt_is_english_with_self_and_roles(tmp_path) -> None:
     context = PromptContext(
         config=env.config,
         roles=(Role("member", description="Team member", context="Help the team."),),
-        runtime=RuntimeFacts(mode="primary", db_label="postgresql://db/eidesoul"),
+        runtime=RuntimeFacts(mode="primary", db_label="postgresql://db/monoagens"),
         body_section="## Interface\n- test",
     )
     prompt = system_prompt(env.config, context.roles, context=context)
@@ -63,8 +65,8 @@ def test_self_block_reports_runtime_facts(tmp_path) -> None:
     env = make_agent(tmp_path)
     runtime = RuntimeFacts(
         mode="primary",
-        db_label="postgresql://db:5432/eidesoul",
-        memory_status="mem0 (eidesoul_memories)",
+        db_label="postgresql://db:5432/monoagens",
+        memory_status="mem0 (monoagens_memories)",
         pending_approvals=2,
         gateways=("whatsapp", "cli"),
     )
@@ -72,7 +74,7 @@ def test_self_block_reports_runtime_facts(tmp_path) -> None:
     assert "Mode: primary" in block
     assert "Surface: whatsapp, cli" in block
     assert "Pending approvals: 2" in block
-    assert "postgresql://db:5432/eidesoul" in block
+    assert "postgresql://db:5432/monoagens" in block
 
 
 def test_status_and_whoami(tmp_path, monkeypatch) -> None:
@@ -192,25 +194,18 @@ def test_system_prompt_states_the_cross_room_policy(tmp_path) -> None:
     assert "The archive covers only this chat" not in prompt
 
 
-def test_character_block_reports_levels_target_and_patterns() -> None:
-    block = character_block((3, 2), jabs=2, patterns=["Balas sekali", " "], language="id"
-    )
+def test_voice_block_is_an_instruction_not_a_level_table() -> None:
+    from dataclasses import replace as _replace
 
-    assert "Toxicity level 3/4 for this turn." in block
-    assert "Adult memes 2/3:" in block
-    assert "At most 2 jab per turn" in block
-    assert "stay gentle: no curse at all" in block
-    assert "Hard floor no level unlocks" in block
-    assert block.count("\n- ") == 1
-    assert "## Room patterns (apply the move, never copy the wording):" in block
-    assert "Balas sekali" in block
+    from monoagens.engine.soul import VoiceConfig
 
-
-def test_character_block_gentle_floor() -> None:
-    gentle = character_block((1, 0), language="id")
-    assert "Toxicity level 1/4" in gentle
-    assert "## Room patterns" not in gentle
-    assert "No sexual or degrading material" in gentle
+    voice = VoiceConfig(profanity="free")
+    block = _voice_block(voice)
+    assert "may swear" in block
+    assert "0/4" not in block
+    assert "adult" not in block.lower()
+    quiet = _voice_block(_replace(voice, profanity="avoid"))
+    assert "avoid swearing" in quiet
 
 
 def test_research_block_forbids_interrogation_without_a_country() -> None:
@@ -230,13 +225,12 @@ def test_system_prompt_carries_the_character_and_research_blocks(tmp_path) -> No
         config=replace(env.agent.config, prompt=PromptConfig(max_chars=20000)),
         roles=roles,
         runtime=RuntimeFacts(),
-        limits=(1, 0),
         language="id",
         query="ada berita apa",
     )
     prompt = system_prompt(context.config, roles, context=context)
 
-    assert "Toxicity level 1/4" in prompt
+    assert "avoid swearing" in prompt
     assert "Research before asking" in prompt
-    assert "In a clearly joking room you may return one short jab" not in prompt
-    assert "but never start them yourself" not in prompt
+    assert "## Room patterns" not in prompt
+    assert "## Known facts" not in prompt

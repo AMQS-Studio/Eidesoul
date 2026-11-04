@@ -1,4 +1,4 @@
-> Terjemahan turunan — jangan sunting; sumber: engine/0011-crash-safety.md (sha256: 83e00e414d33)
+> Terjemahan turunan — jangan sunting; sumber: engine/0011-crash-safety.md (sha256: 6ebdf0049b29)
 > Teks ini ditulis manusia; baris yang tidak bisa diterjemahkan mesin disalin apa adanya ke sumber English, jadi sumber bercampur dua bahasa.
 
 # ADR-0011: Crash Safety & Durability — Antrean Transaksional, Klaim Job, Shutdown Rapi
@@ -98,7 +98,7 @@ Batas: `grace_seconds > drain_seconds + notice_seconds` dan `grace_seconds < sto
 ### 4.6 Higiene proses
 
 - `shell`/subprocess: `start_new_session=True` + kill process group saat shutdown.
-- Sandbox: container diberi label (`eidesoul.worker`, `eidesoul.turn`) untuk pembersihan; `--rm` tetap.
+- Sandbox: container diberi label (`monoagens.worker`, `monoagens.turn`) untuk pembersihan; `--rm` tetap.
 - Worker tidak memblokir event loop: DB dan MiniLM lewat thread/executor.
 
 ### 4.7 Yang tidak durable dan harus diputuskan
@@ -168,12 +168,12 @@ turns:
 
 ## 10. Referensi kode
 
-- `eidesoul/engine/agent.py:917-921` — spawn capture.
-- `eidesoul/engine/turn/context.py:210-225` — `WorkingMemory.append` fail-open.
-- `eidesoul/engine/db.py:95-145` — `connect`, `upsert`.
-- `eidesoul/engine/jobs/supervisor.py:36-129` — lifecycle primary/standby.
-- `eidesoul/engine/jobs/lease.py:103-129` — renew/release.
-- `eidesoul/engine/tools/shell.py:13-18` — subprocess tanpa process group.
+- `monoagens/engine/agent.py:917-921` — spawn capture.
+- `monoagens/engine/turn/context.py:210-225` — `WorkingMemory.append` fail-open.
+- `monoagens/engine/db.py:95-145` — `connect`, `upsert`.
+- `monoagens/engine/jobs/supervisor.py:36-129` — lifecycle primary/standby.
+- `monoagens/engine/jobs/lease.py:103-129` — renew/release.
+- `monoagens/engine/tools/shell.py:13-18` — subprocess tanpa process group.
 
 ---
 

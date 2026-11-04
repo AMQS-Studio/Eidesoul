@@ -1,6 +1,6 @@
 """Language selector contract: YAML `soul.language`, /language command, prompt line.
 
-Also the language-data contract (ADR-0000 §4.2): the packs under `eidesoul/library/lexicon/`
+Also the language-data contract (ADR-0000 §4.2): the packs under `monoagens/library/lexicon/`
 own every language-specific list, the engine holds no Indonesian literal from those lists, the
 pronoun resolves from the catalog, and a missing pack degrades without borrowing.
 """
@@ -16,17 +16,17 @@ import pytest
 import yaml
 from support import build_config, inbound_message, make_agent, make_runtime
 
-from eidesoul.engine import guard, i18n
-from eidesoul.engine.access.roles import Role
-from eidesoul.engine.character import lexicon
-from eidesoul.engine.soul import Soul, load_soul, normalize_language
-from eidesoul.engine.turn import salience
-from eidesoul.engine.turn.prompts import character_block, system_prompt
+from monoagens.engine import guard, i18n
+from monoagens.engine.access.roles import Role
+from monoagens.engine.character import lexicon
+from monoagens.engine.soul import Soul, load_soul, normalize_language
+from monoagens.engine.turn import salience
+from monoagens.engine.turn.prompts import system_prompt
 
 CHAT = "cli:local"
 ROOT = Path(__file__).resolve().parents[1]
-ENGINE = ROOT / "eidesoul" / "engine"
-LEXICON_DIR = ROOT / "eidesoul" / "library" / "lexicon"
+ENGINE = ROOT / "monoagens" / "engine"
+LEXICON_DIR = ROOT / "monoagens" / "library" / "lexicon"
 WORD_LISTS = ("negations", "stopwords", "assistant_tells", "injection")
 
 # Language data the pack schema does not model (register particles, style markers) plus the
@@ -63,11 +63,11 @@ def test_language_command_writes_soul_document_and_mirror(tmp_path, monkeypatch)
     mirror = yaml.safe_load(env.paths.soul_yaml.read_text(encoding="utf-8"))
     assert mirror["language"] == "en"
     assert run_language(env, "") == "🗣️ Reply language: en. Available: en, id."
-    assert run_command(env, "ping") == "🏓 Pong! Eidesoul is alive and ready."
+    assert run_command(env, "ping") == "🏓 Pong! MonoAgens is alive and ready."
 
     assert run_language(env, "id") == "🗣️ Bahasa balasan diatur ke id."
     assert env.agent.soul.language == "id"
-    assert run_command(env, "ping") == "🏓 Pong! Eidesoul hidup dan siap."
+    assert run_command(env, "ping") == "🏓 Pong! MonoAgens hidup dan siap."
 
 
 def test_language_command_rejects_unknown_language(tmp_path, monkeypatch) -> None:
@@ -176,14 +176,16 @@ def test_catalog_without_the_pronoun_key_fails_the_boot(tmp_path) -> None:
 
 
 def _catalog_messages(code: str) -> dict[str, str]:
-    body = yaml.safe_load((ROOT / "eidesoul" / "lang" / f"{code}.yaml").read_text(encoding="utf-8"))
+    body = yaml.safe_load(
+        (ROOT / "monoagens" / "lang" / f"{code}.yaml").read_text(encoding="utf-8")
+    )
     return body["messages"]
 
 
 def _handler_names() -> set[str]:
     folders = [
-        ROOT / "eidesoul" / "engine" / "commands",
-        *sorted((ROOT / "eidesoul" / "gateways").glob("*/commands")),
+        ROOT / "monoagens" / "engine" / "commands",
+        *sorted((ROOT / "monoagens" / "gateways").glob("*/commands")),
     ]
     names: set[str] = set()
     for folder in folders:
@@ -230,14 +232,9 @@ def test_language_packs_are_complete() -> None:
         assert pack.language == path.stem
         for key in WORD_LISTS:
             assert getattr(pack, key), (path.name, key)
-        for purpose in (
-            "quote_attribution",
-            "sticker_meaning",
-            "formal_words",
-            "curse_openers",
-            "self_reference",
-        ):
-            assert pack.example(purpose), (path.name, purpose)
+        assert pack.research_time, (path.name, "research_time")
+        assert pack.research_source, (path.name, "research_source")
+        assert pack.privacy_levels, (path.name, "privacy_levels")
     assert lexicon.load("id") is lexicon.load("id")
 
 
@@ -251,7 +248,7 @@ def test_missing_pack_degrades_and_never_borrows(tmp_path) -> None:
         assert pack.ok is False
         assert pack.negations == frozenset()
         assert pack.stopwords == frozenset()
-        assert pack.example("sticker_meaning") == ""
+        assert pack.research_time == frozenset()
         assert len(lexicon.warnings()) == 1
         assert "'en'" in lexicon.warnings()[0]
         # The id pack is present in the same folder and works; the en lookups never borrow it.
@@ -263,7 +260,7 @@ def test_missing_pack_degrades_and_never_borrows(tmp_path) -> None:
         assert guard.is_crisis("mau mati", "id") is True
         assert guard.is_crisis("mau mati", "en") is False
         assert guard.safe_text("api key abc", language="en") == ""
-        # Prompt examples are omitted, never taken from the other language.
+        # Detector lists are omitted, never taken from the other language.
         config = build_config(
             tmp_path / "cfg", soul=Soul(persona="p", language="en", locale="en-US", timezone="UTC")
         )
@@ -272,9 +269,8 @@ def test_missing_pack_degrades_and_never_borrows(tmp_path) -> None:
         assert "Never use formal or bookish phrasing in daily chat;" in prompt
         assert "Never open a reply with a curse:" in prompt
         assert "Only role=bot lines are words you actually typed." in prompt
-        assert "Attribute carefully" not in character_block((2, 1), language="en")
         # Without stopwords, block selection falls back to length (the longest block goes first).
-        from eidesoul.engine.turn.prompts import PromptPart
+        from monoagens.engine.turn.prompts import PromptPart
 
         blocks = [
             (PromptPart("base", False, 0, pinned=True, text="b" * 10), "b" * 10),

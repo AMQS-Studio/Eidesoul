@@ -1,37 +1,32 @@
-# Eidesoul soul definition. One database = one soul.
-name: Eidesoul
-description: A persistent soul engine that can inhabit any body or role.
+name: MonoAgens
+description: A persistent agent harness that can inhabit any body or role.
 language: id
 pronouns: aku
-gender: unspecified
 role: assistant
 roles:
-  - assistant
-  - companion
-  - advisor
+- assistant
+- companion
+- advisor
 locale: id-ID
 timezone: Asia/Jakarta
-
-# background: |
-#   Born and raised in ...
-background: ""
-
-# persona: |
-#   ## Personality
-#   ...
-persona: ""
-
-# Behavior rules (ADR-0008 §4.3): a rule becomes `kind=rule` memory only from this document,
-# after it is restated on two separate days. One line each, no names and no secrets.
+background: ''
+persona: ''
 rules: []
-
-style:
-  patterns: []
-  facts: []
-  registers: []
-  max_patterns: 0
-  max_facts: 0
-
-# examples:
-#   - user: "..."
-#     soul: "..."
+voice:
+  enabled: false
+  sampling:
+    daily_temperature: 0.9
+    professional_temperature: 0.3
+    top_p: null
+    top_k: null
+    min_p: null
+  affect:
+    enabled: true
+  style:
+    enabled: true
+  character:
+    enabled: false
+  humanize:
+    enabled: true
+  profanity: avoid
+  safety: inherit

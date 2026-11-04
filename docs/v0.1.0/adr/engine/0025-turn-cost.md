@@ -15,15 +15,15 @@
 
 | Fact | Evidence |
 |---|---|
-| All prompt blocks are joined into **one** system message, closed by the language line + `Date: ...` | `eidesoul/engine/turn/prompts.py:187,355-389` |
-| Block `self` holds `Mode`, `uptime`, `lease` — it changes without a soul/config change | `eidesoul/engine/turn/prompts.py:150-186` (`:170`) |
-| Blocks `topic`/`currents`/`style`/`person_style`/`skills` enter `COMPETING` and their order depends on salience | `eidesoul/engine/turn/salience.py:20-24,48-71`, `eidesoul/engine/turn/prompts.py:373-385` |
-| LLM calls per turn: decision, reply loop with tools, then two polish calls | `eidesoul/engine/agent.py:503,758,810,829` |
-| `polish` and `regulate` have no trigger: they are called every turn (unless empty) | `eidesoul/engine/character/character.py:122,293` |
-| Deterministic tells already exist but are not yet used as a gate | `eidesoul/engine/character/character.py:62,105` |
-| Guard against repeated calls: `repeat >= 3` for the same tool | `eidesoul/engine/llm.py:246-255` |
-| Today's budget = time (`run_budget_seconds`), not the number of calls | `eidesoul/engine/llm.py:160-200`, `eidesoul/engine/config.py:79` |
-| Affinity/session only via a provider header | `eidesoul/engine/llm.py:156,176,187,231`, `eidesoul/providers/openai.py:15` |
+| All prompt blocks are joined into **one** system message, closed by the language line + `Date: ...` | `monoagens/engine/turn/prompts.py:187,355-389` |
+| Block `self` holds `Mode`, `uptime`, `lease` — it changes without a soul/config change | `monoagens/engine/turn/prompts.py:150-186` (`:170`) |
+| Blocks `topic`/`currents`/`style`/`person_style`/`skills` enter `COMPETING` and their order depends on salience | `monoagens/engine/turn/salience.py:20-24,48-71`, `monoagens/engine/turn/prompts.py:373-385` |
+| LLM calls per turn: decision, reply loop with tools, then two polish calls | `monoagens/engine/agent.py:503,758,810,829` |
+| `polish` and `regulate` have no trigger: they are called every turn (unless empty) | `monoagens/engine/character/character.py:122,293` |
+| Deterministic tells already exist but are not yet used as a gate | `monoagens/engine/character/character.py:62,105` |
+| Guard against repeated calls: `repeat >= 3` for the same tool | `monoagens/engine/llm.py:246-255` |
+| Today's budget = time (`run_budget_seconds`), not the number of calls | `monoagens/engine/llm.py:160-200`, `monoagens/engine/config.py:79` |
+| Affinity/session only via a provider header | `monoagens/engine/llm.py:156,176,187,231`, `monoagens/providers/openai.py:15` |
 
 The consequences: the prompt prefix **changes every turn**, so provider prompt caching practically never hits; extra `polish`/`regulate` calls happen even when the draft is already clean or when `llm.run` ends in error; and there is no cost ceiling that can be explained to the operator.
 
@@ -61,14 +61,14 @@ The consequences: the prompt prefix **changes every turn**, so provider prompt c
 
 ### 4.3 `polish`/`regulate` gated by deterministic triggers
 
-- `polish` runs only if the draft triggers the tell check (`ASSISTANT_TELL`/`MARKDOWN`, `eidesoul/engine/character/character.py:62,105`).
+- `polish` runs only if the draft triggers the tell check (`ASSISTANT_TELL`/`MARKDOWN`, `monoagens/engine/character/character.py:62,105`).
 - `regulate` runs only when `polish` changes the text.
 - Neither runs when the draft is empty or when `llm.run` ends the turn with `error:`.
 - At most one polish call per turn.
 
 ### 4.4 Call ceiling per turn
 
-`engine.llm.max_calls_per_turn` (default **6**) counts **every** LLM call in one turn: decision + reply loop + polish. When the ceiling is reached: the tool loop stops, the turn closes with the answer already produced + one `notice:budget` (the message pattern already in `eidesoul/engine/llm.py:170-183`), with no retry and no silent cut. The episode is still judged (ADR-0020).
+`engine.llm.max_calls_per_turn` (default **6**) counts **every** LLM call in one turn: decision + reply loop + polish. When the ceiling is reached: the tool loop stops, the turn closes with the answer already produced + one `notice:budget` (the message pattern already in `monoagens/engine/llm.py:170-183`), with no retry and no silent cut. The episode is still judged (ADR-0020).
 
 ### 4.5 Token accounting stays with ADR-0019
 
@@ -133,18 +133,18 @@ engine:
 
 ## 10. Code references
 
-- `eidesoul/engine/turn/prompts.py:187` — `system_prompt` (where the stable/volatile split goes).
-- `eidesoul/engine/turn/prompts.py:355-389` — block assembly, `salience.select`, join, language line + `Date`.
-- `eidesoul/engine/turn/prompts.py:150-186` — `self_block` (mode/uptime/lease; the first candidate moves to the volatile block).
-- `eidesoul/engine/turn/prompts.py:141-147` — `roles_block`.
-- `eidesoul/engine/turn/salience.py:20-24,48-71` — `COMPETING`/`ORDER`/`select`.
-- `eidesoul/engine/agent.py:503,758,810,829` — decision, reply loop, `polish`, `regulate`.
-- `eidesoul/engine/character/character.py:62,105,122,293` — deterministic tells and the two polish functions.
-- `eidesoul/engine/llm.py:160-200` — the loop with `run_budget_seconds` and the budget message.
-- `eidesoul/engine/llm.py:246-255` — the guard for repeated tool calls (`repeat >= 3`).
-- `eidesoul/engine/llm.py:156,176,187,231` — `session_headers` per request.
-- `eidesoul/providers/openai.py:15` — `session_header="x-opencode-session"` (provider affinity).
-- `eidesoul/engine/config.py:69-81,161-163,202-204` — `LLMConfig`, `PromptConfig`, `CharacterConfig`.
+- `monoagens/engine/turn/prompts.py:187` — `system_prompt` (where the stable/volatile split goes).
+- `monoagens/engine/turn/prompts.py:355-389` — block assembly, `salience.select`, join, language line + `Date`.
+- `monoagens/engine/turn/prompts.py:150-186` — `self_block` (mode/uptime/lease; the first candidate moves to the volatile block).
+- `monoagens/engine/turn/prompts.py:141-147` — `roles_block`.
+- `monoagens/engine/turn/salience.py:20-24,48-71` — `COMPETING`/`ORDER`/`select`.
+- `monoagens/engine/agent.py:503,758,810,829` — decision, reply loop, `polish`, `regulate`.
+- `monoagens/engine/character/character.py:62,105,122,293` — deterministic tells and the two polish functions.
+- `monoagens/engine/llm.py:160-200` — the loop with `run_budget_seconds` and the budget message.
+- `monoagens/engine/llm.py:246-255` — the guard for repeated tool calls (`repeat >= 3`).
+- `monoagens/engine/llm.py:156,176,187,231` — `session_headers` per request.
+- `monoagens/providers/openai.py:15` — `session_header="x-opencode-session"` (provider affinity).
+- `monoagens/engine/config.py:69-81,161-163,202-204` — `LLMConfig`, `PromptConfig`, `CharacterConfig`.
 
 ---
 

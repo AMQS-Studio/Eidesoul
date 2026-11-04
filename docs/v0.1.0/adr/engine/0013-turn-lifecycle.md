@@ -8,7 +8,7 @@
 - **Supersedes:** —
 - **Related:** ADR-0011 (durability), ADR-0012 (fencing), ADR-0003 (worker), ADR-0004 (labeling)
 - **Location note:** ADR lives in `docs/v0.1.0/adr/engine/`; the Indonesian copy is `docs/v0.1.0/adr/engine/id/0013-turn-lifecycle.md`.
-- **Amendments:** 2026-11-02 — normalization of the skeleton (ADR-0009 §4.4): added Options considered, Decision (summary), and Interaction with other ADRs; numbering 3-14 shifted to 5-17. 2026-11-03 — audit: the range `supervisor.py` was corrected to `36-129`; the path `eidesoul/engine/gateways` was corrected to `eidesoul/gateways/`; the notice key was standardized to `resume_notice.after_seconds`; the stale line about ADR-0009 was aligned. 2026-11-03 — audit: the turn status `pending` (not in the enum) was replaced by `received`/`running`/`sending`/`interrupted`; the reaper claim uses `clock_timestamp()`; the ledger uses `scope_key`. 2026-11-03 — `send`/`send_to` are no longer called "tools"; both are engine actions (gateway), and `send_to` was once considered a synonym — correction 2026-11-03: `send` and `send_to` are **gateway tools** (`gateways/whatsapp/tools/`), not engine steps; what needs distinguishing is the automation step of ADR-0014. 2026-11-03 — ADR-0016 §4.1: the canonical table name is `turn_steps` (ADR-0009/0016), so the former `turn_actions` block is renamed and gains `step`/`started_at`/`finished_at` for the step history; the action columns stay. 2026-11-03 — §11 pacing is implemented as `Agent._select_resume`: round-robin across chats, `max_resume_per_chat` per room, and a rolling sixty-second budget in place of a fixed per-pass cap; unselected claims go back through `TurnStore.release` without burning an attempt, and `per_message_then_consolidate` expires the tail with `reason=consolidate` while a `turns.category` `action` turn is always selected on its own and never expired.
+- **Amendments:** 2026-11-02 — normalization of the skeleton (ADR-0009 §4.4): added Options considered, Decision (summary), and Interaction with other ADRs; numbering 3-14 shifted to 5-17. 2026-11-03 — audit: the range `supervisor.py` was corrected to `36-129`; the path `monoagens/engine/gateways` was corrected to `monoagens/gateways/`; the notice key was standardized to `resume_notice.after_seconds`; the stale line about ADR-0009 was aligned. 2026-11-03 — audit: the turn status `pending` (not in the enum) was replaced by `received`/`running`/`sending`/`interrupted`; the reaper claim uses `clock_timestamp()`; the ledger uses `scope_key`. 2026-11-03 — `send`/`send_to` are no longer called "tools"; both are engine actions (gateway), and `send_to` was once considered a synonym — correction 2026-11-03: `send` and `send_to` are **gateway tools** (`gateways/whatsapp/tools/`), not engine steps; what needs distinguishing is the automation step of ADR-0014. 2026-11-03 — ADR-0016 §4.1: the canonical table name is `turn_steps` (ADR-0009/0016), so the former `turn_actions` block is renamed and gains `step`/`started_at`/`finished_at` for the step history; the action columns stay. 2026-11-03 — §11 pacing is implemented as `Agent._select_resume`: round-robin across chats, `max_resume_per_chat` per room, and a rolling sixty-second budget in place of a fixed per-pass cap; unselected claims go back through `TurnStore.release` without burning an attempt, and `per_message_then_consolidate` expires the tail with `reason=consolidate` while a `turns.category` `action` turn is always selected on its own and never expired.
 
 ---
 
@@ -144,7 +144,7 @@ users); only the work that produces a reply is stopped.
 useless: the message is still written, only the reply is held back, and nobody needs it. It is
 deleted along with all of its mechanisms:
 
-- `eidesoul/engine/commands/stop.py` (the command and the alias `diam`);
+- `monoagens/engine/commands/stop.py` (the command and the alias `diam`);
 - `Agent.quiet` and the branch `agent.py:439-440` ("message recorded without a reply");
 - `reply.quiet_seconds` (config, `config.yaml`, admin template);
 - the i18n key `command.stop.*`;
@@ -316,12 +316,12 @@ Key meaning:
 
 ## 17. Code references
 
-- `eidesoul/engine/agent.py:413-926` — `handle` without a checkpoint.
-- `eidesoul/engine/agent.py:145-147` — `answered`/`backlog`/`quiet` in memory.
-- `eidesoul/engine/agent.py:881-905` — the chunk delivery loop and the `answered` marking.
-- `eidesoul/engine/jobs/supervisor.py:36-129` — shutdown/primary lifecycle.
-- `eidesoul/gateways/` — the intake that must be stopped while draining (outside the core; the core does not import it).
-- `eidesoul/engine/tools/__init__.py:182-240` — the single execution door (the idempotence classification point).
+- `monoagens/engine/agent.py:413-926` — `handle` without a checkpoint.
+- `monoagens/engine/agent.py:145-147` — `answered`/`backlog`/`quiet` in memory.
+- `monoagens/engine/agent.py:881-905` — the chunk delivery loop and the `answered` marking.
+- `monoagens/engine/jobs/supervisor.py:36-129` — shutdown/primary lifecycle.
+- `monoagens/gateways/` — the intake that must be stopped while draining (outside the core; the core does not import it).
+- `monoagens/engine/tools/__init__.py:182-240` — the single execution door (the idempotence classification point).
 
 ---
 

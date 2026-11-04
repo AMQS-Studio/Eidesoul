@@ -1,4 +1,4 @@
-> Terjemahan turunan — jangan sunting; sumber: engine/0016-schema-migration.md (sha256: 1bc1b9052454)
+> Terjemahan turunan — jangan sunting; sumber: engine/0016-schema-migration.md (sha256: abfa425d172f)
 > Teks ini ditulis manusia; baris yang tidak bisa diterjemahkan mesin disalin apa adanya ke sumber English, jadi sumber bercampur dua bahasa.
 
 # ADR-0016: Skema Kanonik & Migrasi — Satu DDL, Satu Baseline Alembic
@@ -17,7 +17,7 @@
 
 ## 1. Konteks
 
-- Repo punya **23 tabel** di satu `MetaData` (`eidesoul/engine/schema.py`), `SCHEMA_VERSION = 1`
+- Repo punya **23 tabel** di satu `MetaData` (`monoagens/engine/schema.py`), `SCHEMA_VERSION = 1`
   (`db.py:20`), dan `create_all` (`db.py:57-58`) yang menulis versi ke `schema_meta` (`db.py:63-65`).
   Tidak ada Alembic dan tidak ada jalur perubahan skema selain membuat tabel baru dari nol.
 - **DDL `memories` di ADR-0001 §4 tidak lagi cocok dengan keputusan turunannya.** Ia tidak memuat
@@ -365,12 +365,12 @@ database:
 
 ## 10. Referensi kode
 
-- `eidesoul/engine/db.py:20` — `SCHEMA_VERSION`.
-- `eidesoul/engine/db.py:57-58` — `create_all` (hanya DB kosong/test).
-- `eidesoul/engine/db.py:63-65` — penulisan versi ke `schema_meta`.
-- `eidesoul/engine/schema.py` — 23 tabel; `:270-290` `engine_lease`, `engine_control`.
-- `eidesoul/engine/memory/mem0.py:264-281` — metadata JSON yang hari ini menyimpan provenance di luar skema.
-- `eidesoul/engine/tools/settings.py:85-98` — skema config (bukan skema DB), preseden "sumber tunggal skema".
+- `monoagens/engine/db.py:20` — `SCHEMA_VERSION`.
+- `monoagens/engine/db.py:57-58` — `create_all` (hanya DB kosong/test).
+- `monoagens/engine/db.py:63-65` — penulisan versi ke `schema_meta`.
+- `monoagens/engine/schema.py` — 23 tabel; `:270-290` `engine_lease`, `engine_control`.
+- `monoagens/engine/memory/mem0.py:264-281` — metadata JSON yang hari ini menyimpan provenance di luar skema.
+- `monoagens/engine/tools/settings.py:85-98` — skema config (bukan skema DB), preseden "sumber tunggal skema".
 - Tidak ada `alembic.ini`/`migrations/` di repo — ini prasyarat, bukan keadaan sekarang.
 
 ---

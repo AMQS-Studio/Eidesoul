@@ -6,16 +6,16 @@ Hard rules for changes in this repo.
 
 - English is the default for all code, comments, docstrings, log messages, internal `error:`
   strings, CLI help, prompt scaffolding, model-facing payloads, config comments, tests, and docs.
-- Non-English is allowed only in these data surfaces: `eidesoul/lang/<code>.yaml` (chat catalogs),
-  `soul.yaml` persona content, `eidesoul/library/**` character/fact packs, `README.id.md`, and the
+- Non-English is allowed only in these data surfaces: `monoagens/lang/<code>.yaml` (chat catalogs),
+  `soul.yaml` persona content, detector data under `monoagens/library/**`, `README.id.md`, and the
   Indonesian ADR copies in `docs/v*/adr/id/**` (the ADRs themselves are English in `docs/v*/adr/`).
-- No hardcoded chat-visible string in code: call `t()` from `eidesoul/engine/i18n.py` and let the
+- No hardcoded chat-visible string in code: call `t()` from `monoagens/engine/i18n.py` and let the
   catalog supply the text. English code strings are internal diagnostics, never chat replies.
 
 ## Shape
 
 - Python only. The engine is not a server: no HTTP gateway, no Node/Baileys, no bridge. The web panel
-  is a separate operator app at the repo root (`panel/`), a different process that `eidesoul/engine/`
+  is a separate operator app at the repo root (`panel/`), a different process that `monoagens/engine/`
   never imports (ADR-0027).
 - Tracked docs are `TASK.md`, `README.md`, `README.id.md`, `LOG.md`, `AGENTS.md`, `soul.yaml`, and
   the ADR home `docs/v*/README.md` + `docs/v*/adr/**` (ADR-0009). An ADR sits at the ADR home root
@@ -29,50 +29,52 @@ Hard rules for changes in this repo.
   `inbound.py` (the body seam), `plugins.py`, `registry.py`, `llm.py`, `config.py`, `db.py`,
   `schema.py`, `embed.py`, `i18n.py`, `io.py`, `runtime.py`, `soul.py`, `self_knowledge.py`, `clock.py`, and
   `__init__.py` (a written map, no imports). Everything else lives in the folder that owns its reason
-  to change: `turn/` (context, decision, assembly, salience, prompts, reply, observability,
-  loop, intake, delivery, commands, steps, plugin_registration), `character/` (character,
-  knowledge, lexicon, patterns), `access/` (roles, permissions, identity, privacy, approvals,
-  relay, target), `jobs/` (cognition, automation_manifest, automation_store, automation_worker,
-  supervisor, lease, ambient, currents, mcp), plus the fixed contracts `memory/`, `stores/`,
+  to change: `turn/` (context, decision, assembly, salience, prompts, reply, research,
+  observability, loop, intake, delivery, commands, steps, plugin_registration), `character/`
+  (character, lexicon), `access/` (roles, permissions, identity, privacy, approvals, relay, target),
+  `jobs/` (cognition, automation_manifest, automation_store, automation_worker, supervisor, lease,
+  ambient, mcp), plus the fixed contracts `memory/`, `stores/`,
   `tools/`, `commands/`, `guard/`.
   `ablate.py` is a research tool, not engine code: it lives at `scripts/ablate_engine.py`.
 - A module has one reason to change and stays at or below 800 lines; a stateful module above that
   needs a line in the ADR that introduces it (ADR-0031 §4.1). A new engine module is allowed when it
   replaces one, splits a module over the cap, or the ADR names the reason (§4.5).
-- Core lives in `eidesoul/engine/` and must not import `eidesoul.gateways` or `neonize`.
-  Root `eidesoul/` only holds `__main__.py`, `admin/`, `gateways/`, `library/`, `lang/`, `providers/`,
+- Core lives in `monoagens/engine/` and must not import `monoagens.gateways` or `neonize`.
+  Root `monoagens/` only holds `__main__.py`, `admin/`, `gateways/`, `library/`, `lang/`, `providers/`,
   `vendor/`.
-- Core may import `eidesoul.providers`: that package holds endpoint and auth facts for the
-  selectable AI providers and nothing else, and it never imports an engine module. Select a
-  provider by name in `engine.llm.provider`; explicit `base_url`/`api_key_env` stay overrides.
-  Provider facts live one module per endpoint format (`openai.py`, `gemini.py`, `anthropic.py`).
-  Quirks are fields on `ProviderDefaults` (`session_header`, `api_key_optional`, `models_url`),
-  never provider-name comparisons in the engine. A different wire protocol needs an adapter in
-  `eidesoul/providers/` plus a seam in `llm.py`, never a data entry.
+- Core may import `monoagens.providers`: that package holds endpoint, auth, wire, and adapter facts
+  for the selectable AI providers, and it never imports an engine module. Select a provider by name
+  in `engine.llm.provider`; explicit `base_url`/`api_key_env` stay overrides. Provider facts live one
+  module per wire (`openai.py`, `gemini.py`, `anthropic.py`). Quirks and capabilities are fields on
+  `ProviderDefaults` (`session_header`, `api_key_optional`, `models_url`, `wire`,
+  `sampling_supported`, `safety_supported`), never provider-name comparisons in the engine. A
+  different wire protocol needs an adapter in `monoagens/providers/` plus the seam in `llm.py`, never
+  a data entry.
 - Never pin a model id in code: `engine.llm.model` is the operator's choice, written by
-  `eidesoul init --model` (list ids with `eidesoul models`) and required by the loader. Reasoning
+  `monoagens init --model` (list ids with `monoagens models`) and required by the loader. Reasoning
   effort is the same: `engine.llm.reasoning_effort` empty means the provider's own default, and no
   internal call may force a value.
 - Versioning stays honest about churn: while nothing is released, `pyproject.toml` carries a PEP 440
   dev version (`0.0.0.devN`), never a release-looking one; `uv.lock` mirrors it. The first release
   starts at `0.1.0`, then semver `MAJOR.MINOR.PATCH` with `aN`/`bN`/`rcN` pre-release suffixes.
   HTTP user agents carry no version.
-- Guard modules live only under `eidesoul/engine/guard/` (`patterns.py`, `policy.py`, `sandbox.py`);
+- Guard modules live only under `monoagens/engine/guard/` (`patterns.py`, `policy.py`, `sandbox.py`);
   callers import the package (`from .guard import ...`), never a module path inside it.
-- Eidesoul is a soul engine, not an agent product and not an assistant template. Assistant is one
-  role among companion, advisor, and robot embodiments.
+- MonoAgens is an agent; its runtime is a persistent agent harness (ADR-0040). Assistant is one
+  role among companion, advisor, and robot embodiments; the `soul` document names the internal
+  identity, never the product.
 - Tools are removable capabilities. The six core families (`shell`, `read`, `write`, `web_search`,
   `sandbox`, `mcp`) are examples; a robot or custom gateway exposes its body-specific actions in
-  `eidesoul/gateways/<name>/tools`, never in core. The engine never hardcodes a body or an agent loop.
-- A gateway is an appendage: transport only through the contract in `eidesoul/engine/inbound.py`
+  `monoagens/gateways/<name>/tools`, never in core. The engine never hardcodes a body or an agent loop.
+- A gateway is an appendage: transport only through the contract in `monoagens/engine/inbound.py`
   (`Inbound`, `Gateway`, `GatewayError`). Gateway-owned tools/commands live in
-  `eidesoul/gateways/<name>/tools|commands`, never in core.
+  `monoagens/gateways/<name>/tools|commands`, never in core.
 - The core holds no gateway or provider vocabulary: no transport address suffix test, no JID
   parsing, no provider name. Roles match `Inbound.person_id`, deletion and role comparison use the
   canonical form from `permissions.normalize`, the DM/group label is `Inbound.is_dm`,
   mentionability is `ChatMessage.sender_kind == "person"`, and gateways normalize their own
-  identities (`eidesoul/gateways/whatsapp/identity.py`). `engine.llm.provider` is required and has
-  no code default; `eidesoul init --provider` writes it.
+  identities (`monoagens/gateways/whatsapp/identity.py`). `engine.llm.provider` is required and has
+  no code default; `monoagens init --provider` writes it.
 - Every optional feature must be removable: extras in `pyproject.toml`, lazy imports, no core import
   of gateway or vendor libraries, no compatibility shims. Prefer deleting an optional path over
   carrying a fallback.
@@ -80,8 +82,8 @@ Hard rules for changes in this repo.
 ## Capability spine
 
 - The spine is required, never optional: Postgres+pgvector storage, Mem0 semantic memory, one shared
-  embedder (`eidesoul/engine/embed.py`, MiniLM, 384 dim), the affect prototypes under
-  `eidesoul/library/affect/`, the guard, and the lease. Transport and integrations stay extras
+  embedder (`monoagens/engine/embed.py`, MiniLM, 384 dim), the affect prototypes under
+  `monoagens/library/affect/`, the guard, and the lease. Transport and integrations stay extras
   (`whatsapp`, `google`).
 - A dependency the spine needs goes into `dependencies`, not into an extra; a feature that only a
   gateway or a body needs stays an extra. The Dockerfile installs `EXTRAS` (empty by default) on top
@@ -89,14 +91,14 @@ Hard rules for changes in this repo.
 
 ## Extending
 
-- A new tool is a module in `eidesoul/engine/tools/` with `TOOL = Handler(...)` and a family from
+- A new tool is a module in `monoagens/engine/tools/` with `TOOL = Handler(...)` and a family from
   `FAMILIES`; the filename must match `name`; never edit the registry.
-- A new command is a module in `eidesoul/engine/commands/` with `COMMAND = Handler(...)`; never edit
+- A new command is a module in `monoagens/engine/commands/` with `COMMAND = Handler(...)`; never edit
   the dispatcher.
 - Permissions come only from roles (`role:<name>` documents / the `roles.yaml` mirror). No handler
   has default permissions. A missing `tools`/`commands` entry denies everything. Tool permission is
-  checked only at `eidesoul/engine/tools/__init__.py:execute`.
-- Semantic memory only through Mem0 (`eidesoul/engine/memory/mem0.py`, `mem0ai`). The single write
+  checked only at `monoagens/engine/tools/__init__.py:execute`.
+- Semantic memory only through Mem0 (`monoagens/engine/memory/mem0.py`, `mem0ai`). The single write
   port is `MemoryStore` (ADR-0001): canonical writes go through it, reads go through
   `memories_readable`. It is not the pre-v1 store and must not grow a second semantic path —
   derivation stays in Mem0/reflection (ADR-0010). The action ledger stays `ActionLedger`;
@@ -108,19 +110,19 @@ Hard rules for changes in this repo.
   `soul.yaml` is seed plus mirror; there is no legacy persona file and no `persona` document.
 - Documents `engine`, `soul`, and `role:<name>` are the source of truth in the database;
   `config.yaml` (engine section), `soul.yaml`, and `roles.yaml` are seeds plus mirrors.
-  Manual edit → `eidesoul config import`. The loader must never create directories.
+  Manual edit → `monoagens config import`. The loader must never create directories.
 - Config layout: one host-local `config.yaml` holds host keys (`database`, `workspace`, `roles_file`,
   `soul_file`, `sandbox`, `web_search`, `mcp`, `sync_documents`) plus the `engine` and `gateways`
   sections. One `roles.yaml` holds every role. One `soul.yaml` holds the soul. There are no separate
   `engine.yaml`/`gateway.yaml`/`soul.yaml`-per-section files and no `roles/` directory.
 - Secrets only in `.env` (env names referenced from YAML); `config.yaml`, `roles.yaml`, `.env`, and
   any pre-v1 runtime data directory are never committed.
-- Storage: SQLAlchemy Core + `psycopg` to Postgres; one `Database` (`eidesoul/engine/db.py`) and one
-  `MetaData` (`eidesoul/engine/schema.py`). No `sqlite3`, `PRAGMA`, FTS5, or state files in stores.
+- Storage: SQLAlchemy Core + `psycopg` to Postgres; one `Database` (`monoagens/engine/db.py`) and one
+  `MetaData` (`monoagens/engine/schema.py`). No `sqlite3`, `PRAGMA`, FTS5, or state files in stores.
   Schema changes go through the Alembic chain in `migrations/` (`db upgrade`, primary-only);
   `create_all` is for an empty database and tests only. A library cache under the workspace (currently
   Mem0's `mem0_history.db`, ADR-0001) is derived: never read by the engine for truth, safe to lose.
-  A gateway session file (`gateways/whatsapp` `session_db`, default `.eidesoul/whatsapp.db`) is a
+  A gateway session file (`gateways/whatsapp` `session_db`, default `.monoagens/whatsapp.db`) is a
   host-local protocol artifact: one per instance, never shared, never read by the engine (contact
   import is read-only), and losing it costs a re-pair, not data. `SCHEMA_VERSION` mirrors the Alembic
   head. Message history is never there: it lives in Postgres (`messages`, `threads`, `thread_people`).
@@ -129,21 +131,28 @@ Hard rules for changes in this repo.
 
 ## Character data
 
-- Character data lives only in `eidesoul/library/` packs selected by `soul.style`
-  (`patterns` and `facts` pack ids, `registers`, `max_patterns`, `max_facts`). No pack selected means
-  no character data and no facts. No persona text and no raw transcripts in the core.
-- Pack ids match `^[a-z0-9][a-z0-9-]{0,63}$`. Pattern packs carry `version`, `model`, `language`,
-  `lexicon`, and `patterns`; fact packs carry `version`, `model`, `language`, and `facts`.
-- Never put names, phone numbers, URLs, or raw transcripts into a pattern pack. Every fact carries at
-  least one source URL. A fact is not a move: never move one between the two kinds.
-- Affect prototypes live in `eidesoul/library/affect/<language>.json`: exactly the eight
+- Character comes only from `soul.yaml`: `description`, `background`, `persona`, `examples`, and
+  `rules`. There is no runtime pattern pack, fact pack, resolver, or character level table
+  (ADR-0045). Do not reintroduce `library/patterns`, `library/facts`, or `library/severity`.
+- `soul.voice` is the one tuning block: master `enabled`, `sampling`, `affect`, `style`,
+  `character`, `humanize`, `profanity`, and `safety`. The master defaults off; `sampling`,
+  `profanity`, and `safety` are request-level. `engine.affect`, `engine.style`,
+  `engine.character`, `engine.humanize`, and `engine.llm.temperature` do not exist.
+- `soul.voice.profanity` is a prompt instruction (`free` or `avoid`), not a numeric toxicity table.
+  `soul.voice.safety` is `inherit` or `off`; `off` is accepted only when the selected wire reports a
+  request-level safety capability, and core harms stay blocked upstream.
+- The guard, sandbox, and approval policy stay in `engine.guard`; a persona never weakens them.
+- `library/lexicon` holds detector lists only: negations, stopwords, assistant tells, injection,
+  affirmations, laughter, particles, serious registers, research triggers, and privacy level words.
+  No prompt examples and no character-level map. Other detector data lives in `library/privacy/`,
+  `library/safety/`, `library/style/`, `library/affect/`, and `library/intent/`.
+- Stable common knowledge may come from the model prior. Current, specific, local, numeric, disputed,
+  or citation-required claims go through `web_search` and enter the prompt only as an ephemeral
+  `ResearchCard`; personal facts stay in Mem0; a failed search abstains (ADR-0043). Never add a
+  public-fact catalogue or a persistent research table.
+- Affect prototypes live in `monoagens/library/affect/<language>.json`: exactly the eight
   `EMOTION_VAD` labels, at least six short casual sentences each, never a name, URL, or phone number.
   `scripts/affect.py --check` gates them.
-- Edit packs with `scripts/patterns.py` and `scripts/fakta.py` (`--pack`, `--check`, then `--embed`);
-  grow new rows from the corpus with `scripts/grow.py`, never by hand.
-- `soul.style` is derived, not hand-tuned: `eidesoul library resolve` (or `eidesoul init`) writes it
-  from the soul text, gated by language, and never forces a pack. A kind without a match keeps the
-  packs the soul already selected.
 
 ## Licensing
 
@@ -161,7 +170,7 @@ Hard rules for changes in this repo.
   → `consent` (requester approves), shared or outside (`public/`, other rooms, host config,
   credentials) → `authorization` (approver role). `scope_proof` is computed at request and re-checked
   at execution, so a widened role reopens the approval. `approved=True` (`/approve`) bypasses both layers.
-- `administrator` is the protected top role (ADR-0022/0036): it must exist with `tools: "*"`, `memory_admin`, and `approve`; it cannot be deleted or renamed, only its `label` (address) may change, and only through `roles.yaml` + `eidesoul config import`. `protected: true` is refused on every other role. `users` holds `per_...` ids, never an address; a body never names a role. Bootstrap with `eidesoul people add <gateway> <address> --role administrator`, which links the identity and updates the role document plus its mirror.
+- `administrator` is the protected top role (ADR-0022/0036): it must exist with `tools: "*"`, `memory_admin`, and `approve`; it cannot be deleted or renamed, only its `label` (address) may change, and only through `roles.yaml` + `monoagens config import`. `protected: true` is refused on every other role. `users` holds `per_...` ids, never an address; a body never names a role. Bootstrap with `monoagens people add <gateway> <address> --role administrator`, which links the identity and updates the role document plus its mirror.
 - Sensitive actions (`shell`, `sandbox`) and internal changes (`settings`) must pass
   `SafetyPolicy`/`approvals` and `/approve`. Default mode `yolo`; `off` disables approval (document
   the risk). `/approve` never calls the LLM and re-checks role permissions.
@@ -172,7 +181,7 @@ Hard rules for changes in this repo.
 
 - Postgres is the memory system of record (`memories`, `memory_events`, `memory_uses`,
   `memory_tombstones`, `memory_index`); Mem0 is the extractor and vector index behind the port, never
-  the store of truth. `MemoryStore` (`eidesoul/engine/memory/store.py`) is the single write port, and
+  the store of truth. `MemoryStore` (`monoagens/engine/memory/store.py`) is the single write port, and
   reads for prompts go through `memories_readable` only. The state machine is
   `pending|ok|staged|failed|not_worth|superseded`, with `level NULL` meaning "must not be used".
 - Cross-thread identity: query only `global` + `person:<sender>` + `thread:<this thread>`; another
@@ -180,12 +189,12 @@ Hard rules for changes in this repo.
 - Memory carries a numeric privacy level 0-4 (public, team, personal, sensitive/aib, secret).
   Level 5/credentials are never stored. `owner_id` is the speaker who stated the fact; `subject_id`
   is who it is about and only that subject may veto it. Level maths, veto precedence, and disclosure
-  verdicts live in `eidesoul/engine/memory/privacy.py` (deterministic, no LLM). Evidence comes from
-  `eidesoul/engine/memory/evidence.py` (deterministic language pack, Presidio + `xx_ent_wiki_sm`
+  verdicts live in `monoagens/engine/memory/privacy.py` (deterministic, no LLM). Evidence comes from
+  `monoagens/engine/memory/evidence.py` (deterministic language pack, Presidio + `xx_ent_wiki_sm`
   NER, and the shared MiniLM centroid layer) and only its policy writes the level;
   `memories.privacy_evidence` and `privacy_policy` persist the record. The NER path verifies the
   model-tree digest, loads without the model vocabulary, and blocks torch/transformers during its
-  import; `entity` evidence carries a span and never a level. `eidesoul/engine/access/privacy.py` is
+  import; `entity` evidence carries a span and never a level. `monoagens/engine/access/privacy.py` is
   the only agent-facing hook and detects mentions locally; no memory text is sent to an external
   model. ADR-0038 is still partial because the shared PyTorch MiniLM makes the cold privacy stack
   exceed the §5.1 700 MiB cap; moving the shared embedder to int8/ONNX is the remaining budget fix.
@@ -195,11 +204,11 @@ Hard rules for changes in this repo.
 
 ## Language
 
-- Chat-visible strings live only in `eidesoul/lang/<code>.yaml`; `soul.language` selects the catalog,
+- Chat-visible strings live only in `monoagens/lang/<code>.yaml`; `soul.language` selects the catalog,
   so adding a language means adding one YAML file with the same `messages:` keys. `/language <code>`
   (administrator-only) writes the soul and its `soul.yaml` mirror.
 - Culture is data, not mechanism (ADR-0033). No language literal, country default, transport, or
-  vendor name in `eidesoul/engine/**`: word lists live in `eidesoul/library/<kind>/<lang>.json`,
+  vendor name in `monoagens/engine/**`: word lists live in `monoagens/library/<kind>/<lang>.json`,
   `language`, `locale`, and `timezone` are required values with no code default, and a plugin or
   gateway is named only in its own tree and manifest (a template writes `plugins: {}`). A handler
   declares its own `family`/`target`/`approval_class`; no name table decides a class. One clock
@@ -223,9 +232,9 @@ Hard rules for changes in this repo.
   operator pre-places verified code; otherwise the enable fails with one message and changes
   nothing. Disable keeps the files; remove deletes code and the config entry.
 - Google is a **plugin** (`google`, source tree `plugins/google/`), not a core tool and not an
-  extra: there is no `--extra google`, and `eidesoul/engine/tools/` holds no Google module. While
-  the plugin is absent or disabled the capability is `unavailable` (`eidesoul plugins list`,
-  `eidesoul selftest`) — never fabricated and never a plugin traceback; a role grant without code
+  extra: there is no `--extra google`, and `monoagens/engine/tools/` holds no Google module. While
+  the plugin is absent or disabled the capability is `unavailable` (`monoagens plugins list`,
+  `monoagens selftest`) — never fabricated and never a plugin traceback; a role grant without code
   is unavailable, not denied (ADR-0027 §4.3).
 - The image is the spine plus the core tools only (ADR-0027): it carries no gateway and no plugin
   dependency, so plugin `requires` never enters the image's locked set.
@@ -234,9 +243,9 @@ Hard rules for changes in this repo.
 
 ## Verify
 
-- `pytest -q` (with `EIDESOL_TEST_DATABASE_URL` set to the throwaway Postgres+pgvector store),
-  `ruff check eidesoul scripts tests plugins migrations`, `python -P scripts/types.py --check`
-  (the pyright ratchet; `-P` keeps `scripts/` off `sys.path`), `python -m eidesoul selftest`,
+- `pytest -q` (with `MONOAGENS_TEST_DATABASE_URL` set to the throwaway Postgres+pgvector store),
+  `ruff check monoagens scripts tests plugins migrations`, `python -P scripts/types.py --check`
+  (the pyright ratchet; `-P` keeps `scripts/` off `sys.path`), `python -m monoagens selftest`,
   `python scripts/adr.py --check`, `python scripts/adr.py --translate-check` (then `--stamp` after
   editing an English ADR), and `python scripts/selfcheck.py --check` (which also enforces the
-  ADR-0031 size caps). For gateway/lease changes also smoke `eidesoul console --takeover`.
+  ADR-0031 size caps). For gateway/lease changes also smoke `monoagens console --takeover`.

@@ -15,14 +15,14 @@
 
 | Fact | Evidence |
 |---|---|
-| `execute` runs the order name → permission → `fn` empty → safety/approval → execution; arguments are never checked | `eidesoul/engine/tools/__init__.py:182-239` |
-| The handler is called with `await spec.fn(args, ctx)` | `eidesoul/engine/tools/__init__.py:235` |
-| Commands are also `await`ed | `eidesoul/engine/agent.py:986` |
-| The argument schema is only checked **for its shape** at discovery (`parameters` dict, `type: object`, `properties` object) | `eidesoul/engine/registry.py:45-53`, `eidesoul/engine/registry.py:104-108` |
-| `validate()` checks name/alias/family/description, never the type of `fn` | `eidesoul/engine/registry.py:70-108` |
-| `shell` runs `create_subprocess_shell` without `env=` → the child inherits the process environment | `eidesoul/engine/tools/shell.py:10-26` |
-| `sandbox` already has a minimal env pattern (container + CLI client) | `eidesoul/engine/tools/sandbox.py:18-20,83-85,155` |
-| There is no `inspect.iscoroutinefunction` anywhere in `eidesoul/` | repository grep |
+| `execute` runs the order name → permission → `fn` empty → safety/approval → execution; arguments are never checked | `monoagens/engine/tools/__init__.py:182-239` |
+| The handler is called with `await spec.fn(args, ctx)` | `monoagens/engine/tools/__init__.py:235` |
+| Commands are also `await`ed | `monoagens/engine/agent.py:986` |
+| The argument schema is only checked **for its shape** at discovery (`parameters` dict, `type: object`, `properties` object) | `monoagens/engine/registry.py:45-53`, `monoagens/engine/registry.py:104-108` |
+| `validate()` checks name/alias/family/description, never the type of `fn` | `monoagens/engine/registry.py:70-108` |
+| `shell` runs `create_subprocess_shell` without `env=` → the child inherits the process environment | `monoagens/engine/tools/shell.py:10-26` |
+| `sandbox` already has a minimal env pattern (container + CLI client) | `monoagens/engine/tools/sandbox.py:18-20,83-85,155` |
+| There is no `inspect.iscoroutinefunction` anywhere in `monoagens/` | repository grep |
 
 The consequences today: an argument of the wrong type only fails **in the middle of the handler**, after side effects may have happened; a wrongly shaped schema is only discovered when the tool is used; and `shell` could read `OPENAI_API_KEY`/DSN only because it was in the parent environment.
 
@@ -65,11 +65,11 @@ A conscious deviation from JSON Schema: a foreign key is rejected by default; a 
 
 ### 4.5 Handlers must be coroutines
 
-`validate()` rejects a non-coroutine `fn` for tools **and** commands; the message names the file (`<source>.py: fn must be async`). The reason: both callers use `await` (`eidesoul/engine/tools/__init__.py:235`, `eidesoul/engine/agent.py:986`), so a synchronous handler is a bug that is cheaper to find at boot.
+`validate()` rejects a non-coroutine `fn` for tools **and** commands; the message names the file (`<source>.py: fn must be async`). The reason: both callers use `await` (`monoagens/engine/tools/__init__.py:235`, `monoagens/engine/agent.py:986`), so a synchronous handler is a bug that is cheaper to find at boot.
 
 ### 4.6 The shell `env` is computed, not inherited
 
-`shell` uses the whitelist `engine.shell.env` (default `PATH, HOME, LANG, TZ, XDG_RUNTIME_DIR, TMPDIR, TERM`) following the `client_env()` pattern in `eidesoul/engine/tools/sandbox.py:83-85`. The wildcard `*` is rejected at boot; the contents of `.env` are never passed to the child; a variable outside the whitelist does not participate even though it is in the process environment. `sandbox` does not change.
+`shell` uses the whitelist `engine.shell.env` (default `PATH, HOME, LANG, TZ, XDG_RUNTIME_DIR, TMPDIR, TERM`) following the `client_env()` pattern in `monoagens/engine/tools/sandbox.py:83-85`. The wildcard `*` is rejected at boot; the contents of `.env` are never passed to the child; a variable outside the whitelist does not participate even though it is in the process environment. `sandbox` does not change.
 
 ### 4.7 Boundary with credentials
 
@@ -128,16 +128,16 @@ There is no `tools.args: off`: disabling validation means reopening the hole thi
 
 ## 10. Code references
 
-- `eidesoul/engine/tools/__init__.py:182-239` — `execute`, the one door (where argument validation is inserted); `:235` `await spec.fn`.
-- `eidesoul/engine/tools/__init__.py:17-19` — `MAX_OUTPUT`/`MAX_ERROR`/`TRUNCATED`.
-- `eidesoul/engine/registry.py:45-53` — `_schema_errors` (schema shape).
-- `eidesoul/engine/registry.py:70-108` — `validate()` (where the coroutine check is added).
-- `eidesoul/engine/registry.py:148-182` — `discover`/`discover_many`.
-- `eidesoul/engine/registry.py:31` — `Handler.parameters`.
-- `eidesoul/engine/agent.py:986` — command dispatch `await handler.fn(ctx)`.
-- `eidesoul/engine/tools/shell.py:10-26` — `create_subprocess_shell` without `env`.
-- `eidesoul/engine/tools/sandbox.py:18-20,83-85,155` — the reused env whitelist pattern.
-- `eidesoul/engine/config.py:98-108` — `SandboxConfig`, the shape reference for the `shell` config block.
+- `monoagens/engine/tools/__init__.py:182-239` — `execute`, the one door (where argument validation is inserted); `:235` `await spec.fn`.
+- `monoagens/engine/tools/__init__.py:17-19` — `MAX_OUTPUT`/`MAX_ERROR`/`TRUNCATED`.
+- `monoagens/engine/registry.py:45-53` — `_schema_errors` (schema shape).
+- `monoagens/engine/registry.py:70-108` — `validate()` (where the coroutine check is added).
+- `monoagens/engine/registry.py:148-182` — `discover`/`discover_many`.
+- `monoagens/engine/registry.py:31` — `Handler.parameters`.
+- `monoagens/engine/agent.py:986` — command dispatch `await handler.fn(ctx)`.
+- `monoagens/engine/tools/shell.py:10-26` — `create_subprocess_shell` without `env`.
+- `monoagens/engine/tools/sandbox.py:18-20,83-85,155` — the reused env whitelist pattern.
+- `monoagens/engine/config.py:98-108` — `SandboxConfig`, the shape reference for the `shell` config block.
 
 ---
 

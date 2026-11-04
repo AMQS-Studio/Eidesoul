@@ -1,14 +1,53 @@
 # LOG
 
+## 2026-11-05 — ADR-0040..0045 implemented
+
+**Naming (ADR-0040)** — package `monoagens/`, CLI `monoagens`, distribution `monoagens`, state
+directory `.monoagens/`, environment prefix `MONOAGENS_`, wordmark MONOAGENS, and repository
+`github.com/AMQS-Studio/MonoAgens`. No alias package, shim, or dual CLI remains. `soul.yaml` and
+the `soul` document keep their internal names; historical ADR prose keeps the old product name.
+
+**Voice (ADR-0041/0045)** — one `soul.voice` block owns `sampling`, `affect`, `style`, `character`,
+`humanize`, `profanity`, and `safety`; `voice.enabled` is the master and defaults off. The old
+`engine.affect`, `engine.style`, `engine.character`, `engine.humanize`, and `engine.llm.temperature`
+keys are rejected. `library/patterns`, `library/facts`, `library/severity`, the resolver, the gender
+gate, and the character level table are deleted. Character is `persona` + `examples` + the model;
+`character.py` keeps polish only.
+
+**Sync (ADR-0042)** — `DocumentStore.sync()` compares file, DB doc, and last synced hash under a
+Postgres advisory lock, imports a changed file, exports a DB-only change, and keeps the DB on a
+conflict. It runs after seed on `run`, `console`, database seed, and the WhatsApp gateway. No new
+schema and no watcher; `config import`/`export` remain for forced direction.
+
+**Research (ADR-0043, partial)** — deterministic triggers from the language pack, an ephemeral
+`ResearchCard`, rendered untrusted evidence, citation and freshness verification, one correction
+attempt, and abstention. `library/facts` is gone. Automatic page-fetch enrichment and the 40-case
+eval fixture remain open, so the ADR is `partial`.
+
+**Providers (ADR-0044)** — every provider record carries a `wire`, sampling capability, and safety
+capability. OpenAI-compatible providers keep `AsyncOpenAI`; Google uses native
+`generateContent` with `safetySettings` (`OFF`), `topK`, function declarations, and normalized
+block reasons. `top_p`/`top_k`/`min_p` and `safety: off` fail at load when the selected wire cannot
+carry them. Anthropic native stays deferred by the ADR.
+
+**Init/docs** — the generated `config.yaml` has a comment above every key, the voice master is the
+only voice question, and the scaffold writes a commented `soul.voice` block. README, README.id,
+AGENTS, and TASK describe the new architecture.
+
+**Verification** — `pytest -q` 857 passed (plus the research regex/tagline focus rerun); `ruff check` clean; neutral gate
+clean; ADR check 46/46 (`implemented=41 partial=5 draft=0`) and translations clean; `uv lock`
+regenerated. ADR-0038's cold-stack budget remains the known partial.
+
+
 ## 2026-11-04 — ADR-0039 init terminal interface
 
-`eidesoul init` now starts at **Location**, shows the resolved directory before any write, and
+`monoagens init` now starts at **Location**, shows the resolved directory before any write, and
 navigates with `↑`/`↓`, `j`/`k`, `/` filter, Enter, `←` back, and Escape/Ctrl-C cancel. The
 provider picker uses operator labels while IDs and key variables stay in `providers`; the model
 picker reads the provider's served ids when reachable; the credential is masked and written only
 to `.env` at `0600`; `--api-key-file` is the headless equivalent. Review keeps secrets redacted.
-The `[logo]` placeholder is removed; the terminal renders the existing Eidesoul logo as
-generated ANSI half-block art (18x14 cells) beside the EIDESOUL wordmark. The product logo stays
+The `[logo]` placeholder is removed; the terminal renders the existing MonoAgens logo as
+generated ANSI half-block art (18x14 cells) beside the MONOAGENS wordmark. The product logo stays
 `assets/logo.png`; the setup does not redraw it. The writer and interaction are split:
 `admin/init.py` 443 lines, `admin/wizard.py` 472, `admin/terminal.py` 281. Tests cover the
 location step, credential masking, `--api-key-file`, lockup, filter, cancel, and line fallback.
@@ -26,7 +65,7 @@ has no private cap entries. Prompt blocks are one `PromptPart` registry with a f
 and metadata salience; plugins declare static prompt parts and the loader checks them before import.
 Skills gain a nullable `app` namespace above `scope`, threaded from the body hint through turns,
 episodes, retrieval, and writes. Roles are identity-only bundles: `protected` is administrator-only,
-`users` are `per_...`, the `roles` hint and CLI role are gone, and `eidesoul people add` is the
+`users` are `per_...`, the `roles` hint and CLI role are gone, and `monoagens people add` is the
 bootstrap. Privacy now classifies locally: `memory/evidence.py` returns detector/version/digest/
 label/score/span, a versioned policy writes the level, credentials drop, `ask` is policy-owned, and
 `memories.privacy_evidence`/`privacy_policy` persist the record. The auditor and pending-answer
@@ -81,7 +120,7 @@ the only reserved, protected name (no `admin` alias); `protected: true` is rejec
 role, and one `privileged(role)` predicate replaces the split `status`/prompt rules. Role selection
 becomes identity-only: the `roles` hint, `HINT_KEYS` entry, and `gateways.cli.role` go, so a body
 cannot claim authority. `users` must be `per_...` ids, the seed drops `Committee member`,
-`cari`/`memori`/`kirim`, and `google`, and a new `eidesoul people add <gateway> <address> --role
+`cari`/`memori`/`kirim`, and `google`, and a new `monoagens people add <gateway> <address> --role
 administrator` bootstraps the first administrator in one audited transaction. Additive union is
 documented; deny, inheritance, and per-room grants are out of scope.
 
@@ -210,7 +249,7 @@ rewording is free and a leaked transport or culture token fails.
 
 ## 2026-11-04 — Pyright is clean: zero errors, and the ratchet has nothing left to permit
 
-`pyright` over `eidesoul`, `admin`, `gateways`, and `scripts` reports **0 errors**, so
+`pyright` over `monoagens`, `admin`, `gateways`, and `scripts` reports **0 errors**, so
 `scripts/types-baseline.json` is now an empty object: the gate no longer allows a single diagnostic
 to appear. The 191 diagnostics were fixed as type narrowing only (guards, hoisted locals, precise
 annotations) across 40 files; no test was rewritten, and `ruff check` and the 851-test suite are
@@ -235,7 +274,7 @@ expression; `int()`/`float()` on a JSON scalar relied on `except (TypeError, Val
 methods needed `Callable`/`Awaitable` annotations; and the neonize/genai stubs accept no cast-free
 form, so those boundaries carry a `cast` with a one-line reason.
 
-**Verification** — `pyright` 0 errors; `ruff check eidesoul scripts tests plugins migrations` clean;
+**Verification** — `pyright` 0 errors; `ruff check monoagens scripts tests plugins migrations` clean;
 `pytest -q` 851 passed; `scripts/selfcheck.py --check` ok (`engine_modules=111`); `scripts/adr.py
 --check` 33/33 and `--translate-check` 33 files, 0 problems.
 
@@ -334,7 +373,7 @@ position over an unordered `IN (…)`.
 canonical write, `soul.rules` is the only source of `kind=rule`, and `sync_soul_rules` +
 `promote_soul_rules` require two UTC days of corroboration before a rule exists.
 
-**ADR-0005** — MiniLM remember/forget prototypes live in `eidesoul/library/intent/` with
+**ADR-0005** — MiniLM remember/forget prototypes live in `monoagens/library/intent/` with
 `scripts/intent.py --check` as their gate; the remember hint raises durability in capture, the
 deterministic "forget that …" path vetoes and forgets exactly one readable row or nothing at all,
 and the daily audit job purges with `memory.retention.purge.{grace_days,batch}`.
@@ -348,7 +387,7 @@ matching message, the condition reads that message's text and sender, gateway ca
 appear on `/status`, and `threads.gateway` makes delivery routing durable across restarts.
 
 **ADR-0020** — failed tool steps are recorded as `failed`, the episode signature names scope, tools,
-and target types, `eidesoul/engine/memory/efficiency.py` measures the evidence, and the ladder
+and target types, `monoagens/engine/memory/efficiency.py` measures the evidence, and the ladder
 applies keep/merge/promote/archive/propose as one deterministic action; a proposal is an approval
 and nothing else.
 
@@ -365,13 +404,13 @@ OK; `uv lock --check` clean.
 The installable unit was called `component` in code, config, and the CLI while ADR-0028 and the
 config map already said `plugin`. Collapsed to one term, with no alias and no shim.
 
-**Code** — `eidesoul/engine/components.py` is `eidesoul/engine/plugins.py`; `ComponentError`,
+**Code** — `monoagens/engine/components.py` is `monoagens/engine/plugins.py`; `ComponentError`,
 `Component`, `Loaded.components`, and `ComponentSettings` are `PluginError`, `Plugin`,
 `Loaded.plugins`, and `PluginLoader` (the per-plugin config row keeps its name `PluginSettings`).
-The synthetic import package is `eidesoul_plugin_<name>`. Config: `ComponentsConfig` →
+The synthetic import package is `monoagens_plugin_<name>`. Config: `ComponentsConfig` →
 `PluginConfig`, `HostConfig.components`/`Config.components` → `.plugin`, the YAML section is
 `plugin: {root, fetch, source}`, and the default install root is `<workspace>/plugins`. The CLI verb
-is `eidesoul plugins list|install|enable|disable|remove`, and the loader's own strings/audit
+is `monoagens plugins list|install|enable|disable|remove`, and the loader's own strings/audit
 literals follow (`invalid plugin name`, `plugin.fetch is false`, `plugin.source is not set`,
 `plugins cannot register gateways`, `log_action("plugin", ...)`, `config_changes.file = "plugin"`).
 
@@ -415,10 +454,10 @@ All 31 ADRs were re-read against the code before any of them was implemented. Th
 holds: 1 `implemented` (ADR-0009), 9 `partial`, 21 `draft`; no ADR claimed a mechanism the code does
 not have, so none was overstated. Three were **understated**: ADR-0000 still said "no engine change
 yet" although `send` already left the core for
-`eidesoul/gateways/whatsapp/tools/send.py`; ADR-0020 already had `skills`/`skill_files`/`skill_usage`
+`monoagens/gateways/whatsapp/tools/send.py`; ADR-0020 already had `skills`/`skill_files`/`skill_usage`
 and the `skill` tool; ADR-0018 already had `Gateway`/`GatewayError` in `inbound.py`. Stale §10 paths
 were corrected: ADR-0000 and ADR-0023 now name the gateway `send.py`, ADR-0027 names
-`eidesoul/engine/stores/documents.py`, and ADR-0027 §5's row key is `components.root`. The
+`monoagens/engine/stores/documents.py`, and ADR-0027 §5's row key is `components.root`. The
 Indonesian copies were edited on the same lines and re-stamped.
 **Verification** — `scripts/adr.py --check` 31/31 (implemented=1 partial=9 draft=21);
 `--translate-check` 31 files, 0 issues; `pytest -q` 541 passed before the audit (documentation only).
@@ -439,10 +478,10 @@ only; gate 31/31, copies 31/31.
 ## 2026-11-03 — On-machine install and interactive init (ADR-0030)
 
 Onboarding had exactly one path and it started with `podman compose up -d postgres`, while
-`eidesoul init` demanded flags (`__main__.py:709-714`). New **ADR-0030** decides the path: one
+`monoagens init` demanded flags (`__main__.py:709-714`). New **ADR-0030** decides the path: one
 `install.sh` at the repository root serving both stacks (native and compose), which never runs `sudo`
 (a missing package is printed, not installed), pins `uv` by SHA-256 when it is absent, runs
-`uv sync --locked` inside its own directory, then hands over to `init`; `eidesoul init` becomes
+`uv sync --locked` inside its own directory, then hands over to `init`; `monoagens init` becomes
 **interactive on a TTY** and **fails closed** off one, naming the flags it needs; the wizard carries
 **our own visual language** — a step rail, a review screen that shows every file and value (secrets as
 env names only), a receipt, and a reserved **logo slot** filled later. The studied Hermes bootstrap is a
@@ -467,14 +506,14 @@ code changed.
 
 ## 2026-11-03 — Defaults, not examples
 
-`config.example.yaml` and `.env.example` were **deleted**: `eidesoul/admin/templates.py` already is the
+`config.example.yaml` and `.env.example` were **deleted**: `monoagens/admin/templates.py` already is the
 single default source (`init` writes `config.yaml`, `roles.yaml`, `soul.yaml`, and `.env`, the last two
 `0600`), and the two example files only duplicated it — a key added to the template would drift away
 from a hand-kept copy. `compose.example.yaml` became a real **`compose.yaml`**: it runs as it stands,
 takes `POSTGRES_PASSWORD` from `.env`, builds the core image (`EXTRAS: ""`), and keeps the sandbox proxy
 behind a `sandbox` profile on a self-contained egress network instead of demanding `dokploy-network`.
 
-The `.env` seed no longer ships a placeholder password: `EIDESOL_DATABASE_URL=` and `POSTGRES_PASSWORD=`
+The `.env` seed no longer ships a placeholder password: `MONOAGENS_DATABASE_URL=` and `POSTGRES_PASSWORD=`
 are written as empty names, so a half-filled file cannot look like a working one. ADR-0027 §4.6 records
 the rule ("a file we ship must be usable as it stands: the default lives in code, `init` is the only
 writer, the panel writes through the same path"), with its own metrics and acceptance criteria; README
@@ -541,7 +580,7 @@ references and `Implementation` values are unchanged. What deliberately stays In
 tokens (`(untuk memories)`, `baris prosa`) that the gate matches.
 
 **Foundations** — **ADR-0000** (initial invariants, at the ADR home root) gathers the three rules that
-must precede any new body: surface shape (new trees live outside `eidesoul/`; the package keeps its six
+must precede any new body: surface shape (new trees live outside `monoagens/`; the package keeps its six
 subpackages), language data (per-language lexicon pack under `library/lexicon/`, pronoun default from the
 catalog, fixtures out of the package), and the embodiment-neutral seam (`Percept`/`Action` with
 body-declared `hints`, the mechanical `chat_id`→`thread_id` rename, and `send`/`chat_history` moving into
@@ -576,7 +615,7 @@ section after `Code references`, a stale copy, and any attempt to send fenced li
 ## 2026-11-01 — identity is runtime state, context is assembled state (`/reset` deleted)
 
 **Identity** — `people` keeps the person and the new `person_links` table maps `(gateway, address)`
-to an opaque `per_…` id (ten base32 characters, `eidesoul/engine/access/identity.py`). `Inbound` carries
+to an opaque `per_…` id (ten base32 characters, `monoagens/engine/access/identity.py`). `Inbound` carries
 `person_address` and the core fills `person_id` in `Agent.handle`; the WhatsApp ingress and the CLI
 gateway stopped computing an identity and `directory.resolve_person` is gone. `roles.*.users` holds
 only `per_…` ids (`RoleRegistry.for_person`), so no phone number lives in config any more.
@@ -588,7 +627,7 @@ confirm` detaches one address. The code names the surviving identity: the new ga
 re-keyed, `people` fields carried over) and `StyleStore.merge_people` moves the style bucket;
 `memory.rekey` moves Mem0 entries. `/whoami` shows `🪪 Identitas: <name> (<per_…>)`.
 
-**Adopt** — `eidesoul people list|link|unlink|adopt` is the operator surface. `adopt` collects every
+**Adopt** — `monoagens people list|link|unlink|adopt` is the operator surface. `adopt` collects every
 legacy id (`people`, `chat_people`, the google tables, style buckets, role `users`), resolves the new
 identity, folds the old one, rewrites the role documents plus the `roles.yaml` mirror, re-keys memory
 when Mem0 is available, and is idempotent.
@@ -611,7 +650,7 @@ read filter (the column and its write stay for deployed schemas), `WorkingMemory
 a scratch deployment seeded with a legacy owner ran `people adopt` (`6285111242960 -> per_…`),
 preserved name/trust/notes/chat_people/style, rewrote `roles.yaml`, and the second run migrated 0.
 
-## 2026-11-01 — neutral core: no gateway or provider vocabulary in `eidesoul/engine`
+## 2026-11-01 — neutral core: no gateway or provider vocabulary in `monoagens/engine`
 
 **Message facts** — `ChatMessage.sender_jid` is `sender_address`, and a new `sender_kind` (`"person"`
 when the transport can mention that address, `""` otherwise) carries mentionability. The gateway
@@ -622,7 +661,7 @@ strips `FACT_KEYS` before deciding a row is empty, so a fact alone never overwri
 
 **Canonical identities** — `permissions.normalize` is `strip().casefold()` and nothing else: the core
 no longer parses phone digits or JID domains. WhatsApp's digit rule moved verbatim to the new
-`eidesoul/gateways/whatsapp/identity.py` (`normalize_jid`), used by ingress, directory, history sync,
+`monoagens/gateways/whatsapp/identity.py` (`normalize_jid`), used by ingress, directory, history sync,
 and media. Roles now match `Inbound.person_id` (falling back to `sender_address`), so `roles.yaml`
 keeps its bare-digit owner entries; a gateway that leaves `person_id` empty must list full addresses.
 Deletion compares canonical addresses (`mark_deleted(by_address)`, `WorkingMemory`/`HistoryStore`)
@@ -640,7 +679,7 @@ JID".
 
 **Provider is the operator's** — `LLMConfig` defaults for `provider`, `base_url`, and `api_key_env`
 are blank, `_llm_config` raises `ConfigError` when `engine.llm.provider` is missing or when a
-provider without a default key has no `api_key_env`, and the scaffold follows: `eidesoul init
+provider without a default key has no `api_key_env`, and the scaffold follows: `monoagens init
 --provider <name>` is required, `templates.ENGINE["llm"]` ships blanks, and `.env` names only the
 chosen provider's key variable (`env_file`). Both README quickstarts show the flag.
 
@@ -674,7 +713,7 @@ reproduces every result exactly. `scripts/xlsx.ATTR` uses a possessive word run
 
 ## 2026-11-01 — v2: providers, guard package, capability spine, affect prototypes, soul resolver
 
-**Providers** — new `eidesoul/providers/` package holding only client/auth/default-model facts for
+**Providers** — new `monoagens/providers/` package holding only client/auth/default-model facts for
 the OpenAI-compatible endpoints (`opencode`, `openai`, `google`, `openrouter`, `groq`, `deepseek`,
 `ollama`, `custom`). `LLMConfig` gained `provider` as its first field, `load_config` resolves the
 name into `base_url`/`api_key_env`/`model` before building the config (explicit values still win,
@@ -682,19 +721,19 @@ name into `base_url`/`api_key_env`/`model` before building the config (explicit 
 `OLLAMA_API_KEY` for a local endpoint. `config.example.yaml` and the `init` template gained the
 `provider` key; Gemini is reached through its OpenAI-compatible endpoint.
 
-**Guard package** — `eidesoul/engine/guard.py`, `safety.py`, and `sandbox_guard.py` moved verbatim
-into `eidesoul/engine/guard/` as `patterns.py`, `policy.py`, and `sandbox.py`, and the package
+**Guard package** — `monoagens/engine/guard.py`, `safety.py`, and `sandbox_guard.py` moved verbatim
+into `monoagens/engine/guard/` as `patterns.py`, `policy.py`, and `sandbox.py`, and the package
 `__init__` re-exports the same public symbols, so `from . import guard` call sites in the agent,
 ambient, llm, privacy, and affect modules did not change. No shim: the three old modules are gone and
 `agent.py`, `tools/__init__.py`, and the two guard test modules import from the package.
 
-**One embedder** — `eidesoul/engine/embed.py` owns the MiniLM model, the 384 dimensions, and the
+**One embedder** — `monoagens/engine/embed.py` owns the MiniLM model, the 384 dimensions, and the
 cosine helper; patterns, facts, affect prototypes, the admin resolver, and Mem0 all share it, so the
 two private `_default_encoder` copies and three private cosine implementations are gone. Encoding
 runs without progress bars.
 
 **Affect prototypes** — the EmoSense classifier is replaced by multilingual prototype sentences in
-`eidesoul/library/affect/{id,en}.json` (`anger, anticipation, disgust, fear, joy, sadness, surprise,
+`monoagens/library/affect/{id,en}.json` (`anger, anticipation, disgust, fear, joy, sadness, surprise,
 trust`, six casual sentences each). `stores/vibe.py` now loads the bank, scores a message by the max
 cosine per label, and turns neutral input into `None` through a calibrated floor and margin
 (`0.73`/`0.063`, measured on the fixture sentences: neutral `0.54`, accepted `>= 0.92`).
@@ -710,11 +749,11 @@ regenerated (125 packages, no CUDA).
 
 **Soul and resolver** — `DEFAULT_SOUL_YAML` is identity only (`roles`, `style`, and the `examples`
 comment are gone); `load_soul` defaults `roles` to `(role,)` and the persona only lists other roles
-when there is more than one. New `eidesoul/admin/library.py` derives the style top-down:
+when there is more than one. New `monoagens/admin/library.py` derives the style top-down:
 `pack_profiles`, `packs_for(language)`, `suggest(text, packs, use_embedding=...)` (cosine tier with a
 floor and margin, then a keyword tier, never a forced pick), `seed_style` for `init`, and
-`resolve_soul` which rewrites `style:` while preserving every other key. `eidesoul library resolve
-[--explain] [--force]` writes `soul.yaml` and prints `next: eidesoul config import`.
+`resolve_soul` which rewrites `style:` while preserving every other key. `monoagens library resolve
+[--explain] [--force]` writes `soul.yaml` and prints `next: monoagens config import`.
 
 **License and credits** — Apache-2.0 `LICENSE` with `Copyright 2026 Abdul Muqsith`, PEP 639
 `license`/`license-files` metadata (setuptools floor raised to 77), an author, and a repository URL.
@@ -724,17 +763,17 @@ without a declared license say so.
 
 **Verification** — `pytest -q` 464 passed; `uv lock --check` clean; `scripts/affect.py --check`
 prints `labels=8 ok`; the prototype fixtures classify to `sadness`/`anger`/`joy`/`fear`/`trust` with
-`besok rapat jam sembilan` staying neutral; `eidesoul init` writes `style` with `jawatimur` and
-`indonesia` and no `roles`/`examples`; `eidesoul library resolve --explain --force` reports
+`besok rapat jam sembilan` staying neutral; `monoagens init` writes `style` with `jawatimur` and
+`indonesia` and no `roles`/`examples`; `monoagens library resolve --explain --force` reports
 `indonesia facts ... tokens: surabaya` and keeps `jawatimur`; a second call prints `style already
 set`; `selftest` OK and `STATUS` present.
 
 ## 2026-11-01 — v1: rebrand, soul.yaml, character library, sandbox guard
 
-**Brand** — the project is Eidesoul everywhere: package `eidesoul`, CLI `eidesoul`, default
-workspace `.eidesoul/workspace`, lock file `.eidesoul.lock`, LLM session names `eidesoul-*`, the
-GitHub repository renamed to `Eidesoul`, and the remote points at
-`https://github.com/inimuqsith/Eidesoul.git`. The external SonarCloud project key stays
+**Brand** — the project is MonoAgens everywhere: package `monoagens`, CLI `monoagens`, default
+workspace `.monoagens/workspace`, lock file `.monoagens.lock`, LLM session names `monoagens-*`, the
+GitHub repository renamed to `MonoAgens`, and the remote points at
+`https://github.com/inimuqsith/MonoAgens.git`. The external SonarCloud project key stays
 `sanka-agent` so the existing quality-gate history is preserved.
 
 **Clean cutover** — deleted the compatibility layer instead of carrying it: the config migrator,
@@ -750,7 +789,7 @@ validates pack ids, clamps the per-turn counts, and renders the persona in a fix
 `soul` document is authoritative and `soul.yaml` is seed plus mirror; the `persona` document is
 gone. `config.yaml` gained the `soul_file` host key and lost its `soul` section.
 
-**Character library** — `eidesoul/data/` became `eidesoul/library/`: the pattern pack is
+**Character library** — `monoagens/data/` became `monoagens/library/`: the pattern pack is
 `library/patterns/jawatimur.json` (+ `_vectors.json`) with `version`, `model`, `language`,
 `lexicon`, and `patterns`, and the fact pack is `library/facts/indonesia.json` (+ `_vectors.json`).
 Nothing is loaded unless `soul.style` selects a pack, so a fresh install carries no character data.
@@ -759,7 +798,7 @@ register allow-list, and every `say` line carrying brand text was replaced by a 
 `scripts/patterns.py`, `scripts/fakta.py`, and `scripts/grow.py` take `--pack` and keep every write
 inside the library.
 
-**Sandbox guard** — `eidesoul/engine/sandbox_guard.py` runs before any sandbox command reaches the
+**Sandbox guard** — `monoagens/engine/sandbox_guard.py` runs before any sandbox command reaches the
 container. Layer 1 is deterministic: host-escape and destructive patterns deny, over-long or
 sensitive commands ask for approval, plain read-only commands allow, everything else falls through.
 Layer 2 is one small fast classifier call with a timeout; an unusable answer, a timeout, and a
@@ -787,7 +826,7 @@ markers (deleted, view-once, undecryptable, attachments) are English, and the af
 translation with explicit anchors, `AGENTS.md` states the English default and the removability
 rules, `TASK.md` is the v1 checklist, and this entry replaces the earlier history.
 
-**Verification** — `pytest -q` 447 passed; `python -m eidesoul selftest` OK; `eidesoul init` writes
+**Verification** — `pytest -q` 447 passed; `python -m monoagens selftest` OK; `monoagens init` writes
 `soul.yaml` and no `SOUL.md`; `db upgrade` + `config import` + `config export` round-trip the soul
 document into `soul.yaml`; `/language en` writes the document and its mirror; `scripts/patterns.py
 --check` and `scripts/fakta.py --check` pass on the shipped packs; `uv lock --check` passes.

@@ -13,9 +13,9 @@
 
 ## 1. Context
 
-ADR-0030 made `eidesoul init` interactive and left a logo slot (`[logo]`) in the header. The wizard
+ADR-0030 made `monoagens init` interactive and left a logo slot (`[logo]`) in the header. The wizard
 it shipped is a linear sequence of line prompts: no arrow keys, no search, no back navigation, and
-no visible location step. `eidesoul init` from an arbitrary working directory therefore asks for
+no visible location step. `monoagens init` from an arbitrary working directory therefore asks for
 provider and model before the operator has confirmed where the files will land.
 
 The operator direction was explicit: study the Hermes setup, then build our own interaction and
@@ -61,7 +61,7 @@ wordmark, or asset is copied. The existing Eidesoul logo remains `assets/logo.pn
 
 The rail is `location · provider · credential · model · database · identity · voice layer`, followed
 by Review. The location step shows the resolved directory and the status of `config.yaml`,
-`roles.yaml`, `soul.yaml`, `.env`, and `.eidesoul/`. It offers `new`, `existing`, or `keep` /
+`roles.yaml`, `soul.yaml`, `.env`, and `.monoagens/`. It offers `new`, `existing`, or `keep` /
 `change` / `replace` through the existing decision screen. A path that is a file, or whose nearest
 existing ancestor is not writable, is rejected at the step. No directory is created before Apply.
 
@@ -87,7 +87,7 @@ number, an exact label, or an exact value, and a blank answer keeps the default.
 ### 4.3 Steps and operators
 
 1. **Provider** — operator label from `admin/provider_catalog.py`; the ID and key variable stay in
-   `eidesoul/providers`.
+   `monoagens/providers`.
 2. **Credential** — masked input for the provider's `api_key_env`; blank leaves `.env` for later.
    `--api-key-file PATH` is the headless equivalent, so a key never has to appear in shell history.
 3. **Model** — the provider's served ids when reachable, searchable; manual entry when the list is
@@ -151,10 +151,10 @@ No key is added to `config.yaml`. The API key value lives only in `.env`.
 
 ## 7. Acceptance criteria
 
-- [ ] `eidesoul init` on a POSIX TTY shows the EIDESOUL wordmark and the location-first rail.
+- [ ] `monoagens init` on a POSIX TTY shows the MONOAGENS wordmark and the location-first rail.
 - [ ] Provider and model pickers move with arrows, filter with `/`, select with Enter, and return with Left.
 - [ ] Escape and Ctrl-C leave no new file and no partial file.
-- [ ] A custom location writes all four host files and `.eidesoul/workspace` there.
+- [ ] A custom location writes all four host files and `.monoagens/workspace` there.
 - [ ] A path that is a file, or whose nearest existing ancestor is unwritable, fails at Location.
 - [ ] Review and Receipt show the location; Review never shows the API key or database password.
 - [ ] A masked credential lands only in `.env` at `0600`; `--api-key-file` does the same headlessly.
@@ -185,14 +185,14 @@ No key is added to `config.yaml`. The API key value lives only in `.env`.
 
 ## 10. Code references
 
-- `eidesoul/admin/init.py` — `Answers`, validation, `build()`, atomic `write_files()`, `banner()`.
-- `eidesoul/admin/wizard.py` — location, provider, credential, model, database, identity, voice,
+- `monoagens/admin/init.py` — `Answers`, validation, `build()`, atomic `write_files()`, `banner()`.
+- `monoagens/admin/wizard.py` — location, provider, credential, model, database, identity, voice,
   review, navigation, and the numbered fallback.
-- `eidesoul/admin/terminal.py` — curses radiolist, `/` filter, Back/Cancel, masked secret.
-- `eidesoul/admin/brand.py` — the wordmark, tagline, and ANSI cell parser; no replacement mark.
-- `eidesoul/admin/logo_art.py` — generated half-block rows from `assets/logo.png`.
-- `eidesoul/admin/provider_catalog.py` — operator labels and key-variable detail.
-- `eidesoul/__main__.py` — `--api-key-file` and the `init` dispatch.
+- `monoagens/admin/terminal.py` — curses radiolist, `/` filter, Back/Cancel, masked secret.
+- `monoagens/admin/brand.py` — the wordmark, tagline, and ANSI cell parser; no replacement mark.
+- `monoagens/admin/logo_art.py` — generated half-block rows from `assets/logo.png`.
+- `monoagens/admin/provider_catalog.py` — operator labels and key-variable detail.
+- `monoagens/__main__.py` — `--api-key-file` and the `init` dispatch.
 - `tests/test_init.py` — location, credential, lockup, filter, review, cancel, and fallback coverage.
 
 ---

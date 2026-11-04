@@ -6,15 +6,15 @@ import asyncio
 import pytest
 from support import build_config, role
 
-from eidesoul.engine.config import ConfigError, ShellConfig, _shell_config
-from eidesoul.engine.registry import Handler, validate
-from eidesoul.engine.tools import (
+from monoagens.engine.config import ConfigError, ShellConfig, _shell_config
+from monoagens.engine.registry import Handler, validate
+from monoagens.engine.tools import (
     ToolContext,
     argument_errors,
     execute,
     truncate,
 )
-from eidesoul.engine.tools.shell import child_env
+from monoagens.engine.tools.shell import child_env
 
 SCHEMA = {
     "type": "object",

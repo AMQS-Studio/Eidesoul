@@ -6,7 +6,7 @@
 - **Context:** follows ADR-0027 (clean by default), ADR-0031 (engine structure), ADR-0033 (neutral core), ADR-0039 (setup terminal), and ADR-0040 (naming); replaces the four top-level voice sections with one `engine.voice` section and makes the generated `config.yaml` self-documenting.
 - **Supersedes:** —
 - **Related:** ADR-0001 (memory source of truth), ADR-0027 (distribution), ADR-0031 (module structure), ADR-0033 (neutral core), ADR-0039 (setup terminal), ADR-0040 (naming)
-- **Implementation:** draft — the decision is recorded; the schema, the loader, and the commented template are not implemented in this ADR.
+- **Implementation:** implemented — location is `soul.voice` per ADR-0045; the master, commented template, and inert-by-default semantics are live.
 - **Location note:** the voice layer binds the engine runtime, so this ADR sits under `adr/engine/`. The Indonesian copy is `docs/v0.1.0/adr/engine/id/0041-voice-layer-off-by-default.md`.
 - **Location update:** ADR-0045 moves the section from `engine.voice` to `soul.voice`, removes the old `soul.style` pack block, and removes pack selection from the character part. Read every `engine.voice` path below as `soul.voice`; the master/off-by-default semantics still apply. Option E is no longer rejected: voice tuning is per-soul data.
 
@@ -89,7 +89,7 @@ default `true`, but the value is inert while the master is `false`. The old top-
 
 `engine.style` is renamed `engine.voice.rhythm` so the word `style` no longer names two different
 things. `soul.style` is unchanged: it remains the pack selection (`patterns`, `facts`, `registers`,
-`max_patterns`, `max_facts`) that `eidesoul library resolve` derives from the soul text.
+`max_patterns`, `max_facts`) that `monoagens library resolve` derives from the soul text.
 
 ### 4.2 Effective state
 
@@ -131,7 +131,7 @@ The generated `config.yaml` is self-documenting at every depth. The file is the 
   shape.
 - Comments are English, like the rest of the operator surface, and are generated from one source
   (`admin/templates.py`), so a default cannot drift between the comment and the dataclass tree.
-- Comments are ignored by the loader and by `eidesoul config import`; the file stays valid YAML.
+- Comments are ignored by the loader and by `monoagens config import`; the file stays valid YAML.
 
 The comment map is data keyed by the dotted path (`database.pool_size`,
 `engine.llm.retry.base_seconds`, `sandbox.image`, `gateways.cli.enabled`). A test walks the generated
@@ -190,16 +190,16 @@ No `parts` key is introduced. The old `engine.affect`, `engine.humanize`, `engin
 
 ## 8. Acceptance criteria
 
-- [ ] `engine.voice` is the only voice section; the four old top-level sections are gone.
-- [ ] `engine.voice.enabled` defaults to `false`; a sub-section is inert while the master is off.
-- [ ] No `parts` key exists in the config, the wizard, or the loader.
-- [ ] `engine.style` is renamed `engine.voice.rhythm`; `soul.style` is unchanged.
-- [ ] `--voice-layer` accepts only `off` and `on`; the wizard asks the master only.
-- [ ] `voice.character.enabled: false` disables both the polish pass and the pattern/fact selection.
-- [ ] `voice.humanize.enabled: false` produces one message with no typing or between-bubble delay.
-- [ ] The generated `config.yaml` has a comment on every key at every depth — host, engine, and gateways.
-- [ ] No key is bare; no section is an empty mapping without an explanatory comment.
-- [ ] `eidesoul config import` and the loader parse the commented file.
+- [x] `engine.voice` is the only voice section; the four old top-level sections are gone.
+- [x] `engine.voice.enabled` defaults to `false`; a sub-section is inert while the master is off.
+- [x] No `parts` key exists in the config, the wizard, or the loader.
+- [x] `engine.style` is renamed `engine.voice.rhythm`; `soul.style` is unchanged.
+- [x] `--voice-layer` accepts only `off` and `on`; the wizard asks the master only.
+- [x] `voice.character.enabled: false` disables both the polish pass and the pattern/fact selection.
+- [x] `voice.humanize.enabled: false` produces one message with no typing or between-bubble delay.
+- [x] The generated `config.yaml` has a comment on every key at every depth — host, engine, and gateways.
+- [x] No key is bare; no section is an empty mapping without an explanatory comment.
+- [x] `monoagens config import` and the loader parse the commented file.
 
 ## 9. Risks and mitigations
 
@@ -225,18 +225,18 @@ No `parts` key is introduced. The old `engine.affect`, `engine.humanize`, `engin
 
 ## 11. Code references
 
-- `eidesoul/admin/templates.py` — the commented `config.yaml` template and the comment map.
-- `eidesoul/engine/config.py` — `VoiceConfig`, the four sub-configs, and the loader fallbacks.
-- `eidesoul/engine/turn/loop.py` — the emotion, rhythm, character, and humanize call sites.
-- `eidesoul/engine/character/character.py` — the `polish`/`regulate` gate and the pattern/fact selection.
-- `eidesoul/engine/stores/affect.py` — the affect store, built only when `voice.emotion` is on.
-- `eidesoul/engine/stores/style.py` — the rhythm store, built only when `voice.rhythm` is on.
-- `eidesoul/engine/turn/reply.py` — `plan_chunks` and the humanize-off path.
-- `eidesoul/engine/turn/delivery.py` — `typing_delay` and the between-bubble delay.
-- `eidesoul/admin/init.py` — the master switch, `VOICE_PARTS`/`voice_off()` removal, and `build()`.
-- `eidesoul/admin/wizard.py` — the master-only voice prompt and its default.
-- `eidesoul/__main__.py` — the `--voice-layer` argument and its help text.
-- `eidesoul/engine/agent.py` — the `/status` configuration report for the voice parts.
+- `monoagens/admin/templates.py` — the commented `config.yaml` template and the comment map.
+- `monoagens/engine/config.py` — `VoiceConfig`, the four sub-configs, and the loader fallbacks.
+- `monoagens/engine/turn/loop.py` — the emotion, rhythm, character, and humanize call sites.
+- `monoagens/engine/character/character.py` — the `polish`/`regulate` gate and the pattern/fact selection.
+- `monoagens/engine/stores/affect.py` — the affect store, built only when `voice.emotion` is on.
+- `monoagens/engine/stores/style.py` — the rhythm store, built only when `voice.rhythm` is on.
+- `monoagens/engine/turn/reply.py` — `plan_chunks` and the humanize-off path.
+- `monoagens/engine/turn/delivery.py` — `typing_delay` and the between-bubble delay.
+- `monoagens/admin/init.py` — the master switch, `VOICE_PARTS`/`voice_off()` removal, and `build()`.
+- `monoagens/admin/wizard.py` — the master-only voice prompt and its default.
+- `monoagens/__main__.py` — the `--voice-layer` argument and its help text.
+- `monoagens/engine/agent.py` — the `/status` configuration report for the voice parts.
 - `README.md`, `README.id.md` — the voice-layer paragraph.
 - `tests/` — default-off, master-on, sub-off, commented-template, and one-message coverage.
 

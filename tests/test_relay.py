@@ -14,11 +14,11 @@ from sqlalchemy.exc import IntegrityError
 from support import inbound_message, make_agent, role, specs
 from test_whatsapp_gateway import FakeClient, make_gateway
 
-from eidesoul.engine.access.relay import MODES, RelayRefused, RelayStore
-from eidesoul.engine.inbound import Address
-from eidesoul.engine.schema import people, person_links, relay_grants
-from eidesoul.engine.tools import execute
-from eidesoul.gateways.whatsapp import directory
+from monoagens.engine.access.relay import MODES, RelayRefused, RelayStore
+from monoagens.engine.inbound import Address
+from monoagens.engine.schema import people, person_links, relay_grants
+from monoagens.engine.tools import execute
+from monoagens.gateways.whatsapp import directory
 
 TASK = "task-42"
 FROM = "per_b"

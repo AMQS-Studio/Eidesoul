@@ -6,10 +6,10 @@ cases:
     locale: en-US
     timezone: UTC
     section: ""
-    stable_prefix_hash: 50d69771e510194d
+    stable_prefix_hash: b035e3b6461e39e9
     expect_contains:
-      - "Toxicity level"
-      - "Hard floor no level unlocks"
+      - "Voice: avoid swearing"
+      - "Hard floor"
     expect_absent:
       - "DM"
       - "group chat"
@@ -22,7 +22,7 @@ cases:
     locale: en-US
     timezone: UTC
     section_from: cli
-    stable_prefix_hash: b58c4c9785a2d4b3
+    stable_prefix_hash: b2801456556f9797
     expect_contains:
       - "## CLI interface"
     expect_absent:
@@ -33,7 +33,7 @@ cases:
     locale: en-US
     timezone: UTC
     section: "## Room\nThis thread is shared with other people; another person may be addressed."
-    stable_prefix_hash: b14660b1ef7dd4c7
+    stable_prefix_hash: 676b83e56c5bc7c3
     expect_contains:
       - "This thread is shared"
     expect_absent:

@@ -1,4 +1,4 @@
-> Terjemahan turunan — jangan sunting; sumber: 0039-setup-terminal.md (sha256: eda4034c59fd)
+> Terjemahan turunan — jangan sunting; sumber: 0039-setup-terminal.md (sha256: b887874e7643)
 
 # ADR-0039: Init sebagai Antarmuka Terminal Kelas Satu
 
@@ -15,7 +15,7 @@
 
 ## 1. Konteks
 
-ADR-0030 membuat `eidesoul init` interaktif dan meninggalkan slot logo (`[logo]`). Wizard yang dikirim adalah urutan prompt baris: tanpa panah, tanpa pencarian, tanpa navigasi mundur, dan tanpa langkah lokasi yang terlihat. `eidesoul init` dari direktori kerja mana pun karena itu bertanya provider dan model sebelum operator mengonfirmasi di mana file akan mendarat.
+ADR-0030 membuat `monoagens init` interaktif dan meninggalkan slot logo (`[logo]`). Wizard yang dikirim adalah urutan prompt baris: tanpa panah, tanpa pencarian, tanpa navigasi mundur, dan tanpa langkah lokasi yang terlihat. `monoagens init` dari direktori kerja mana pun karena itu bertanya provider dan model sebelum operator mengonfirmasi di mana file akan mendarat.
 
 Arahan operator eksplisit: pelajari setup Hermes, lalu bangun interaksi dan identitas sendiri, bukan menyalin frame atau asetnya. Defect-nya konkret:
 
@@ -56,7 +56,7 @@ Hermes berlisensi MIT dan tetap hanya referensi disiplin interaksi. Tidak ada ko
 
 ### 4.1 Location adalah langkah pertama
 
-Rail-nya `location · provider · credential · model · database · identity · voice layer`, lalu Review. Langkah location menampilkan direktori hasil resolve dan status `config.yaml`, `roles.yaml`, `soul.yaml`, `.env`, dan `.eidesoul/`. Ia menawarkan `new`, `existing`, atau `keep` / `change` / `replace` lewat layar keputusan yang sudah ada. Path yang merupakan file, atau yang ancestor terdekatnya tidak writable, ditolak di langkah itu. Tidak ada direktori yang dibuat sebelum Apply.
+Rail-nya `location · provider · credential · model · database · identity · voice layer`, lalu Review. Langkah location menampilkan direktori hasil resolve dan status `config.yaml`, `roles.yaml`, `soul.yaml`, `.env`, dan `.monoagens/`. Ia menawarkan `new`, `existing`, atau `keep` / `change` / `replace` lewat layar keputusan yang sudah ada. Path yang merupakan file, atau yang ancestor terdekatnya tidak writable, ditolak di langkah itu. Tidak ada direktori yang dibuat sebelum Apply.
 
 `--dir PATH` mengisi jawaban; `--non-interactive` memakainya tanpa prompt. Path hasil resolve selalu tampil di Review dan Receipt.
 
@@ -76,7 +76,7 @@ Lapisan curses memakai standard library saja dan hanya jalan bila stdin dan stdo
 
 ### 4.3 Langkah dan operator
 
-1. **Provider** — label operator dari `admin/provider_catalog.py`; ID dan variabel key tetap di `eidesoul/providers`.
+1. **Provider** — label operator dari `admin/provider_catalog.py`; ID dan variabel key tetap di `monoagens/providers`.
 2. **Credential** — input termask untuk `api_key_env` provider; kosong meninggalkan `.env` untuk diisi nanti. `--api-key-file PATH` adalah padanan headless, jadi key tidak perlu muncul di shell history.
 3. **Model** — ID yang disajikan provider saat reachable, bisa dicari; entri manual saat daftar kosong atau tidak tersedia.
 4. **Database** — validasi URL Postgres yang ada; password tidak dirender di Review.
@@ -126,10 +126,10 @@ Tidak ada key yang ditambahkan ke `config.yaml`. Nilai API key hanya hidup di `.
 
 ## 7. Kriteria penerimaan
 
-- [ ] `eidesoul init` di TTY POSIX menampilkan wordmark EIDESOUL dan rail location-first.
+- [ ] `monoagens init` di TTY POSIX menampilkan wordmark MONOAGENS dan rail location-first.
 - [ ] Picker provider dan model bergerak dengan panah, memfilter dengan `/`, memilih dengan Enter, dan kembali dengan Left.
 - [ ] Escape dan Ctrl-C tidak meninggalkan file baru atau file parsial.
-- [ ] Location kustom menulis keempat host file dan `.eidesoul/workspace` di sana.
+- [ ] Location kustom menulis keempat host file dan `.monoagens/workspace` di sana.
 - [ ] Path yang merupakan file, atau ancestor terdekatnya tidak writable, gagal di Location.
 - [ ] Review dan Receipt menampilkan location; Review tidak pernah menampilkan API key atau password database.
 - [ ] Credential termask hanya mendarat di `.env` mode `0600`; `--api-key-file` melakukan hal yang sama secara headless.
@@ -158,13 +158,13 @@ Tidak ada key yang ditambahkan ke `config.yaml`. Nilai API key hanya hidup di `.
 
 ## 10. Referensi kode
 
-- `eidesoul/admin/init.py` — `Answers`, validasi, `build()`, `write_files()` atomik, `banner()`.
-- `eidesoul/admin/wizard.py` — location, provider, credential, model, database, identity, voice, review, navigasi, dan fallback bernomor.
-- `eidesoul/admin/terminal.py` — radiolist curses, filter `/`, Back/Cancel, secret termask.
-- `eidesoul/admin/brand.py` — wordmark, tagline, dan parser sel ANSI; tanpa mark pengganti.
-- `eidesoul/admin/logo_art.py` — baris half-block yang dihasilkan dari `assets/logo.png`.
-- `eidesoul/admin/provider_catalog.py` — label operator dan detail variabel key.
-- `eidesoul/__main__.py` — `--api-key-file` dan dispatch `init`.
+- `monoagens/admin/init.py` — `Answers`, validasi, `build()`, `write_files()` atomik, `banner()`.
+- `monoagens/admin/wizard.py` — location, provider, credential, model, database, identity, voice, review, navigasi, dan fallback bernomor.
+- `monoagens/admin/terminal.py` — radiolist curses, filter `/`, Back/Cancel, secret termask.
+- `monoagens/admin/brand.py` — wordmark, tagline, dan parser sel ANSI; tanpa mark pengganti.
+- `monoagens/admin/logo_art.py` — baris half-block yang dihasilkan dari `assets/logo.png`.
+- `monoagens/admin/provider_catalog.py` — label operator dan detail variabel key.
+- `monoagens/__main__.py` — `--api-key-file` dan dispatch `init`.
 - `tests/test_init.py` — location, credential, lockup, filter, review, cancel, dan fallback.
 
 ---

@@ -14,14 +14,14 @@ import pytest
 import yaml
 from support import build_config, database, inbound_message, make_agent
 
-from eidesoul.admin import templates
-from eidesoul.engine.access.permissions import (
+from monoagens.admin import templates
+from monoagens.engine.access.permissions import (
     command_allowed,
     command_patterns,
     tool_patterns,
     tools_for,
 )
-from eidesoul.engine.access.roles import (
+from monoagens.engine.access.roles import (
     LABEL_MAX,
     PROTECTED,
     Role,
@@ -29,9 +29,9 @@ from eidesoul.engine.access.roles import (
     assert_protected_roles,
     load_roles,
 )
-from eidesoul.engine.commands import REGISTRY as COMMANDS
-from eidesoul.engine.stores.documents import DocumentStore
-from eidesoul.engine.tools import REGISTRY as TOOLS
+from monoagens.engine.commands import REGISTRY as COMMANDS
+from monoagens.engine.stores.documents import DocumentStore
+from monoagens.engine.tools import REGISTRY as TOOLS
 
 ROOT = Path(__file__).resolve().parents[1]
 PERSON = "per_aaaaaaaaaa"
@@ -244,11 +244,11 @@ def test_shipped_role_surfaces_use_administrator() -> None:
 def test_no_owner_role_literal_in_the_role_surfaces() -> None:
     surfaces = (
         ROOT / "roles.yaml",
-        ROOT / "eidesoul" / "admin" / "templates.py",
-        ROOT / "eidesoul" / "engine" / "access" / "roles.py",
-        ROOT / "eidesoul" / "engine" / "access" / "permissions.py",
-        ROOT / "eidesoul" / "engine" / "commands" / "whoami.py",
-        ROOT / "eidesoul" / "engine" / "commands" / "approve.py",
+        ROOT / "monoagens" / "admin" / "templates.py",
+        ROOT / "monoagens" / "engine" / "access" / "roles.py",
+        ROOT / "monoagens" / "engine" / "access" / "permissions.py",
+        ROOT / "monoagens" / "engine" / "commands" / "whoami.py",
+        ROOT / "monoagens" / "engine" / "commands" / "approve.py",
     )
     found: list[str] = []
     for path in surfaces:
@@ -273,7 +273,7 @@ def _roles_file(tmp_path, roles: dict) -> DocumentStore:
 
 
 def test_people_add_bootstraps_an_administrator_and_writes_the_mirror(tmp_path) -> None:
-    from eidesoul.admin import people as admin_people
+    from monoagens.admin import people as admin_people
 
     config = build_config(tmp_path)
     db = database()
@@ -296,7 +296,7 @@ def test_people_add_bootstraps_an_administrator_and_writes_the_mirror(tmp_path) 
 
 
 def test_people_add_refuses_a_non_administrator_first_user(tmp_path) -> None:
-    from eidesoul.admin import people as admin_people
+    from monoagens.admin import people as admin_people
 
     config = build_config(tmp_path)
     db = database()

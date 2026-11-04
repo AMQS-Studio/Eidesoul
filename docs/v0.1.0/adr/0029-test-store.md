@@ -6,7 +6,7 @@
 - **Context:** follows ADR-0016 (canonical schema and migration), ADR-0001 (memory source of truth), ADR-0011 (crash safety), ADR-0012 (lease safety), ADR-0026 (search), ADR-0027 (distribution and default-off capability)
 - **Supersedes:** —
 - **Related:** ADR-0009 (the gate these tests run beside), ADR-0019 (observability), ADR-0021 / ADR-0024 (tool contracts)
-- **Implementation:** implemented — evidence: `tests/conftest.py`, `tests/support.py`, `tests/test_pgvector.py`, `eidesoul/engine/db.py`, `eidesoul/engine/schema.py`, `compose.yaml`; gate result: `pytest -q` 561 passed in 31 s on Postgres+pgvector, unset variable failure verified
+- **Implementation:** implemented — evidence: `tests/conftest.py`, `tests/support.py`, `tests/test_pgvector.py`, `monoagens/engine/db.py`, `monoagens/engine/schema.py`, `compose.yaml`; gate result: `pytest -q` 561 passed in 31 s on Postgres+pgvector, unset variable failure verified
 - **Location note:** this ADR binds every surface (it decides what "verified" means), so it sits at the root of the ADR home. The Indonesian copy is `docs/v0.1.0/adr/id/0029-test-store.md`.
 - **Amendments:** 2026-11-03 — first version.
 
@@ -18,12 +18,12 @@ The suite runs on SQLite today, which means several shipped mechanisms are **sim
 
 | Mechanism | Why SQLite cannot represent it | Evidence |
 |---|---|---|
-pgvector and Mem0 | semantic memory is skipped entirely on a SQLite URL | `eidesoul/engine/memory/__init__.py:178` |
-Upsert semantics | the code chooses a dialect-specific insert, so only one branch is exercised | `eidesoul/engine/db.py:12-13,123-124` |
+pgvector and Mem0 | semantic memory is skipped entirely on a SQLite URL | `monoagens/engine/memory/__init__.py:178` |
+Upsert semantics | the code chooses a dialect-specific insert, so only one branch is exercised | `monoagens/engine/db.py:12-13,123-124` |
 Real DDL and migration | tests build tables through `ensure()`/`ensure_schemas()`, never through the production `db upgrade` path | `tests/support.py:88,539` |
-`JSONB` behaviour | it degrades to plain JSON; containment and path operators are never exercised | `eidesoul/engine/schema.py:22` |
-Vector maintenance | `ensure_vector()` is best-effort and a no-op without the extension | `eidesoul/engine/db.py:76-90` |
-`timestamptz`, row locks, claim races | Postgres semantics with no SQLite equivalent (ADR-0011/0012) | `eidesoul/engine/db.py:46-49` |
+`JSONB` behaviour | it degrades to plain JSON; containment and path operators are never exercised | `monoagens/engine/schema.py:22` |
+Vector maintenance | `ensure_vector()` is best-effort and a no-op without the extension | `monoagens/engine/db.py:76-90` |
+`timestamptz`, row locks, claim races | Postgres semantics with no SQLite equivalent (ADR-0011/0012) | `monoagens/engine/db.py:46-49` |
 
 The cost of the switch is bounded because the dependence is centralised: 522 tests in 56 files, only five
 files mention SQLite, and the harness builds the store in one place (`tests/support.py:71,88,515,539`).
@@ -56,7 +56,7 @@ Fixing the harness moves the whole suite; keeping SQLite keeps a second, shipped
 
 The suite runs against **Postgres with `pgvector`**, the same store the engine ships with.
 
-- The DSN comes from `EIDESOL_TEST_DATABASE_URL`.
+- The DSN comes from `MONOAGENS_TEST_DATABASE_URL`.
 - When it is unset the suite **fails with that variable's name and the exact command to start a test
   database** — it never falls back to SQLite and never skips the store-backed tests.
 - The test database is a throwaway: it holds nothing an operator cares about, and it is never the dev or
@@ -84,8 +84,8 @@ The suite runs against **Postgres with `pgvector`**, the same store the engine s
 ### 4.4 SQLite is removed, not kept as a fallback
 
 - `tests/support.py` stops offering a SQLite URL and stops building a temporary config around it.
-- The dialect branches go with it: the insert-dialect choice in `eidesoul/engine/db.py`, the SQLite skip in
-  `eidesoul/engine/memory/__init__.py`, the integer-variant primary key in `eidesoul/engine/schema.py`,
+- The dialect branches go with it: the insert-dialect choice in `monoagens/engine/db.py`, the SQLite skip in
+  `monoagens/engine/memory/__init__.py`, the integer-variant primary key in `monoagens/engine/schema.py`,
   and the `"sqlite"` mention in the storage rule in `AGENTS.md`.
 - `JSONB` stays a Postgres type; nothing pretends to be portable any more.
 
@@ -97,17 +97,17 @@ fresh database owns that cost explicitly.
 
 ### 4.6 What still gates a change
 
-`pytest -q` (now store-backed), `python -m eidesoul selftest`, and `python scripts/adr.py --check` remain
+`pytest -q` (now store-backed), `python -m monoagens selftest`, and `python scripts/adr.py --check` remain
 the three gates. A change is not verified because SQLite said so, and not verified by a green subset.
 
 ## 5. Configuration
 
 | Key | Default | Meaning |
 |---|---|---|
-| `EIDESOL_TEST_DATABASE_URL` | unset → the suite fails with instructions | DSN of the throwaway test database |
-| `POSTGRES_DB` (compose) | `eidesoul` | parameterised so a test stack uses `eidesoul_test` |
+| `MONOAGENS_TEST_DATABASE_URL` | unset → the suite fails with instructions | DSN of the throwaway test database |
+| `POSTGRES_DB` (compose) | `monoagens` | parameterised so a test stack uses `monoagens_test` |
 | `POSTGRES_PORT` (compose) | `5432` | parameterised so a test stack can run beside dev on `5433` |
-| compose project | `eidesoul-test` for the test stack | separate volumes, separate network, separate database |
+| compose project | `monoagens-test` for the test stack | separate volumes, separate network, separate database |
 
 The dev stack keeps its own values; nothing here changes how an operator runs the engine.
 
@@ -115,7 +115,7 @@ The dev stack keeps its own values; nothing here changes how an operator runs th
 
 | Metric | Initial target |
 |---|---|
-| Dialect branches for a second store in `eidesoul/engine` | 0 |
+| Dialect branches for a second store in `monoagens/engine` | 0 |
 | Store-backed tests that can silently fall back to SQLite | 0 |
 | Mechanisms from §1 with no test on the real store | 0 (pgvector, upsert, `db upgrade`, JSONB, locks) |
 | Full-suite runtime | ≤ 180 s |
@@ -125,16 +125,16 @@ The dev stack keeps its own values; nothing here changes how an operator runs th
 
 ## 7. Acceptance criteria
 
-- [ ] `pytest -q` with `EIDESOL_TEST_DATABASE_URL` set runs the whole suite on Postgres+pgvector, and green means green on the shipped store.
+- [ ] `pytest -q` with `MONOAGENS_TEST_DATABASE_URL` set runs the whole suite on Postgres+pgvector, and green means green on the shipped store.
 - [ ] `pytest -q` without it fails with one message naming the variable and the compose command to start a test database; no test silently skips.
 - [ ] The session runs `db upgrade` (the production path) and `CREATE EXTENSION vector`; the schema it produces matches `SCHEMA_VERSION`.
 - [ ] At least one test asserts a pgvector nearest-neighbour result through the memory path (not through a hand-written SQL string in the test).
 - [ ] At least one test asserts `memory/__init__.py` no longer skips anything: the semantic path runs on the test store.
 - [ ] No test downloads a model: the embedder is the 384-dimension stub and the suite passes offline.
 - [ ] Two consecutive runs of the same test file produce identical results (truncation, no order dependence).
-- [ ] Grep finds no `sqlite` in `eidesoul/engine/**` and none in `tests/**`; `AGENTS.md` no longer calls SQLite a valid store for tests.
+- [ ] Grep finds no `sqlite` in `monoagens/engine/**` and none in `tests/**`; `AGENTS.md` no longer calls SQLite a valid store for tests.
 - [ ] Full-suite runtime is at or below the §6 budget on this workstation, measured once with the report pasted into the change.
-- [ ] `python -m eidesoul selftest` and `python scripts/adr.py --check` still pass.
+- [ ] `python -m monoagens selftest` and `python scripts/adr.py --check` still pass.
 
 ## 8. Risks and mitigations
 
@@ -160,10 +160,10 @@ The dev stack keeps its own values; nothing here changes how an operator runs th
 ## 10. Code references
 
 - `tests/support.py:71,88,515-539` — the SQLite DSN, the temporary config, and the helpers to replace.
-- `eidesoul/engine/db.py:12-13,46-49,76-90,123-124` — dialect branches, `ensure_vector()`, insert-dialect choice.
-- `eidesoul/engine/memory/__init__.py:178` — the SQLite skip that disappears with this ADR.
-- `eidesoul/engine/schema.py:22-24` — `JSONB` and the integer-variant primary key.
-- `compose.yaml` — `POSTGRES_DB` / `POSTGRES_PORT` parameterisation and the `eidesoul-test` project.
+- `monoagens/engine/db.py:12-13,46-49,76-90,123-124` — dialect branches, `ensure_vector()`, insert-dialect choice.
+- `monoagens/engine/memory/__init__.py:178` — the SQLite skip that disappears with this ADR.
+- `monoagens/engine/schema.py:22-24` — `JSONB` and the integer-variant primary key.
+- `compose.yaml` — `POSTGRES_DB` / `POSTGRES_PORT` parameterisation and the `monoagens-test` project.
 - `AGENTS.md` §Storage, §Verify — the rule text that this ADR amends at implementation time.
 - `pyproject.toml` — no new dependency: `pytest` is already the runner and no container library is introduced.
 

@@ -1,4 +1,4 @@
-> Terjemahan turunan — jangan sunting; sumber: engine/0045-character-without-local-packs.md (sha256: a0c95b9a2e15)
+> Terjemahan turunan — jangan sunting; sumber: engine/0045-character-without-local-packs.md (sha256: 666980bf600a)
 
 # ADR-0045: Karakter Tanpa Pack Lokal — Soul, Contoh, Tanpa Gerbang Gender, Tanpa Tabel Level
 
@@ -8,7 +8,7 @@
 - **Konteks:** mengikuti ADR-0008 (aturan), ADR-0025 (biaya turn), ADR-0033 (core netral), ADR-0034 (prompt parts), ADR-0038 (privasi), ADR-0041 (konfigurasi voice), ADR-0043 (kontrak riset), dan ADR-0044 (adapter wire provider); menghapus katalog karakter runtime, selector `soul.style`, pembedaan gender, dan tabel level karakter, serta memindahkan tuning voice ke `soul.voice`.
 - **Supersedes:** ADR-0041 (lokasi konfigurasi dan premis `soul.style` saja; semantik master/off-by-default tetap)
 - **Terkait:** ADR-0008 (integritas memori), ADR-0025 (biaya turn), ADR-0033 (core netral), ADR-0034 (prompt parts), ADR-0038 (privasi), ADR-0041 (konfigurasi voice), ADR-0043 (kontrak riset), ADR-0044 (adapter wire provider)
-- **Implementasi:** draft — keputusan dicatat; penghapusan pack, perubahan prompt, sampling mode, dan test belum diimplementasikan di ADR ini.
+- **Implementasi:** implemented — pack, resolver, gender, dan tabel level dihapus; `soul.voice` membawa tuning dan test mencakupnya.
 - **Catatan lokasi:** perubahan mengikat turn engine, jadi ADR ini duduk di `adr/engine/`. Salinan Indonesia di `docs/v0.1.0/adr/engine/id/0045-character-without-local-packs.md`.
 
 ---
@@ -110,7 +110,7 @@ bergantung padanya diganti.
 
 - `patterns`, `facts`, `registers`, `max_patterns`, dan `max_facts` keluar dari `soul.yaml`;
 - `SoulStyle`, `style_block()`, dan `_style()` keluar dari `soul.py`;
-- `eidesoul library resolve` dan `admin/library.py` dipensiunkan;
+- `monoagens library resolve` dan `admin/library.py` dipensiunkan;
 - `init` berhenti menulis blok `style:` dan berhenti menjalankan resolver;
 - blok `style:` tidak disimpan sebagai permukaan kompatibilitas kosong.
 
@@ -380,23 +380,23 @@ digerbangi capability adapter dari ADR-0044.
 
 ## 7. Kriteria penerimaan
 
-- [ ] Tidak ada jalur runtime yang membaca `library/patterns` atau `library/facts`.
-- [ ] `select_patterns()` dan `select_facts()` tidak ada lagi.
-- [ ] `soul.style` dan `eidesoul library resolve` tidak ada lagi.
-- [ ] Prompt karakter tidak punya blok room-pattern atau known-facts.
-- [ ] Jalur karakter tidak punya field gender, baris gender di prompt, atau target gender.
-- [ ] Jalur karakter tidak punya tabel toxicity/adult, pack severity, scan level, atau rewrite level.
-- [ ] `soul.voice.profanity` dan `soul.voice.safety` bisa dikonfigurasi per soul.
-- [ ] `engine.affect`, `engine.style`, `engine.character`, dan `engine.humanize` tidak ada lagi.
-- [ ] `soul.voice` punya sub-section sampling, affect, style, character, dan humanize.
-- [ ] Tidak ada temperature daily atau professional yang tersisa di `engine.llm`.
-- [ ] `voice.safety` adalah satu-satunya selector safety dan `off` gagal bila tidak didukung.
-- [ ] Blok `voice` yang tidak ada diselesaikan menjadi `profanity: avoid` dan `safety: inherit`.
-- [ ] `character.py` tetap memoles draft robotik dan mempertahankan fakta serta hasil tool.
-- [ ] Temperature daily dan professional bisa dikonfigurasi operator.
-- [ ] Mode professional tetap dipilih untuk task, bukan default percakapan biasa.
-- [ ] `affect`, `humanize`, level privasi, dan guard tool tetap bekerja.
-- [ ] Tidak ada library karakter eksternal atau dependensi runtime baru.
+- [x] Tidak ada jalur runtime yang membaca `library/patterns` atau `library/facts`.
+- [x] `select_patterns()` dan `select_facts()` tidak ada lagi.
+- [x] `soul.style` dan `monoagens library resolve` tidak ada lagi.
+- [x] Prompt karakter tidak punya blok room-pattern atau known-facts.
+- [x] Jalur karakter tidak punya field gender, baris gender di prompt, atau target gender.
+- [x] Jalur karakter tidak punya tabel toxicity/adult, pack severity, scan level, atau rewrite level.
+- [x] `soul.voice.profanity` dan `soul.voice.safety` bisa dikonfigurasi per soul.
+- [x] `engine.affect`, `engine.style`, `engine.character`, dan `engine.humanize` tidak ada lagi.
+- [x] `soul.voice` punya sub-section sampling, affect, style, character, dan humanize.
+- [x] Tidak ada temperature daily atau professional yang tersisa di `engine.llm`.
+- [x] `voice.safety` adalah satu-satunya selector safety dan `off` gagal bila tidak didukung.
+- [x] Blok `voice` yang tidak ada diselesaikan menjadi `profanity: avoid` dan `safety: inherit`.
+- [x] `character.py` tetap memoles draft robotik dan mempertahankan fakta serta hasil tool.
+- [x] Temperature daily dan professional bisa dikonfigurasi operator.
+- [x] Mode professional tetap dipilih untuk task, bukan default percakapan biasa.
+- [x] `affect`, `humanize`, level privasi, dan guard tool tetap bekerja.
+- [x] Tidak ada library karakter eksternal atau dependensi runtime baru.
 
 ## 8. Risiko dan mitigasi
 
@@ -433,30 +433,30 @@ digerbangi capability adapter dari ADR-0044.
 
 ## 10. Referensi kode
 
-- `eidesoul/engine/character/patterns.py:1-27` — katalog pattern lokal dan helper seleksinya.
-- `eidesoul/engine/character/knowledge.py:1-30` — katalog fakta lokal.
-- `eidesoul/engine/character/character.py:190-268` — `severity()`, `effective_limits()`, dan `over_level()`.
-- `eidesoul/engine/character/character.py:310-360` — `regulate()` dan jalur rewrite-nya.
-- `eidesoul/engine/character/lexicon.py:23-47` — key lexicon, termasuk `level_words` dan contoh prompt.
-- `eidesoul/engine/soul.py:49-55` — `SoulStyle`.
-- `eidesoul/engine/soul.py:95-109` — `style_block()`.
-- `eidesoul/engine/soul.py:255-285` — pemuatan soul dan assignment `style`.
-- `eidesoul/engine/turn/loop.py:16-17` — import `select_facts` dan `select_patterns`.
-- `eidesoul/engine/turn/loop.py:393-414` — seleksi pattern dan fact per turn.
-- `eidesoul/engine/turn/loop.py:534-579` — polish daily dan regulasi level.
-- `eidesoul/engine/turn/prompts.py:171-214` — `character_block()` dan teks level.
-- `eidesoul/engine/turn/prompts.py:442-449` — prompt part karakter.
-- `eidesoul/engine/turn/decision.py:25-26` — kontrak keputusan daily/professional.
-- `eidesoul/engine/turn/decision.py:392-397` — prompt identitas dengan baris gender.
-- `eidesoul/engine/config.py:582-614` — `AffectConfig`, `StyleConfig`, `CharacterConfig`, dan
+- `monoagens/engine/character/patterns.py:1-27` — katalog pattern lokal dan helper seleksinya.
+- `monoagens/engine/character/knowledge.py:1-30` — katalog fakta lokal.
+- `monoagens/engine/character/character.py:190-268` — `severity()`, `effective_limits()`, dan `over_level()`.
+- `monoagens/engine/character/character.py:310-360` — `regulate()` dan jalur rewrite-nya.
+- `monoagens/engine/character/lexicon.py:23-47` — key lexicon, termasuk `level_words` dan contoh prompt.
+- `monoagens/engine/soul.py:49-55` — `SoulStyle`.
+- `monoagens/engine/soul.py:95-109` — `style_block()`.
+- `monoagens/engine/soul.py:255-285` — pemuatan soul dan assignment `style`.
+- `monoagens/engine/turn/loop.py:16-17` — import `select_facts` dan `select_patterns`.
+- `monoagens/engine/turn/loop.py:393-414` — seleksi pattern dan fact per turn.
+- `monoagens/engine/turn/loop.py:534-579` — polish daily dan regulasi level.
+- `monoagens/engine/turn/prompts.py:171-214` — `character_block()` dan teks level.
+- `monoagens/engine/turn/prompts.py:442-449` — prompt part karakter.
+- `monoagens/engine/turn/decision.py:25-26` — kontrak keputusan daily/professional.
+- `monoagens/engine/turn/decision.py:392-397` — prompt identitas dengan baris gender.
+- `monoagens/engine/config.py:582-614` — `AffectConfig`, `StyleConfig`, `CharacterConfig`, dan
   `HumanizeConfig`.
-- `eidesoul/engine/config.py:1724-1732` — parsing config karakter.
-- `eidesoul/engine/soul.py:58-72` — field `Soul` yang akan membawa `voice`.
-- `eidesoul/engine/soul.py:255-285` — pemuatan soul dan assignment `voice` mendatang.
-- `eidesoul/__main__.py:102-111` — konstruksi `AffectStore`, `StyleStore`, dan `VibeRunner`.
-- `eidesoul/admin/library.py:1-27` — resolver pack.
-- `eidesoul/admin/templates.py:389` — blok style soul yang dihasilkan.
-- `eidesoul/__main__.py:600` — panggilan `library resolve`.
+- `monoagens/engine/config.py:1724-1732` — parsing config karakter.
+- `monoagens/engine/soul.py:58-72` — field `Soul` yang akan membawa `voice`.
+- `monoagens/engine/soul.py:255-285` — pemuatan soul dan assignment `voice` mendatang.
+- `monoagens/__main__.py:102-111` — konstruksi `AffectStore`, `StyleStore`, dan `VibeRunner`.
+- `monoagens/admin/library.py:1-27` — resolver pack.
+- `monoagens/admin/templates.py:389` — blok style soul yang dihasilkan.
+- `monoagens/__main__.py:600` — panggilan `library resolve`.
 - `tests/test_library.py` — cakupan seleksi pack.
 - `tests/test_resolver.py` — cakupan resolver.
 - `tests/test_character.py` — cakupan polish dan regulate.

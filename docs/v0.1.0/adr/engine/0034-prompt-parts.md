@@ -161,12 +161,12 @@ The gate:
 
 ## 10. Code references
 
-- `eidesoul/engine/turn/prompts.py:16,45,244,400,407,428` — `Prompt`, `_capability_index`, `system_prompt`, the two block dictionaries, and the fixed volatile tail.
-- `eidesoul/engine/turn/salience.py:11,12,13,26,53,68,75,87,90` — the name lists and every membership/index use.
-- `eidesoul/engine/agent.py:1101-1107,1184,1368-1372,1445-1464` — the emotion/vibe producers, the decision call, `character_block`, and the sixteen-argument assembly call.
-- `eidesoul/engine/llm.py:232-237` — the two system messages that make the split a cache decision.
-- `eidesoul/engine/inbound.py:220` — `prompt_section`, the cap, and the body contribution.
-- `eidesoul/engine/plugins.py:261-268,505-520` — `provides` parsing and `register()`; the extension point this ADR defines.
+- `monoagens/engine/turn/prompts.py:16,45,244,400,407,428` — `Prompt`, `_capability_index`, `system_prompt`, the two block dictionaries, and the fixed volatile tail.
+- `monoagens/engine/turn/salience.py:11,12,13,26,53,68,75,87,90` — the name lists and every membership/index use.
+- `monoagens/engine/agent.py:1101-1107,1184,1368-1372,1445-1464` — the emotion/vibe producers, the decision call, `character_block`, and the sixteen-argument assembly call.
+- `monoagens/engine/llm.py:232-237` — the two system messages that make the split a cache decision.
+- `monoagens/engine/inbound.py:220` — `prompt_section`, the cap, and the body contribution.
+- `monoagens/engine/plugins.py:261-268,505-520` — `provides` parsing and `register()`; the extension point this ADR defines.
 - `tests/test_salience.py:5,18,44,83-84` — the tests that import the name lists and will be rebuilt from fixtures.
 - `tests/test_prompt_contract.py`, `tests/data/prompt_cases.yaml` — the per-body property and stable-hash contract that must keep passing.
 

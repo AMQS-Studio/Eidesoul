@@ -1,4 +1,4 @@
-> Terjemahan turunan — jangan sunting; sumber: engine/0010-reflection-disputed.md (sha256: 31e4a1721961)
+> Terjemahan turunan — jangan sunting; sumber: engine/0010-reflection-disputed.md (sha256: 6f8c517709d4)
 > Teks ini ditulis manusia; baris yang tidak bisa diterjemahkan mesin disalin apa adanya ke sumber English, jadi sumber bercampur dua bahasa.
 
 # ADR-0010: Reflection, Kontradiksi & Status `disputed`
@@ -10,14 +10,14 @@
 - **Konteks:** melunasi utang ADR-0008 §4.9C (`disputed` ditunda ke sini) dan menutup slot terakhir antrean ADR-0001 §14
 - **Supersedes:** —
 - **Terkait:** ADR-0003 (worker & antrean), ADR-0004 (state `staged`), ADR-0005 (TTL/renewal), ADR-0006 (privasi grup), ADR-0007 (kelas izin), ADR-0008 (integritas), ADR-0013 (turn lifecycle), ADR-0014 (automation), ADR-0015 (payload), ADR-0019 (`llm_calls`), ADR-0020 (prosedur turunan)
-- **Amandemen:** 2026-11-03 — audit: path rujukan `capture_turn` diperbaiki menjadi `eidesoul/engine/access/privacy.py:222-303` (`memory/privacy.py` 71 baris, hanya `show`/`disclose`). 2026-11-03 — ambang promosi `staged` dinyatakan sebagai jumlah baris (≥2 baris `ok`), dibedakan dari ambang hari `corroboration_days` (ADR-0008); daftar `state` menunjuk ADR-0004 §5.1/enum ADR-0016. 2026-11-03 — audit: `refs`/`derive_depth`/`dispute_state` di §Referensi diberi label usulan (belum ada di repo).
+- **Amandemen:** 2026-11-03 — audit: path rujukan `capture_turn` diperbaiki menjadi `monoagens/engine/access/privacy.py:222-303` (`memory/privacy.py` 71 baris, hanya `show`/`disclose`). 2026-11-03 — ambang promosi `staged` dinyatakan sebagai jumlah baris (≥2 baris `ok`), dibedakan dari ambang hari `corroboration_days` (ADR-0008); daftar `state` menunjuk ADR-0004 §5.1/enum ADR-0016. 2026-11-03 — audit: `refs`/`derive_depth`/`dispute_state` di §Referensi diberi label usulan (belum ada di repo).
 - **Catatan lokasi:** ADR hidup di `docs/v0.1.0/adr/engine/`; salinan Indonesia di `docs/v0.1.0/adr/engine/id/0010-reflection-disputed.md`.
 
 ---
 
 ## 1. Konteks
 
-**Reflection belum ada wujudnya.** Di seluruh `eidesoul/engine` tidak ada satu pun modul reflection:
+**Reflection belum ada wujudnya.** Di seluruh `monoagens/engine` tidak ada satu pun modul reflection:
 `grep -iE 'reflect|rumina'` hanya menemukan `ambient.py:1` yang menyebut “summarise topics and
 research while idle”. Yang benar-benar berjalan sekarang adalah `Ambient` — loop latar yang, saat
 sebuah chat menganggur, membuat digest topik dan riset `web_search`, lalu menulis baris
@@ -253,7 +253,7 @@ Pass yang sama meninjau `staged` di scope itu:
 - Keterlihatan: `/status` menampilkan jumlah pass, tulisan, dispute dibuka/diselesaikan/di-`stale`,
   dan pertanyaan yang dikirim — angka, bukan narasi.
 - Tanpa LLM (`llm is None`) reflection tidak berjalan sama sekali; tidak ada jalur cadangan yang
-  menebak. Lapisan deterministik ada di `eidesoul/engine/memory/reflect.py`; pembungkus CLI manual belum dibuat.
+  menebak. Lapisan deterministik ada di `monoagens/engine/memory/reflect.py`; pembungkus CLI manual belum dibuat.
   untuk memeriksa kandidat tanpa menulis apa pun.
 
 ## 5. Konfigurasi
@@ -279,7 +279,7 @@ engine:
 ```
 
 Kunci ini bagian dari dokumen `engine` (seed `config.yaml`, mirror di DB); mengubahnya manual → 
-`eidesoul config import`.
+`monoagens config import`.
 
 ## 6. Metrik dan gate
 
@@ -352,20 +352,20 @@ Kunci ini bagian dari dokumen `engine` (seed `config.yaml`, mirror di DB); mengu
 
 ## 10. Referensi kode
 
-- `eidesoul/engine/jobs/ambient.py:1-4`, `:103-200`, `:203-315` — loop menganggur yang ada; batas “tidak pernah
+- `monoagens/engine/jobs/ambient.py:1-4`, `:103-200`, `:203-315` — loop menganggur yang ada; batas “tidak pernah
   mengirim pesan” dan bentuk tulisan `scope=chat, kind=note, source=ambient:<thread_id>`.
-- `eidesoul/engine/config.py:236-252` — `AmbientConfig` (preseden kunci anggaran: `tick_seconds`,
+- `monoagens/engine/config.py:236-252` — `AmbientConfig` (preseden kunci anggaran: `tick_seconds`,
   `idle_minutes`, `research_per_day`).
-- `eidesoul/engine/memory/mem0.py:340-392` — jalur metadata; `refs`, `derive_depth`, `dispute_state`
+- `monoagens/engine/memory/mem0.py:340-392` — jalur metadata; `refs`, `derive_depth`, `dispute_state`
   **usulan** (belum ada di repo; kolomnya di ADR-0016 §4.2). `:323-338` — supersede berbukti (ada).
-- `eidesoul/engine/access/privacy.py:222-303` — `capture_turn` (jalur masuk jawaban subjek);
-  `eidesoul/engine/memory/privacy.py:52-71` — `show`/`disclose`.
-- `eidesoul/engine/memory/context.py:91-133` — `render`/`build` (tempat penanda dispute ikut dirender).
-- `eidesoul/engine/commands/memori.py:15-23` — penanda `?` untuk baris belum dikonfirmasi (konvensi
+- `monoagens/engine/access/privacy.py:222-303` — `capture_turn` (jalur masuk jawaban subjek);
+  `monoagens/engine/memory/privacy.py:52-71` — `show`/`disclose`.
+- `monoagens/engine/memory/context.py:91-133` — `render`/`build` (tempat penanda dispute ikut dirender).
+- `monoagens/engine/commands/memori.py:15-23` — penanda `?` untuk baris belum dikonfirmasi (konvensi
   tampilan yang diperluas oleh `!`).
-- `eidesoul/engine/tools/memory.py` — tool aksi sadar (tetap jalur utama untuk “ingat/lupakan”).
-- `eidesoul/engine/commands/status.py` — tempat angka pass/tulisan/dispute/pertanyaan ditampilkan.
-- `eidesoul/engine/guard/patterns.py:11-26` — leksikon/pola yang dipakai lapisan deterministik.
+- `monoagens/engine/tools/memory.py` — tool aksi sadar (tetap jalur utama untuk “ingat/lupakan”).
+- `monoagens/engine/commands/status.py` — tempat angka pass/tulisan/dispute/pertanyaan ditampilkan.
+- `monoagens/engine/guard/patterns.py:11-26` — leksikon/pola yang dipakai lapisan deterministik.
 - `scripts/ablate.py:1-8` — preseden harness read-only; `scripts/replay.py:1-12` — harness skenario
   ber-rubric untuk menilai mutu pass reflection.
 - ADR-0003 §5.3-5.6 — antrean `cognition_jobs`, batching per scope, jalur Batch API.

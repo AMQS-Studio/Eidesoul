@@ -1,10 +1,10 @@
-> Terjemahan turunan — jangan sunting; sumber: engine/0015-capability-manifest.md (sha256: 69b4ac0bdfae)
+> Terjemahan turunan — jangan sunting; sumber: engine/0015-capability-manifest.md (sha256: 8295255518ee)
 > Teks ini ditulis manusia; baris yang tidak bisa diterjemahkan mesin disalin apa adanya ke sumber English, jadi sumber bercampur dua bahasa.
 
 # ADR-0015: Payload Bertingkat & Manifest Kapabilitas
 
 - **Status:** accepted
-- **Implementasi:** implemented — bukti: `eidesoul/engine/self_knowledge.py` (katalog/konfigurasi/perilaku/topologi), `tools/info.py`, `scripts/selfcheck.py --check`, allowlist dokumen default `README.md`, baca konfigurasi teredaksi, `tests/test_self_knowledge.py`; hasil gate: `selfcheck: ok — behaviors=6`
+- **Implementasi:** implemented — bukti: `monoagens/engine/self_knowledge.py` (katalog/konfigurasi/perilaku/topologi), `tools/info.py`, `scripts/selfcheck.py --check`, allowlist dokumen default `README.md`, baca konfigurasi teredaksi, `tests/test_self_knowledge.py`; hasil gate: `selfcheck: ok — behaviors=6`
 - **Tanggal:** 2026-11-02
 - **Deciders:** Muqsith (owner), omp (reviewer)
 - **Konteks:** lanjutan ADR-0006 (privasi grup), ADR-0007 (capability vs authorization), ADR-0008 (integritas & karantina), ADR-0014 (automation)
@@ -235,7 +235,7 @@ setiap payload, dan tanpa bisa basi saat arsitektur berubah.
 | `catalog` | `registry.discover` + `Handler.parameters` | skema sudah berbentuk JSON |
 | `config_schema` | `_schema_paths` atas dataclass (`tools/settings.py:85-98`) | dot-path + default, tanpa nilai |
 | `behavior` | satu modul `engine/self_knowledge.py` | satu-satunya prosa; tiap entri ber-anotasi `behavior:<id>` |
-| `topology` | `ast.parse` atas `eidesoul/engine/**.py` | peta dependensi; data yang sama dipakai test arsitektur AGENTS (`engine` tidak mengimpor `gateways`) |
+| `topology` | `ast.parse` atas `monoagens/engine/**.py` | peta dependensi; data yang sama dipakai test arsitektur AGENTS (`engine` tidak mengimpor `gateways`) |
 
 **Aturan supaya tidak basi:**
 
@@ -248,7 +248,7 @@ setiap payload, dan tanpa bisa basi saat arsitektur berubah.
    Batas `max_chars` per topik.
 
 **Penegakan (bukan disiplin)** — *menyusul bersama implementasi 0015; sampai `scripts/selfcheck.py` ada,
-butir di bawah ini belum ditegakkan mesin*: `scripts/selfcheck.py --check` + `eidesoul selftest`:
+butir di bawah ini belum ditegakkan mesin*: `scripts/selfcheck.py --check` + `monoagens selftest`:
 
 - setiap `behavior:<id>` terdaftar; hapus/rename perilaku tanpa memperbarui daftar → **gagal**;
 - setiap `config:`/`role:`/`registry` resolve ke kunci yang benar-benar ada;
@@ -451,22 +451,22 @@ engine:
 
 ## 10. Referensi kode
 
-- `eidesoul/engine/self_knowledge.py` — **modul baru**: empat generator (`catalog`, `config_schema`, `behavior`, `topology`) dan prosa `behavior:<id>`.
+- `monoagens/engine/self_knowledge.py` — **modul baru**: empat generator (`catalog`, `config_schema`, `behavior`, `topology`) dan prosa `behavior:<id>`.
 - `scripts/selfcheck.py` — **skrip baru**: verifikasi `behavior:<id>`, resolusi `config:`/`role:`/`registry`, daftar token terlarang, dan konsistensi `topology`.
-- `eidesoul/engine/registry.py:148` — `discover` (sumber tunggal katalog tool/command).
-- `eidesoul/engine/tools/settings.py:85-98` — `_schema_paths` (sumber tunggal skema config); `:294-297` — baca gratis tanpa approval.
+- `monoagens/engine/registry.py:148` — `discover` (sumber tunggal katalog tool/command).
+- `monoagens/engine/tools/settings.py:85-98` — `_schema_paths` (sumber tunggal skema config); `:294-297` — baca gratis tanpa approval.
 - `scripts/affect.py`, `scripts/patterns.py` — preseden pola “data + skrip penjaga” (`--check`).
 - `README.md`, `README.id.md` — sumber dokumen produk (indeks subjudul dihitung dari berkas ini).
-- `eidesoul/engine/tools/read.py:28-30` + `tools/__init__.py:120-165` — batas `workspace_roots` (alasan `read` tidak bisa menjangkau direktori proyek).
-- `eidesoul/engine/turn/prompts.py:150-186` — `self_block` (tempat redaksi infra).
-- `eidesoul/engine/turn/prompts.py:190-386` — `system_prompt`, daftar blok, `salience.select`, `language_line`, `Date`.
-- `eidesoul/engine/turn/salience.py:38-60` — `JOIN`, `block_score`, `select` (tempat blok pinned dilewatkan).
-- `eidesoul/engine/llm.py:150-260` — loop tool: `tools`/`by_name`, `kwargs["tools"]`, `execute`, budget, guard “repeated call”.
-- `eidesoul/engine/tools/__init__.py:180-235` — `execute` (satu gerbang izin) dan pesan error yang sudah menyebut nama tool.
-- `eidesoul/engine/access/permissions.py:56` + `eidesoul/engine/commands/help.py` — `commands_for` (sumber daftar command).
-- `eidesoul/engine/registry.py` — `Handler` (`name`, `description`, `usage`, `parameters`) sebagai sumber detail `info`.
-- `eidesoul/engine/turn/context.py:641-683` + `FOOTER` (`:55-58`) — format user content yang tidak berubah.
-- `eidesoul/engine/agent.py:279-283,759-788` — `_specs(roles)` dan perakitan `system_prompt`.
+- `monoagens/engine/tools/read.py:28-30` + `tools/__init__.py:120-165` — batas `workspace_roots` (alasan `read` tidak bisa menjangkau direktori proyek).
+- `monoagens/engine/turn/prompts.py:150-186` — `self_block` (tempat redaksi infra).
+- `monoagens/engine/turn/prompts.py:190-386` — `system_prompt`, daftar blok, `salience.select`, `language_line`, `Date`.
+- `monoagens/engine/turn/salience.py:38-60` — `JOIN`, `block_score`, `select` (tempat blok pinned dilewatkan).
+- `monoagens/engine/llm.py:150-260` — loop tool: `tools`/`by_name`, `kwargs["tools"]`, `execute`, budget, guard “repeated call”.
+- `monoagens/engine/tools/__init__.py:180-235` — `execute` (satu gerbang izin) dan pesan error yang sudah menyebut nama tool.
+- `monoagens/engine/access/permissions.py:56` + `monoagens/engine/commands/help.py` — `commands_for` (sumber daftar command).
+- `monoagens/engine/registry.py` — `Handler` (`name`, `description`, `usage`, `parameters`) sebagai sumber detail `info`.
+- `monoagens/engine/turn/context.py:641-683` + `FOOTER` (`:55-58`) — format user content yang tidak berubah.
+- `monoagens/engine/agent.py:279-283,759-788` — `_specs(roles)` dan perakitan `system_prompt`.
 
 ---
 

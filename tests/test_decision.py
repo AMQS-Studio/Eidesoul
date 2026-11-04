@@ -5,9 +5,9 @@ import asyncio
 
 from support import default_soul
 
-from eidesoul.engine.soul import Soul
-from eidesoul.engine.turn import decision as decision_module
-from eidesoul.engine.turn.decision import (
+from monoagens.engine.soul import Soul
+from monoagens.engine.turn import decision as decision_module
+from monoagens.engine.turn.decision import (
     Decision,
     build_context,
     decide,
@@ -90,7 +90,7 @@ def test_context_includes_emotion_relationship_and_transcript() -> None:
         thread_id="120@g.us",
         chat_name="panitia",
         current="Fahri: kamu culun",
-        transcript="Fahri: halo\nkamu (eidesoul): hai",
+        transcript="Fahri: halo\nkamu (monoagens): hai",
         emotion={
             "summary": "guarded, energized, balanced",
             "pulse": "strong hostility pulse",
@@ -117,7 +117,7 @@ def test_context_includes_emotion_relationship_and_transcript() -> None:
     assert "hostility: dihina (sakit)" in text
     assert "Fahri (member): baru, kesal 0.3" in text
     assert "Fahri: halo" in text
-    assert "kamu (eidesoul): hai" in text
+    assert "kamu (monoagens): hai" in text
     assert "Fahri: kamu culun" in text
     assert "addressed to you" in text
 
@@ -174,8 +174,8 @@ def test_decision_uses_one_llm_call_with_full_context() -> None:
                 language="id",
                 locale="id-ID",
                 timezone="UTC",
-                name="Eidesoul",
-                persona="Kamu Eidesoul.",
+                name="MonoAgens",
+                persona="Kamu MonoAgens.",
             ),
         )
     )
@@ -185,9 +185,9 @@ def test_decision_uses_one_llm_call_with_full_context() -> None:
     assert parsed.addressed == "other"
     assert len(llm.calls) == 1
     call = llm.calls[0]
-    assert call["session"] == "eidesoul-decision-120@g.us"
-    assert "Kamu Eidesoul." in call["system"]
-    assert "You are Eidesoul, a soul in chat." in call["system"]
+    assert call["session"] == "monoagens-decision-120@g.us"
+    assert "Kamu MonoAgens." in call["system"]
+    assert "You are MonoAgens, a soul in chat." in call["system"]
     assert "panitia" in call["user"]
     assert "Fahri: besok rapat jam 3" in call["user"]
 

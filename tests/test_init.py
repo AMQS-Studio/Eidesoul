@@ -13,9 +13,9 @@ import sys
 import pytest
 import yaml
 
-from eidesoul.__main__ import main
-from eidesoul.admin import brand, templates, terminal
-from eidesoul.admin import init as admin_init
+from monoagens.__main__ import main
+from monoagens.admin import brand, templates, terminal
+from monoagens.admin import init as admin_init
 
 
 def modes(folder) -> dict[str, int]:
@@ -63,7 +63,7 @@ def test_non_interactive_writes_the_four_files_with_modes(tmp_path):
     body = yaml.safe_load((tmp_path / "config.yaml").read_text(encoding="utf-8"))
     assert body["engine"]["llm"]["provider"] == "openai"
     assert body["engine"]["llm"]["model"] == "operator-model"
-    assert (tmp_path / ".eidesoul" / "workspace").is_dir()
+    assert (tmp_path / ".monoagens" / "workspace").is_dir()
 
 
 def test_piped_init_fails_closed_and_names_the_flags(tmp_path, monkeypatch, capsys):
@@ -128,11 +128,12 @@ def test_a_non_interactive_cli_run_writes_into_dir_with_every_flag(tmp_path, cap
         ".env": 0o600,
     }
     config = yaml.safe_load((tmp_path / "config.yaml").read_text(encoding="utf-8"))
-    assert config["engine"]["affect"]["enabled"] is False
-    assert config["engine"]["humanize"]["enabled"] is False
-    assert config["engine"]["character"]["enabled"] is False
+    assert "affect" not in config["engine"]
+    assert "character" not in config["engine"]
+    soul = yaml.safe_load((tmp_path / "soul.yaml").read_text(encoding="utf-8"))
+    assert soul["voice"]["enabled"] is False
     env = (tmp_path / ".env").read_text(encoding="utf-8")
-    assert "EIDESOUL_DATABASE_URL=postgresql+psycopg://u:p@h/db" in env
+    assert "MONOAGENS_DATABASE_URL=postgresql+psycopg://u:p@h/db" in env
 
 
 def test_the_wizard_shows_the_rail_and_the_review_then_writes(tmp_path, monkeypatch):
@@ -143,7 +144,7 @@ def test_the_wizard_shows_the_rail_and_the_review_then_writes(tmp_path, monkeypa
             "groq",  # 2/7 provider
             "",  # 3/7 credential: fill .env later
             "llama-operator",  # 4/7 model
-            "postgresql+psycopg://eidesoul:MARKER-PASSWORD@127.0.0.1:5433/eidesoul",
+            "postgresql+psycopg://monoagens:MARKER-PASSWORD@127.0.0.1:5433/monoagens",
             "Muqsith",  # 6/7 administrator label
             "off",  # 7/7 voice layer
             "1",  # review: apply
@@ -157,26 +158,25 @@ def test_the_wizard_shows_the_rail_and_the_review_then_writes(tmp_path, monkeypa
     screen = stdout.getvalue()
     assert "[1/7] location" in screen
     assert "[7/7] voice layer" in screen
-    assert "EIDESOUL" in screen
+    assert "MONOAGENS" in screen
     assert "Review" in screen
     assert "Receipt" in screen
     assert "MARKER-PASSWORD" not in screen
-    assert "EIDESOUL_DATABASE_URL" in screen
+    assert "MONOAGENS_DATABASE_URL" in screen
     assert skipped == []
     assert len(written) == 4
     assert modes(tmp_path)[".env"] == 0o600
     assert modes(tmp_path)["roles.yaml"] == 0o600
 
     config = yaml.safe_load((tmp_path / "config.yaml").read_text(encoding="utf-8"))
-    assert config["engine"]["llm"]["provider"] == "groq"
-    assert config["engine"]["llm"]["model"] == "llama-operator"
-    assert config["engine"]["affect"]["enabled"] is False
-    assert config["engine"]["humanize"]["enabled"] is False
-    assert config["engine"]["character"]["enabled"] is False
+    assert "affect" not in config["engine"]
+    assert "character" not in config["engine"]
+    soul = yaml.safe_load((tmp_path / "soul.yaml").read_text(encoding="utf-8"))
+    assert soul["voice"]["enabled"] is False
     roles = yaml.safe_load((tmp_path / "roles.yaml").read_text(encoding="utf-8"))
     assert roles["roles"]["administrator"]["label"] == "Muqsith"
     env = (tmp_path / ".env").read_text(encoding="utf-8")
-    assert "EIDESOUL_DATABASE_URL=postgresql+psycopg://" in env
+    assert "MONOAGENS_DATABASE_URL=postgresql+psycopg://" in env
     assert "MARKER-PASSWORD" in env  # the value lives in .env, at 0600
 
 
@@ -300,21 +300,15 @@ def test_existing_files_offer_keep_change_replace(tmp_path):
 
 @pytest.mark.parametrize(
     ("answer", "expected"),
-    [
-        ("on", ()),
-        ("off", admin_init.VOICE_PARTS),
-        ("character", ("character",)),
-        ("character,humanize", ("humanize", "character")),
-        ("emotion,humanize,character", admin_init.VOICE_PARTS),
-    ],
+    [("on", True), ("off", False), ("", False), ("true", True), ("false", False)],
 )
 def test_the_voice_layer_switch_parses(answer, expected):
-    assert admin_init.voice_off(answer) == expected
+    assert admin_init.voice_enabled(answer) is expected
 
 
-def test_an_unknown_voice_part_is_rejected():
-    with pytest.raises(ValueError, match="unknown voice layer part"):
-        admin_init.voice_off("character,singing")
+def test_an_unknown_voice_value_is_rejected():
+    with pytest.raises(ValueError, match="voice layer must be"):
+        admin_init.voice_enabled("character")
 
 
 def test_the_database_url_is_validated_at_the_step():
@@ -326,24 +320,26 @@ def test_the_database_url_is_validated_at_the_step():
 
 def test_the_review_comes_from_the_templates_plus_answers():
     contents = admin_init.build(
-        provider="openai", database_url="postgresql+psycopg://u:secret@h/db", voice=("character",)
+        provider="openai", database_url="postgresql+psycopg://u:secret@h/db", voice="off"
     )
 
     assert set(contents) == set(
         templates.files(provider="openai", language="en", locale="en-US", timezone="UTC")
     )
     config = yaml.safe_load(contents["config.yaml"])
-    assert config["engine"]["character"]["enabled"] is False
-    assert config["engine"]["affect"]["enabled"] is True
+    assert "character" not in config["engine"]
+    assert "affect" not in config["engine"]
+    soul = yaml.safe_load(contents["soul.yaml"])
+    assert soul["voice"]["enabled"] is False
     assert "postgresql+psycopg://u:secret@h/db" not in contents["config.yaml"]
-    assert "EIDESOUL_DATABASE_URL=postgresql+psycopg://u:secret@h/db" in contents[".env"]
+    assert "MONOAGENS_DATABASE_URL=postgresql+psycopg://u:secret@h/db" in contents[".env"]
 
 
 def test_the_header_uses_the_existing_wordmark_and_not_a_placeholder() -> None:
     screen = "\n".join(admin_init.banner())
 
-    assert "EIDESOUL" in screen
-    assert "a soul engine you run on your own machine" in screen
+    assert "MONOAGENS" in screen
+    assert "persistent mono agent" in screen
     assert "[logo]" not in screen
 
 
@@ -363,7 +359,7 @@ def test_the_location_step_writes_to_the_chosen_directory(tmp_path):
 
     assert len(written) == 4
     assert (target / "config.yaml").is_file()
-    assert (target / ".eidesoul" / "workspace").is_dir()
+    assert (target / ".monoagens" / "workspace").is_dir()
     assert not (tmp_path / "config.yaml").exists()
 
 
@@ -488,7 +484,7 @@ def test_line_fallback_never_emits_ansi(tmp_path):
 
 
 def test_curses_header_never_contains_ansi():
-    from eidesoul.admin.wizard import _menu_header
+    from monoagens.admin.wizard import _menu_header
 
     assert "\x1b" not in "\n".join(_menu_header(0, True))
 
@@ -530,3 +526,27 @@ def test_curses_logo_draws_cells_without_ansi(monkeypatch):
 
     assert calls
     assert all("\x1b" not in text for _, _, text, _ in calls)
+
+
+def _leaf_paths(body: dict, prefix: str = "") -> list[tuple[str, object]]:
+    found: list[tuple[str, object]] = []
+    for key, value in body.items():
+        path = f"{prefix}.{key}" if prefix else str(key)
+        if isinstance(value, dict):
+            found.extend(_leaf_paths(value, path))
+        else:
+            found.append((path, value))
+    return found
+
+
+def test_generated_config_comments_every_key() -> None:
+    text = templates.files(
+        provider="openai", language="en", locale="en-US", timezone="UTC"
+    )["config.yaml"]
+    body = yaml.safe_load(text)
+
+    for path, value in _leaf_paths(body):
+        assert templates.comment_for(path, value), path
+    assert "# Temperature for decisions" in text
+    assert "# off, auto, or always" in text
+    assert "# Connection pool size" in text

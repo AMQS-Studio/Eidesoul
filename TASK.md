@@ -1,11 +1,11 @@
 # TASK
 
-Eidesoul checklist. Every item is done when the listed surface exists and works end to end.
+MonoAgens checklist. Every item is done when the listed surface exists and works end to end.
 
 ## Core
 
-- [x] One Python process: `eidesoul run|console|selftest|backfill`, no HTTP gateway, no bridge.
-- [x] `eidesoul/engine/` is gateway-free: no `eidesoul.gateways` or `neonize` import in core.
+- [x] One Python process: `monoagens run|console|selftest|backfill`, no HTTP gateway, no bridge.
+- [x] `monoagens/engine/` is gateway-free: no `monoagens.gateways` or `neonize` import in core.
 - [x] One `Database` + one `MetaData`; `SCHEMA_VERSION` mirrors the Alembic head (currently 18);
       no legacy tables, no SQLite import, no split-config migration path.
 - [x] One primary enforced by `engine_lease`; `/freeze` and takeover go through the lease only.
@@ -13,22 +13,36 @@ Eidesoul checklist. Every item is done when the listed surface exists and works 
 ## soul.yaml
 
 - [x] `soul.yaml` is the only persona/host soul file; `soul_file` is a host key in `config.yaml`.
-- [x] Schema: `name`, `description`, `language`, `pronouns`, `locale`, `background`, `persona`,
-      `style.{patterns,facts,registers,max_patterns,max_facts}`, `examples`.
-- [x] `load_soul` validates genders, prepends the active role, validates pack ids, clamps per-turn
-      counts to 0..6, and renders the persona in one fixed order.
-- [x] The `soul` DB document is authoritative; `soul.yaml` is seed plus mirror. No legacy persona
-      file, no `persona` document.
-- [x] `eidesoul init` scaffolds `config.yaml`, `roles.yaml`, `soul.yaml`, `.env`.
+- [x] Schema: `name`, `description`, `language`, `pronouns`, `locale`, `timezone`, `background`,
+      `persona`, `voice.{enabled,sampling,affect,style,character,humanize,profanity,safety}`,
+      `examples`, `rules`.
+- [x] `load_soul` prepends the active role, validates voice ranges/choices, and renders the persona
+      in one fixed order. No gender, no pack ids, no level table.
+- [x] The `soul` DB document is authoritative; `soul.yaml` is seed plus mirror. A changed file is
+      imported on start, a DB-only change exports, and a conflict keeps the DB. No resolver.
+- [x] `monoagens init` scaffolds `config.yaml`, `roles.yaml`, `soul.yaml`, `.env`; the config has a
+      comment on every key and the voice master defaults off.
 
-## Character library
+## Voice and research
 
-- [x] Packs under `eidesoul/library/patterns` and `eidesoul/library/facts`, with
-      `version`, `model`, `language` (+ `lexicon` for patterns).
-- [x] `soul.style` selects the packs; no pack selected means no character data and no facts.
-- [x] `scripts/patterns.py --pack`, `scripts/fakta.py --pack`, `scripts/grow.py --pack` maintain
-      packs; `--check` and `--embed` pass on the shipped packs.
-- [x] No brand text and no raw transcripts inside a pack.
+- [x] `soul.voice` is the only behavior-tuning block; `engine.affect`, `engine.style`,
+      `engine.character`, `engine.humanize`, and `engine.llm.temperature` are gone.
+- [x] `voice.enabled` is the master; `sampling`, `profanity`, and `safety` stay request-level.
+- [x] Daily/professional temperatures and `top_p`/`top_k`/`min_p` are operator values; unsupported
+      values fail at load, never silently drop.
+- [x] Character data is `persona` + `examples` + the model; no `library/patterns`,
+      `library/facts`, `library/severity`, `select_patterns`, `select_facts`, or `regulate`.
+- [x] `library/lexicon` holds detector lists only; no prompt examples or level map.
+- [x] Research uses a deterministic trigger, one ephemeral `ResearchCard`, citation/freshness
+      verification, and an abstain when no usable source exists; no table or migration.
+- [x] Native Gemini `generateContent` carries `safetySettings`/`topK`; OpenAI-compatible providers
+      keep the existing wire; Anthropic native stays deferred by ADR-0044.
+
+## Naming
+
+- [x] Package, CLI, distribution, state directory, environment prefix, wordmark, docs, and URLs
+      use MonoAgens; `soul.yaml` and the `soul` document keep their internal names.
+- [x] No alias package, shim, or dual CLI; the old product env prefix is not read.
 
 ## Sandbox guard
 
@@ -55,7 +69,7 @@ Eidesoul checklist. Every item is done when the listed surface exists and works 
       translation with explicit section anchors.
 - [x] `AGENTS.md` states the English default, the allowed non-English data surfaces, and the
       removability rules.
-- [x] `pytest -q` and `python -m eidesoul selftest` pass.
+- [x] `pytest -q` and `python -m monoagens selftest` pass.
 
 ## Foundation after ADR-0034..0038
 
@@ -63,7 +77,7 @@ Eidesoul checklist. Every item is done when the listed surface exists and works 
 - [x] A plugin declares static prompt parts through `provides.prompt` and `register()["prompts"]`.
 - [x] `turns.app`, `episodes.app`, and `skills.app` scope a corpus; the body supplies the app hint.
 - [x] Roles are identity-only bundles; `users` are `per_...`; `protected` belongs to `administrator`;
-      `eidesoul people add` bootstraps the first user.
+      `monoagens people add` bootstraps the first user.
 - [x] `agent.py` (787), `memory/store.py` (645), and the automation manifest/store/worker are under
       the 800-line module cap; `LINE_CAPS` is empty.
 - [x] Privacy decisions come from local evidence plus a versioned policy; `memories.privacy_evidence`
@@ -72,8 +86,8 @@ Eidesoul checklist. Every item is done when the listed surface exists and works 
       entity-layer budget test.
 - [ ] Cold privacy stack under 700 MiB: move the shared MiniLM to int8/ONNX (or remove a detector);
       PyTorch MiniLM plus NER measured about 929 MiB.
-- [x] `eidesoul init` has a location-first terminal wizard, provider/model pickers, masked
-      credential, back navigation, and the generated ANSI Eidesoul logo; the writer is split from the wizard.
+- [x] `monoagens init` has a location-first terminal wizard, provider/model pickers, masked
+      credential, back navigation, and the generated ANSI MonoAgens logo; the writer is split from the wizard.
 
 ## Shipped in v1 (ADR)
 
@@ -112,28 +126,24 @@ Eidesoul checklist. Every item is done when the listed surface exists and works 
 
 ## v2 spine
 
-- [x] `eidesoul/providers/` selects an OpenAI-compatible endpoint by name (`opencode`, `openai`,
-      `google`, `anthropic`, `openrouter`, `groq`, `deepseek`, `ollama`, `custom`), one module per
-      endpoint format (`openai.py`, `gemini.py`, `anthropic.py`); it carries no model id, explicit
-      `base_url`/`api_key_env` stay overrides, and `custom` requires a `base_url`.
-- [x] The model is the operator's choice: `eidesoul init --model <id>` writes `engine.llm.model`,
-      `eidesoul models` lists what the provider serves, and the loader rejects a blank model.
+- [x] `monoagens/providers/` selects a provider by name and a wire (`openai`, `gemini`, `anthropic`),
+      one module per wire (`openai.py`, `gemini.py`, `anthropic.py`); it carries no model id,
+      explicit `base_url`/`api_key_env` stay overrides, and `custom` requires a `base_url`.
+- [x] The model is the operator's choice: `monoagens init --model <id>` writes `engine.llm.model`,
+      `monoagens models` lists what the provider serves, and the loader rejects a blank model.
       `engine.llm.reasoning_effort` empty means the provider default; no internal call pins one.
 - [x] Versioning is honest about churn: `pyproject.toml` carries `0.0.0.dev0` (PEP 440 dev, not a
-      release), `uv.lock` mirrors it, the wheel builds as `eidesoul-0.0.0.dev0`, and HTTP user
+      release), `uv.lock` mirrors it, the wheel builds as `monoagens-0.0.0.dev0`, and HTTP user
       agents carry no version.
-- [x] `eidesoul/engine/guard/` owns `patterns.py`, `policy.py`, and `sandbox.py`; the package
+- [x] `monoagens/engine/guard/` owns `patterns.py`, `policy.py`, and `sandbox.py`; the package
       re-exports the public symbols and no caller imports a module path inside it.
-- [x] One embedder (`eidesoul/engine/embed.py`, MiniLM, 384 dim) serves patterns, facts, affect
-      prototypes, the library resolver, and Mem0; the `vibe` extra and the EmoSense classifier are
-      gone.
-- [x] Affect prototypes live in `eidesoul/library/affect/{id,en}.json` (eight labels, six sentences
+- [x] One embedder (`monoagens/engine/embed.py`, MiniLM, 384 dim) serves Mem0, the affect
+      prototypes, and the privacy prototypes; the `vibe` extra and the EmoSense classifier are gone.
+- [x] Affect prototypes live in `monoagens/library/affect/{id,en}.json` (eight labels, six sentences
       each) and `scripts/affect.py --check` gates them; `PROTOTYPE_FLOOR`/`PROTOTYPE_MARGIN` are
       calibrated on the fixture sentences.
-- [x] `soul.yaml` carries identity only: `roles` defaults to `[role]`, a single role hides the
-      "available roles" line, and `style` is written by `eidesoul init` or
-      `eidesoul library resolve [--explain] [--force]` from the soul text (language-gated, no forced
-      pack, unmatched kinds keep the existing packs).
+- [x] `soul.yaml` carries identity and `soul.voice`: `roles` defaults to `[role]`, a single role
+      hides the "available roles" line, and voice tuning is data with one master switch, no resolver.
 - [x] Apache-2.0 `LICENSE` with the copyright line, PEP 639 `license`/`license-files`, an author, and
       a repository URL in `pyproject.toml`.
 - [x] README credits table (component, license, author, source, use) covers every declared
@@ -141,13 +151,13 @@ Eidesoul checklist. Every item is done when the listed surface exists and works 
 - [x] The core carries no gateway or provider vocabulary: roles match `Inbound.person_id`, deletion
       and role comparison use canonical addresses, the DM/group label comes from `Inbound.is_dm`,
       mentionability is `ChatMessage.sender_kind == "person"`, and WhatsApp's digit rule lives in
-      `eidesoul/gateways/whatsapp/identity.py`.
+      `monoagens/gateways/whatsapp/identity.py`.
 - [x] The provider is the operator's choice with no code default: `engine.llm.provider` is required,
-      `eidesoul init --provider <name>` is required, and the scaffold `.env` names only the chosen
+      `monoagens init --provider <name>` is required, and the scaffold `.env` names only the chosen
       provider's key variable.
 - [x] Identity is runtime state: `people` + `person_links` hold one opaque `per_…` id per human,
       `roles.*.users` lists only those ids, a gateway hands in `Inbound.person_address`, `/link`
-      attaches a second gateway to the same person, and `eidesoul people adopt` migrates the old raw
-      addresses once. Context is assembled state: `eidesoul/engine/turn/assembly.py` picks the newest tail
+      attaches a second gateway to the same person, and `monoagens people adopt` migrates the old raw
+      addresses once. Context is assembled state: `monoagens/engine/turn/assembly.py` picks the newest tail
       plus the quoted messages under `engine.prompt.thread_chars`, and `/reset` is gone — the chat
       capsule is compacted into dated `chat_eras` rows by the ambient digest.

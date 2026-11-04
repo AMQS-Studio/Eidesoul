@@ -6,13 +6,13 @@ from dataclasses import replace
 
 from support import build_config, role
 
-from eidesoul.engine import self_knowledge as sk
-from eidesoul.engine.commands import REGISTRY as COMMANDS
-from eidesoul.engine.config import SelfKnowledgeConfig
-from eidesoul.engine.self_knowledge import SelfKnowledge, check, slug
-from eidesoul.engine.tools import REGISTRY as TOOLS
-from eidesoul.engine.tools import ToolContext, execute
-from eidesoul.engine.tools.info import TOOL as INFO
+from monoagens.engine import self_knowledge as sk
+from monoagens.engine.commands import REGISTRY as COMMANDS
+from monoagens.engine.config import SelfKnowledgeConfig
+from monoagens.engine.self_knowledge import SelfKnowledge, check, slug
+from monoagens.engine.tools import REGISTRY as TOOLS
+from monoagens.engine.tools import ToolContext, execute
+from monoagens.engine.tools.info import TOOL as INFO
 
 
 def manifest(tmp_path) -> SelfKnowledge:

@@ -15,41 +15,41 @@
 ## 1. Context
 
 **Ceiling privacy already exists, but it is not run on the prompt path.** `PrivacyPolicy.show()` and
-`.disclose()` (`eidesoul/engine/memory/privacy.py:52-71`) are correct, but are only called on the
+`.disclose()` (`monoagens/engine/memory/privacy.py:52-71`) are correct, but are only called on the
 tool, command, and auditor review paths:
 
-- `eidesoul/engine/tools/memory.py:118-119,145-146,175-177` — `policy.show(row, is_dm=ctx.is_dm)`.
-- `eidesoul/engine/commands/memori.py:58,76,104` — likewise.
-- `eidesoul/__main__.py:372-381` — policy self-test.
+- `monoagens/engine/tools/memory.py:118-119,145-146,175-177` — `policy.show(row, is_dm=ctx.is_dm)`.
+- `monoagens/engine/commands/memori.py:58,76,104` — likewise.
+- `monoagens/__main__.py:372-381` — policy self-test.
 
 The path that builds the **memory block in the prompt** does not use the policy at all:
 
-- `eidesoul/engine/memory/context.py:118-133` — `build()` filters only `vetoed`; it does not filter
+- `monoagens/engine/memory/context.py:118-133` — `build()` filters only `vetoed`; it does not filter
 `level` and does not receive `is_dm`.
-- `eidesoul/engine/memory/mem0.py:536-557` — `context()` forwards to `build()` without a ceiling.
-- `eidesoul/engine/agent.py:619-628` — the caller does not pass `is_dm`.
+- `monoagens/engine/memory/mem0.py:536-557` — `context()` forwards to `build()` without a ceiling.
+- `monoagens/engine/agent.py:619-628` — the caller does not pass `is_dm`.
 
 As a result, L3/L4 can enter a **group** prompt, and `MemoryContext.hits` (used by the auditor and the
 disclosure path) contains rows that should never be visible in a group.
 
 **Group capture is not restricted to "about oneself".** `capture_turn`
-(`eidesoul/engine/access/privacy.py:225-277`) stores `[user text, soul reply]` with
+(`monoagens/engine/access/privacy.py:225-277`) stores `[user text, soul reply]` with
 `owner = person_id`, `subject = assess.subject or owner`, `audience = "group"` — with no rule that
 in a group only facts the **speaker states about himself** may be stored.
 
 **Confirmation questions leak in a group.** The `verdict.ask` path sends a question to
-`inbound.thread` (`eidesoul/engine/access/privacy.py:267-277`), and the disclosure path does the
+`inbound.thread` (`monoagens/engine/access/privacy.py:267-277`), and the disclosure path does the
 same (`:150-172`). In a group, that question reveals the existence of a fact being protected.
 
 **What is already good and kept:**
 
-- Hard exclusion of credentials before storing (`eidesoul/engine/access/privacy.py:225`,
-`eidesoul/engine/memory/mem0.py:354-356`).
+- Hard exclusion of credentials before storing (`monoagens/engine/access/privacy.py:225`,
+`monoagens/engine/memory/mem0.py:354-356`).
 - Person memory with `audience="group"` is never carried to another chat
-(`eidesoul/engine/memory/mem0.py:425-433`).
+(`monoagens/engine/memory/mem0.py:425-433`).
 - `vetoed` always wins across every verdict (`memory/privacy.py:53-71`).
 - Safe defaults: `group_max_level: 2`, `dm_max_level: 4`, `ask_level: 4`
-(`eidesoul/engine/config.py:118-127`).
+(`monoagens/engine/config.py:118-127`).
 
 ## 2. Decision drivers
 
@@ -190,15 +190,15 @@ memory:
 
 ## 10. Code references
 
-- `eidesoul/engine/memory/privacy.py:52-71` — `show`, `disclose`.
-- `eidesoul/engine/memory/context.py:40-86,88-133` — `gather`, `render`, `build`.
-- `eidesoul/engine/memory/mem0.py:340-380,425-433,536-557` — `capture`, the cross-chat exception, `context()`.
-- `eidesoul/engine/access/privacy.py:133-140,141-172,222-281,282-309` — `_risky`, `review`, `capture_turn`, `_assess`.
-- `eidesoul/engine/agent.py:619-628,900-918` — the context caller and the capture spawn.
-- `eidesoul/engine/tools/memory.py:104-119,145-146` — policy use in the tool.
-- `eidesoul/engine/commands/memori.py:58,76,104` — policy use in the command.
-- `eidesoul/engine/config.py:118-127` — `PrivacyConfig`.
-- `eidesoul/__main__.py:372-381` — privacy self-test.
+- `monoagens/engine/memory/privacy.py:52-71` — `show`, `disclose`.
+- `monoagens/engine/memory/context.py:40-86,88-133` — `gather`, `render`, `build`.
+- `monoagens/engine/memory/mem0.py:340-380,425-433,536-557` — `capture`, the cross-chat exception, `context()`.
+- `monoagens/engine/access/privacy.py:133-140,141-172,222-281,282-309` — `_risky`, `review`, `capture_turn`, `_assess`.
+- `monoagens/engine/agent.py:619-628,900-918` — the context caller and the capture spawn.
+- `monoagens/engine/tools/memory.py:104-119,145-146` — policy use in the tool.
+- `monoagens/engine/commands/memori.py:58,76,104` — policy use in the command.
+- `monoagens/engine/config.py:118-127` — `PrivacyConfig`.
+- `monoagens/__main__.py:372-381` — privacy self-test.
 
 ---
 

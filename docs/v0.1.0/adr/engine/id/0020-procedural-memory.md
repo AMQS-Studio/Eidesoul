@@ -1,10 +1,10 @@
-> Terjemahan turunan — jangan sunting; sumber: engine/0020-procedural-memory.md (sha256: db9f696122f9)
+> Terjemahan turunan — jangan sunting; sumber: engine/0020-procedural-memory.md (sha256: 8c63704e213e)
 > Teks ini ditulis manusia; baris yang tidak bisa diterjemahkan mesin disalin apa adanya ke sumber English, jadi sumber bercampur dua bahasa.
 
 # ADR-0020: Prosedur Turunan — Skill sebagai Pertumbuhan Soul, Bukan Tool
 
 - **Status:** accepted
-- **Implementasi:** implemented — bukti: `episodes` + enam sinyal penutup, `distill` (satu revisi per episode), `skill_revisions`, retrieval sadar-scope berurut prioritas, status langkah gagal lewat `llm.run` → `turn_steps`, perbandingan `signature`/`evidence`/`eligible` (`eidesoul/engine/memory/efficiency.py`), aksi tangga dengan cooldown proposal dan usulan automation yang hanya berupa approval, `tests/test_episodes.py`, `tests/test_efficiency.py`; gate: `pytest -q` 831 lulus, `scripts/adr.py --check`
+- **Implementasi:** implemented — bukti: `episodes` + enam sinyal penutup, `distill` (satu revisi per episode), `skill_revisions`, retrieval sadar-scope berurut prioritas, status langkah gagal lewat `llm.run` → `turn_steps`, perbandingan `signature`/`evidence`/`eligible` (`monoagens/engine/memory/efficiency.py`), aksi tangga dengan cooldown proposal dan usulan automation yang hanya berupa approval, `tests/test_episodes.py`, `tests/test_efficiency.py`; gate: `pytest -q` 831 lulus, `scripts/adr.py --check`
 - **Tanggal:** 2026-11-03
 - **Deciders:** Muqsith (owner), omp (reviewer)
 - **Konteks:** tool `skill` yang eksplisit tidak terpakai, tetapi menagih indeks ±3000 karakter di setiap prompt untuk setiap role yang memilikinya; skema `skills` tanpa scope/provenance/versi membuatnya menjadi kanal instruksi global yang bisa ditulis model — jalur yang ADR-0008 tutup untuk memori
@@ -250,15 +250,15 @@ Kunci lama `max_index_chars` dihapus bersama indeks.
 
 ## 10. Referensi kode
 
-- `eidesoul/engine/stores/skills.py:88` — `index()` (indeks yang akan dihapus dari prompt); `:144-149` — `view()` dan satu-satunya `_record_use`.
-- `eidesoul/engine/commands/skill.py` — perintah owner; `eidesoul/engine/tools/skill.py` untuk model sudah dihapus.
-- `eidesoul/engine/agent.py:637-640` — tempat indeks skill disusun (titik cutover).
-- `eidesoul/engine/config.py:156-157` — `SkillsConfig.max_index_chars` (diganti §5).
-- `eidesoul/engine/turn/prompts.py:300,318` — aturan prompt yang menyuruh model mengurus skill sendiri (dihapus).
-- `eidesoul/engine/schema.py` — tabel `skills`, `skill_files`, `skill_usage` (bentuk baru di ADR-0016 §4.7); `turns`/`turn_steps` sebagai sumber angka langkah.
-- `eidesoul/engine/llm.py:206-255` — loop tool: sumber signature rantai tool per episode (bahan §4.8).
-- `eidesoul/engine/embed.py:53-62` — embedder yang dipakai retrieval prosedur.
-- `eidesoul/engine/access/approvals.py` — jalur approval yang dipakai usulan otomasi §4.9.
+- `monoagens/engine/stores/skills.py:88` — `index()` (indeks yang akan dihapus dari prompt); `:144-149` — `view()` dan satu-satunya `_record_use`.
+- `monoagens/engine/commands/skill.py` — perintah owner; `monoagens/engine/tools/skill.py` untuk model sudah dihapus.
+- `monoagens/engine/agent.py:637-640` — tempat indeks skill disusun (titik cutover).
+- `monoagens/engine/config.py:156-157` — `SkillsConfig.max_index_chars` (diganti §5).
+- `monoagens/engine/turn/prompts.py:300,318` — aturan prompt yang menyuruh model mengurus skill sendiri (dihapus).
+- `monoagens/engine/schema.py` — tabel `skills`, `skill_files`, `skill_usage` (bentuk baru di ADR-0016 §4.7); `turns`/`turn_steps` sebagai sumber angka langkah.
+- `monoagens/engine/llm.py:206-255` — loop tool: sumber signature rantai tool per episode (bahan §4.8).
+- `monoagens/engine/embed.py:53-62` — embedder yang dipakai retrieval prosedur.
+- `monoagens/engine/access/approvals.py` — jalur approval yang dipakai usulan otomasi §4.9.
 - `roles.yaml:8-14` — role `member` yang memegang tool `skill` (dicabut).
 
 ---

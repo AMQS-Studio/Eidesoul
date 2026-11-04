@@ -7,27 +7,27 @@ import pytest
 import yaml
 from support import database
 
-from eidesoul.engine.config import (
+from monoagens.engine.config import (
     DEFAULT_SENSITIVE_COMMANDS,
     ConfigError,
     load_config,
     load_env,
     load_host,
 )
-from eidesoul.engine.stores.documents import DocumentStore
+from monoagens.engine.stores.documents import DocumentStore
 
 BASE = {
     "database": {
-        "url": "postgresql+psycopg://eidesoul:eidesoul@127.0.0.1:5433/eidesoul_test",
+        "url": "postgresql+psycopg://monoagens:monoagens@127.0.0.1:5433/monoagens_test",
         "url_env": "",
     },
-    "workspace": ".eidesoul/workspace",
+    "workspace": ".monoagens/workspace",
     "roles_file": "roles.yaml",
     "engine": {
         "llm": {
             "provider": "custom",
             "base_url": "http://x",
-            "api_key_env": "EIDESOUL_TEST_KEY",
+            "api_key_env": "MONOAGENS_TEST_KEY",
             "model": "seed-model",
         },
         "default_role": "guest",
@@ -46,7 +46,7 @@ BASE = {
     "gateways": {"cli": {"enabled": True, "role": "guest", "thread_id": "cli:local"}},
 }
 
-SOUL = "name: Eidesoul\nlanguage: en\nlocale: en-US\ntimezone: UTC\npronouns: aku\n"
+SOUL = "name: MonoAgens\nlanguage: en\nlocale: en-US\ntimezone: UTC\npronouns: aku\n"
 
 ROLES = {
     "roles": {
@@ -74,7 +74,7 @@ def write_folder(tmp_path, *, config=None, roles=None, soul=SOUL) -> None:
 
 
 def test_load_config_reads_all_sections(tmp_path, monkeypatch) -> None:
-    monkeypatch.setenv("EIDESOUL_TEST_KEY", "x")
+    monkeypatch.setenv("MONOAGENS_TEST_KEY", "x")
     write_folder(tmp_path)
 
     host, paths = load_host(tmp_path / "config.yaml")
@@ -93,15 +93,15 @@ def test_load_config_reads_all_sections(tmp_path, monkeypatch) -> None:
 
 
 def test_documents_override_config_sections(tmp_path, monkeypatch) -> None:
-    monkeypatch.setenv("EIDESOUL_TEST_KEY", "x")
+    monkeypatch.setenv("MONOAGENS_TEST_KEY", "x")
     write_folder(tmp_path)
     docs = DocumentStore(database(), load_host(tmp_path / "config.yaml")[1])
     docs.put(
         "engine",
         "llm:\n  provider: custom\n  base_url: http://doc\n"
-        "  model: doc-model\n  api_key_env: EIDESOUL_TEST_KEY\ndefault_role: administrator\n",
+        "  model: doc-model\n  api_key_env: MONOAGENS_TEST_KEY\ndefault_role: administrator\n",
     )
-    docs.put("soul", "name: eidesoul\nlanguage: id\nlocale: id-ID\ntimezone: UTC\npronouns: aku\n")
+    docs.put("soul", "name: monoagens\nlanguage: id\nlocale: id-ID\ntimezone: UTC\npronouns: aku\n")
     docs.put(
         "role:administrator",
         "name: administrator\ntools: ['*']\ncommands: ['*']\nmemory_admin: true\n",
@@ -119,21 +119,21 @@ def test_documents_override_config_sections(tmp_path, monkeypatch) -> None:
 
 
 def test_roles_file_needs_the_wrapper(tmp_path, monkeypatch) -> None:
-    monkeypatch.setenv("EIDESOUL_TEST_KEY", "x")
+    monkeypatch.setenv("MONOAGENS_TEST_KEY", "x")
     write_folder(tmp_path, roles={"guest": {"name": "guest"}})
     with pytest.raises(ConfigError, match="roles"):
         load_config(tmp_path / "config.yaml", require_key=False)
 
 
 def test_missing_roles_file_is_an_error(tmp_path, monkeypatch) -> None:
-    monkeypatch.setenv("EIDESOUL_TEST_KEY", "x")
+    monkeypatch.setenv("MONOAGENS_TEST_KEY", "x")
     write_folder(tmp_path, roles=False)
     with pytest.raises(ConfigError, match="no roles"):
         load_config(tmp_path / "config.yaml", require_key=False)
 
 
 def test_privacy_levels_clamp_invalid_values(tmp_path, monkeypatch) -> None:
-    monkeypatch.setenv("EIDESOUL_TEST_KEY", "x")
+    monkeypatch.setenv("MONOAGENS_TEST_KEY", "x")
     config = yaml.safe_load(yaml.safe_dump(BASE))
     config["engine"]["memory"]["privacy"] = {
         "enabled": "false",
@@ -153,7 +153,7 @@ def test_privacy_levels_clamp_invalid_values(tmp_path, monkeypatch) -> None:
 
 
 def test_approval_defaults_to_command_patterns(tmp_path, monkeypatch) -> None:
-    monkeypatch.setenv("EIDESOUL_TEST_KEY", "x")
+    monkeypatch.setenv("MONOAGENS_TEST_KEY", "x")
     write_folder(tmp_path)
 
     loaded = load_config(tmp_path / "config.yaml", require_key=False)
@@ -163,7 +163,7 @@ def test_approval_defaults_to_command_patterns(tmp_path, monkeypatch) -> None:
 
 
 def test_approval_sensitive_commands_override_and_disable(tmp_path, monkeypatch) -> None:
-    monkeypatch.setenv("EIDESOUL_TEST_KEY", "x")
+    monkeypatch.setenv("MONOAGENS_TEST_KEY", "x")
     for value, expected in (([], ()), (["rm *"], ("rm *",))):
         config = yaml.safe_load(yaml.safe_dump(BASE))
         config["engine"]["approval"] = {"sensitive_commands": value}
@@ -177,11 +177,11 @@ def test_approval_sensitive_commands_override_and_disable(tmp_path, monkeypatch)
 
 def test_load_env_rejects_paths_outside_the_working_directory(tmp_path, monkeypatch) -> None:
     monkeypatch.chdir(tmp_path)
-    monkeypatch.delenv("EIDESOUL_ENV_TEST", raising=False)
-    (tmp_path / ".env").write_text("EIDESOUL_ENV_TEST=ok\n", encoding="utf-8")
+    monkeypatch.delenv("MONOAGENS_ENV_TEST", raising=False)
+    (tmp_path / ".env").write_text("MONOAGENS_ENV_TEST=ok\n", encoding="utf-8")
 
     load_env()
-    assert os.environ["EIDESOUL_ENV_TEST"] == "ok"
+    assert os.environ["MONOAGENS_ENV_TEST"] == "ok"
 
     for bad in ("../.env", "/etc/passwd", "sub/.env"):
         with pytest.raises(ConfigError):

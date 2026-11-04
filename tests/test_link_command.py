@@ -7,11 +7,12 @@ from dataclasses import replace
 
 from support import FakeGateway, inbound_message, make_agent, role
 
-from eidesoul.engine.commands.link import link
-from eidesoul.engine.commands.unlink import unlink
-from eidesoul.engine.commands.whoami import whoami
-from eidesoul.engine.config import GatewaySettings, StyleConfig
-from eidesoul.engine.stores.style import StyleStore
+from monoagens.engine.commands.link import link
+from monoagens.engine.commands.unlink import unlink
+from monoagens.engine.commands.whoami import whoami
+from monoagens.engine.config import GatewaySettings
+from monoagens.engine.soul import StyleConfig
+from monoagens.engine.stores.style import StyleStore
 
 SENDER = "6285111242960"
 CODE = re.compile(r"/link ([A-Z0-9]{6})")

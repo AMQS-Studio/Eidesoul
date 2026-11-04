@@ -11,12 +11,12 @@ import pytest
 from sqlalchemy import text as sql_text
 from support import FakeMem0, build_config, database
 
-from eidesoul.engine.config import DatabaseConfig
-from eidesoul.engine.memory import context as memory_context
-from eidesoul.engine.memory.mem0 import Mem0Backend
+from monoagens.engine.config import DatabaseConfig
+from monoagens.engine.memory import context as memory_context
+from monoagens.engine.memory.mem0 import Mem0Backend
 
-PG = "postgresql+psycopg://eidesoul:secret@db:5432/eidesoul"
-RESOLVE_TABLE = "eidesoul_resolve_test"
+PG = "postgresql+psycopg://monoagens:secret@db:5432/monoagens"
+RESOLVE_TABLE = "monoagens_resolve_test"
 
 
 def make_backend(tmp_path, monkeypatch) -> tuple[Mem0Backend, FakeMem0]:
@@ -34,8 +34,8 @@ def test_config_dict_maps_providers(tmp_path, monkeypatch) -> None:
 
     assert body["vector_store"]["provider"] == "pgvector"
     store = body["vector_store"]["config"]
-    assert store["connection_string"] == "postgresql://eidesoul:secret@db:5432/eidesoul"
-    assert store["collection_name"] == "eidesoul_memories"
+    assert store["connection_string"] == "postgresql://monoagens:secret@db:5432/monoagens"
+    assert store["collection_name"] == "monoagens_memories"
     assert store["embedding_model_dims"] == 384
     assert body["llm"]["provider"] == "openai"
     assert body["llm"]["config"]["model"] == "m"
@@ -68,7 +68,7 @@ def test_ready_sends_the_provider_session_header(tmp_path, monkeypatch) -> None:
     asyncio.run(backend.ready())
 
     client = backend._memory.llm.client
-    assert client.default_headers["x-opencode-session"] == "eidesoul-mem0"
+    assert client.default_headers["x-opencode-session"] == "monoagens-mem0"
     client.close()
 
 
@@ -209,7 +209,7 @@ def test_search_queries_only_requested_scopes(tmp_path, monkeypatch) -> None:
     )
     assert [hit.scope for hit in only_global] == ["global"]
     filters = [call[1]["filters"] for call in fake.calls if call[0] in {"search", "get_all"}]
-    assert {"agent_id": "eidesoul"} in filters
+    assert {"agent_id": "monoagens"} in filters
 
 
 def test_context_timeout_returns_empty(tmp_path, monkeypatch) -> None:

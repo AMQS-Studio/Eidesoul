@@ -5,9 +5,9 @@ from datetime import datetime
 
 from support import database
 
-from eidesoul.engine.config import SearchConfig
-from eidesoul.engine.stores.history import HistoryStore
-from eidesoul.engine.turn.context import Message
+from monoagens.engine.config import SearchConfig
+from monoagens.engine.stores.history import HistoryStore
+from monoagens.engine.turn.context import Message
 
 
 def message(mid: str, text: str, stamp: float = 0.0, sender: str = "1") -> Message:

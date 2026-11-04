@@ -6,9 +6,9 @@ from dataclasses import replace
 
 from support import FakeGateway, inbound_message, make_agent, role
 
-from eidesoul.engine.access.approvals import ApprovalStore
-from eidesoul.engine.config import ApprovalConfig
-from eidesoul.engine.inbound import Action, Address, Receipt, action_from_json, action_json
+from monoagens.engine.access.approvals import ApprovalStore
+from monoagens.engine.config import ApprovalConfig
+from monoagens.engine.inbound import Action, Address, Receipt, action_from_json, action_json
 
 
 class RecordingGateway(FakeGateway):
@@ -152,7 +152,7 @@ def test_an_action_round_trips_through_json() -> None:
 
 
 def test_strict_mode_creates_one_approval_and_sends_after_it(tmp_path) -> None:
-    from eidesoul.engine.guard import build_safety
+    from monoagens.engine.guard import build_safety
 
     gateway = RecordingGateway()
     env = make_agent(tmp_path, gateway=gateway)
@@ -185,7 +185,7 @@ def test_a_send_row_records_its_receipt_state(tmp_path) -> None:
     env = make_agent(tmp_path, gateway=gateway)
     store = ApprovalStore(env.db, ApprovalConfig(mode="strict"))
     env.agent.approvals = store
-    from eidesoul.engine.guard import build_safety
+    from monoagens.engine.guard import build_safety
 
     env.agent.safety = build_safety(store.config)
     address = Address("fake", "chat")
@@ -200,7 +200,7 @@ def test_a_send_row_records_its_receipt_state(tmp_path) -> None:
 
 
 def test_a_robot_body_with_only_dispatch_meets_the_core(tmp_path) -> None:
-    from eidesoul.engine.inbound import GatewayCore, missing_core
+    from monoagens.engine.inbound import GatewayCore, missing_core
 
     class Robot:
         name = "robot"

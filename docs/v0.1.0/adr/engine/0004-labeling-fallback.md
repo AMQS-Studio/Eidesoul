@@ -191,12 +191,12 @@ memory:
 
 ## 11. Code references
 
-- `eidesoul/engine/access/privacy.py:222-303` — `capture_turn`, `_assess`.
-- `eidesoul/engine/access/privacy.py:133-140` — `_risky` (level and confirmed).
-- `eidesoul/engine/memory/privacy.py:52-71` — `show`, `disclose`.
-- `eidesoul/engine/memory/mem0.py:360-380` — `capture` guard.
-- `eidesoul/engine/config.py:118-126` — `PrivacyConfig` (default 2, group max 2).
-- `eidesoul/engine/agent.py:906-921` — the current capture gate.
+- `monoagens/engine/access/privacy.py:222-303` — `capture_turn`, `_assess`.
+- `monoagens/engine/access/privacy.py:133-140` — `_risky` (level and confirmed).
+- `monoagens/engine/memory/privacy.py:52-71` — `show`, `disclose`.
+- `monoagens/engine/memory/mem0.py:360-380` — `capture` guard.
+- `monoagens/engine/config.py:118-126` — `PrivacyConfig` (default 2, group max 2).
+- `monoagens/engine/agent.py:906-921` — the current capture gate.
 
 ---
 

@@ -8,12 +8,12 @@ state. Every timestamp comes from `message.when` so the replay is deterministic.
 import dataclasses
 from dataclasses import dataclass
 
-from eidesoul.engine.access.roles import Role
-from eidesoul.engine.config import Config
-from eidesoul.engine.turn import salience
-from eidesoul.engine.turn.context import AUTHOR_BOT, AUTHOR_MANUAL, Message, prompt_entry
-from eidesoul.engine.turn.decision import decide
-from eidesoul.engine.turn.prompts import CORE_PARTS, PromptContext, system_prompt
+from monoagens.engine.access.roles import Role
+from monoagens.engine.config import Config
+from monoagens.engine.turn import salience
+from monoagens.engine.turn.context import AUTHOR_BOT, AUTHOR_MANUAL, Message, prompt_entry
+from monoagens.engine.turn.decision import decide
+from monoagens.engine.turn.prompts import CORE_PARTS, PromptContext, system_prompt
 
 REPLY_WINDOW = 1
 TRANSCRIPT_LINES = 30

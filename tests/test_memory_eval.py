@@ -12,8 +12,8 @@ from pathlib import Path
 
 from support import build_config, database
 
-from eidesoul.engine.memory.integrity import WriteQuota
-from eidesoul.engine.memory.store import MemoryStore
+from monoagens.engine.memory.integrity import WriteQuota
+from monoagens.engine.memory.store import MemoryStore
 
 DATA = Path(__file__).resolve().parent / "data" / "memory_eval.json"
 RECALL_FLOOR = 0.7

@@ -95,7 +95,7 @@ Limits: `grace_seconds > drain_seconds + notice_seconds` and `grace_seconds < st
 ### 4.6 Process hygiene
 
 - `shell`/subprocess: `start_new_session=True` + kill the process group on shutdown.
-- Sandbox: containers are labeled (`eidesoul.worker`, `eidesoul.turn`) for cleanup; `--rm` stays.
+- Sandbox: containers are labeled (`monoagens.worker`, `monoagens.turn`) for cleanup; `--rm` stays.
 - Workers do not block the event loop: DB and MiniLM go through a thread/executor.
 
 ### 4.7 What is not durable and must be decided
@@ -165,12 +165,12 @@ turns:
 
 ## 10. Code references
 
-- `eidesoul/engine/agent.py:917-921` — spawn capture.
-- `eidesoul/engine/turn/context.py:210-225` — `WorkingMemory.append` fail-open.
-- `eidesoul/engine/db.py:95-145` — `connect`, `upsert`.
-- `eidesoul/engine/jobs/supervisor.py:36-129` — primary/standby lifecycle.
-- `eidesoul/engine/jobs/lease.py:103-129`
-- `eidesoul/engine/tools/shell.py:13-18` — subprocess without a process group.
+- `monoagens/engine/agent.py:917-921` — spawn capture.
+- `monoagens/engine/turn/context.py:210-225` — `WorkingMemory.append` fail-open.
+- `monoagens/engine/db.py:95-145` — `connect`, `upsert`.
+- `monoagens/engine/jobs/supervisor.py:36-129` — primary/standby lifecycle.
+- `monoagens/engine/jobs/lease.py:103-129`
+- `monoagens/engine/tools/shell.py:13-18` — subprocess without a process group.
 
 ---
 

@@ -8,12 +8,12 @@ from types import SimpleNamespace
 from sqlalchemy import select
 from support import build_config, database
 
-from eidesoul.engine.access.roles import Role
-from eidesoul.engine.llm import LLM, prompt_prefix_hash
-from eidesoul.engine.registry import Handler
-from eidesoul.engine.schema import llm_calls
-from eidesoul.engine.tools import ToolContext
-from eidesoul.engine.turn.prompts import Prompt, system_prompt
+from monoagens.engine.access.roles import Role
+from monoagens.engine.llm import LLM, prompt_prefix_hash
+from monoagens.engine.registry import Handler
+from monoagens.engine.schema import llm_calls
+from monoagens.engine.tools import ToolContext
+from monoagens.engine.turn.prompts import Prompt, system_prompt
 
 
 class FakeClient:

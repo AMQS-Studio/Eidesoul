@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Ablate Eidesoul behavior from the database archive: gate replay, prompt budget, decisions.
+"""Ablate MonoAgens behavior from the database archive: gate replay, prompt budget, decisions.
 
 Read-only harness: it sends no messages, never calls `handle`, and writes no state.
 Run from the repo root: `.venv/bin/python scripts/ablate.py --last 100`.
@@ -19,28 +19,29 @@ sys.path.insert(0, str(ROOT))
 
 from ablate_engine import ABLATABLE, classify, decision_shift, prompt_budget, replay_metrics
 
-from eidesoul.engine.config import load_config, load_env, load_host, resolve_database_url
-from eidesoul.engine.db import Database
-from eidesoul.engine.llm import LLM
-from eidesoul.engine.memory import build_memory
-from eidesoul.engine.stores.affect import AffectStore
-from eidesoul.engine.stores.documents import DocumentStore
-from eidesoul.engine.stores.history import HistoryStore
-from eidesoul.engine.stores.skills import SkillStore
-from eidesoul.engine.stores.style import StyleStore
-from eidesoul.engine.turn.prompts import CORE_PARTS
+from monoagens.engine.config import load_config, load_env, load_host, resolve_database_url
+from monoagens.engine.db import Database
+from monoagens.engine.llm import LLM
+from monoagens.engine.memory import build_memory
+from monoagens.engine.stores.affect import AffectStore
+from monoagens.engine.stores.documents import DocumentStore
+from monoagens.engine.stores.history import HistoryStore
+from monoagens.engine.stores.skills import SkillStore
+from monoagens.engine.stores.style import StyleStore
+from monoagens.engine.turn.prompts import CORE_PARTS
 
 
 def open_stores(config, db, memory) -> dict:
     stores: dict = {"memory": memory}
     with suppress(Exception):
         stores["skills"] = SkillStore(db, config.skills.max_index_chars)
-    if config.affect.enabled:
+    voice = config.soul.voice
+    if voice.enabled and voice.affect.enabled:
         with suppress(Exception):
-            stores["affect"] = AffectStore(db, config.affect, soul=config.soul.persona)
-    if config.style.enabled:
+            stores["affect"] = AffectStore(db, voice.affect, soul=config.soul.persona)
+    if voice.enabled and voice.style.enabled:
         with suppress(Exception):
-            stores["style"] = StyleStore(db, config.style, language=config.soul.language)
+            stores["style"] = StyleStore(db, voice.style, language=config.soul.language)
     return stores
 
 
@@ -110,7 +111,7 @@ def report(chat: str, replay: dict, budget: dict, shift: dict | None) -> str:
 
 def main() -> int:
     parser = argparse.ArgumentParser(
-        description="Ablate Eidesoul behavior from the database archive."
+        description="Ablate MonoAgens behavior from the database archive."
     )
     parser.add_argument("--config", default=None, help="path to config.yaml")
     parser.add_argument("--chat", default=None, help="chat JID (default: the latest chat)")

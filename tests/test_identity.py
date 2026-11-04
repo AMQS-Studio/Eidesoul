@@ -4,7 +4,7 @@
 import pytest
 from support import database
 
-from eidesoul.engine.access.identity import (
+from monoagens.engine.access.identity import (
     CODE_ATTEMPTS,
     CODE_TTL,
     ID_PATTERN,
@@ -12,7 +12,7 @@ from eidesoul.engine.access.identity import (
     is_person_id,
     mask_address,
 )
-from eidesoul.engine.schema import people
+from monoagens.engine.schema import people
 
 WHATSAPP = "6285111242960"
 

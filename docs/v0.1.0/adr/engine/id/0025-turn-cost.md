@@ -1,4 +1,4 @@
-> Terjemahan turunan — jangan sunting; sumber: engine/0025-turn-cost.md (sha256: a4ff3e8d7547)
+> Terjemahan turunan — jangan sunting; sumber: engine/0025-turn-cost.md (sha256: 415ecf3594be)
 > Teks ini ditulis manusia; baris yang tidak bisa diterjemahkan mesin disalin apa adanya ke sumber English, jadi sumber bercampur dua bahasa.
 
 # ADR-0025: Biaya Turn — Prefix Stabil, Gating `polish`, dan Anggaran Panggilan
@@ -18,15 +18,15 @@
 
 | Fakta | Bukti |
 |---|---|
-| Semua blok prompt dirangkai menjadi **satu** pesan sistem, ditutup baris bahasa + `Date: ...` | `eidesoul/engine/turn/prompts.py:187,355-389` |
-| Blok `self` memuat `Mode`, `uptime`, `lease` — berubah tanpa perubahan soul/config | `eidesoul/engine/turn/prompts.py:150-186` (`:170`) |
-| Blok `topic`/`currents`/`style`/`person_style`/`skills` masuk `COMPETING` dan urutannya bergantung salience | `eidesoul/engine/turn/salience.py:20-24,48-71`, `eidesoul/engine/turn/prompts.py:373-385` |
-| Panggilan LLM per turn: decision, lingkar balasan dengan tool, lalu dua panggilan perapian | `eidesoul/engine/agent.py:503,758,810,829` |
-| `polish` dan `regulate` tidak punya pemicu: dipanggil setiap turn (kecuali kosong) | `eidesoul/engine/character/character.py:122,293` |
-| Tells deterministik sudah ada tapi belum dipakai sebagai gerbang | `eidesoul/engine/character/character.py:62,105` |
-| Penjaga panggilan berulang `repeat >= 3` untuk tool yang sama | `eidesoul/engine/llm.py:246-255` |
-| Anggaran hari ini = waktu (`run_budget_seconds`), bukan jumlah panggilan | `eidesoul/engine/llm.py:160-200`, `eidesoul/engine/config.py:79` |
-| Afinitas/sesi hanya lewat header provider | `eidesoul/engine/llm.py:156,176,187,231`, `eidesoul/providers/openai.py:15` |
+| Semua blok prompt dirangkai menjadi **satu** pesan sistem, ditutup baris bahasa + `Date: ...` | `monoagens/engine/turn/prompts.py:187,355-389` |
+| Blok `self` memuat `Mode`, `uptime`, `lease` — berubah tanpa perubahan soul/config | `monoagens/engine/turn/prompts.py:150-186` (`:170`) |
+| Blok `topic`/`currents`/`style`/`person_style`/`skills` masuk `COMPETING` dan urutannya bergantung salience | `monoagens/engine/turn/salience.py:20-24,48-71`, `monoagens/engine/turn/prompts.py:373-385` |
+| Panggilan LLM per turn: decision, lingkar balasan dengan tool, lalu dua panggilan perapian | `monoagens/engine/agent.py:503,758,810,829` |
+| `polish` dan `regulate` tidak punya pemicu: dipanggil setiap turn (kecuali kosong) | `monoagens/engine/character/character.py:122,293` |
+| Tells deterministik sudah ada tapi belum dipakai sebagai gerbang | `monoagens/engine/character/character.py:62,105` |
+| Penjaga panggilan berulang `repeat >= 3` untuk tool yang sama | `monoagens/engine/llm.py:246-255` |
+| Anggaran hari ini = waktu (`run_budget_seconds`), bukan jumlah panggilan | `monoagens/engine/llm.py:160-200`, `monoagens/engine/config.py:79` |
+| Afinitas/sesi hanya lewat header provider | `monoagens/engine/llm.py:156,176,187,231`, `monoagens/providers/openai.py:15` |
 
 Konsekuensinya: prefix prompt **berubah setiap turn**, jadi prompt caching provider praktis tidak pernah kena; penambahan panggilan `polish`/`regulate` terjadi bahkan ketika draft sudah bersih atau ketika `llm.run` berakhir error; dan tidak ada plafon biaya yang bisa dijelaskan ke operator.
 
@@ -64,14 +64,14 @@ Konsekuensinya: prefix prompt **berubah setiap turn**, jadi prompt caching provi
 
 ### 4.3 `polish`/`regulate` digerbangi pemicu deterministik
 
-- `polish` dijalankan hanya bila draft memicu pemeriksaan tell (`ASSISTANT_TELL`/`MARKDOWN`, `eidesoul/engine/character/character.py:62,105`).
+- `polish` dijalankan hanya bila draft memicu pemeriksaan tell (`ASSISTANT_TELL`/`MARKDOWN`, `monoagens/engine/character/character.py:62,105`).
 - `regulate` dijalankan hanya bila `polish` mengubah teks.
 - Tidak dijalankan bila draft kosong atau bila `llm.run` mengakhiri turn dengan `error:`.
 - Total maksimum satu panggilan perapian per turn.
 
 ### 4.4 Plafon panggilan per turn
 
-`engine.llm.max_calls_per_turn` (default **6**) menghitung **semua** panggilan LLM dalam satu turn: decision + lingkar balasan + perapian. Bila plafon habis: lingkar tool berhenti, turn ditutup dengan jawaban yang sudah ada + satu `notice:budget` (pola pesan yang sudah ada di `eidesoul/engine/llm.py:170-183`), tanpa retry dan tanpa potong senyap. Episode tetap dinilai (ADR-0020).
+`engine.llm.max_calls_per_turn` (default **6**) menghitung **semua** panggilan LLM dalam satu turn: decision + lingkar balasan + perapian. Bila plafon habis: lingkar tool berhenti, turn ditutup dengan jawaban yang sudah ada + satu `notice:budget` (pola pesan yang sudah ada di `monoagens/engine/llm.py:170-183`), tanpa retry dan tanpa potong senyap. Episode tetap dinilai (ADR-0020).
 
 ### 4.5 Token accounting tetap milik ADR-0019
 
@@ -136,18 +136,18 @@ engine:
 
 ## 10. Referensi kode
 
-- `eidesoul/engine/turn/prompts.py:187` — `system_prompt` (tempat pemisahan stabil/volatil).
-- `eidesoul/engine/turn/prompts.py:355-389` — perakitan blok, `salience.select`, join, baris bahasa + `Date`.
-- `eidesoul/engine/turn/prompts.py:150-186` — `self_block` (mode/uptime/lease; kandidat pertama pindah ke blok volatil).
-- `eidesoul/engine/turn/prompts.py:141-147` — `roles_block`.
-- `eidesoul/engine/turn/salience.py:20-24,48-71` — `COMPETING`/`ORDER`/`select`.
-- `eidesoul/engine/agent.py:503,758,810,829` — decision, lingkar balasan, `polish`, `regulate`.
-- `eidesoul/engine/character/character.py:62,105,122,293` — tell deterministik dan dua fungsi perapian.
-- `eidesoul/engine/llm.py:160-200` — lingkar dengan `run_budget_seconds` dan pesan anggaran.
-- `eidesoul/engine/llm.py:246-255` — penjaga panggilan tool berulang (`repeat >= 3`).
-- `eidesoul/engine/llm.py:156,176,187,231` — `session_headers` per request.
-- `eidesoul/providers/openai.py:15` — `session_header="x-opencode-session"` (afinitas provider).
-- `eidesoul/engine/config.py:69-81,161-163,202-204` — `LLMConfig`, `PromptConfig`, `CharacterConfig`.
+- `monoagens/engine/turn/prompts.py:187` — `system_prompt` (tempat pemisahan stabil/volatil).
+- `monoagens/engine/turn/prompts.py:355-389` — perakitan blok, `salience.select`, join, baris bahasa + `Date`.
+- `monoagens/engine/turn/prompts.py:150-186` — `self_block` (mode/uptime/lease; kandidat pertama pindah ke blok volatil).
+- `monoagens/engine/turn/prompts.py:141-147` — `roles_block`.
+- `monoagens/engine/turn/salience.py:20-24,48-71` — `COMPETING`/`ORDER`/`select`.
+- `monoagens/engine/agent.py:503,758,810,829` — decision, lingkar balasan, `polish`, `regulate`.
+- `monoagens/engine/character/character.py:62,105,122,293` — tell deterministik dan dua fungsi perapian.
+- `monoagens/engine/llm.py:160-200` — lingkar dengan `run_budget_seconds` dan pesan anggaran.
+- `monoagens/engine/llm.py:246-255` — penjaga panggilan tool berulang (`repeat >= 3`).
+- `monoagens/engine/llm.py:156,176,187,231` — `session_headers` per request.
+- `monoagens/providers/openai.py:15` — `session_header="x-opencode-session"` (afinitas provider).
+- `monoagens/engine/config.py:69-81,161-163,202-204` — `LLMConfig`, `PromptConfig`, `CharacterConfig`.
 
 ---
 

@@ -13,7 +13,7 @@
 
 ## 1. Context
 
-The engine already has the right *shape* for data-driven behavior: chat strings live in `eidesoul/lang/<code>.yaml` (two catalogs, 249 keys each), character data lives in `eidesoul/library/`, and an extension declares itself in a manifest. What it does **not** have is the rule that keeps mechanism and data apart. Culture, geography, transport, and vendor are written into the mechanism itself, so a deployment outside one country or one transport must edit code. Measured on 2026-11-04 by a full sweep of `eidesoul/engine`, `eidesoul/admin`, `__main__.py`, the shipped templates, the image, and `scripts/`.
+The engine already has the right *shape* for data-driven behavior: chat strings live in `monoagens/lang/<code>.yaml` (two catalogs, 249 keys each), character data lives in `monoagens/library/`, and an extension declares itself in a manifest. What it does **not** have is the rule that keeps mechanism and data apart. Culture, geography, transport, and vendor are written into the mechanism itself, so a deployment outside one country or one transport must edit code. Measured on 2026-11-04 by a full sweep of `monoagens/engine`, `monoagens/admin`, `__main__.py`, the shipped templates, the image, and `scripts/`.
 
 ### 1.1 Language is a default, twenty-five times over
 
@@ -76,8 +76,8 @@ Two consequences follow. First, **safety is not portable**: the crisis net cover
 1. **Neutrality must be executable, not remembered.** A review checklist already failed: every item above survived multiple review passes because it "worked".
 2. **Safety cannot depend on a country.** Crisis detection is a spine behavior and must cover every language the engine claims to speak.
 3. **Safety cannot depend on a name table.** An approval class decided by tool name means a plugin tool is either uncategorizable or silently misclassified.
-4. **Install is the first impression.** `eidesoul init` must produce a host that mentions no vendor, country, transport, or language.
-5. **Extensions must not edit core.** A new plugin, gateway, tool, or language adds data and manifests; it never touches `eidesoul/engine/**` or `eidesoul/admin/templates.py`.
+4. **Install is the first impression.** `monoagens init` must produce a host that mentions no vendor, country, transport, or language.
+5. **Extensions must not edit core.** A new plugin, gateway, tool, or language adds data and manifests; it never touches `monoagens/engine/**` or `monoagens/admin/templates.py`.
 6. **Refusal over silent fallback.** A missing pack, timezone, locale, or plugin is an explicit error naming what is missing — never an Indonesian, English, or Jakarta default chosen on the operator's behalf.
 7. **One gate, mechanical.** The rule lives in a script the suite runs, with a listed inventory, not in prose.
 
@@ -95,22 +95,22 @@ Two consequences follow. First, **safety is not portable**: the crisis net cover
 
 ### 4.1 The neutral-core contract
 
-The engine must boot, pass its suite, and serve `/status` under this configuration: `plugins: {}`, no **optional** gateway registered, no library pack installed, `language: en`, and an empty database. The body the engine ships for its own operator console (`eidesoul/gateways/cli`) is not an optional gateway; it is the default surface and counts as part of the neutral boot. Any data it needs and cannot find is an explicit refusal that names the missing thing. This is the operational definition of "neutral"; anything weaker is a slogan.
+The engine must boot, pass its suite, and serve `/status` under this configuration: `plugins: {}`, no **optional** gateway registered, no library pack installed, `language: en`, and an empty database. The body the engine ships for its own operator console (`monoagens/gateways/cli`) is not an optional gateway; it is the default surface and counts as part of the neutral boot. Any data it needs and cannot find is an explicit refusal that names the missing thing. This is the operational definition of "neutral"; anything weaker is a slogan.
 
 ### 4.2 Culture is data
 
 Crisis and sensitive patterns, profanity severity, affirmation words, level words, laughter, particles, and the style seed live in per-language packs next to the existing ones:
 
-- `eidesoul/library/safety/<lang>.json` — `crisis`, `sensitive` phrase lists.
-- `eidesoul/library/severity/<lang>.json` — word → `{kind, level}`.
-- `eidesoul/library/lexicon/<lang>.json` — gains `affirmations`, `level_words`, `laughter`, `particles`.
-- `eidesoul/library/style/<lang>.json` — the style baseline (`seed_median`, `seed_p90`, `seed_lower`, `seed_emoji`, `particles`, `emojis`).
+- `monoagens/library/safety/<lang>.json` — `crisis`, `sensitive` phrase lists.
+- `monoagens/library/severity/<lang>.json` — word → `{kind, level}`.
+- `monoagens/library/lexicon/<lang>.json` — gains `affirmations`, `level_words`, `laughter`, `particles`.
+- `monoagens/library/style/<lang>.json` — the style baseline (`seed_median`, `seed_p90`, `seed_lower`, `seed_emoji`, `particles`, `emojis`).
 
-`eidesoul/engine/**` carries no non-English literal and no language-specific word list. The only exception is the English safety net, which the gate records explicitly. A language without a style pack gets no style baseline, not an Indonesian one.
+`monoagens/engine/**` carries no non-English literal and no language-specific word list. The only exception is the English safety net, which the gate records explicitly. A language without a style pack gets no style baseline, not an Indonesian one.
 
 ### 4.3 Language is a required value
 
-No `language: str = "id"` default, no `or "id"` fallback, and no `normalize_language(..., "id")` argument survives in `eidesoul/engine/**`; `soul.language` is written by `eidesoul init`, every call site passes it explicitly, and catalog lookup falls back to `en` only. `"auto"` resolves to the operator's locale, never to a fixed country. `soul.language_line` stops branching in code: the instruction is a catalog key, so a French soul is told to reply in French or refused, never in Indonesian.
+No `language: str = "id"` default, no `or "id"` fallback, and no `normalize_language(..., "id")` argument survives in `monoagens/engine/**`; `soul.language` is written by `monoagens init`, every call site passes it explicitly, and catalog lookup falls back to `en` only. `"auto"` resolves to the operator's locale, never to a fixed country. `soul.language_line` stops branching in code: the instruction is a catalog key, so a French soul is told to reply in French or refused, never in Indonesian.
 
 ### 4.4 Geography is a required value
 
@@ -139,7 +139,7 @@ Metadata lives with the thing it describes: a tool declares `target` (`file`, `r
 
 Because nothing is released, specialization is removed rather than shimmed: `currents` (module pair, command, prompt prose, state key), `LEGACY`/`LEGACY_GATEWAY`, the shutdown compatibility hooks, and the `memori` verb DSL.
 
-Gender splits three ways. The soul's own `gender` (`soul.py:62`, read by the decision prompt) stays: it is identity data written by `soul.yaml` and `eidesoul init`. Everything that guesses or gates a **person's** gender goes: `access/target.py` in full, `identity.display_target` and its call site, the `/gender` command and its catalog keys, the `gender_gate`/`gender_confidence`/`gender_avatar` keys, the `people.gender*` columns with `affect.gender`/`set_gender`, and the gateway `avatar` signal — `gateways/whatsapp/profile.py` exists only for that guess.
+Gender splits three ways. The soul's own `gender` (`soul.py:62`, read by the decision prompt) stays: it is identity data written by `soul.yaml` and `monoagens init`. Everything that guesses or gates a **person's** gender goes: `access/target.py` in full, `identity.display_target` and its call site, the `/gender` command and its catalog keys, the `gender_gate`/`gender_confidence`/`gender_avatar` keys, the `people.gender*` columns with `affect.gender`/`set_gender`, and the gateway `avatar` signal — `gateways/whatsapp/profile.py` exists only for that guess.
 
 `gender_gate` is an unlock, not a net: `effective_limits` gives a target it believes male the configured `toxicity`/`adult_memes` while everyone else is clamped to `(1, 0)`, and `character/patterns.py:28,167-171` gates pattern selection on the same `TARGETS` axis. Its removal therefore ships its replacement in the same commit, never after: the register comes from the room's configuration, the "male target" precondition on the highest `adult_memes` level is deleted, `TARGETS`/`_eligible` lose the axis, and the prompt rule becomes target-independent ("no sexual or degrading material about a real person; an unclear target or room stays gentle"). The hard floor in `character.py` (minors, doxxing, credible threats, hate) is unchanged and remains the actual safety line.
 
@@ -171,17 +171,17 @@ TOOL = Handler(
 
 ### 4.12 The spine is the only vendor allowlist
 
-The spine named by ADR-0001 and ADR-0031 is fixed and may be named in core: PostgreSQL with pgvector, Mem0, the shared MiniLM embedder, and the OpenAI-compatible wire client. Everything else is optional and stays out of `eidesoul/engine/**`: search engines and their regions, language-model vendors, cloud APIs, and plugin tables. The allowlist is a constant with one entry per spine component and a comment naming its ADR, so adding one is a reviewed change, never an accidental import.
+The spine named by ADR-0001 and ADR-0031 is fixed and may be named in core: PostgreSQL with pgvector, Mem0, the shared MiniLM embedder, and the OpenAI-compatible wire client. Everything else is optional and stays out of `monoagens/engine/**`: search engines and their regions, language-model vendors, cloud APIs, and plugin tables. The allowlist is a constant with one entry per spine component and a comment naming its ADR, so adding one is a reviewed change, never an accidental import.
 
 ### 4.13 One clock, one locale
 
-`locale` and `timezone` are required soul values written by `eidesoul init`, not code defaults. Core reads the clock through one helper, `now(tz)`, and stores day buckets in that zone; `date.today()`, `time.localtime()`, and a mixed `gmtime`/`localtime` pair are forbidden in `eidesoul/engine/**`. The host `TZ` and `LANG` are not forwarded into sandbox or shell children. Weekday parsing accepts ISO numbers or case-insensitive names, and week start is stated, not assumed.
+`locale` and `timezone` are required soul values written by `monoagens init`, not code defaults. Core reads the clock through one helper, `now(tz)`, and stores day buckets in that zone; `date.today()`, `time.localtime()`, and a mixed `gmtime`/`localtime` pair are forbidden in `monoagens/engine/**`. The host `TZ` and `LANG` are not forwarded into sandbox or shell children. Weekday parsing accepts ISO numbers or case-insensitive names, and week start is stated, not assumed.
 
 ## 5. Configuration
 
 ```yaml
 soul:
-  language: en            # written by `eidesoul init`; required, no default
+  language: en            # written by `monoagens init`; required, no default
   locale: en-US           # required; drives formatting and search region
   timezone: Europe/Berlin # required; the host's home zone for prompts and day buckets
 engine:
@@ -198,10 +198,10 @@ plugins: {}               # no plugin key in a shipped template
 Pack layout:
 
 ```text
-eidesoul/library/safety/<lang>.json     {"version":1,"language":"en","crisis":[…],"sensitive":[…]}
-eidesoul/library/severity/<lang>.json   {"version":1,"language":"en","words":{"word":["kind",2]}}
-eidesoul/library/style/<lang>.json      {"version":1,"language":"en","seed_median":34,"particles":[…],"emojis":[…]}
-eidesoul/library/lexicon/<lang>.json    gains "affirmations", "level_words", "laughter", "particles"
+monoagens/library/safety/<lang>.json     {"version":1,"language":"en","crisis":[…],"sensitive":[…]}
+monoagens/library/severity/<lang>.json   {"version":1,"language":"en","words":{"word":["kind",2]}}
+monoagens/library/style/<lang>.json      {"version":1,"language":"en","seed_median":34,"particles":[…],"emojis":[…]}
+monoagens/library/lexicon/<lang>.json    gains "affirmations", "level_words", "laughter", "particles"
 ```
 
 ## 6. Metrics and gates
@@ -222,24 +222,24 @@ Counts to drive to zero, measured 2026-11-04:
 
 The gate, `scripts/neutral.py --check` (new module), fails when:
 
-1. `eidesoul/engine/**`, `eidesoul/admin/**`, or the shipped templates contain a **non-ASCII letter** (Unicode category `L*`) outside the explicit English safety allowlist. Typographic punctuation and arrows (`§ — … → • ≥ ↳`) are structural, not culture; emoji and country or state symbols are refused in any user-visible string.
+1. `monoagens/engine/**`, `monoagens/admin/**`, or the shipped templates contain a **non-ASCII letter** (Unicode category `L*`) outside the explicit English safety allowlist. Typographic punctuation and arrows (`§ — … → • ≥ ↳`) are structural, not culture; emoji and country or state symbols are refused in any user-visible string.
 2. The banned vocabulary list (Indonesian function words plus the words moved to packs) appears in that same scope.
-3. A vendor, gateway, or plugin identifier appears there outside the spine allowlist (§4.12), `eidesoul/providers/`, `eidesoul/gateways/`, and `plugins/`.
+3. A vendor, gateway, or plugin identifier appears there outside the spine allowlist (§4.12), `monoagens/providers/`, `monoagens/gateways/`, and `plugins/`.
 4. A `language`/`locale`/`tz` default or fallback appears there: no `language="id"`, no `default="id"`, no `"id-ID"`, no `"Asia/`, no `TZ=` in the `Dockerfile`.
 5. A catalog language has neither a safety pack nor a refusal record.
 6. A `Handler` lacks `target` or `approval_class`, or a closed name table (`FAMILIES`, `AUTHORIZATION_TOOLS`, `DESTRUCTIVE_ACTIONS`, `PROVIDES_KEYS`) is found, or a name branch decides an approval class.
 7. A shipped template has a non-empty `plugins:` map, names a plugin tool in a role seed, or writes plugin credentials into `.env`.
-8. `date.today()`, `time.localtime()`, or `time.gmtime()` appears in `eidesoul/engine/**` instead of the `now(tz)` helper; or a host `TZ`/`LANG` is forwarded to a child process.
-9. The neutral smoke fails: `pytest -q` and `eidesoul selftest` run with `plugins: {}`, `language: en`, no optional gateway, and an empty database.
+8. `date.today()`, `time.localtime()`, or `time.gmtime()` appears in `monoagens/engine/**` instead of the `now(tz)` helper; or a host `TZ`/`LANG` is forwarded to a child process.
+9. The neutral smoke fails: `pytest -q` and `monoagens selftest` run with `plugins: {}`, `language: en`, no optional gateway, and an empty database.
 10. A body's `prompt_section()` is longer than 1200 characters, changes between two calls in one boot, or a body that returns an empty section still yields transport vocabulary in the assembled prompt.
 11. The prompt contract suite fails: `tests/data/prompt_cases.yaml` declares, per case, the required fragments, the forbidden tokens, and the expected `prompt_prefix_hash`, and `pytest -q` runs it against the real prompt builders. It pins properties, never wording, so a reworded sentence does not force a fixture edit but a leaked transport, culture, or language token does.
 
-It runs beside the existing gates: `pytest -q`, `ruff check eidesoul scripts tests plugins migrations`, `python -P scripts/types.py --check`, `python scripts/selfcheck.py --check`, `python scripts/adr.py --check`.
+It runs beside the existing gates: `pytest -q`, `ruff check monoagens scripts tests plugins migrations`, `python -P scripts/types.py --check`, `python scripts/selfcheck.py --check`, `python scripts/adr.py --check`.
 
 ## 7. Acceptance criteria
 
 - The gate in §6 passes with zero hits, in the scope it names (`engine`, `admin`, `__main__.py`, templates, `Dockerfile`).
-- `language`, `locale`, and `timezone` have no default anywhere in `eidesoul/engine/**`; `eidesoul init` writes all three, and the seed `soul.yaml` carries none of them until it does.
+- `language`, `locale`, and `timezone` have no default anywhere in `monoagens/engine/**`; `monoagens init` writes all three, and the seed `soul.yaml` carries none of them until it does.
 - A French soul is told to reply in French through the catalog, or refused; `language_line` carries no language branch in code.
 - A manifest without `tz` fails with `ManifestError`; no `Asia/` literal and no `TZ=` exist outside a deployment manifest.
 - `currents` is gone: no module, no command, no state key, no prose topic list in `turn/prompts.py`.
@@ -252,7 +252,7 @@ It runs beside the existing gates: `pytest -q`, `ruff check eidesoul scripts tes
 - A test plugin that declares a new family and a new `target` boots and its tool is classified without editing core; no `FAMILIES` or `AUTHORIZATION_TOOLS` set exists.
 - `schema.py` defines no plugin table; a plugin creates its own.
 - `plugins: {}` and a `.env` without plugin secrets; installing a plugin adds its declared `secrets` without editing `templates.py`.
-- Deleting every plugin and optional gateway still boots the engine; `eidesoul selftest` reports `safety: ok` for a language with a pack and `safety: degraded` only when `allow_degraded: true`.
+- Deleting every plugin and optional gateway still boots the engine; `monoagens selftest` reports `safety: ok` for a language with a pack and `safety: degraded` only when `allow_degraded: true`.
 - Every command, tool, and verb name is English; no localized alias or verb branch resolves through core.
 
 ## 8. Risks and mitigations
@@ -287,44 +287,44 @@ It runs beside the existing gates: `pytest -q`, `ruff check eidesoul scripts tes
 
 ## 10. Code references
 
-- `eidesoul/engine/guard/patterns.py:15-19` — the hardcoded crisis and sensitive patterns.
-- `eidesoul/engine/character/character.py:31,188-211,227-235` — `pantun`, `SEVERITY`, and `effective_limits`.
-- `eidesoul/engine/access/target.py:21-26,39-40,50,111-155` — the second profanity list, the markers, the `TARGETS` axis, and the inference.
-- `eidesoul/engine/access/privacy.py:27,32-46,93` — `YES`, `LEVEL_WORDS`, and the `or "id"` fallback.
-- `eidesoul/engine/character/patterns.py:27,28,167-171` — `SERIOUS_REGISTERS`, `TARGETS`, `_eligible`.
-- `eidesoul/engine/stores/style.py:22,27,29-33,34-60,343-357` — placeholders, laughter, particles, emojis, seed, and the prompt baseline.
-- `eidesoul/engine/config.py:215-218,250-259,388` — search config, forwarded `TZ`/`LANG`, Indonesian topic ids.
-- `eidesoul/engine/self_knowledge.py:70-77,313-325,462-465` — topic keys, prompt headings, README fallback.
-- `eidesoul/engine/commands/memori.py:58,75,90,126` — the localized verb DSL; `eidesoul/lang/en.yaml:121` — the same verbs in the English catalog.
-- `eidesoul/engine/soul.py:22-44,60,65,82,106-111,251,256` — the seed document, `language`, `locale`, `language_line`, and both fallbacks.
-- `eidesoul/engine/i18n.py:50,59` — `normalize_language` default and the `auto` alias.
-- `eidesoul/engine/jobs/schedule.py:16,29-36,76-84,136` — `DEFAULT_TZ`, `zone`, weekday parsing.
-- `eidesoul/engine/jobs/automation.py:155,1133,1539` — the two `tz` re-defaults and the day key.
-- `eidesoul/engine/jobs/currents.py:1,18-31`, `eidesoul/engine/stores/currents.py:1`, `eidesoul/engine/commands/konteks.py:1,11,72` — the country context and its flag.
-- `eidesoul/engine/commands/cari.py:46-48`, `kirim.py:28-30`, `memori.py:159-161` — Indonesian names, aliases, emoji descriptions.
-- `eidesoul/engine/tools/web_search.py:16,64,107` — `WEB_BACKENDS`, the ddgs region default, the tool alias.
-- `eidesoul/engine/tools/sandbox.py:17,69-71` — forwarded `TZ`/`LANG`; `eidesoul/engine/tools/settings.py:33-37` — closed document kinds.
-- `eidesoul/engine/guard/policy.py:18,108-111,289-356` — the approval name tables and branches.
-- `eidesoul/engine/tools/__init__.py:23,349-367` — `FAMILIES` and the per-name door logic.
-- `eidesoul/engine/plugins.py:105-110,508-511` — `PROVIDES_KEYS` and plugin tools validated against core families.
-- `eidesoul/engine/schema.py:927-946`, `eidesoul/engine/access/identity.py:22-23,345`, `eidesoul/admin/people.py:14,22,57-59,90` — the plugin tables, their core readers, and the WhatsApp/legacy fallbacks.
-- `eidesoul/admin/templates.py:70,335-345,354-356,380,389-397` — plugin default, role grants, Indonesian command names, `.env` tail.
-- `eidesoul/engine/memory/episodes.py:149-161` — `TARGET_TYPES` naming a plugin and gateway tools.
-- `eidesoul/engine/turn/prompts.py:61-84,121,138-159,178-191,239,247,309,319,329-332,347-350,360-372,379-384,408-412,427-432,441-449,498` — the chat vocabulary and the prose topic list.
-- `eidesoul/engine/turn/decision.py:13-51,343-345` — mentions, DMs, `ACTS`, `bubbles`, prompt labels.
-- `eidesoul/engine/inbound.py:168-176` — `CoreDefaults`, where `prompt_section()` lands with an empty default.
-- `eidesoul/engine/llm.py:138-145` — `prompt_prefix_hash`, which will cover the body section automatically.
-- `eidesoul/gateways/cli/gateway.py:91-106`, `eidesoul/gateways/whatsapp/gateway.py` — bodies that will carry their own section instead of teaching core their vocabulary.
-- `eidesoul/engine/turn/context.py:317,506-513` — language default and quote rendering.
-- `eidesoul/engine/access/relay.py:1-10,218`, `eidesoul/engine/stores/history.py:683,746` — the DM-bound relay, `dm_thread`, the compatibility hook.
-- `eidesoul/engine/llm.py:1,10,33,51,177,648-655` — the wire client, the digest prompt and method, the language default.
-- `eidesoul/engine/memory/mem0.py:19,186-204,213,223`, `eidesoul/engine/embed.py:15` — the spine components §4.12 allowlists.
-- `eidesoul/engine/memory/context.py:82`, `eidesoul/engine/memory/ledger.py:25,104`, `eidesoul/engine/stores/affect.py:835,917`, `eidesoul/engine/memory/store.py:2216` — the mixed day boundaries.
-- `eidesoul/engine/access/roles.py:20`, `eidesoul/engine/memory/ledger.py:104` — the legacy markers.
+- `monoagens/engine/guard/patterns.py:15-19` — the hardcoded crisis and sensitive patterns.
+- `monoagens/engine/character/character.py:31,188-211,227-235` — `pantun`, `SEVERITY`, and `effective_limits`.
+- `monoagens/engine/access/target.py:21-26,39-40,50,111-155` — the second profanity list, the markers, the `TARGETS` axis, and the inference.
+- `monoagens/engine/access/privacy.py:27,32-46,93` — `YES`, `LEVEL_WORDS`, and the `or "id"` fallback.
+- `monoagens/engine/character/patterns.py:27,28,167-171` — `SERIOUS_REGISTERS`, `TARGETS`, `_eligible`.
+- `monoagens/engine/stores/style.py:22,27,29-33,34-60,343-357` — placeholders, laughter, particles, emojis, seed, and the prompt baseline.
+- `monoagens/engine/config.py:215-218,250-259,388` — search config, forwarded `TZ`/`LANG`, Indonesian topic ids.
+- `monoagens/engine/self_knowledge.py:70-77,313-325,462-465` — topic keys, prompt headings, README fallback.
+- `monoagens/engine/commands/memori.py:58,75,90,126` — the localized verb DSL; `monoagens/lang/en.yaml:121` — the same verbs in the English catalog.
+- `monoagens/engine/soul.py:22-44,60,65,82,106-111,251,256` — the seed document, `language`, `locale`, `language_line`, and both fallbacks.
+- `monoagens/engine/i18n.py:50,59` — `normalize_language` default and the `auto` alias.
+- `monoagens/engine/jobs/schedule.py:16,29-36,76-84,136` — `DEFAULT_TZ`, `zone`, weekday parsing.
+- `monoagens/engine/jobs/automation.py:155,1133,1539` — the two `tz` re-defaults and the day key.
+- `monoagens/engine/jobs/currents.py:1,18-31`, `monoagens/engine/stores/currents.py:1`, `monoagens/engine/commands/konteks.py:1,11,72` — the country context and its flag.
+- `monoagens/engine/commands/cari.py:46-48`, `kirim.py:28-30`, `memori.py:159-161` — Indonesian names, aliases, emoji descriptions.
+- `monoagens/engine/tools/web_search.py:16,64,107` — `WEB_BACKENDS`, the ddgs region default, the tool alias.
+- `monoagens/engine/tools/sandbox.py:17,69-71` — forwarded `TZ`/`LANG`; `monoagens/engine/tools/settings.py:33-37` — closed document kinds.
+- `monoagens/engine/guard/policy.py:18,108-111,289-356` — the approval name tables and branches.
+- `monoagens/engine/tools/__init__.py:23,349-367` — `FAMILIES` and the per-name door logic.
+- `monoagens/engine/plugins.py:105-110,508-511` — `PROVIDES_KEYS` and plugin tools validated against core families.
+- `monoagens/engine/schema.py:927-946`, `monoagens/engine/access/identity.py:22-23,345`, `monoagens/admin/people.py:14,22,57-59,90` — the plugin tables, their core readers, and the WhatsApp/legacy fallbacks.
+- `monoagens/admin/templates.py:70,335-345,354-356,380,389-397` — plugin default, role grants, Indonesian command names, `.env` tail.
+- `monoagens/engine/memory/episodes.py:149-161` — `TARGET_TYPES` naming a plugin and gateway tools.
+- `monoagens/engine/turn/prompts.py:61-84,121,138-159,178-191,239,247,309,319,329-332,347-350,360-372,379-384,408-412,427-432,441-449,498` — the chat vocabulary and the prose topic list.
+- `monoagens/engine/turn/decision.py:13-51,343-345` — mentions, DMs, `ACTS`, `bubbles`, prompt labels.
+- `monoagens/engine/inbound.py:168-176` — `CoreDefaults`, where `prompt_section()` lands with an empty default.
+- `monoagens/engine/llm.py:138-145` — `prompt_prefix_hash`, which will cover the body section automatically.
+- `monoagens/gateways/cli/gateway.py:91-106`, `monoagens/gateways/whatsapp/gateway.py` — bodies that will carry their own section instead of teaching core their vocabulary.
+- `monoagens/engine/turn/context.py:317,506-513` — language default and quote rendering.
+- `monoagens/engine/access/relay.py:1-10,218`, `monoagens/engine/stores/history.py:683,746` — the DM-bound relay, `dm_thread`, the compatibility hook.
+- `monoagens/engine/llm.py:1,10,33,51,177,648-655` — the wire client, the digest prompt and method, the language default.
+- `monoagens/engine/memory/mem0.py:19,186-204,213,223`, `monoagens/engine/embed.py:15` — the spine components §4.12 allowlists.
+- `monoagens/engine/memory/context.py:82`, `monoagens/engine/memory/ledger.py:25,104`, `monoagens/engine/stores/affect.py:835,917`, `monoagens/engine/memory/store.py:2216` — the mixed day boundaries.
+- `monoagens/engine/access/roles.py:20`, `monoagens/engine/memory/ledger.py:104` — the legacy markers.
 - `Dockerfile:5` — `TZ=Asia/Jakarta`.
-- `eidesoul/library/patterns/jawatimur.json`, `eidesoul/library/facts/indonesia.json` — the only shipped packs, both `language: id`.
+- `monoagens/library/patterns/jawatimur.json`, `monoagens/library/facts/indonesia.json` — the only shipped packs, both `language: id`.
 - `tests/support.py:66-120` — `default_soul`, `role`, and `build_config`, the helpers the prompt contract suite reuses instead of rebuilding a world.
-- Proposed, not code yet: `eidesoul/library/{safety,severity,style}/<lang>.json`, the `affirmations`/`level_words`/`laughter`/`particles` lexicon keys, `Handler.target`/`approval_class`/`destructive`/`path_arg`/`scan`, `now(tz)`, `soul.timezone`, `scripts/neutral.py`, and `tests/data/prompt_cases.yaml`.
+- Proposed, not code yet: `monoagens/library/{safety,severity,style}/<lang>.json`, the `affirmations`/`level_words`/`laughter`/`particles` lexicon keys, `Handler.target`/`approval_class`/`destructive`/`path_arg`/`scan`, `now(tz)`, `soul.timezone`, `scripts/neutral.py`, and `tests/data/prompt_cases.yaml`.
 
 ---
 

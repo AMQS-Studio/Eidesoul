@@ -1,4 +1,4 @@
-> Terjemahan turunan — jangan sunting; sumber: engine/0036-role-model.md (sha256: e96a979b4c1f)
+> Terjemahan turunan — jangan sunting; sumber: engine/0036-role-model.md (sha256: 4259e16c3d6b)
 
 - **Status:** accepted
 - **Tanggal:** 2026-11-04
@@ -28,7 +28,7 @@ Diukur pada 2026-11-04:
 | --- | --- |
 | hint role dipercaya dari setiap body | `agent.py:654-662` membaca `hints["roles"]`; `inbound.py:13-20` mendokumentasikannya hanya untuk konsol lokal |
 | administrator seed tidak punya user | `roles.yaml:5`, `admin/templates.py:306-320`; `require_administrator()` menolaknya |
-| init tidak dapat mengisi user administrator | `eidesoul init --label` mengisi `label`, bukan `users` (`admin/init.py:227-230`) |
+| init tidak dapat mengisi user administrator | `monoagens init --label` mengisi `label`, bukan `users` (`admin/init.py:227-230`) |
 | seed terikat budaya dan usang | `description: Committee member`; command `cari`, `memori`, `kirim`; tool `google` (`roles.yaml:31-46`) |
 | `protected` tidak dibatasi ke administrator | `parse_role` menerima `protected: true` pada role apa pun (`roles.py:165-174`), sementara `prompts.py:42` dan `status.py:61` memperlakukan role protected mana pun sebagai privileged |
 | `users` menerima string apa pun | `parse_role` memanggil `_str_tuple` lalu berhenti (`roles.py:151-183`); alamat mentah diam-diam tidak cocok dengan `per_...` mana pun dan jatuh ke `default_role` |
@@ -90,7 +90,7 @@ tanpa penggunaan di policy. Ia tidak ada sekarang.
 - Ia harus ada, membawa `tools: ["*"]`, mengizinkan `approve`, dan memiliki setidaknya satu user
   `per_...`.
 - Ia tidak dapat dihapus atau dinamai ulang; hanya `label` dan daftar user-nya yang boleh berubah,
-  lewat `roles.yaml` plus `eidesoul config import` (ADR-0022).
+  lewat `roles.yaml` plus `monoagens config import` (ADR-0022).
 - Tidak ada alias `admin`. Role kedua dengan `"*"` diperbolehkan dan eksplisit, tetapi ia tidak
   terlindungi dan tidak memenuhi gate boot.
 - `priority` mengurutkan role yang cocok; ia tidak membuat satu role menimpa yang lain. Grant
@@ -138,7 +138,7 @@ kemudian); pencocokan tidak melakukan apa pun sampai baris dan link ada.
 Subcommand baru membuat administrator pertama tanpa menyunting YAML manual:
 
 ```text
-eidesoul people add <gateway> <address> --role administrator [--name <display name>]
+monoagens people add <gateway> <address> --role administrator [--name <display name>]
 ```
 
 Ia melakukan satu transaksi: membuat baris `people` dengan `per_...` baru, menyisipkan baris
@@ -147,7 +147,7 @@ Ia melakukan satu transaksi: membuat baris `people` dengan `per_...` baru, menyi
 dikenal, role tak dikenal, role yang bukan `administrator` untuk user pertama (kecuali role sudah
 punya user), dan alamat yang sudah tertaut ke person lain.
 
-`eidesoul init` mencetak command ini sebagai langkah berikutnya yang pertama. `eidesoul run` tetap
+`monoagens init` mencetak command ini sebagai langkah berikutnya yang pertama. `monoagens run` tetap
 memakai gate boot yang ada: tanpa user administrator ia menolak dan menyebut command-nya. Ia tidak
 pernah memberi grant otomatis ke pengirim pertama.
 
@@ -250,18 +250,18 @@ Gate-nya:
 
 ## 10. Referensi kode
 
-- `eidesoul/engine/access/roles.py:19,27-38,60-72,84-108,151-183` — nama dicadangkan, field Role,
+- `monoagens/engine/access/roles.py:19,27-38,60-72,84-108,151-183` — nama dicadangkan, field Role,
   pencarian identitas, gate boot, dan parsing.
-- `eidesoul/engine/access/identity.py:30-48,107-145` — bentuk `per_...` dan resolusi.
-- `eidesoul/engine/agent.py:654-662,851-862` — cabang hint role dan penyerahan identitas.
-- `eidesoul/engine/inbound.py:13-20,47-53` — daftar hint dan `HINT_KEYS`.
-- `eidesoul/gateways/cli/config.py:8-21` dan `gateways/cli/gateway.py:66-67` — opsi role CLI dan
+- `monoagens/engine/access/identity.py:30-48,107-145` — bentuk `per_...` dan resolusi.
+- `monoagens/engine/agent.py:654-662,851-862` — cabang hint role dan penyerahan identitas.
+- `monoagens/engine/inbound.py:13-20,47-53` — daftar hint dan `HINT_KEYS`.
+- `monoagens/gateways/cli/config.py:8-21` dan `gateways/cli/gateway.py:66-67` — opsi role CLI dan
   hint yang ia tulis.
-- `eidesoul/engine/turn/prompts.py:42`, `eidesoul/engine/commands/status.py:61` — situs predikat
+- `monoagens/engine/turn/prompts.py:42`, `monoagens/engine/commands/status.py:61` — situs predikat
   privilege.
-- Jalur import `eidesoul/engine/access/roles.py` dan `eidesoul/admin/roles.py` — jalur tulis
+- Jalur import `monoagens/engine/access/roles.py` dan `monoagens/admin/roles.py` — jalur tulis
   teraudit yang dipakai ulang `people add`.
-- `roles.yaml`, `eidesoul/admin/templates.py:306-320`, `eidesoul/admin/init.py:227-230` — seed dan
+- `roles.yaml`, `monoagens/admin/templates.py:306-320`, `monoagens/admin/init.py:227-230` — seed dan
   perilaku `--label`.
 - `tests/test_roles.py`, `tests/test_cli_gateway.py`, `tests/test_architecture.py` — suite yang
   diubah keputusan ini.

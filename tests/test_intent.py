@@ -7,10 +7,10 @@ from types import SimpleNamespace
 
 from support import build_config, database
 
-from eidesoul.engine import embed
-from eidesoul.engine.config import IntentConfig, RetentionConfig
-from eidesoul.engine.memory import intent
-from eidesoul.engine.memory.store import MemoryStore
+from monoagens.engine import embed
+from monoagens.engine.config import IntentConfig, RetentionConfig
+from monoagens.engine.memory import intent
+from monoagens.engine.memory.store import MemoryStore
 
 PERSON = "628111"
 THREAD = "628111@s.whatsapp.net"
@@ -86,7 +86,7 @@ def store(tmp_path) -> MemoryStore:
 def test_the_remember_hint_forces_core_without_pinning_a_plain_category(
     tmp_path, monkeypatch
 ) -> None:
-    from eidesoul.engine.jobs.cognition import CognitionWorker
+    from monoagens.engine.jobs.cognition import CognitionWorker
 
     memory = store(tmp_path)
     worker = CognitionWorker(database(), build_config(tmp_path), memory)
@@ -164,7 +164,7 @@ def test_forget_stays_put_when_it_is_ambiguous(tmp_path) -> None:
 
 
 def test_the_audit_job_purges_with_the_configured_grace_and_batch(tmp_path) -> None:
-    from eidesoul.engine.jobs.cognition import CognitionWorker, Job
+    from monoagens.engine.jobs.cognition import CognitionWorker, Job
 
     class Recorder:
         def __init__(self) -> None:

@@ -1,4 +1,4 @@
-> Terjemahan turunan — jangan sunting; sumber: engine/0042-sync-on-start.md (sha256: 7f74abcc3d61)
+> Terjemahan turunan — jangan sunting; sumber: engine/0042-sync-on-start.md (sha256: ce25ca46ed17)
 
 # ADR-0042: Sync saat Start — Perubahan File Berlaku Tanpa CLI
 
@@ -8,22 +8,22 @@
 - **Konteks:** mengikuti ADR-0027 (distribusi), ADR-0030 (install dan init), ADR-0031 (struktur engine), ADR-0033 (core netral), ADR-0039 (setup terminal), ADR-0041 (konfigurasi voice), dan ADR-0045 (tuning voice di `soul.yaml`); menggantikan langkah manual `config import` untuk edit file normal.
 - **Supersedes:** —
 - **Terkait:** ADR-0027 (distribusi), ADR-0030 (install dan init), ADR-0031 (struktur modul), ADR-0033 (core netral), ADR-0039 (setup terminal), ADR-0041 (konfigurasi voice), ADR-0045 (tuning voice di `soul.yaml`)
-- **Implementasi:** draft — keputusan dicatat; hash sync dan pemanggilan saat start belum diimplementasikan di ADR ini.
+- **Implementasi:** implemented — hash sync, advisory lock, konflik DB-menang, dan pemanggilan saat start sudah live.
 - **Catatan lokasi:** document store mengikat runtime engine, jadi ADR ini duduk di `adr/engine/`. Salinan Indonesia di `docs/v0.1.0/adr/engine/id/0042-sync-on-start.md`.
 
 ---
 
 ## 1. Konteks
 
-Dokumen database adalah sumber kebenaran; `config.yaml`, `soul.yaml`, dan `roles.yaml` adalah seed plus mirror. `DocumentStore.seed()` mengisi dokumen yang hilang dari file, dan dokumen yang sudah ada dibiarkan. Setelah itu, edit manual membutuhkan `eidesoul config import`; arah sebaliknya membutuhkan `eidesoul config export`.
+Dokumen database adalah sumber kebenaran; `config.yaml`, `soul.yaml`, dan `roles.yaml` adalah seed plus mirror. `DocumentStore.seed()` mengisi dokumen yang hilang dari file, dan dokumen yang sudah ada dibiarkan. Setelah itu, edit manual membutuhkan `monoagens config import`; arah sebaliknya membutuhkan `monoagens config export`.
 
 Aturan itu aman tetapi mahal dalam operasi harian:
 
 | Permukaan | Jalur saat ini | Friksi |
 | --- | --- | --- |
-| `roles.yaml` | edit file, lalu `eidesoul config import` | role sering dituning; setiap putaran tuning butuh langkah CLI |
-| `soul.yaml` | edit persona atau `voice`, lalu `eidesoul config import` | satu langkah CLI untuk setiap tuning karakter atau voice |
-| engine `config.yaml` | edit section, lalu `eidesoul config import` | satu langkah CLI |
+| `roles.yaml` | edit file, lalu `monoagens config import` | role sering dituning; setiap putaran tuning butuh langkah CLI |
+| `soul.yaml` | edit persona atau `voice`, lalu `monoagens config import` | satu langkah CLI untuk setiap tuning karakter atau voice |
+| engine `config.yaml` | edit section, lalu `monoagens config import` | satu langkah CLI |
 
 `sync_documents: true` tidak menyelesaikan ini: ia hanya mengisi dokumen yang hilang. Operator melihat file berubah dan mengharapkannya berlaku; langkah CLI mudah terlupa, dan langkah yang terlupa berarti engine berjalan dengan dokumen lama sementara file menunjukkan yang baru.
 
@@ -93,7 +93,7 @@ Section `engine` di `config.yaml` mengikuti tabel empat kasus yang sama. Edit ho
 
 ### 4.4 Yang tetap eksplisit
 
-- `eidesoul config import` dan `eidesoul config export` tetap ada untuk arah paksa dan pemulihan.
+- `monoagens config import` dan `monoagens config export` tetap ada untuk arah paksa dan pemulihan.
 - Proses yang berjalan tidak memantau file; edit berlaku saat start berikutnya. `/reload` di masa depan dapat memakai pass yang sama, tetapi bukan bagian dari keputusan ini.
 
 ## 5. Konfigurasi
@@ -134,16 +134,16 @@ Nilainya hash saja; tidak ada isi file dan tidak ada secret yang disimpan di sta
 
 ## 7. Kriteria penerimaan
 
-- [ ] `roles.yaml` yang berubah berlaku saat start berikutnya tanpa `eidesoul config import`.
-- [ ] `soul.yaml` yang berubah — termasuk blok `voice` — di-import saat start berikutnya.
-- [ ] Tidak ada resolver, panggilan model, atau embedding saat sync.
-- [ ] Perubahan sisi DB mengekspor dokumen ke mirror file.
-- [ ] Perubahan file dan DB diselesaikan untuk DB, mengekspor mirror, dan memberi warning.
-- [ ] First sync tanpa state diselesaikan untuk DB dan memberi warning.
-- [ ] File yang hilang di-import dari DB; dokumen yang hilang di-import dari file.
-- [ ] Standby tidak dapat menerapkan pass selama instance lain memegang advisory lock.
-- [ ] `sync_documents: false` tidak melakukan seed, sync, import, atau export.
-- [ ] Tidak ada watcher atau dependensi runtime baru.
+- [x] `roles.yaml` yang berubah berlaku saat start berikutnya tanpa `monoagens config import`.
+- [x] `soul.yaml` yang berubah — termasuk blok `voice` — di-import saat start berikutnya.
+- [x] Tidak ada resolver, panggilan model, atau embedding saat sync.
+- [x] Perubahan sisi DB mengekspor dokumen ke mirror file.
+- [x] Perubahan file dan DB diselesaikan untuk DB, mengekspor mirror, dan memberi warning.
+- [x] First sync tanpa state diselesaikan untuk DB dan memberi warning.
+- [x] File yang hilang di-import dari DB; dokumen yang hilang di-import dari file.
+- [x] Standby tidak dapat menerapkan pass selama instance lain memegang advisory lock.
+- [x] `sync_documents: false` tidak melakukan seed, sync, import, atau export.
+- [x] Tidak ada watcher atau dependensi runtime baru.
 
 ## 8. Risiko dan mitigasi
 
@@ -167,14 +167,14 @@ Nilainya hash saja; tidak ada isi file dan tidak ada secret yang disimpan di sta
 
 ## 10. Referensi kode
 
-- `eidesoul/engine/stores/documents.py` — `sync()`, `seed()`, `import_from_files()`, `export_to_files()`, dan perbandingan hash.
-- `eidesoul/engine/config.py` — host key `sync_documents`.
-- `eidesoul/engine/schema.py` — tabel `state` untuk hash sync.
-- `eidesoul/engine/jobs/lease.py` — advisory lock untuk membuat satu writer.
-- `eidesoul/__main__.py` — call site `run`, `console`, dan `database seed`.
-- `eidesoul/gateways/whatsapp/cli.py` — pemuatan dokumen gateway.
-- `eidesoul/admin/database.py` — jalur seed database.
-- `eidesoul/engine/soul.py` — dokumen soul, termasuk blok `voice` mendatang.
+- `monoagens/engine/stores/documents.py` — `sync()`, `seed()`, `import_from_files()`, `export_to_files()`, dan perbandingan hash.
+- `monoagens/engine/config.py` — host key `sync_documents`.
+- `monoagens/engine/schema.py` — tabel `state` untuk hash sync.
+- `monoagens/engine/jobs/lease.py` — advisory lock untuk membuat satu writer.
+- `monoagens/__main__.py` — call site `run`, `console`, dan `database seed`.
+- `monoagens/gateways/whatsapp/cli.py` — pemuatan dokumen gateway.
+- `monoagens/admin/database.py` — jalur seed database.
+- `monoagens/engine/soul.py` — dokumen soul, termasuk blok `voice` mendatang.
 - `tests/` — tabel empat kasus, first sync, sisi hilang, dan cakupan lock.
 
 ---

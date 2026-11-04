@@ -14,7 +14,7 @@
 
 ## 1. Context
 
-- The repo has **23 tables** in one `MetaData` (`eidesoul/engine/schema.py`), `SCHEMA_VERSION = 1` (`db.py:20`), and `create_all` (`db.py:57-58`), which writes the version into `schema_meta` (`db.py:63-65`). There is no Alembic and no schema-change path other than creating a new table of zeros.
+- The repo has **23 tables** in one `MetaData` (`monoagens/engine/schema.py`), `SCHEMA_VERSION = 1` (`db.py:20`), and `create_all` (`db.py:57-58`), which writes the version into `schema_meta` (`db.py:63-65`). There is no Alembic and no schema-change path other than creating a new table of zeros.
 - **The `memories` DDL in ADR-0001 §4 no longer matches the decisions derived from it.** It carries no `state` column at all, it forces `level smallint not null default 2` and `confirmed boolean not null default true` — whereas ADR-0004 makes `level` nullable and lets `confirmed` mean something only when `state='ok'`.
 - **The ADR-0004 constraint clashes with a decision in ADR-0008.** `state='superseded'` is born from an `ok` row that has a level; the CHECK `(state IN ('ok','staged')) = (level IS NOT NULL)` forces it to `level NULL`, so a superseded row loses its level and its inventory.
 - **New columns are scattered with no migration home:** retention (ADR-0005), provenance/trust/quota (ADR-0008), dispute metadata (ADR-0010), `generation` (ADR-0012), `turns`/`outbound_messages` (ADR-0013), `automations`/`automation_runs` (ADR-0014). ADR-0012 even points to "ADR-0005 (migration scheme)", but ADR-0005 is retention, not migration.
@@ -332,12 +332,12 @@ database:
 
 ## 10. Code references
 
-- `eidesoul/engine/db.py:20` `SCHEMA_VERSION`.
-- `eidesoul/engine/db.py:57-58` `create_all` (empty DB/tests only).
-- `eidesoul/engine/db.py:63-65` — writes the version to `schema_meta`.
-- `eidesoul/engine/schema.py` — 23 tables; `:270-290` `engine_lease`, `engine_control`.
-- `eidesoul/engine/memory/mem0.py:264-281` — JSON metadata that today stores provenance outside the schema.
-- `eidesoul/engine/tools/settings.py:85-98` — config schema (not DB schema), precedent for a "single schema source".
+- `monoagens/engine/db.py:20` `SCHEMA_VERSION`.
+- `monoagens/engine/db.py:57-58` `create_all` (empty DB/tests only).
+- `monoagens/engine/db.py:63-65` — writes the version to `schema_meta`.
+- `monoagens/engine/schema.py` — 23 tables; `:270-290` `engine_lease`, `engine_control`.
+- `monoagens/engine/memory/mem0.py:264-281` — JSON metadata that today stores provenance outside the schema.
+- `monoagens/engine/tools/settings.py:85-98` — config schema (not DB schema), precedent for a "single schema source".
 - No `alembic.ini`/`migrations/` in this repo — a prerequisite, not the current state.
 
 ---

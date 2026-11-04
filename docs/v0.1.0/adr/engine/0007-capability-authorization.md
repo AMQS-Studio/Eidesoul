@@ -429,26 +429,26 @@ role. The implementation follows in `chat_history`/`send` with one shared helper
 
 ## 10. Code references
 
-- `eidesoul/engine/agent.py:614-628,857-861` — capture gate, memory block, cross-chat guard.
-- `eidesoul/engine/tools/__init__.py:180-235` — the single door `execute` + `allows`.
-- `eidesoul/engine/tools/memory.py:64-73,104-119,127-183` — `global`, `confirmed`, `forget`, `veto`.
-- `eidesoul/engine/commands/memori.py:41-43,83-92,121-123` — the command door for scope/`memory_admin`.
-- `eidesoul/engine/commands/approve.py:20-80` — chat/sender/TTL binding and the re-run through `execute`.
-- `eidesoul/engine/guard/policy.py:105-215` — `sensitive_tools`, destructive actions, shell scans.
-- `eidesoul/engine/memory/mem0.py:476-530` — `forget`, `set_privacy`, `veto`.
-- `eidesoul/engine/access/roles.py:18-28,100-116` — `Role` (no room flag; membership is computed when used).
-- `eidesoul/gateways/whatsapp/tools/chat_history.py` — reading another room + the `cross_reads` buffer for the leak guard.
-- `eidesoul/engine/tools/settings.py:294-413` — approval for internal changes.
-- `eidesoul/engine/stores/documents.py:137` — `export_to_files` (config document mirror).
-- `eidesoul/engine/stores/history.py:318-352` — `search` (where the `visibility` ceiling is installed) and `recent_chats`.
-- `eidesoul/gateways/whatsapp/tools/chat_history.py` — `chat_history` and the separation of this room from other rooms.
-- `eidesoul/engine/memory/rekey.py:83-97` — the `_chats(db, person_id)` pattern for `rooms_of(person_id)`.
-- `eidesoul/engine/inbound.py:29-70` — the `Gateway` contract (where the `participants(thread_id)` capability is added, optional).
-- `eidesoul/engine/turn/context.py:72-81,288-300` — `clamp_visibility`, `entry_tag`, `set_visibility`.
-- `eidesoul/engine/config.py:148-152` — `ApprovalConfig` (mode, ttl, settings).
-- `eidesoul/engine/turn/prompts.py:195-355` — `system_prompt` (where the "out of reach → short refusal, do not speculate" rule lives).
-- `eidesoul/engine/guard/patterns.py:12,14` — `SENSITIVE`/`INJECTION`, the existing pattern shape; the §4.8 credential class **does not exist in code** (a proposal, part of ADR-0024 at implementation).
-- `eidesoul/engine/config.py:227-232` — `GuardConfig`, where `credential_patterns` is added.
+- `monoagens/engine/agent.py:614-628,857-861` — capture gate, memory block, cross-chat guard.
+- `monoagens/engine/tools/__init__.py:180-235` — the single door `execute` + `allows`.
+- `monoagens/engine/tools/memory.py:64-73,104-119,127-183` — `global`, `confirmed`, `forget`, `veto`.
+- `monoagens/engine/commands/memori.py:41-43,83-92,121-123` — the command door for scope/`memory_admin`.
+- `monoagens/engine/commands/approve.py:20-80` — chat/sender/TTL binding and the re-run through `execute`.
+- `monoagens/engine/guard/policy.py:105-215` — `sensitive_tools`, destructive actions, shell scans.
+- `monoagens/engine/memory/mem0.py:476-530` — `forget`, `set_privacy`, `veto`.
+- `monoagens/engine/access/roles.py:18-28,100-116` — `Role` (no room flag; membership is computed when used).
+- `monoagens/gateways/whatsapp/tools/chat_history.py` — reading another room + the `cross_reads` buffer for the leak guard.
+- `monoagens/engine/tools/settings.py:294-413` — approval for internal changes.
+- `monoagens/engine/stores/documents.py:137` — `export_to_files` (config document mirror).
+- `monoagens/engine/stores/history.py:318-352` — `search` (where the `visibility` ceiling is installed) and `recent_chats`.
+- `monoagens/gateways/whatsapp/tools/chat_history.py` — `chat_history` and the separation of this room from other rooms.
+- `monoagens/engine/memory/rekey.py:83-97` — the `_chats(db, person_id)` pattern for `rooms_of(person_id)`.
+- `monoagens/engine/inbound.py:29-70` — the `Gateway` contract (where the `participants(thread_id)` capability is added, optional).
+- `monoagens/engine/turn/context.py:72-81,288-300` — `clamp_visibility`, `entry_tag`, `set_visibility`.
+- `monoagens/engine/config.py:148-152` — `ApprovalConfig` (mode, ttl, settings).
+- `monoagens/engine/turn/prompts.py:195-355` — `system_prompt` (where the "out of reach → short refusal, do not speculate" rule lives).
+- `monoagens/engine/guard/patterns.py:12,14` — `SENSITIVE`/`INJECTION`, the existing pattern shape; the §4.8 credential class **does not exist in code** (a proposal, part of ADR-0024 at implementation).
+- `monoagens/engine/config.py:227-232` — `GuardConfig`, where `credential_patterns` is added.
 
 ---
 

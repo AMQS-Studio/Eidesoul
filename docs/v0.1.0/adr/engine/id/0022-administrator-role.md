@@ -1,4 +1,4 @@
-> Terjemahan turunan — jangan sunting; sumber: engine/0022-administrator-role.md (sha256: 33793601f7a6)
+> Terjemahan turunan — jangan sunting; sumber: engine/0022-administrator-role.md (sha256: 509fd2b65346)
 > Teks ini ditulis manusia; baris yang tidak bisa diterjemahkan mesin disalin apa adanya ke sumber English, jadi sumber bercampur dua bahasa.
 
 # ADR-0022: Peran `administrator` — Nama, Proteksi, dan Sebutan
@@ -54,7 +54,7 @@ Selain itu, soul hari ini hanya melihat nama role + deskripsi (`prompts.py:141-1
 
 - `administrator` membawa `protected: true` (dipaksa loader; nilai `false` ditolak saat load).
 - Loader **menolak boot** bila: role `administrator` tidak ada; `users`-nya kosong; `tools` tidak mencakup `"*"`; atau `commands` tidak memuat `approve`.
-- Role ini **tidak bisa dihapus** dan identifier-nya **tidak bisa di-rename** lewat editor role/manajer admin; perubahan hanya lewat `roles.yaml` + `eidesoul config import` (dengan backup) atau tindakan owner di host.
+- Role ini **tidak bisa dihapus** dan identifier-nya **tidak bisa di-rename** lewat editor role/manajer admin; perubahan hanya lewat `roles.yaml` + `monoagens config import` (dengan backup) atau tindakan owner di host.
 - Tidak ada jalur pembuatan role `administrator` dari percakapan; tool/command apa pun yang menulis role menolak nama ini kecuali lewat import.
 
 ### 4.3 Sebutan (`label`) — opsional untuk setiap role
@@ -69,7 +69,7 @@ Selain itu, soul hari ini hanya melihat nama role + deskripsi (`prompts.py:141-1
 
 ### 4.4 Migrasi sekali jalan
 
-- `eidesoul config import` menjalankan migrasi: dokumen `role:administrator` → `role:administrator` (nama dokumen dan isi `name`), key `owner:` di `roles.yaml` → `administrator:`, daftar role di `approvals.roles` yang masih menyebut `administrator` → `administrator`, dan field `administrator` pada baris otomasi yang menunjuk role (bila ada) dibiarkan (itu pemilik, bukan role).
+- `monoagens config import` menjalankan migrasi: dokumen `role:administrator` → `role:administrator` (nama dokumen dan isi `name`), key `owner:` di `roles.yaml` → `administrator:`, daftar role di `approvals.roles` yang masih menyebut `administrator` → `administrator`, dan field `administrator` pada baris otomasi yang menunjuk role (bila ada) dibiarkan (itu pemilik, bukan role).
 - Backup ditulis sebelum perubahan; migrasi idempoten dan tercatat di `config_changes` sebagai `role_rename`.
 - Boot **gagal dengan pesan yang menyebut perintah migrasi** bila masih ada `role:administrator` dan tidak ada `role:administrator`.
 - Bila **keduanya ada**, boot gagal (tidak ada penggabungan otomatis): operator memilih mana yang benar, karena menggabungkan bisa memberi izin ke pemegang yang salah.
@@ -79,10 +79,10 @@ Selain itu, soul hari ini hanya melihat nama role + deskripsi (`prompts.py:141-1
 | Berkas | Perubahan |
 |---|---|
 | `roles.yaml` | key `owner:` → `administrator:` + `label` (opsional, semua role), `protected: true` |
-| `eidesoul/engine/stores/recipes.py:29` | `DEFAULT_ROLES = ("administrator", "member")` |
-| `eidesoul/admin/templates.py:143,158-159` | template role default |
+| `monoagens/engine/stores/recipes.py:29` | `DEFAULT_ROLES = ("administrator", "member")` |
+| `monoagens/admin/templates.py:143,158-159` | template role default |
 | Pemeriksaan nama role di engine | semua literal `"owner"` yang berarti role → `"administrator"` |
-| `eidesoul/engine/turn/prompts.py:141-147` | `roles_block` menyertakan `label` bila ada (`; panggil dia "…"`) |
+| `monoagens/engine/turn/prompts.py:141-147` | `roles_block` menyertakan `label` bila ada (`; panggil dia "…"`) |
 | `ADR-0015` `redact_infra: non_owner` | nilai → `non_administrator` |
 | `ADR-0019` `status_owner_only` | → `status_administrator_only` |
 | `ADR-0007` role approver | → `(administrator)` |
@@ -127,7 +127,7 @@ roles:
 - [ ] `label` kosong pada role mana pun → prompt memakai nama orang atau nama role; tidak ada label kosong yang tercetak.
 - [ ] Mengubah `label` tidak mengubah hasil pemeriksaan izin apa pun (test: label "Tuhan" vs kosong, matriks izin identik).
 - [ ] `label` tidak bisa diubah dari percakapan (tool/command tulis role menolak), dan tidak pernah muncul di log/audit sebagai identifier.
-- [ ] Grep test: tidak ada literal `"owner"` yang berarti role di `eidesoul/` dan `roles.yaml`.
+- [ ] Grep test: tidak ada literal `"owner"` yang berarti role di `monoagens/` dan `roles.yaml`.
 - [ ] `owner_id`, `lease_owner`, dan `administrator` pada otomasi tetap berfungsi setelah migrasi (test round-trip).
 - [ ] `approvals.roles` yang memuat `administrator` ikut dimigrasikan; approval lama yang tidak bisa dipetakan ditandai dan ditolak saat `/approve`, bukan dieksekusi.
 
@@ -157,12 +157,12 @@ roles:
 ## 10. Referensi kode
 
 - `roles.yaml:31` — key role `administrator` (target rename).
-- `eidesoul/engine/stores/recipes.py:29` — `DEFAULT_ROLES`.
-- `eidesoul/admin/templates.py:143,158-159` — template role default.
-- `eidesoul/engine/turn/prompts.py:141-147` — `roles_block` (tempat `label` dipakai).
-- `eidesoul/engine/access/permissions.py` — `normalize`/`allows` (nama role dinormalisasi di sini).
-- `eidesoul/engine/config.py` — bagian `roles` (seed/import).
-- `eidesoul/engine/schema.py` — `people.name` (fallback alamat bila label kosong); tidak ada perubahan tabel role.
+- `monoagens/engine/stores/recipes.py:29` — `DEFAULT_ROLES`.
+- `monoagens/admin/templates.py:143,158-159` — template role default.
+- `monoagens/engine/turn/prompts.py:141-147` — `roles_block` (tempat `label` dipakai).
+- `monoagens/engine/access/permissions.py` — `normalize`/`allows` (nama role dinormalisasi di sini).
+- `monoagens/engine/config.py` — bagian `roles` (seed/import).
+- `monoagens/engine/schema.py` — `people.name` (fallback alamat bila label kosong); tidak ada perubahan tabel role.
 - `AGENTS.md` — aturan role di bagian Safety (sebutan `administrator`).
 
 ---

@@ -16,9 +16,10 @@ from support import (
     role,
 )
 
-from eidesoul.engine.config import ApprovalConfig, CharacterConfig, HumanizeConfig
-from eidesoul.engine.schema import people, person_links, thread_people, threads
-from eidesoul.engine.tools import execute
+from monoagens.engine.config import ApprovalConfig
+from monoagens.engine.schema import people, person_links, thread_people, threads
+from monoagens.engine.soul import HumanizeConfig, render_persona
+from monoagens.engine.tools import execute
 
 DM = "628111@s.whatsapp.net"
 GROUP = "123@g.us"
@@ -73,7 +74,7 @@ def test_group_mention_replies(tmp_path) -> None:
 
     handle(
         env,
-        inbound_message("eidesoul tolong", thread=GROUP, dm=False, mention=True),
+        inbound_message("monoagens tolong", thread=GROUP, dm=False, mention=True),
     )
 
     assert env.gateway.sent
@@ -127,10 +128,10 @@ def test_auto_capture_runs_for_memory_role(tmp_path) -> None:
 
     from support import build_config, database
 
-    from eidesoul.engine.jobs.cognition import CognitionWorker
-    from eidesoul.engine.memory.store import MemoryStore
-    from eidesoul.engine.stores.history import HistoryStore
-    from eidesoul.engine.turn.context import Message
+    from monoagens.engine.jobs.cognition import CognitionWorker
+    from monoagens.engine.memory.store import MemoryStore
+    from monoagens.engine.stores.history import HistoryStore
+    from monoagens.engine.turn.context import Message
 
     memory = FakeMemory()
     env = make_agent(tmp_path, memory=memory)
@@ -178,22 +179,26 @@ def test_memory_block_and_runtime_reach_prompt(tmp_path) -> None:
     assert "WhatsApp" not in env.llm.system
 
 
-def test_character_patterns_reach_the_system_prompt(tmp_path, monkeypatch) -> None:
-    from eidesoul.engine.character import patterns as pattern_catalog
-    from eidesoul.engine.soul import SoulStyle
-
-    monkeypatch.setattr(pattern_catalog, "_load_vectors", lambda name: {})
+def test_soul_examples_reach_the_system_prompt(tmp_path, monkeypatch) -> None:
     env = make_agent(
         tmp_path,
         answer="berat ya. capeknya di bagian mana?",
-        soul=default_soul(style=SoulStyle(patterns=("jawatimur",), max_patterns=2)),
+        soul=replace(
+            default_soul(
+                examples=({"user": "aku capek", "soul": "capeknya di bagian mana?"},)
+            ),
+            persona=render_persona(
+                default_soul(
+                    examples=({"user": "aku capek", "soul": "capeknya di bagian mana?"},)
+                )
+            ),
+        ),
     )
-    env.agent.config = replace(env.agent.config, character=CharacterConfig(enabled=True))
 
     handle(env, inbound_message("aku capek banget, gak kuat", thread=DM))
 
-    assert "## Room patterns (apply the move, never copy the wording):" in env.llm.system
-    assert "Validasi satu kata dulu" in env.llm.system
+    assert "## Dialogue examples" in env.llm.system
+    assert "capeknya di bagian mana?" in env.llm.system
 
 
 def test_humanize_splits_bubbles(tmp_path) -> None:
@@ -216,7 +221,7 @@ def test_shell_requires_approval_then_approve_executes(tmp_path) -> None:
             self.call = await execute(
                 {handler.name: handler for handler in specs},
                 "shell",
-                {"command": "printf eidesoul-ok"},
+                {"command": "printf monoagens-ok"},
                 ctx,
             )
             return f"tool: {self.call}"
@@ -238,7 +243,7 @@ def test_shell_requires_approval_then_approve_executes(tmp_path) -> None:
     pending = env.agent.approvals.pending(DM, "628111")
     assert len(pending) == 1
 
-    from eidesoul.engine.commands.approve import COMMAND as APPROVE
+    from monoagens.engine.commands.approve import COMMAND as APPROVE
 
     inbound = inbound_message("/approve 1", thread=DM)
     ctx = env.agent.command_context(
@@ -246,7 +251,7 @@ def test_shell_requires_approval_then_approve_executes(tmp_path) -> None:
     )
     result = asyncio.run(APPROVE.fn(ctx))
 
-    assert "eidesoul-ok" in result
+    assert "monoagens-ok" in result
     assert env.agent.approvals.get(1).status == "approved"
 
 
@@ -257,7 +262,7 @@ def test_sensitive_shell_command_waits_then_approve_executes(tmp_path) -> None:
             self.call = await execute(
                 {handler.name: handler for handler in specs},
                 "shell",
-                {"command": "printf eidesoul-ok"},
+                {"command": "printf monoagens-ok"},
                 ctx,
             )
             return f"tool: {self.call}"
@@ -275,13 +280,13 @@ def test_sensitive_shell_command_waits_then_approve_executes(tmp_path) -> None:
     handle(env, inbound_message("jalankan shell", thread=DM))
 
     assert "pending approval #1" in env.gateway.sent[0][1]
-    from eidesoul.engine.commands.approve import COMMAND as APPROVE
+    from monoagens.engine.commands.approve import COMMAND as APPROVE
 
     ctx = env.agent.command_context(
         DM, "628111", (env.config.roles.get("member"),), env.gateway, "1"
     )
     result = asyncio.run(APPROVE.fn(ctx))
-    assert "eidesoul-ok" in result
+    assert "monoagens-ok" in result
     assert env.agent.approvals.get(1).status == "approved"
 
 
@@ -299,7 +304,7 @@ def test_approve_rejects_other_sender(tmp_path) -> None:
         )
 
     approval = asyncio.run(create())
-    from eidesoul.engine.commands.approve import COMMAND as APPROVE
+    from monoagens.engine.commands.approve import COMMAND as APPROVE
 
     ctx = env.agent.command_context(
         DM, "628111", (env.config.roles.get("member"),), env.gateway, str(approval.id)
@@ -325,7 +330,7 @@ def test_typing_events_around_turn(tmp_path) -> None:
 
 
 def test_partial_send_leaves_the_turn_resumable(tmp_path) -> None:
-    from eidesoul.engine.inbound import GatewayError
+    from monoagens.engine.inbound import GatewayError
 
     class FailingGateway(FakeGateway):
         def __init__(self) -> None:
@@ -398,7 +403,7 @@ def _dispute(
 
 def test_a_dispute_question_goes_to_the_dm_once_per_day(tmp_path) -> None:
     """ADR-0010 §4.7: one question per subject per day, in the subject's own DM."""
-    from eidesoul.engine.memory.store import MemoryStore
+    from monoagens.engine.memory.store import MemoryStore
 
     store = MemoryStore(database(), build_config(tmp_path))
     env = make_agent(tmp_path, memory=store)
@@ -416,7 +421,7 @@ def test_a_dispute_question_goes_to_the_dm_once_per_day(tmp_path) -> None:
 
 
 def test_a_dispute_question_needs_a_single_member_dm(tmp_path) -> None:
-    from eidesoul.engine.memory.store import MemoryStore
+    from monoagens.engine.memory.store import MemoryStore
 
     store = MemoryStore(database(), build_config(tmp_path))
     env = make_agent(tmp_path, memory=store)
@@ -428,7 +433,7 @@ def test_a_dispute_question_needs_a_single_member_dm(tmp_path) -> None:
 
 
 def test_questions_per_day_two_allows_two_pairs(tmp_path) -> None:
-    from eidesoul.engine.memory.store import MemoryStore
+    from monoagens.engine.memory.store import MemoryStore
 
     store = MemoryStore(database(), build_config(tmp_path))
     env = make_agent(tmp_path, memory=store)
@@ -451,8 +456,8 @@ def test_a_body_without_rich_or_directory_is_counted(tmp_path) -> None:
     """ADR-0014 §4.5: what a body cannot do is counted, not assumed away."""
     from support import FakeGateway
 
-    from eidesoul.engine.inbound import Directory
-    from eidesoul.engine.tools import cross_refusal
+    from monoagens.engine.inbound import Directory
+    from monoagens.engine.tools import cross_refusal
 
     env = make_agent(tmp_path, gateway=FakeGateway())
     assert not isinstance(env.gateway, Directory)
@@ -470,8 +475,8 @@ def test_a_body_without_rich_or_directory_is_counted(tmp_path) -> None:
 
 
 def test_status_shows_the_gateway_capability_counters(tmp_path) -> None:
-    from eidesoul.engine.access.roles import Role
-    from eidesoul.engine.commands.status import COMMAND as STATUS
+    from monoagens.engine.access.roles import Role
+    from monoagens.engine.commands.status import COMMAND as STATUS
 
     admin = Role("administrator", tools=("*",), commands=("*",), memory_admin=True)
     env = make_agent(tmp_path, roles={"administrator": admin}, default_role="administrator")

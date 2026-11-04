@@ -1,10 +1,10 @@
-> Terjemahan turunan — jangan sunting; sumber: engine/0005-retention-decay.md (sha256: 6127172c81db)
+> Terjemahan turunan — jangan sunting; sumber: engine/0005-retention-decay.md (sha256: 5056546667d9)
 > Teks ini ditulis manusia; baris yang tidak bisa diterjemahkan mesin disalin apa adanya ke sumber English, jadi sumber bercampur dua bahasa.
 
 # ADR-0005: Retention & Decay — Hybrid TTL, Renewal Saat Dipakai, dan Pin Otomatis
 
 - **Status:** accepted
-- **Implementasi:** implemented — bukti: `pinned`/`durability`/`category`/`use_*`/`expires_at`/`max_lifetime_at`, renewal per turn delivered, auto-pin, `memory purge` dengan `--dry-run` dan penghapusan salinan library, prototipe MiniLM remember/forget (`eidesoul/library/intent/`, `eidesoul/engine/memory/intent.py`, `scripts/intent.py --check`), hint remember di capture, jalur deterministik "lupakan itu …", dan purge terjadwal dengan `memory.retention.purge.{grace_days,batch}` pada job audit harian; gate: `pytest -q` 831 lulus, `scripts/adr.py --check`
+- **Implementasi:** implemented — bukti: `pinned`/`durability`/`category`/`use_*`/`expires_at`/`max_lifetime_at`, renewal per turn delivered, auto-pin, `memory purge` dengan `--dry-run` dan penghapusan salinan library, prototipe MiniLM remember/forget (`monoagens/library/intent/`, `monoagens/engine/memory/intent.py`, `scripts/intent.py --check`), hint remember di capture, jalur deterministik "lupakan itu …", dan purge terjadwal dengan `memory.retention.purge.{grace_days,batch}` pada job audit harian; gate: `pytest -q` 831 lulus, `scripts/adr.py --check`
 - **Tanggal:** 2026-11-01
 - **Deciders:** Muqsith (owner), omp (reviewer)
 - **Konteks:** lanjutan ADR-0001 (canonical), ADR-0003 (worker & konsolidasi), ADR-0004 (TTL state non-`ok`); memori default-on memerlukan kebijakan umur
@@ -125,7 +125,7 @@ Risiko yang **diterima**: fakta penting yang tidak pernah disebut lagi lebih dar
 
 ### 4.5 Purge
 
-- Job terjadwal nightly; juga manual: `eidesoul memory purge [--dry-run]`.
+- Job terjadwal nightly; juga manual: `monoagens memory purge [--dry-run]`.
 - Memilih `expires_at <= now - grace_days` (grace 1 hari) dan `pinned=false`.
 - Urutan per batch: hapus index → hapus canonical → **hapus salinan library** (baris `history`/`messages`
   di `mem0_history.db` untuk id/sesi itu) → tulis tombstone; satu transaksi per batch.
@@ -258,12 +258,12 @@ memory:
 
 ## 10. Referensi kode
 
-- `eidesoul/engine/memory/mem0.py:496-531` — `set_privacy`, `veto`.
-- `eidesoul/engine/memory/context.py:48-108` — retrieval dan render (titik sentuh “used”).
-- `eidesoul/engine/memory/rekey.py` — contoh migrasi metadata yang harus menghormati retention.
-- `eidesoul/engine/access/privacy.py:222-278` — capture dan level.
-- `eidesoul/engine/config.py:118-138` — `PrivacyConfig`, `MemoryConfig`.
-- `eidesoul/engine/db.py:112-145` — `upsert` untuk batch purge.
+- `monoagens/engine/memory/mem0.py:496-531` — `set_privacy`, `veto`.
+- `monoagens/engine/memory/context.py:48-108` — retrieval dan render (titik sentuh “used”).
+- `monoagens/engine/memory/rekey.py` — contoh migrasi metadata yang harus menghormati retention.
+- `monoagens/engine/access/privacy.py:222-278` — capture dan level.
+- `monoagens/engine/config.py:118-138` — `PrivacyConfig`, `MemoryConfig`.
+- `monoagens/engine/db.py:112-145` — `upsert` untuk batch purge.
 
 ---
 

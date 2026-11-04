@@ -1,8 +1,8 @@
 """Prompt block competition: pinned parts always fit, references compete when tight (ADR-0034)."""
 
-from eidesoul.engine.turn.context import keyword_set
-from eidesoul.engine.turn.prompts import PromptPart
-from eidesoul.engine.turn.salience import select
+from monoagens.engine.turn.context import keyword_set
+from monoagens.engine.turn.prompts import PromptPart
+from monoagens.engine.turn.salience import select
 
 
 def part(name: str, *, pinned: bool = False, bonus: float = 0.0, order: int = 0) -> PromptPart:

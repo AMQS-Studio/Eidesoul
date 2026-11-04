@@ -1,4 +1,4 @@
-> Terjemahan turunan — jangan sunting; sumber: engine/0037-module-budgets.md (sha256: 719657fa8d31)
+> Terjemahan turunan — jangan sunting; sumber: engine/0037-module-budgets.md (sha256: 31b544cad652)
 
 - **Status:** accepted
 - **Tanggal:** 2026-11-04
@@ -20,9 +20,9 @@ permanen:
 
 | Modul | Baris | Cap | Sisa |
 | --- | --- | --- | --- |
-| `eidesoul/engine/agent.py` | 1.800 | 1.800 | **0** |
-| `eidesoul/engine/memory/store.py` | 2.376 | 2.400 | 24 |
-| `eidesoul/engine/jobs/automation.py` | 1.971 | 2.000 | 29 |
+| `monoagens/engine/agent.py` | 1.800 | 1.800 | **0** |
+| `monoagens/engine/memory/store.py` | 2.376 | 2.400 | 24 |
+| `monoagens/engine/jobs/automation.py` | 1.971 | 2.000 | 29 |
 
 Empat modul lain di atas 800 (`config.py`, `stores/affect.py`, `jobs/cognition.py`, `schema.py`)
 adalah pengecualian eksplisit ADR-0031 dan tidak termasuk cakupan ini.
@@ -187,8 +187,8 @@ Hitungan yang harus didorong ke nol, diukur 2026-11-04:
 
 Gate, per commit split:
 
-1. `pytest -q` (dengan `EIDESOL_TEST_DATABASE_URL`) lolos; tidak ada tes yang mengubah assertion.
-2. `ruff check eidesoul scripts tests plugins migrations` bersih.
+1. `pytest -q` (dengan `MONOAGENS_TEST_DATABASE_URL`) lolos; tidak ada tes yang mengubah assertion.
+2. `ruff check monoagens scripts tests plugins migrations` bersih.
 3. `python -P scripts/types.py --check` melaporkan tidak ada error baru.
 4. `python scripts/selfcheck.py --check` lolos dengan cap yang diturunkan.
 5. `python scripts/adr.py --check` dan `--translate-check` lolos.
@@ -245,13 +245,13 @@ Gate, per commit split:
 ## 10. Referensi kode
 
 - `scripts/selfcheck.py:36-74` — `LINE_CAPS`, `OVER_CAP_ALLOWED`, `MODULE_CAP`, dan gate ukuran.
-- `eidesoul/engine/agent.py:753-818,1005-1640,1646-1707,1774-1800` — delivery, `_run_turn`, dispatch
+- `monoagens/engine/agent.py:753-818,1005-1640,1646-1707,1774-1800` — delivery, `_run_turn`, dispatch
   command, settings/close.
-- `eidesoul/engine/jobs/automation.py:75-599,600-1255,1256-1971` — manifest/otoritas, store, worker.
-- `eidesoul/engine/memory/store.py:314-1145,1334-1596,1597-1762,1972-2363` — write/kandidat,
+- `monoagens/engine/jobs/automation.py:75-599,600-1255,1256-1971` — manifest/otoritas, store, worker.
+- `monoagens/engine/memory/store.py:314-1145,1334-1596,1597-1762,1972-2363` — write/kandidat,
   retensi, read, refleksi/sengketa.
-- `eidesoul/engine/memory/queries.py` — statement SQL; helper memanggilnya, bukan menggantikannya.
-- `eidesoul/engine/turn/` — folder yang menerima modul turn baru; `reply.py` tetap text shaping,
+- `monoagens/engine/memory/queries.py` — statement SQL; helper memanggilnya, bukan menggantikannya.
+- `monoagens/engine/turn/` — folder yang menerima modul turn baru; `reply.py` tetap text shaping,
   `assembly.py`/`prompts.py` mempertahankan perannya.
 - `tests/test_turn_lifecycle.py`, `tests/test_automation.py`, `tests/test_memory.py` — suite yang
   membuktikan resume, claim, dan perilaku memori di seluruh pemindahan.

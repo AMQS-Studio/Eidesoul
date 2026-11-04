@@ -1,4 +1,4 @@
-> Terjemahan turunan — jangan sunting; sumber: engine/0021-tool-output-contract.md (sha256: 27a0d22ba0d3)
+> Terjemahan turunan — jangan sunting; sumber: engine/0021-tool-output-contract.md (sha256: a11b72c03abe)
 > Teks ini ditulis manusia; baris yang tidak bisa diterjemahkan mesin disalin apa adanya ke sumber English, jadi sumber bercampur dua bahasa.
 
 # ADR-0021: Kontrak Keluaran Tool, `grep`, dan `fetch`
@@ -18,7 +18,7 @@
 
 | Fakta | Bukti |
 |---|---|
-| Tool hari ini: `read`, `write`, `shell`, `sandbox`, `web_search`, `chat_history`, `memory`, `google`, `mcp`, `settings`, `recipe`, `skill` | `eidesoul/engine/tools/` |
+| Tool hari ini: `read`, `write`, `shell`, `sandbox`, `web_search`, `chat_history`, `memory`, `google`, `mcp`, `settings`, `recipe`, `skill` | `monoagens/engine/tools/` |
 | Tidak ada pencarian isi berkas dan tidak ada pembacaan URL | tidak ada `grep.py`/`fetch.py` |
 | `read` menerima `start`/`limit` (default **400 baris**) | `tools/read.py:13-18` |
 | `member` tidak memegang `shell` | `roles.yaml:8-14` |
@@ -177,13 +177,13 @@ Cap per tool lain (§4.1) adalah default kode, bukan kunci wajib.
 
 ## 10. Referensi kode
 
-- `eidesoul/engine/tools/__init__.py:17-19` — `MAX_OUTPUT`/`MAX_ERROR`/`TRUNCATED` global (diganti cap per tool).
-- `eidesoul/engine/tools/__init__.py:120-141` — `workspace_roots` dan `resolve_path` (root + penolakan symlink).
-- `eidesoul/engine/tools/__init__.py:180-200` — `execute`: satu gerbang izin, tempat cap dipasang.
-- `eidesoul/engine/tools/read.py:10-30` — `start`/`limit` dan format `baris: teks` (pola keluaran `grep`).
-- `eidesoul/engine/tools/web_search.py:22-61` — bentuk hasil pencarian dan pemakaian stdlib `urllib`.
-- `eidesoul/engine/guard/patterns.py:12,14` — `SENSITIVE`/`INJECTION` untuk menandai isi `fetch`.
-- `eidesoul/engine/config.py:112-115` — `WebSearchConfig` (tempat kunci `fetch` ditambahkan).
+- `monoagens/engine/tools/__init__.py:17-19` — `MAX_OUTPUT`/`MAX_ERROR`/`TRUNCATED` global (diganti cap per tool).
+- `monoagens/engine/tools/__init__.py:120-141` — `workspace_roots` dan `resolve_path` (root + penolakan symlink).
+- `monoagens/engine/tools/__init__.py:180-200` — `execute`: satu gerbang izin, tempat cap dipasang.
+- `monoagens/engine/tools/read.py:10-30` — `start`/`limit` dan format `baris: teks` (pola keluaran `grep`).
+- `monoagens/engine/tools/web_search.py:22-61` — bentuk hasil pencarian dan pemakaian stdlib `urllib`.
+- `monoagens/engine/guard/patterns.py:12,14` — `SENSITIVE`/`INJECTION` untuk menandai isi `fetch`.
+- `monoagens/engine/config.py:112-115` — `WebSearchConfig` (tempat kunci `fetch` ditambahkan).
 - `roles.yaml:8-14` — daftar tool `member` (ditambah `grep`, `fetch`).
 
 ---

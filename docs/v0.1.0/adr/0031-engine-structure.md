@@ -15,7 +15,7 @@
 
 The engine holds 100 modules (excluding `__init__.py`) and 32,835 lines. Measured on 2026-11-03:
 
-- 41 files sit flat at the top of `eidesoul/engine/`, ordered alphabetically, so unrelated domains interleave: `ablate.py` above `agent.py`, `approvals.py` between `ambient.py` and `assembly.py`.
+- 41 files sit flat at the top of `monoagens/engine/`, ordered alphabetically, so unrelated domains interleave: `ablate.py` above `agent.py`, `approvals.py` between `ambient.py` and `assembly.py`.
 - Three modules carry 22% of the tree: `memory/store.py` (2,785), `agent.py` (2,215), `automation.py` (2,106). Four more are above 800 lines (`config.py` 1,776, `stores/affect.py` 1,285, `cognition.py` 1,164, `schema.py` 954).
 - The code is not bloated: 84% of the lines are code, 11% blank, 5% docstring or comment; an 8-line clone scan finds 21 repeated windows (about 170 lines); the only module not on a runtime path is `ablate.py`, a research tool driven by `scripts/ablate.py`.
 - 60 of the 100 modules live in five folders with a fixed contract: 12 tools and 22 commands are one file per unit (folder discovery, never a registry edit), 9 stores hold persistence, 3 guard modules and 14 memory modules each have one reason to change.
@@ -67,7 +67,7 @@ No new folders yet, because a split and a move in the same commit hide both diff
 25 modules move; `ablate.py` leaves the engine for `scripts/`. The top level drops from 41 files to 15, and `clock.py` joins as the sixteenth when ADR-0033 §4.13 requires one `now(tz)` helper.
 
 ```text
-eidesoul/engine/
+monoagens/engine/
   __init__.py
   agent.py                      # the handle: one turn, one orchestration
   inbound.py  plugins.py  registry.py  llm.py
@@ -146,7 +146,7 @@ Gates, after every commit of the sequence: `pytest -q` on the throwaway Postgres
 ## 7. Acceptance criteria
 
 - `agent.py`, `automation.py`, and `memory/store.py` are below their targets, and no module exceeds 800 lines except the ones listed in §6.
-- The top level of `eidesoul/engine/` holds only the modules shown in §4.3.
+- The top level of `monoagens/engine/` holds only the modules shown in §4.3.
 - `grep -rn "components\.\|ComponentSettings"` stays empty; no symbol is renamed by the move.
 - Each of the five commits is green on all four gates, and the 831 tests pass before and after.
 - `scripts/selfcheck.py --check` prints the engine module count and any module above 800 lines.
@@ -161,7 +161,7 @@ Gates, after every commit of the sequence: `pytest -q` on the throwaway Postgres
 - **ADR paths go stale.** The path references are rewritten in the same commit, and `--translate-check` fails the moment a copy drifts.
 - **`git blame` becomes less useful.** `git mv` without reformatting keeps rename detection.
 - **Over-splitting after the cap.** The evidence cuts both ways; the 800-line cap is a ceiling, not a target, and the bottom is left alone.
-- **A moving tree confuses agents.** `AGENTS.md` and `eidesoul/engine/__init__.py` carry the map, and the folders are stable after one landing.
+- **A moving tree confuses agents.** `AGENTS.md` and `monoagens/engine/__init__.py` carry the map, and the folders are stable after one landing.
 - **The floor bump strands an old image or venv.** The Dockerfile, `config.yaml`, `install.sh`, and both READMEs change in the same commit; a 3.13 interpreter now fails fast with one message.
 - **A ratchet baseline hides new debt inside an old count.** The script records per directory, not one global number, and lowering is a commit of its own.
 - **A new rule set floods the gate.** Rules land with `--fix` first, remaining findings are triaged once, and a rule that cannot be satisfied is ignored explicitly with a reason.
@@ -186,12 +186,12 @@ ADR-0009 governs where these decisions live and gates the copies. ADR-0016 is un
 
 ## 11. Code references
 
-- `eidesoul/engine/agent.py` — the handle; delivery and counters leave it in §4.2.
-- `eidesoul/engine/turn/reply.py` — receives the delivery helpers.
-- `eidesoul/engine/runtime.py` — receives the capability counters.
-- `eidesoul/engine/memory/store.py` — the single port; statements move to `memory/queries.py`.
-- `eidesoul/engine/jobs/automation.py` — second delivery copy removed in §4.2.
-- `eidesoul/admin/templates.py` — defaults derived from the dataclass tree in §4.6.
+- `monoagens/engine/agent.py` — the handle; delivery and counters leave it in §4.2.
+- `monoagens/engine/turn/reply.py` — receives the delivery helpers.
+- `monoagens/engine/runtime.py` — receives the capability counters.
+- `monoagens/engine/memory/store.py` — the single port; statements move to `memory/queries.py`.
+- `monoagens/engine/jobs/automation.py` — second delivery copy removed in §4.2.
+- `monoagens/admin/templates.py` — defaults derived from the dataclass tree in §4.6.
 - `scripts/adr.py` — `--stamp` in §4.6.
 - `scripts/selfcheck.py` — reports the module count and over-size modules in §6.
 - `pyproject.toml` — floor, ruff selection, dependency group, and pyright config in §4.7.

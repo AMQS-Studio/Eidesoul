@@ -1,8 +1,8 @@
 <p align="center">
-  <img src="assets/logo.png" alt="Eidesoul" width="260">
+  <img src="assets/logo.png" alt="MonoAgens" width="260">
 </p>
 
-<h1 align="center">Eidesoul</h1>
+<h1 align="center">MonoAgens</h1>
 
 <p align="center"><em>mesin jiwa: satu diri, selalu ingat, selalu belajar, orang yang sama di mana pun ia hidup.</em></p>
 
@@ -19,7 +19,7 @@
 <p align="center">
   <a href="#architecture">Arsitektur</a> · <a href="#tools-are-capabilities">Tool</a> ·
   <a href="#quickstart">Mulai cepat</a> ·
-  <a href="#soulyaml">soul.yaml</a> · <a href="#character-library">Pustaka karakter</a> ·
+  <a href="#soulyaml">soul.yaml</a> · <a href="#karakter-dan-riset">Karakter dan riset</a> ·
   <a href="#supported-gateways">Gateway</a> · <a href="#roles-and-permissions">Peran dan izin</a> ·
   <a href="#safety">Keamanan</a> · <a href="#credits">Kredit</a>
 </p>
@@ -69,14 +69,14 @@ dinamai menurut tujuannya — autonomous harness agent berjalan tanpa pengawasan
 mengubah sebuah repository — dan yang sudah matang sudah membawa memori, skill, todo, dan aturan
 approval.
 
-Eidesoul adalah **soul harness**: harness yang state-nya adalah diri. Ia mengingat lintas sesi, menjaga
+MonoAgens adalah **persistent agent harness**: harness yang state-nya adalah diri. Ia mengingat lintas sesi, menjaga
 satu persona, dan berperilaku sebagai satu karakter yang meyakinkan lintas setiap embodiment.
 
 | | Di mana state hidup | Bagaimana satu giliran mendapat konteks | Dioptimalkan untuk |
 |---|---|---|---|
 | Autonomous harness agent | riwayat tugas dan workspace-nya, cukup untuk melanjutkan dari titik terakhir | context window, dipadatkan saat penuh | menyelesaikan pekerjaan tanpa pengawasan |
 | Developer harness agent | repository dan berkas-berkasnya | context window, diisi dari berkas dan keluaran tool | mengubah kode dengan benar |
-| Eidesoul (soul harness) | satu store kanonik — Postgres dengan index vektor — memuat memori, affect, dan transkrip | dibangun ulang setiap giliran dari store itu, dibatasi pada orang dan chat; window hanya working set, bukan memorinya | tetap orang yang sama, serba bisa — ingat, belajar, privasi, izin |
+| MonoAgens (persistent agent harness) | satu store kanonik — Postgres dengan index vektor — memuat memori, affect, dan transkrip | dibangun ulang setiap giliran dari store itu, dibatasi pada orang dan chat; window hanya working set, bukan memorinya | tetap orang yang sama, serba bisa — ingat, belajar, privasi, izin |
 
 Harness konvensional memperlakukan context window sebagai memori kerja lalu memadatkannya saat penuh. Di
 sini store adalah memorinya dan window hanya working set giliran ini, jadi percakapan panjang tidak
@@ -213,7 +213,7 @@ Kebutuhan: Python 3.14, Postgres 14+ dengan `pgvector`, dan endpoint LLM yang ko
 OpenAI. Image container memakai Python 3.14; menjalankan dari source butuh 3.14 atau lebih baru.
 
 Jalur terpendek adalah installer; ia tidak pernah menjalankan `sudo`, mem-pin `uv`, menulis empat
-berkas host, lalu menyerahkan ke `eidesoul init`:
+berkas host, lalu menyerahkan ke `monoagens init`:
 
 ```bash
 bash install.sh                 # native
@@ -225,13 +225,13 @@ Dari source, langkah yang sama secara manual:
 
 ```bash
 # 1. Scaffold config.yaml, roles.yaml, soul.yaml, dan .env; provider adalah pilihan operator
-eidesoul init --provider openai
+monoagens init --provider openai
 
 # 2. Jadikan ini jiwa Anda, bukan jiwa default
 $EDITOR soul.yaml
 
 # 3. Isi .env: kunci provider, URL database, dan POSTGRES_PASSWORD untuk compose
-#      EIDESOUL_DATABASE_URL=postgresql+psycopg://eidesoul:<password>@127.0.0.1:5432/eidesoul
+#      MONOAGENS_DATABASE_URL=postgresql+psycopg://monoagens:<password>@127.0.0.1:5432/monoagens
 #      POSTGRES_PASSWORD=<password yang sama>
 #      OPENAI_API_KEY=...
 
@@ -239,23 +239,23 @@ $EDITOR soul.yaml
 podman compose up -d postgres
 
 # 5. Buat skema dan seed berkas host ke dalamnya
-eidesoul db upgrade
+monoagens db upgrade
 
 # 6. Jalankan gateway yang diaktifkan di config.yaml
-eidesoul run
+monoagens run
 
 # REPL lokal terhadap jiwa dan database yang sama; mengambil lease
-eidesoul console --takeover
+monoagens console --takeover
 ```
 
-`eidesoul run` memuat dokumen, mengambil lease primary, lalu menjalankan gateway yang aktif.
+`monoagens run` memuat dokumen, mengambil lease primary, lalu menjalankan gateway yang aktif.
 Instance kedua tetap standby dan beku sampai mengambil alih lewat lease, jadi
-`eidesoul console --takeover` adalah cara resmi berbicara manual dengan deployment yang sedang
+`monoagens console --takeover` adalah cara resmi berbicara manual dengan deployment yang sedang
 berjalan.
 
-`eidesoul db check` mencetak ringkasan skema dan isi; `eidesoul selftest` menguji store, tool, dan
-LLM sekali tanpa menjalankan gateway. `eidesoul people list` menampilkan identitas dan alamat
-gateway-nya, dan `eidesoul people adopt` memindahkan alamat lama (nomor telepon, `local`) ke id
+`monoagens db check` mencetak ringkasan skema dan isi; `monoagens selftest` menguji store, tool, dan
+LLM sekali tanpa menjalankan gateway. `monoagens people list` menampilkan identitas dan alamat
+gateway-nya, dan `monoagens people adopt` memindahkan alamat lama (nomor telepon, `local`) ke id
 `per_…`, ikut membawa state affect dan style-nya serta menulis ulang dokumen peran; ia idempoten,
 jadi deployment yang di-upgrade cukup menjalankannya sekali.
 
@@ -264,10 +264,10 @@ dev atau produksi) lalu ekspor DSN-nya; tanpa variabel itu suite gagal dengan pe
 bukan jatuh ke SQLite:
 
 ```bash
-podman run -d --name eidesoul-test-pg -p 5433:5432 \
-  -e POSTGRES_DB=eidesoul_test -e POSTGRES_USER=eidesoul -e POSTGRES_PASSWORD=eidesoul \
+podman run -d --name monoagens-test-pg -p 5433:5432 \
+  -e POSTGRES_DB=monoagens_test -e POSTGRES_USER=monoagens -e POSTGRES_PASSWORD=monoagens \
   docker.io/pgvector/pgvector:pg17
-export EIDESOL_TEST_DATABASE_URL='postgresql+psycopg://eidesoul:eidesoul@127.0.0.1:5433/eidesoul_test'
+export MONOAGENS_TEST_DATABASE_URL='postgresql+psycopg://monoagens:monoagens@127.0.0.1:5433/monoagens_test'
 pytest -q
 ```
 
@@ -289,141 +289,98 @@ diverifikasi saat diaktifkan (lihat Integrasi opsional).
 <a id="soulyaml"></a>
 ## soul.yaml
 
-Satu database adalah satu jiwa, dan `soul.yaml` adalah tempat jiwa itu dituliskan. Semua kunci
-kecuali `name` opsional; kunci yang tidak dikenal diabaikan. Setelah `db upgrade` pertama, jiwa yang
-tersimpan di database menjadi acuan dan `soul.yaml` adalah seed sekaligus cerminnya — ubah berkasnya,
-jalankan `eidesoul config import` untuk memasukkan perubahan, atau `eidesoul config export` untuk
-menuliskan cerminnya kembali.
+Satu database adalah satu jiwa, dan `soul.yaml` adalah tempat jiwa itu dituliskan. Setelah
+`db upgrade` pertama, jiwa di database menjadi acuan dan `soul.yaml` adalah seed sekaligus
+cerminnya. Edit biasa berlaku saat start berikutnya: engine membandingkan hash berkas dan DB,
+mengimpor bila hanya berkas yang berubah, dan membiarkan DB menang saat keduanya berubah.
+`monoagens config import` dan `monoagens config export` tetap ada untuk arah paksa.
 
 ```yaml
-name: Eidesoul                  # wajib; jika kosong jatuh ke "Eidesoul"
-description: ""                 # satu baris, muncul di blok persona
+name: MonoAgens
+description: ""
 language: id                    # katalog terpasang: id | en
+locale: id-ID
+timezone: Asia/Jakarta          # zona IANA wajib; tidak ada default kode
 pronouns: aku
-gender: unspecified             # male | female | nonbinary | unspecified
-role: assistant                 # peran aktif
-roles: [assistant]              # opsional; default [role]
-locale: id-ID                   # locale konteks untuk prompt dan currents
-background: ""                  # teks bebas: asal-usul jiwa ini
-persona: ""                     # markdown bebas: kepribadian, suara, nilai
-style:                          # ditulis `eidesoul library resolve`, bukan manual
-  patterns: []                  # id pack pattern dari eidesoul/library/patterns/
-  facts: []                     # id pack fakta dari eidesoul/library/facts/
-  registers: []                 # allow-list register opsional; kosong = default pack
-  max_patterns: 0               # gerakan pattern per giliran, 0..6
-  max_facts: 0                  # fakta per giliran, 0..6
-examples: []                    # opsional [{user: "...", soul: "..."}]
+role: assistant
+roles: [assistant]
+background: ""
+persona: ""
+voice:
+  enabled: false                # satu saklar utama; semua bagian di bawah inert saat false
+  sampling:
+    daily_temperature: 0.9
+    professional_temperature: 0.3
+    top_p:                      # kosong = default provider
+    top_k:
+    min_p:
+  affect:
+    enabled: true
+  style:
+    enabled: true
+  character:
+    enabled: false
+    max_chars: 400
+    max_tokens: 500
+    temperature: 0.7
+  humanize:
+    enabled: true
+    cpms: 25.0
+    min_delay: 0.5
+    max_delay: 5.0
+    between_delay: 0.7
+    max_bubbles: 3
+    reaction_stickers: []
+  profanity: avoid              # free | avoid
+  safety: inherit               # inherit | off; off butuh adapter native
+examples: []
+rules: []
 ```
 
-Aturan yang ditegakkan loader:
+Aturan loader:
 
-- `name` harus tidak kosong, jika tidak dipakai nilai default.
-- `gender` harus salah satu dari `male`, `female`, `nonbinary`, atau `unspecified`; nilai lain
-  jatuh ke `unspecified` dengan peringatan.
-- `roles` default `[role]` bila tidak diisi; jika `role` tidak ada di `roles`, ia ditambahkan di
-  depan, dan persona hanya mencantumkan peran lain bila jumlahnya lebih dari satu.
-- Id pack dan register harus cocok dengan `^[a-z0-9][a-z0-9-]{0,63}$`; id tidak valid adalah error,
-  bukan dilewati diam-diam.
-- `max_patterns` dan `max_facts` dijepit ke `0..6`.
+- `language`, `locale`, dan `timezone` wajib; `monoagens init` menuliskannya.
+- `roles` default `[role]`; bila `role` tidak ada di `roles`, ia ditambahkan di depan.
 - `persona` dirender dengan urutan tetap: nama, deskripsi, peran aktif, peran tersedia, locale,
   background, persona bebas, lalu contoh dialog. Bagian kosong dihilangkan.
-- `style` diturunkan: `eidesoul init` mengisinya dan `eidesoul library resolve --force` menulis
-  ulang dari `description` + `background` + `persona` + `examples`, hanya memakai pack yang
-  `language`-nya sama dengan jiwa. Kecocokan lemah, seri, atau kosong tidak memilih apa pun, dan
-  jenis yang tidak menemukan padanan mempertahankan pack yang sudah ada.
+- `voice.enabled` adalah satu-satunya saklar utama. `sampling`, `profanity`, dan `safety` berlaku
+  per request dan tetap bekerja saat master off; `affect`, `style`, `character`, dan `humanize`
+  inert.
+- `voice.profanity` adalah instruksi prompt, bukan tabel toksisitas. `voice.safety: off` hanya
+  diterima bila wire provider melaporkan kemampuan safety request-level.
+- Blok `voice` yang tidak ada memakai default aman: off, `profanity: avoid`, `safety: inherit`,
+  dan `top_p` / `top_k` / `min_p` kosong.
+- Kunci lama `engine.affect`, `engine.style`, `engine.character`, `engine.humanize`, dan
+  `engine.llm.temperature` ditolak; semuanya pindah ke sini.
 
-Peran aktif dan pack gaya adalah dua tombol yang membentuk satu giliran. Peran aktif menentukan izin
-dan sikap kerja; pack gaya menentukan bagaimana jiwa terdengar dan seberapa banyak data karakter
-yang boleh dipakai per giliran. Jiwa tanpa pack tidak meminjam gaya bahasa daerah dan tidak memakai
-fakta — hanya `persona` dan `background` miliknya sendiri.
+## Karakter dan riset
 
-Contoh singkat (biarkan `style` ditulis resolver):
+Karakter berasal dari `soul.yaml` dan model, bukan katalog pack runtime:
 
-```yaml
-name: Eidesoul
-language: id
-role: companion
-roles: [assistant, companion]
-locale: id-ID
-background: |
-  Tumbuh di sekitar pelabuhan yang ramai dan masih berpikir dengan cerita dermaga.
-persona: |
-  ## Kepribadian
-  Lugas, kering, hangat setelah kepercayaan terbentuk.
-style:
-  patterns: [jawatimur]
-  facts: [indonesia]
-  max_patterns: 3
-  max_facts: 2
-examples:
-  - user: "capek banget hari ini"
-    soul: "sini dulu, duduk"
-```
+- `persona` dan `examples` adalah jangkar few-shot; contoh pendek dan sintetis.
+- Pengetahuan umum yang stabil boleh dari prior model.
+- Klaim terkini, spesifik, lokal, numerik, diperdebatkan, atau yang butuh sitasi memicu
+  `web_search`. Hasilnya masuk prompt hanya sebagai `ResearchCard` tak tepercaya dengan sumber,
+  ID, dan timestamp; jawaban mengutip `[R1]`, dan klaim terkini tanpa dukungan harus abstain.
+- Fakta personal dan episode tetap di Mem0; `soul.yaml` bukan katalog fakta publik.
+- Bila model ragu tetapi tidak ada trigger deterministik, ia boleh memanggil `web_search` sendiri.
 
-<a id="character-library"></a>
-## Pustaka karakter
+Tidak ada `library/patterns`, `library/facts`, `library resolve`, atau tabel level karakter.
+`library/` hanya menyimpan data detektor (`lexicon`, `privacy`, `safety`, `style`, `affect`, dan
+`intent`), bukan contoh prompt atau baris fakta publik.
 
-Data karakter adalah pustaka yang dipilih jiwa, bukan sesuatu yang dikirim engine lewat suaranya.
-Seleksi berjalan dari atas ke bawah: `soul.yaml` menyebut pack-nya, `eidesoul init` mengisi daftar
-itu sesuai bahasa jiwa, dan `eidesoul library resolve` menurunkannya kembali dari tulisan penulis.
-`style` kosong berarti tanpa pattern dan tanpa fakta.
-
-Pack berada di bawah `eidesoul/library/`:
-
-- `patterns/<pack>.json` — gerakan bersyarat ("jika begini, maka begitu") yang ditandai register,
-  target gender, serta gate toksisitas dan konten dewasa. Satu pack membawa `version`, `model`,
-  `language`, sebuah `lexicon` token percakapan, dan baris `patterns`.
-- `facts/<pack>.json` — fakta pendek yang berdasar, masing-masing dengan setidaknya satu URL
-  sumber. Satu pack membawa `version`, `model`, `language`, dan baris `facts`.
-
-Dua pack disertakan sebagai contoh kerja: `jawatimur` (gerakan percakapan Jawa Timur) dan
-`indonesia` (fakta Indonesia). Pilih keduanya, abaikan, atau tulis sendiri:
-
-```yaml
-style:
-  patterns: [jawatimur]
-  facts: [indonesia]
-  registers: [serious, laughter]   # opsional: hanya register ini
-  max_patterns: 3
-  max_facts: 2
-```
-
-Seleksi bersifat deterministik per giliran: engine membaca pesan terakhir, menurunkan register
-ruangan, lalu memilih paling banyak `max_patterns` gerakan dan `max_facts` fakta. Hit kata kunci
-didahulukan, lalu kemiripan kosinus pada embedder bersama (`eidesoul/engine/embed.py`). Pack yang hilang, tidak
-terbaca, atau namanya di luar pola id tidak menyumbang apa pun dan mencatat peringatan alih-alih
-menggagalkan giliran.
-
-Tidak ada transkrip mentah yang dikirim. Baris `say` di pack pattern adalah contoh yang sudah
-disetujui, bukan pesan pribadi yang disalin, dan baris fakta membawa sumber, bukan percakapan.
-
-Ubah pack lewat skrip, jangan manual:
-
-```bash
-python scripts/patterns.py --pack jawatimur --check     # skema, gate, duplikat, keterjangkauan
-python scripts/patterns.py --pack jawatimur --embed     # bangun ulang vektor pack
-python scripts/fakta.py --pack indonesia --check        # skema dan vektor
-python scripts/fakta.py --pack indonesia --embed
-python scripts/grow.py --pack jawatimur --patterns      # usulkan baris baru dari korpus
-```
-
-`--embed` harus dijalankan setelah setiap perubahan konten agar vektor sesuai dengan barisnya. Pack
-baru adalah pasangan berkas baru di direktori yang sama dengan nama yang cocok dengan pola id; tidak
-perlu mengubah kode untuk memilihnya.
-
-<a id="supported-gateways"></a>
 ## Gateway yang didukung
 
 Inilah daftar lengkapnya; tidak ada bagian lain dalam dokumentasi yang mendaftar gateway.
 
-- **CLI** — bawaan. Config default mengaktifkannya, dan inilah cara `eidesoul run` serta
-  `eidesoul console` berbicara dengan sebuah jiwa tanpa transport jaringan.
+- **CLI** — bawaan. Config default mengaktifkannya, dan inilah cara `monoagens run` serta
+  `monoagens console` berbicara dengan sebuah jiwa tanpa transport jaringan.
 - **WhatsApp** — extra opsional. Pasang dengan `uv sync --extra whatsapp` dan aktifkan di bagian
   `gateways`; hilangkan keduanya dan gateway ini tidak ada untuk deployment tersebut. Core tidak
   pernah mengimpornya, dan peran member default tidak pernah menerima tool `send` miliknya.
 - **Perwujudan Anda sendiri** — robot, loop suara, perangkat, atau endpoint HTTP privat hanyalah
   gateway lain. Implementasikan amplop masuk dan antarmuka gateway, kirim kelasnya sebagai entry
-  point di grup `eidesoul.gateways` atau aktifkan berdasarkan nama, dan ia bergabung ke jiwa yang
+  point di grup `monoagens.gateways` atau aktifkan berdasarkan nama, dan ia bergabung ke jiwa yang
   sama.
 
 Gateway adalah transport, bukan otak. Ia menormalkan input, mengantarkan balasan, dan memiliki modul
@@ -461,7 +418,7 @@ roles:
 - `approve` adalah izin command seperti yang lain: hanya peran yang mencantumkannya bisa
   menyelesaikan aksi yang tertunda.
 - `memory_admin: true` wajib untuk menulis memori global jiwa.
-- Peran mencantumkan identitas opaque `per_…` (`eidesoul people list`), bukan nomor telepon atau
+- Peran mencantumkan identitas opaque `per_…` (`monoagens people list`), bukan nomor telepon atau
   JID: `person_links` memetakan tiap alamat gateway ke identitas itu, `/link` menautkan gateway
   kedua ke orang yang sama, dan `/unlink` melepasnya. Identitas di beberapa peran digabung;
   blok `context` diurutkan berdasarkan priority, lalu name.
@@ -469,7 +426,7 @@ roles:
   read-only dan area scratch miliknya, dan sandbox mencerminkan itu dengan mount bersama read-only
   serta satu mount scratch yang bisa ditulis.
 
-Mengedit `roles.yaml` secara manual didukung: jalankan `eidesoul config import` setelahnya agar
+Mengedit `roles.yaml` secara manual didukung: jalankan `monoagens config import` setelahnya agar
 database melihatnya.
 
 <a id="safety"></a>
@@ -517,8 +474,8 @@ bahkan ketika ia diizinkan berjalan.
 
 ```bash
 uv sync --extra whatsapp                  # gateway opsional
-eidesoul plugins install google        # plugin: unduh + verifikasi digest
-eidesoul plugins enable google         # daftarkan tool-nya ke katalog yang sama
+monoagens plugins install google        # plugin: unduh + verifikasi digest
+monoagens plugins enable google         # daftarkan tool-nya ke katalog yang sama
 ```
 
 ```bash
@@ -528,7 +485,7 @@ podman build --build-arg EXTRAS="--extra whatsapp" .
 Memori, embedder, dan prototipe affect adalah bagian dari instalasi core; tidak ada extra untuk
 mereka. Penyimpanan hanya Postgres+pgvector, toko yang sama dengan tes.
 
-- **Vibe affect** membaca embedder bersama terhadap `eidesoul/library/affect/*.json`; tanpa embedder
+- **Vibe affect** membaca embedder bersama terhadap `monoagens/library/affect/*.json`; tanpa embedder
   suasana ruangan tetap netral, bukan menebak.
 - **WhatsApp** (`whatsapp`): gateway opsional. Tidak pernah aktif secara default.
 - **Google Workspace** (`google`): plugin, bukan tool core dan bukan extra. Selama absen,
@@ -542,7 +499,7 @@ di-commit.
 ## Kredit
 
 Setiap komponen di bawah ini mempertahankan lisensi dan atribusinya masing-masing. Versinya adalah
-yang dipasang lock file; kolom terakhir menjelaskan untuk apa Eidesoul memakainya.
+yang dipasang lock file; kolom terakhir menjelaskan untuk apa MonoAgens memakainya.
 
 | Komponen | Lisensi | Penulis / organisasi | Sumber | Dipakai untuk |
 |---|---|---|---|---|
@@ -577,8 +534,8 @@ yang dipasang lock file; kolom terakhir menjelaskan untuk apa Eidesoul memakainy
 <a id="license"></a>
 ## Lisensi
 
-Eidesoul dirilis di bawah [Apache License 2.0](LICENSE). Hak cipta 2026 Abdul Muqsith.
+MonoAgens dirilis di bawah [Apache License 2.0](LICENSE). Hak cipta 2026 Abdul Muqsith.
 
 Komponen pihak ketiga mempertahankan ketentuannya masing-masing; tabel di atas mencantumkan lisensi,
 penulis, dan sumber tiap komponen. Emotion engine yang di-vendor membawa lisensinya di samping
-source-nya sebagai `eidesoul/vendor/LICENSE.emotion-engine`.
+source-nya sebagai `monoagens/vendor/LICENSE.emotion-engine`.

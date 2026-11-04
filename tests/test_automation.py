@@ -10,13 +10,13 @@ import pytest
 from sqlalchemy import select
 from support import inbound_message, make_agent
 
-from eidesoul.engine.access.relay import RelayStore
-from eidesoul.engine.access.roles import Role
-from eidesoul.engine.jobs.automation_manifest import describe, validate_manifest
-from eidesoul.engine.jobs.automation_store import AutomationStore
-from eidesoul.engine.jobs.automation_worker import AutomationWorker
-from eidesoul.engine.jobs.schedule import ManifestError, next_after, occurrence_key
-from eidesoul.engine.schema import automation_runs, automations, outbound_messages
+from monoagens.engine.access.relay import RelayStore
+from monoagens.engine.access.roles import Role
+from monoagens.engine.jobs.automation_manifest import describe, validate_manifest
+from monoagens.engine.jobs.automation_store import AutomationStore
+from monoagens.engine.jobs.automation_worker import AutomationWorker
+from monoagens.engine.jobs.schedule import ManifestError, next_after, occurrence_key
+from monoagens.engine.schema import automation_runs, automations, outbound_messages
 
 OWNER = "628111"
 TZ = UTC
@@ -65,7 +65,7 @@ def seed_dm(env, thread: str = OWNER) -> str:
     """ADR-0032 §4.1: a send needs a route, so the owner has a DM thread with the fake body."""
     from sqlalchemy.dialects.postgresql import insert as pg_insert
 
-    from eidesoul.engine.schema import people, thread_people, threads
+    from monoagens.engine.schema import people, thread_people, threads
 
     with env.db.connect() as conn:
         conn.execute(

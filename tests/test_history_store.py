@@ -8,9 +8,9 @@ from sqlalchemy import text as sql_text
 from sqlalchemy.exc import IntegrityError
 from support import database
 
-from eidesoul.engine.schema import messages
-from eidesoul.engine.stores.history import HistoryStore
-from eidesoul.engine.turn.context import Media, Message, Quote
+from monoagens.engine.schema import messages
+from monoagens.engine.stores.history import HistoryStore
+from monoagens.engine.turn.context import Media, Message, Quote
 
 
 def message(
@@ -136,7 +136,7 @@ def test_merge_never_downgrades_author_or_visibility(tmp_path) -> None:
     )
     store.add(
         "chat",
-        message("a", "", sender_name="eidesoul", sender_id="628567770837", author="bot"),
+        message("a", "", sender_name="monoagens", sender_id="628567770837", author="bot"),
     )
     store.add("chat", message("a", "", sender_name="", sender_id="", author="unknown"))
     store.add("chat", message("a", "", sender_name="x", visibility=2))
@@ -145,7 +145,7 @@ def test_merge_never_downgrades_author_or_visibility(tmp_path) -> None:
 
     assert item is not None
     assert item.author == "bot"
-    assert item.sender_name == "eidesoul"
+    assert item.sender_name == "monoagens"
     assert item.sender_id == "628567770837"
     assert item.visibility == 3
     assert item.text == "halo"
@@ -293,8 +293,8 @@ def test_a_second_body_cannot_claim_an_owned_thread(tmp_path) -> None:
     import pytest
     from sqlalchemy import select
 
-    from eidesoul.engine.schema import messages as messages_table
-    from eidesoul.engine.stores.history import RouteConflict
+    from monoagens.engine.schema import messages as messages_table
+    from monoagens.engine.stores.history import RouteConflict
 
     store = HistoryStore(database())
     assert store.intake("chat", message("m1", "halo"), "628222", gateway="a", language="id") is True

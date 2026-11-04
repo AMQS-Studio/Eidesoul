@@ -142,11 +142,11 @@ relay:
 
 ## 10. Code references
 
-- `eidesoul/engine/access/approvals.py` — the `consent` path used by relay questions (the class from ADR-0007 §4.7).
-- `eidesoul/engine/agent.py:311` — `send_text` (the send path that records to `outbound_messages`).
-- `eidesoul/gateways/whatsapp/tools/send.py` — tool `send` (the reminder and the relay report use the same path).
-- `eidesoul/engine/schema.py` — the `approvals` table (TTL/binding pattern) as a shape reference for `relay_grants`.
-- `eidesoul/engine/turn/prompts.py:141-147` — role/label block (the relay mentions the `label` of the administrator/manager when present).
+- `monoagens/engine/access/approvals.py` — the `consent` path used by relay questions (the class from ADR-0007 §4.7).
+- `monoagens/engine/agent.py:311` — `send_text` (the send path that records to `outbound_messages`).
+- `monoagens/gateways/whatsapp/tools/send.py` — tool `send` (the reminder and the relay report use the same path).
+- `monoagens/engine/schema.py` — the `approvals` table (TTL/binding pattern) as a shape reference for `relay_grants`.
+- `monoagens/engine/turn/prompts.py:141-147` — role/label block (the relay mentions the `label` of the administrator/manager when present).
 
 ---
 

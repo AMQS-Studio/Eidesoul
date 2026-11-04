@@ -8,7 +8,7 @@ from types import SimpleNamespace
 
 from support import build_config
 
-from eidesoul.engine.llm import LLM, parse_digest
+from monoagens.engine.llm import LLM, parse_digest
 
 
 def test_parse_digest_keeps_known_kinds_and_rejects_others() -> None:

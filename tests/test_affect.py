@@ -9,11 +9,11 @@ import pytest
 from sqlalchemy import select, update
 from support import database
 
-from eidesoul.engine import guard
-from eidesoul.engine.config import AffectConfig
-from eidesoul.engine.schema import drives, people, state
-from eidesoul.engine.stores.affect import AffectStore
-from eidesoul.engine.turn.decision import Appraisal, Decision, RelationshipDelta
+from monoagens.engine import guard
+from monoagens.engine.schema import drives, people, state
+from monoagens.engine.soul import AffectConfig
+from monoagens.engine.stores.affect import AffectStore
+from monoagens.engine.turn.decision import Appraisal, Decision, RelationshipDelta
 
 CHAT = "120363415422117951@g.us"
 OTHER = "120363000000000000@g.us"
@@ -342,7 +342,7 @@ def test_safe_text_drops_sensitive_and_injection() -> None:
 
 
 def test_inertia_shrinks_delta() -> None:
-    from eidesoul.engine.stores.affect import _inertia
+    from monoagens.engine.stores.affect import _inertia
 
     assert _inertia(0.15, 0.0) == 0.15
     assert _inertia(0.15, 0.5) == pytest.approx(0.075)
@@ -423,10 +423,10 @@ def test_heartbeat_soothes_grudge_over_hours(tmp_path, monkeypatch) -> None:
         assert "enemy" in store.prompt(CHAT)  # the initial label at 0.8
 
         moment = time.time()
-        monkeypatch.setattr("eidesoul.engine.stores.affect.time.time", lambda: moment)
+        monkeypatch.setattr("monoagens.engine.stores.affect.time.time", lambda: moment)
         store.pulse(CHAT)  # the first beat only anchors time
         monkeypatch.setattr(
-            "eidesoul.engine.stores.affect.time.time", lambda: moment + 3 * 3600
+            "monoagens.engine.stores.affect.time.time", lambda: moment + 3 * 3600
         )
         store.pulse(CHAT)
 
@@ -461,10 +461,10 @@ def test_close_grudge_fades_slower_than_stranger(tmp_path, monkeypatch) -> None:
         )
 
         moment = time.time()
-        monkeypatch.setattr("eidesoul.engine.stores.affect.time.time", lambda: moment)
+        monkeypatch.setattr("monoagens.engine.stores.affect.time.time", lambda: moment)
         store.pulse(CHAT)
         monkeypatch.setattr(
-            "eidesoul.engine.stores.affect.time.time", lambda: moment + 2 * 3600
+            "monoagens.engine.stores.affect.time.time", lambda: moment + 2 * 3600
         )
         store.pulse(CHAT)
 
@@ -484,16 +484,16 @@ def test_default_half_life_clears_enemy_label_within_hour(tmp_path, monkeypatch)
         assert "enemy" in store.prompt(CHAT)
 
         moment = time.time()
-        monkeypatch.setattr("eidesoul.engine.stores.affect.time.time", lambda: moment)
+        monkeypatch.setattr("monoagens.engine.stores.affect.time.time", lambda: moment)
         store.pulse(CHAT)
         monkeypatch.setattr(
-            "eidesoul.engine.stores.affect.time.time", lambda: moment + 40 * 60
+            "monoagens.engine.stores.affect.time.time", lambda: moment + 40 * 60
         )
         store.pulse(CHAT)
 
         assert "enemy" not in store.prompt(CHAT)  # ~40 minutes is no longer an enemy
         monkeypatch.setattr(
-            "eidesoul.engine.stores.affect.time.time", lambda: moment + 6 * 3600
+            "monoagens.engine.stores.affect.time.time", lambda: moment + 6 * 3600
         )
         store.pulse(CHAT)
         # the default trust of 0.1 slows it slightly; a tenth still remains after 6 hours
@@ -514,7 +514,7 @@ def test_emotion_and_drives_are_one_heart(tmp_path) -> None:
         turn(store, decision(), message_id="HEART2", chat=OTHER, person=OWNER)
         after = store.drives(CHAT)
         # messages in another chat satisfy the same boredom/loneliness:
-        # the drive belongs to Eidesoul, not to the room
+        # the drive belongs to MonoAgens, not to the room
         assert after["boredom"] < before["boredom"]
         assert after["loneliness"] < before["loneliness"]
     finally:
@@ -522,7 +522,7 @@ def test_emotion_and_drives_are_one_heart(tmp_path) -> None:
 
 
 def test_migrated_state_with_stale_session_still_moves_emotion(tmp_path) -> None:
-    from eidesoul.vendor import emotion_engine as engine
+    from monoagens.vendor import emotion_engine as engine
 
     store = make_store(tmp_path)
     try:

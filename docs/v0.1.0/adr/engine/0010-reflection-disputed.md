@@ -7,14 +7,14 @@
 - **Context:** paying off the ADR-0008 §4.9C debt (`disputed` was deferred to here) and closing the last slot in the ADR-0001 §14 queue
 - **Supersedes:** —
 - **Related:** ADR-0003 (worker & queue), ADR-0004 (state `staged`), ADR-0005 (TTL/renewal), ADR-0006 (group privacy), ADR-0007 (permission classes), ADR-0008 (integrity), ADR-0013 (turn lifecycle), ADR-0014 (automation), ADR-0015 (payload), ADR-0019 (`llm_calls`), ADR-0020 (derivative procedure)
-- **Amendments:** 2026-11-03 — audit: the reference path for `capture_turn` was corrected to `eidesoul/engine/access/privacy.py:222-303` (`memory/privacy.py` is 71 lines, only `show`/`disclose`). 2026-11-03 — the `staged` promotion threshold is stated as a row count (≥2 `ok` rows), distinguished from the day threshold `corroboration_days` (ADR-0008); the `state` list points to ADR-0004 §5.1 / the ADR-0016 enum. 2026-11-03 — audit: `refs`/`derive_depth`/`dispute_state` in §10 Code references are labeled as a proposal (not yet in the repo).
+- **Amendments:** 2026-11-03 — audit: the reference path for `capture_turn` was corrected to `monoagens/engine/access/privacy.py:222-303` (`memory/privacy.py` is 71 lines, only `show`/`disclose`). 2026-11-03 — the `staged` promotion threshold is stated as a row count (≥2 `ok` rows), distinguished from the day threshold `corroboration_days` (ADR-0008); the `state` list points to ADR-0004 §5.1 / the ADR-0016 enum. 2026-11-03 — audit: `refs`/`derive_depth`/`dispute_state` in §10 Code references are labeled as a proposal (not yet in the repo).
 - **Location note:** ADR lives in `docs/v0.1.0/adr/engine/`; the Indonesian copy is `docs/v0.1.0/adr/engine/id/0010-reflection-disputed.md`.
 
 ---
 
 ## 1. Context
 
-**Reflection does not exist.** Across `eidesoul/engine` there is not a single reflection module:
+**Reflection does not exist.** Across `monoagens/engine` there is not a single reflection module:
 `grep -iE 'reflect|rumina'` only finds `ambient.py:1`, which mentions "summarise topics and
 research while idle". What really runs today is `Ambient` — a background loop that, when
 a chat goes idle, builds a topic digest and researches `web_search`, then writes a row
@@ -250,7 +250,7 @@ an `open` dispute is left standing (not force-closed) and the question is not se
 - Visibility: `/status` shows the count of passes, writes, disputes opened/resolved/`stale`,
 and questions sent — numbers, not narratives.
 - Without an LLM (`llm is None`) reflection does not run at all; there is no fallback path that
-guesses. The deterministic layer is `eidesoul/engine/memory/reflect.py`; a manual CLI wrapper is not built yet.
+guesses. The deterministic layer is `monoagens/engine/memory/reflect.py`; a manual CLI wrapper is not built yet.
 to inspect candidates without writing anything.
 
 ## 5. Configuration
@@ -276,7 +276,7 @@ engine:
 ```
 
 This key is part of the `engine` document (seed `config.yaml`, mirrored in the DB); changing it manually →
-`eidesoul config import`.
+`monoagens config import`.
 
 ## 6. Metrics and gates
 
@@ -349,20 +349,20 @@ payload; `refs`/row ids still do not enter the user prompt.
 
 ## 10. Code references
 
-- `eidesoul/engine/jobs/ambient.py:1-4`, `:103-200`, `:203-315` — the idle loop that exists; the limit "never
+- `monoagens/engine/jobs/ambient.py:1-4`, `:103-200`, `:203-315` — the idle loop that exists; the limit "never
 sends a message" and the write shape `scope=chat, kind=note, source=ambient:<thread_id>`.
-- `eidesoul/engine/config.py:236-252` — `AmbientConfig` (precedent for budget keys: `tick_seconds`,
+- `monoagens/engine/config.py:236-252` — `AmbientConfig` (precedent for budget keys: `tick_seconds`,
 `idle_minutes`, `research_per_day`).
-- `eidesoul/engine/memory/mem0.py:340-392` — metadata path; `refs`, `derive_depth`, `dispute_state`
+- `monoagens/engine/memory/mem0.py:340-392` — metadata path; `refs`, `derive_depth`, `dispute_state`
 **proposal** (not yet in the repo; the column in ADR-0016 §4.2). `:323-338` — proven supersede (exists).
-- `eidesoul/engine/access/privacy.py:222-303` — `capture_turn` (the entry path for the subject's answer);
-`eidesoul/engine/memory/privacy.py:52-71` — `show`/`disclose`.
-- `eidesoul/engine/memory/context.py:91-133` — `render`/`build` (where the dispute marker is rendered too).
-- `eidesoul/engine/commands/memori.py:15-23` — the `?` marker for unconfirmed rows (a display
+- `monoagens/engine/access/privacy.py:222-303` — `capture_turn` (the entry path for the subject's answer);
+`monoagens/engine/memory/privacy.py:52-71` — `show`/`disclose`.
+- `monoagens/engine/memory/context.py:91-133` — `render`/`build` (where the dispute marker is rendered too).
+- `monoagens/engine/commands/memori.py:15-23` — the `?` marker for unconfirmed rows (a display
 convention extended by `!`).
-- `eidesoul/engine/tools/memory.py` — conscious-action tool (still the main path for "remember/forget").
-- `eidesoul/engine/commands/status.py` — where the pass/write/dispute/question numbers are displayed.
-- `eidesoul/engine/guard/patterns.py:11-26` — the lexicon/patterns used by the deterministic layer.
+- `monoagens/engine/tools/memory.py` — conscious-action tool (still the main path for "remember/forget").
+- `monoagens/engine/commands/status.py` — where the pass/write/dispute/question numbers are displayed.
+- `monoagens/engine/guard/patterns.py:11-26` — the lexicon/patterns used by the deterministic layer.
 - `scripts/ablate.py:1-8` — read-only harness precedent; `scripts/replay.py:1-12` — rubric
 scenario harness to assess the quality of a reflection pass.
 - ADR-0003 §5.3-5.6 — the `cognition_jobs` queue, batching per scope, the Batch API path.

@@ -1,4 +1,4 @@
-> Terjemahan turunan — jangan sunting; sumber: 0027-distribution-web-config.md (sha256: f6b46736b39a)
+> Terjemahan turunan — jangan sunting; sumber: 0027-distribution-web-config.md (sha256: 843a0866c4b0)
 > Ditulis tangan (bukan mesin), mengikuti sumber English baris demi baris.
 
 # ADR-0027: Distribusi dan Konfigurasi Web-First — Satu Image Core, Kapabilitas Clean by Default
@@ -9,7 +9,7 @@
 - **Konteks:** lanjutan ADR-0001 (permukaan dan body), ADR-0015 (manifest kapabilitas), ADR-0016 (skema), ADR-0018 (kontrak gateway), ADR-0022 (`administrator`), ADR-0028 (plugin)
 - **Supersedes:** —
 - **Terkait:** ADR-0009 (rumah dokumen), ADR-0012 (lease), ADR-0019 (observability), ADR-0028 (unit plugin yang didistribusikan ADR ini)
-- **Implementasi:** partial — ada: build image lokal (core-only, `EXTRAS` kosong), pemisahan plugin/gateway, isi image di `eidesoul selftest`, gate panel-atau-CLI di installer; sisa: `panel/` (milik operator; `web.enabled: false` sampai mendarat) dan publikasi image ke GHCR (tidak ada kredensial registry di sini)
+- **Implementasi:** partial — ada: build image lokal (core-only, `EXTRAS` kosong), pemisahan plugin/gateway, isi image di `monoagens selftest`, gate panel-atau-CLI di installer; sisa: `panel/` (milik operator; `web.enabled: false` sampai mendarat) dan publikasi image ke GHCR (tidak ada kredensial registry di sini)
 - **Catatan lokasi:** ADR ini lintas-potong (mengikat setiap permukaan dan setiap deployment), jadi ia duduk di akar rumah ADR. Salinan Indonesia di `docs/v0.1.0/adr/id/0027-distribution-web-config.md`.
 - **Amandemen:** 2026-11-03 — versi pertama. 2026-11-03 — lapisan suara (emosi, humanize, karakter) dinyatakan aktif secara default dan bisa dimatikan per bagian; clean by default tetap hanya mencakup gateway, tool, dan plugin. 2026-11-03 — kunci kode hasil unduhan di §5 adalah `plugin.root`/`plugin.fetch`/`plugin.source`, mengikuti penamaan ulang plugin (ADR-0028 §5); root install bawaan `<workspace>/plugins`.
 
@@ -21,9 +21,9 @@
 |---|---|
 | Image dibangun tapi belum dipublikasikan | `Dockerfile:1,28-35` membangun dari `python:3.12-slim` dengan `ARG EXTRAS=""`; tidak ada `.github/workflows` |
 | Kapabilitas opsional hari ini ikut dikompilasi ke image | extra `pyproject.toml`: `whatsapp`, `google`; `Dockerfile:28` mendokumentasikan `--extra google` |
-| Sebagian kapabilitas tinggal di core seperti first-class | `eidesoul/engine/tools/google.py`, `chat_history.py` |
+| Sebagian kapabilitas tinggal di core seperti first-class | `monoagens/engine/tools/google.py`, `chat_history.py` |
 | Semua tool dan command sudah deny-by-default | role membawa `tools`/`commands`; entri yang hilang menolak (aturan repo) |
-| Belum ada permukaan operator untuk konfigurasi | konfigurasi lewat `eidesoul init`, `eidesoul config import`, cermin `roles.yaml`/`soul.yaml`, dan `.env` |
+| Belum ada permukaan operator untuk konfigurasi | konfigurasi lewat `monoagens init`, `monoagens config import`, cermin `roles.yaml`/`soul.yaml`, dan `.env` |
 | Spine tidak opsional | Postgres+pgvector, Mem0, embedder bersama, prototipe affect, guard, dan lease (`AGENTS.md` §Capability spine) |
 
 Keputusan pemilik: distribusi lewat `ghcr.io`, permukaan web jadi jalur utama init dan konfigurasi,
@@ -65,22 +65,22 @@ tidak ada tag yang menyerupai rilis (§Versioning di `AGENTS.md`).
   `memory`, `recipe`, `skill`, `settings`, plus command core.
 - Image **tidak memuat gateway, extra provider, maupun plugin**; semuanya diaktifkan kemudian (§4.3)
   dan dependency Python-nya bukan bagian dari set core yang di-lock.
-- Image menyatakan isinya di satu label build dan mencetaknya di `eidesoul selftest`, sehingga apa yang
+- Image menyatakan isinya di satu label build dan mencetaknya di `monoagens selftest`, sehingga apa yang
   bisa dilakukan container yang berjalan bisa diperiksa, bukan diasumsikan.
 
 ### 4.2 Permukaan web adalah jalur konfigurasi utama
 
 Panel web adalah permukaan operator untuk init dan konfigurasi: jalan pertama (database, workspace,
 provider dan model, administrator pertama), inspeksi (data `/status`, ledger, automation, kebenaran
-memori), dan pengaktifan plugin (§4.3). CLI tetap setara untuk install headless (`eidesoul init`,
-`eidesoul config import`, `eidesoul selftest`, `eidesoul models`).
+memori), dan pengaktifan plugin (§4.3). CLI tetap setara untuk install headless (`monoagens init`,
+`monoagens config import`, `monoagens selftest`, `monoagens models`).
 
-- Panel adalah **proses terpisah** di akar repo (`panel/`), bukan modul di dalam `eidesoul/engine/`,
+- Panel adalah **proses terpisah** di akar repo (`panel/`), bukan modul di dalam `monoagens/engine/`,
   dan engine tidak pernah mengimpornya. `AGENTS.md` §Shape diamandemen: larangan gateway HTTP tetap
   berlaku untuk **engine**, sedangkan panel adalah aplikasi operator yang membaca dan menulis dokumen
   yang sama.
 - Konfigurasi yang ditulis panel menempuh jalur yang sama dengan suntingan manual lalu
-  `eidesoul config import`: dokumen adalah sumber kebenaran, berkas YAML adalah seed + cermin, rahasia
+  `monoagens config import`: dokumen adalah sumber kebenaran, berkas YAML adalah seed + cermin, rahasia
   tetap di `.env` (panel menulis **nama** env, tidak pernah nilai rahasia ke YAML).
 - Setiap perubahan dicatat di `config_changes` dengan aktor dan diff, dan panel menampilkan nilai
   efektif di samping sumbernya (`document`, `yaml mirror`, `env`, `default`).
@@ -143,12 +143,12 @@ Bind di luar loopback menuntut host eksplisit, pernyataan listener eksplisit di 
 ### 4.6 Default, bukan contoh
 
 Berkas yang kita kirim harus bisa dipakai apa adanya; berkas yang hanya mendemonstrasikan dihapus.
-Defaultnya hidup di kode, `eidesoul init` satu-satunya penulis berkas host, dan panel menulis lewat
+Defaultnya hidup di kode, `monoagens init` satu-satunya penulis berkas host, dan panel menulis lewat
 jalur yang sama (§4.2).
 
-- `eidesoul/admin/templates.py` adalah satu-satunya sumber: `config.yaml`, `roles.yaml`, `soul.yaml`, dan
+- `monoagens/admin/templates.py` adalah satu-satunya sumber: `config.yaml`, `roles.yaml`, `soul.yaml`, dan
   `.env` dihasilkan dari situ, dengan `.env` dan `roles.yaml` bermode `0600` dan tidak pernah ditimpa
-  kecuali `--force`. `.env` membawa **nama dengan nilai kosong** (`EIDESOL_DATABASE_URL=`,
+  kecuali `--force`. `.env` membawa **nama dengan nilai kosong** (`MONOAGENS_DATABASE_URL=`,
   `POSTGRES_PASSWORD=`) tanpa rahasia placeholder, jadi berkas yang baru terisi separuh tidak bisa
   disangka berkas yang sudah jalan.
 - Tidak ada berkas `*.example` yang dikirim. `config.example.yaml` dan `.env.example` menduplikasi
@@ -171,7 +171,7 @@ jalur yang sama (§4.2).
 | `web.port` | dipilih operator saat jalan pertama | listener panel |
 | `plugin.root` | `<workspace>/plugins` | tempat kode gateway/plugin hasil unduhan (§ADR-0028) |
 | `plugin.fetch` | `true` | boleh mengunduh kode saat aktif; `false` = hanya install offline |
-| `image.tag` | kosong selama belum rilis | tag image yang berjalan, dilaporkan `eidesoul selftest` |
+| `image.tag` | kosong selama belum rilis | tag image yang berjalan, dilaporkan `monoagens selftest` |
 
 Rahasia hanya di `.env` (`WEB_TOKEN`, kunci provider); YAML memuat nama, bukan nilai.
 
@@ -180,7 +180,7 @@ Rahasia hanya di `.env` (`WEB_TOKEN`, kunci provider); YAML memuat nama, bukan n
 | Metrik | Target awal |
 |---|---|
 | Kapabilitas aktif pada install baru (di luar spine dan pemberian izin role) | 0 |
-| Isi image bisa diperiksa | `eidesoul selftest` mencantumkan ada/tidaknya gateway/plugin; label cocok |
+| Isi image bisa diperiksa | `monoagens selftest` mencantumkan ada/tidaknya gateway/plugin; label cocok |
 | Divergensi panel ↔ CLI pada perubahan yang sama | 0 (satu jalur import) |
 | Plugin terunduh tanpa verifikasi digest | 0 (fail closed) |
 | Perubahan tanpa baris `config_changes` | 0 |
@@ -191,19 +191,19 @@ Rahasia hanya di `.env` (`WEB_TOKEN`, kunci provider); YAML memuat nama, bukan n
 
 ## 7. Acceptance criteria
 
-- [ ] Satu image terbangun lokal dengan `EXTRAS` kosong dan menjalankan `eidesoul selftest`; tag rilis baru dipublikasikan kalau rilisnya ada.
+- [ ] Satu image terbangun lokal dengan `EXTRAS` kosong dan menjalankan `monoagens selftest`; tag rilis baru dipublikasikan kalau rilisnya ada.
 - [ ] Image tidak memuat dependency gateway/plugin: `pip list` di container tidak menampilkan `neonize` maupun `google-api-python-client`.
 - [ ] Install baru mulai dengan spine saja: `/status` melaporkan setiap gateway dan plugin `absent/mati`, dan tidak ada kapabilitas yang diberikan.
 - [ ] Mengaktifkan plugin mengunduh kode per digest; digest salah membatalkan tanpa perubahan config dan tanpa berkas terpasang.
 - [ ] Mengaktifkan plugin tanpa izin role membuatnya inert (`unavailable`, bukan `denied`) dan `/tools` menjelaskan alasannya.
 - [ ] Menonaktifkan menyimpan berkas dan menghentikan kapabilitas; menghapus membuang kode dan status; keduanya muncul di ledger.
-- [ ] Panel menulis perubahan konfigurasi yang sama dengan hasil `eidesoul config import`, dengan baris `config_changes`; suntingan YAML manual tampil sebagai drift sampai di-import.
+- [ ] Panel menulis perubahan konfigurasi yang sama dengan hasil `monoagens config import`, dengan baris `config_changes`; suntingan YAML manual tampil sebagai drift sampai di-import.
 - [ ] `web.enabled: false` menghentikan panel dan membiarkan engine beserta gateway-nya tetap jalan.
 - [ ] Tidak ada nilai rahasia di `config.yaml`, `roles.yaml`, atau `soul.yaml` sesudah sesi panel (test).
 - [ ] `AGENTS.md` §Shape menyatakan engine bukan server sementara panel adalah aplikasi operator terpisah; `docs/**` masuk daftar dokumen tracked.
 - [ ] Tidak ada berkas `*.example` yang di-track, dan `templates.files()` menulis tepat `config.yaml`, `roles.yaml`, `soul.yaml`, dan `.env`.
 - [ ] `compose.yaml` menyalakan Postgres hanya dengan `POSTGRES_PASSWORD` di `.env`, dan tidak ada literal `CHANGE_ME` yang ikut dikirim.
-- [ ] Kunci yang ditambahkan ke `eidesoul/admin/templates.py` sampai ke berkas yang ditulis `init`, tanpa salinan kedua yang harus diperbarui.
+- [ ] Kunci yang ditambahkan ke `monoagens/admin/templates.py` sampai ke berkas yang ditulis `init`, tanpa salinan kedua yang harus diperbarui.
 
 ## 8. Risiko dan mitigasi
 
@@ -213,7 +213,7 @@ Rahasia hanya di `.env` (`WEB_TOKEN`, kunci provider); YAML memuat nama, bukan n
 | Unduh-saat-aktif butuh jaringan di saat yang tidak nyaman | `plugin.fetch: false` memungkinkan operator menaruh artefak terverifikasi lebih dulu; kegagalannya eksplisit |
 | Panel jadi jalur konfigurasi kedua yang paralel | Satu jalur import (§4.2), baris `config_changes`, dan tampilan drift di panel |
 | Panel yang terbuka di luar loopback jadi permukaan serang | Default loopback, `remote_ack` eksplisit, rahasia `.env`, tanpa mode anonim |
-| Web-first memancing logika engine masuk ke panel | §4.5 plus aturan repo bahwa `eidesoul/engine/` tidak pernah mengimpor panel |
+| Web-first memancing logika engine masuk ke panel | §4.5 plus aturan repo bahwa `monoagens/engine/` tidak pernah mengimpor panel |
 | Panel on-by-default mengejutkan operator headless | Satu saklar, didokumentasikan di baris pertama runbook; CLI tidak pernah bergantung pada panel |
 | Image yang belum dirilis diperlakukan sebagai rilis | Aturan versi dev (§Versioning); tanpa tag yang menyerupai rilis selama belum ada rilis |
 
@@ -230,10 +230,10 @@ Rahasia hanya di `.env` (`WEB_TOKEN`, kunci provider); YAML memuat nama, bukan n
 
 - `Dockerfile:1,28-35` — build image hari ini dengan `ARG EXTRAS=""`.
 - `pyproject.toml` `[project.optional-dependencies]` — extra `whatsapp`, `google`, `dev`.
-- `plugins/google/` — kapabilitas Google setelah pindah; `eidesoul/gateways/whatsapp/tools/chat_history.py` — tool arsip setelah pindah.
-- `eidesoul/__main__.py` — `init`, `models`, `config import`, `selftest` (permukaan CLI yang setara).
-- `eidesoul/engine/config.py`, `eidesoul/engine/stores/documents.py` — jalur konfigurasi yang dipakai ulang panel.
-- `eidesoul/engine/schema.py` — ledger `config_changes`.
+- `plugins/google/` — kapabilitas Google setelah pindah; `monoagens/gateways/whatsapp/tools/chat_history.py` — tool arsip setelah pindah.
+- `monoagens/__main__.py` — `init`, `models`, `config import`, `selftest` (permukaan CLI yang setara).
+- `monoagens/engine/config.py`, `monoagens/engine/stores/documents.py` — jalur konfigurasi yang dipakai ulang panel.
+- `monoagens/engine/schema.py` — ledger `config_changes`.
 - `panel/` — tree baru di akar repo (usulan, belum dibuat).
 
 ---

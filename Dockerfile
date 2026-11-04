@@ -30,25 +30,25 @@ ARG EXTRAS=""
 COPY pyproject.toml uv.lock ./
 RUN uv sync --locked --no-build --no-install-project $EXTRAS
 
-COPY eidesoul ./eidesoul
+COPY monoagens ./monoagens
 RUN uv sync --locked --no-build $EXTRAS
 
 ENV PATH="/app/.venv/bin:$PATH" \
-    HF_HOME=/app/.eidesoul/hf
+    HF_HOME=/app/.monoagens/hf
 
-RUN useradd --create-home --uid 1000 --shell /usr/sbin/nologin eidesoul \
-    && mkdir -p /app/.eidesoul \
-    && chown -R eidesoul:eidesoul /app
+RUN useradd --create-home --uid 1000 --shell /usr/sbin/nologin monoagens \
+    && mkdir -p /app/.monoagens \
+    && chown -R monoagens:monoagens /app
 
 # Must come AFTER useradd: the docker group follows the socket gid on the host.
 ARG DOCKER_GID=994
 RUN groupadd -g "${DOCKER_GID}" docker || true \
-    && usermod -aG docker eidesoul
+    && usermod -aG docker monoagens
 
-USER eidesoul
-# The Mem0 embedder is downloaded once at build time into the eidesoul user cache.
+USER monoagens
+# The Mem0 embedder is downloaded once at build time into the monoagens user cache.
 RUN python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2')"
 
 STOPSIGNAL SIGINT
-# `eidesoul run` creates the schema, seeds the documents, then acquires the primary lease.
-CMD ["python", "-m", "eidesoul", "run"]
+# `monoagens run` creates the schema, seeds the documents, then acquires the primary lease.
+CMD ["python", "-m", "monoagens", "run"]

@@ -7,8 +7,8 @@ import yaml
 from sqlalchemy import select
 from support import make_runtime
 
-from eidesoul.engine.schema import config_changes
-from eidesoul.engine.tools import execute
+from monoagens.engine.schema import config_changes
+from monoagens.engine.tools import execute
 
 CHAT = "cli:local"
 
@@ -30,7 +30,7 @@ def test_schema_and_get(tmp_path, monkeypatch) -> None:
     assert "engine.memory.max_items" in schema
 
     assert run(env, "get", file="engine", path="default_role").strip() == "member"
-    assert "Kamu Eidesoul" in run(env, "get", file="soul")
+    assert "Kamu MonoAgens" in run(env, "get", file="soul")
 
 
 def test_set_soul_language_updates_runtime_and_mirror(tmp_path, monkeypatch) -> None:
@@ -60,7 +60,7 @@ def test_invalid_engine_value_does_not_change_document(tmp_path, monkeypatch) ->
 def test_write_soul_changes_prompt_and_mirror(tmp_path, monkeypatch) -> None:
     env = make_runtime(tmp_path, monkeypatch, settings_approval=False)
     content = (
-        "name: Eidesoul\nlanguage: id\nlocale: id-ID\ntimezone: UTC\n"
+        "name: MonoAgens\nlanguage: id\nlocale: id-ID\ntimezone: UTC\n"
         "persona: Persona baru yang tenang.\n"
     )
 

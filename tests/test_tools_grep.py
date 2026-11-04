@@ -6,7 +6,7 @@ from pathlib import Path
 
 from support import build_config, role
 
-from eidesoul.engine.tools import REGISTRY, ToolContext, execute
+from monoagens.engine.tools import REGISTRY, ToolContext, execute
 
 
 def env(tmp_path, *, trusted: bool = True):

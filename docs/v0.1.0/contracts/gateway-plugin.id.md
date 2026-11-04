@@ -1,6 +1,6 @@
 # Kontrak Gateway, Plugin, dan MCP
 
-**Cakupan:** permukaan ekstensi engine Eidesoul: bagaimana sebuah body (gateway) dan bundel
+**Cakupan:** permukaan ekstensi engine MonoAgens: bagaimana sebuah body (gateway) dan bundel
 kemampuan yang dapat dipasang (plugin) terhubung, apa yang dimiliki masing-masing, dan apa yang
 tidak boleh dilakukan keduanya.
 **Konteks:** ditulis setelah ADR-0034 (prompt parts) dan ADR-0035 (skill ber-scope app). Klausa yang
@@ -38,7 +38,7 @@ Ketiganya tidak dapat dipertukarkan:
 | Apakah ia server tool eksternal yang dijangkau lewat protokol standar, tanpa langkah pemasangan? | server MCP |
 | Bolehkah gateway "sekadar plugin"? | Tidak. Ia boleh *dikirim* oleh plugin, tetapi didaftarkan dan diaktifkan sebagai gateway (ADR-0028 §4.1). |
 | Bolehkah plugin membuka transportnya sendiri? | Hanya lewat gateway yang ia kirim dan deklarasikan; tidak pernah sebagai efek samping saat import. |
-| Bolehkah core memuat aksi gateway? | Tidak. Aksi gateway tinggal di `eidesoul/gateways/<name>/tools|commands`; aksi plugin tinggal di pohon plugin. |
+| Bolehkah core memuat aksi gateway? | Tidak. Aksi gateway tinggal di `monoagens/gateways/<name>/tools|commands`; aksi plugin tinggal di pohon plugin. |
 
 Uji satu baris: **gateway adalah dari mana byte datang; plugin adalah apa yang dapat dipasang;
 server MCP adalah pemasok tool yang kamu konfigurasi; tool adalah apa yang boleh dipanggil model.**
@@ -49,18 +49,18 @@ server MCP adalah pemasok tool yang kamu konfigurasi; tool adalah apa yang boleh
 
 ### 2.1 Lokasi dan penemuan
 
-- Gateway yang dikirim core adalah paket di bawah `eidesoul/gateways/<name>/`.
+- Gateway yang dikirim core adalah paket di bawah `monoagens/gateways/<name>/`.
 - Gateway yang dikirim plugin adalah kode di bawah `plugins/<name>/`, dideklarasikan di
   `plugin.yaml: provides.gateways`, dan didaftarkan lewat jalur gateway. Ia tidak pernah disebut
   "plugin gateway" dan tool-nya tidak pernah masuk daftar tool plugin global.
-- Engine tidak pernah mengimpor gateway secara eager. `eidesoul/engine/**` tidak boleh mengimpor
-  `eidesoul.gateways` atau modul plugin saat import.
+- Engine tidak pernah mengimpor gateway secara eager. `monoagens/engine/**` tidak boleh mengimpor
+  `monoagens.gateways` atau modul plugin saat import.
 - Gateway diaktifkan lewat config (`gateways.<name>.enabled: true`), tidak pernah dengan memasang
-  plugin sebagai efek samping. Body default yang dikirim adalah `eidesoul/gateways/cli`.
+  plugin sebagai efek samping. Body default yang dikirim adalah `monoagens/gateways/cli`.
 
 ### 2.2 Permukaan wajib
 
-Sebuah body mengimplementasikan `GatewayCore` dari `eidesoul/engine/inbound.py`:
+Sebuah body mengimplementasikan `GatewayCore` dari `monoagens/engine/inbound.py`:
 
 ```python
 name: str
@@ -300,7 +300,7 @@ Inilah aturan yang menjaga "modular" tidak berarti "tumpang tindih".
    `provides.gateways`, didaftarkan lewat jalur gateway, dan diaktifkan lewat config gateway. Ia tidak
    masuk daftar tool plugin dan tidak memperoleh semantik siklus hidup plugin.
 4. **Aksi body tetap di body.** Tool/command gateway tinggal di
-   `eidesoul/gateways/<name>/tools|commands` (atau pohon plugin yang mengirimnya). Core tidak pernah
+   `monoagens/gateways/<name>/tools|commands` (atau pohon plugin yang mengirimnya). Core tidak pernah
    menyimpan command balas WhatsApp, tool alarm robot, atau API kalender.
 5. **Tool tidak memilih transportnya.** Capability menerima `ToolContext`; ia tidak membaca nama
    transport untuk memutuskan perilaku. Jika ia butuh fakta body, fakta itu ada di `ctx`.
@@ -380,7 +380,7 @@ gateway ia tetap registrasi, tetapi tool yang membutuhkan body menolak. Gateway 
 
 - **Role adalah satu-satunya sumber izin.** Handler gateway atau plugin tidak punya grant default;
   entri `tools`/`commands` yang hilang menolak semuanya. Satu-satunya pemeriksaan adalah
-  `eidesoul/engine/tools/__init__.py:execute`.
+  `monoagens/engine/tools/__init__.py:execute`.
 - **Kelas approval dideklarasikan handler**, bukan namanya. Plugin yang ingin aman mendeklarasikan
   `approval_class="none"` hanya ketika aksinya fail-safe; setiap handler tak dikenal default ke
   `authorization`.
@@ -418,13 +418,13 @@ gateway ia tetap registrasi, tetapi tool yang membutuhkan body menolak. Gateway 
 
 Gateway konforman ketika:
 
-1. ia mengimplementasikan `GatewayCore` dan hanya mengimpor `eidesoul.engine.inbound`, `registry`,
+1. ia mengimplementasikan `GatewayCore` dan hanya mengimpor `monoagens.engine.inbound`, `registry`,
    serta tipe turn yang dibutuhkannya;
 2. `run()` menghasilkan `Percept` dan tidak pernah menyentuh store atau model secara langsung;
 3. `dispatch()` menolak capability tak dikenal dengan `GatewayError`;
 4. `prompt_section()` statis, English, dan dalam 1200 karakter;
 5. tool/command-nya tinggal di pohonnya sendiri dan tidak pernah di
-   `eidesoul/engine/tools|commands`;
+   `monoagens/engine/tools|commands`;
 6. ia menormalisasi identitasnya sendiri dan tidak pernah mem-parsing id transport di core;
 7. dengan body dihentikan, tidak ada loop, task, atau koneksi yang bertahan.
 
@@ -483,7 +483,7 @@ Ini adalah cacat terhadap kontrak ini, bukan opsi:
 - Prompt part plugin belum ada sampai ADR-0034 mendarat; hari ini `register()` hanya mengembalikan
   tools/commands.
 - `Inbound` muncul di prosa lama (termasuk `AGENTS.md`); seam yang hidup adalah `Percept`/`Action` di
-  `eidesoul/engine/inbound.py`. Kontrak ini memakai nama yang hidup.
+  `monoagens/engine/inbound.py`. Kontrak ini memakai nama yang hidup.
 - Nilai `env` MCP dibaca dari `config.yaml` sebagai string literal; berbeda dari `secrets` plugin,
   tidak ada indireksi atau verifikasi nama env. Jauhkan secret dari mapping itu sampai celahnya
   ditutup.
@@ -497,13 +497,13 @@ Ini adalah cacat terhadap kontrak ini, bukan opsi:
 
 ## 11. Referensi
 
-- `eidesoul/engine/inbound.py` — `Percept`, `Action`, `Address`, `Receipt`, `GatewayCore`, `Rich`,
+- `monoagens/engine/inbound.py` — `Percept`, `Action`, `Address`, `Receipt`, `GatewayCore`, `Rich`,
   `Directory`, `PrivateThread`, `HINT_KEYS`, `PROMPT_SECTION_MAX`.
-- `eidesoul/engine/plugins.py` — skema manifest, `tree_digest`, `_verify`, `_register`, status siklus
+- `monoagens/engine/plugins.py` — skema manifest, `tree_digest`, `_verify`, `_register`, status siklus
   hidup, `PluginError`.
-- `eidesoul/engine/registry.py` dan `eidesoul/engine/tools/__init__.py` — `Handler`, `ToolContext`,
+- `monoagens/engine/registry.py` dan `monoagens/engine/tools/__init__.py` — `Handler`, `ToolContext`,
   `execute`, satu-satunya pemeriksaan izin.
-- `eidesoul/engine/agent.py` — intake `handle(percept, gateway)`, pintu keluar `dispatch(...)`,
+- `monoagens/engine/agent.py` — intake `handle(percept, gateway)`, pintu keluar `dispatch(...)`,
   penggabungan tool/command gateway.
 - ADR-0027 §4.1 — gateway, tool, dan plugin adalah tiga hal berbeda.
 - ADR-0028 §4.1–4.4 — unit plugin, manifest, siklus hidup, pemuatan.
@@ -511,8 +511,8 @@ Ini adalah cacat terhadap kontrak ini, bukan opsi:
 - ADR-0033 §4.5 — satu `prompt_section` body.
 - ADR-0034 — prompt parts: part plugin statis, satu kontribusi body.
 - ADR-0035 — namespace app: gateway memasok `hints["app"]`, plugin membaca `ctx.app`, core memfilter.
-- `eidesoul/engine/jobs/mcp.py` — `Hub`, penemuan, penamaan `mcp__<server>__<tool>`, timeout,
+- `monoagens/engine/jobs/mcp.py` — `Hub`, penemuan, penamaan `mcp__<server>__<tool>`, timeout,
   rendering hasil.
-- `eidesoul/engine/config.py:649-656,870-895` — `MCPServerConfig` dan validasi `mcp.servers`.
-- `eidesoul/__main__.py:112-113,476` — start `Hub` saat boot proses dan stop di jalur selftest;
-  `eidesoul/engine/agent.py:1796-1798` — `hub.stop()` saat agent shutdown.
+- `monoagens/engine/config.py:649-656,870-895` — `MCPServerConfig` dan validasi `mcp.servers`.
+- `monoagens/__main__.py:112-113,476` — start `Hub` saat boot proses dan stop di jalur selftest;
+  `monoagens/engine/agent.py:1796-1798` — `hub.stop()` saat agent shutdown.

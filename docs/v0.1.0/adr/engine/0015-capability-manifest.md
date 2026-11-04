@@ -1,7 +1,7 @@
 # ADR-0015: Layered Payload & Capability Manifest
 
 - **Status:** accepted
-- **Implementation:** implemented — evidence: `eidesoul/engine/self_knowledge.py` (catalog/config/behavior/topology), `tools/info.py`, `scripts/selfcheck.py --check`, docs allowlist default `README.md`, redacted config reads, `tests/test_self_knowledge.py`; gate result: `selfcheck: ok — behaviors=6`
+- **Implementation:** implemented — evidence: `monoagens/engine/self_knowledge.py` (catalog/config/behavior/topology), `tools/info.py`, `scripts/selfcheck.py --check`, docs allowlist default `README.md`, redacted config reads, `tests/test_self_knowledge.py`; gate result: `selfcheck: ok — behaviors=6`
 - **Date:** 2026-11-02
 - **Deciders:** Muqsith (owner), omp (reviewer)
 - **Context:** follows ADR-0006 (group privacy), ADR-0007 (capability vs authority), ADR-0008 (integrity & quarantine), ADR-0014 (automation)
@@ -184,7 +184,7 @@ The soul must be able to answer questions about itself correctly **without** put
 | `catalog` | `registry.discover` + `Handler.parameters` | JSON-shaped schema. |
 | `config_schema` | `_schema_paths` over the dataclass (`tools/settings.py:85-98`) | dot-path + default, without values |
 | `behavior` | one module `engine/self_knowledge.py` | the only prose; each entry annotates `behavior:<id>` |
-| `topology` | `ast.parse` over `eidesoul/engine/**.py` | dependency map; the same data feeds the AGENTS architecture test (`engine` does not import `gateways`) |
+| `topology` | `ast.parse` over `monoagens/engine/**.py` | dependency map; the same data feeds the AGENTS architecture test (`engine` does not import `gateways`) |
 
 **Rules against staleness:**
 
@@ -193,7 +193,7 @@ The soul must be able to answer questions about itself correctly **without** put
 3. **A docstring is not the source of the truth**; only structured facts are trusted.
 4. **Cached at boot**: generator results are computed once and cached; `info` only looks up strings. A `max_chars` limit per topic.
 
-**Guard (not discipline)** *follows implementation 0015; until `scripts/selfcheck.py` exists, the items below are not machine-enforced*: `scripts/selfcheck.py --check` + `eidesoul selftest`:
+**Guard (not discipline)** *follows implementation 0015; until `scripts/selfcheck.py` exists, the items below are not machine-enforced*: `scripts/selfcheck.py --check` + `monoagens selftest`:
 
 - every `behavior:<id>` is registered; removing or renaming a behavior without updating the list → **failure**;
 - every `config:`, `role:`, and `registry` reference resolves to a real key;
@@ -369,22 +369,22 @@ engine:
 
 ## 10. Code references
 
-- `eidesoul/engine/self_knowledge.py` — **new module**: four generators (`catalog`, `config_schema`, `behavior`, `topology`) and the `behavior:<id>` prose.
+- `monoagens/engine/self_knowledge.py` — **new module**: four generators (`catalog`, `config_schema`, `behavior`, `topology`) and the `behavior:<id>` prose.
 - `scripts/selfcheck.py` — **new script**: verifies `behavior:<id>`, the `config:`/`role:`/`registry` resolutions, the forbidden-token list, and `topology` consistency.
-- `eidesoul/engine/registry.py:148` `discover` (the single source for the tool/command catalog).
-- `eidesoul/engine/tools/settings.py:85-98` `_schema_paths` (the single config schema source); `:294-297` free reads without approval.
+- `monoagens/engine/registry.py:148` `discover` (the single source for the tool/command catalog).
+- `monoagens/engine/tools/settings.py:85-98` `_schema_paths` (the single config schema source); `:294-297` free reads without approval.
 - `scripts/affect.py`, `scripts/patterns.py` — precedent for the "data + guard script" pattern (`--check`).
 - `README.md`, `README.id.md` — the source of the product documents (the subheading index is computed from this file).
-- `eidesoul/engine/tools/read.py:28-30` + `tools/__init__.py:120-165` — the `workspace_roots` limit (why `read` cannot reach the project directory).
-- `eidesoul/engine/turn/prompts.py:150-186` `self_block` (the place of the infrastructure facts).
-- `eidesoul/engine/turn/prompts.py:190-386` `system_prompt`, the block list, `salience.select`, `language_line`, `Date`.
-- `eidesoul/engine/turn/salience.py:38-60` `JOIN`, `block_score`, `select` (where pinned blocks are passed through).
-- `eidesoul/engine/llm.py:150-260` the tool loop `execute`: `tools`/`by_name`, `kwargs["tools"]`, budget, repeated-call guard.
-- `eidesoul/engine/tools/__init__.py:180-235` `execute` (the one permission gate) and the error message that already names the tool.
-- `eidesoul/engine/access/permissions.py:56` + `eidesoul/engine/commands/help.py` `commands_for` (the command-list source).
-- `eidesoul/engine/registry.py` `Handler` (`name`, `description`, `usage`, `parameters`) as the `info` detail source.
-- `eidesoul/engine/turn/context.py:641-683` + `FOOTER` (`:55-58`) — the immutable user-content format.
-- `eidesoul/engine/agent.py:279-283,759-788` `_specs(roles)` and the `system_prompt` assembly.
+- `monoagens/engine/tools/read.py:28-30` + `tools/__init__.py:120-165` — the `workspace_roots` limit (why `read` cannot reach the project directory).
+- `monoagens/engine/turn/prompts.py:150-186` `self_block` (the place of the infrastructure facts).
+- `monoagens/engine/turn/prompts.py:190-386` `system_prompt`, the block list, `salience.select`, `language_line`, `Date`.
+- `monoagens/engine/turn/salience.py:38-60` `JOIN`, `block_score`, `select` (where pinned blocks are passed through).
+- `monoagens/engine/llm.py:150-260` the tool loop `execute`: `tools`/`by_name`, `kwargs["tools"]`, budget, repeated-call guard.
+- `monoagens/engine/tools/__init__.py:180-235` `execute` (the one permission gate) and the error message that already names the tool.
+- `monoagens/engine/access/permissions.py:56` + `monoagens/engine/commands/help.py` `commands_for` (the command-list source).
+- `monoagens/engine/registry.py` `Handler` (`name`, `description`, `usage`, `parameters`) as the `info` detail source.
+- `monoagens/engine/turn/context.py:641-683` + `FOOTER` (`:55-58`) — the immutable user-content format.
+- `monoagens/engine/agent.py:279-283,759-788` `_specs(roles)` and the `system_prompt` assembly.
 
 ---
 

@@ -6,9 +6,9 @@
 - **Context:** follows ADR-0027 (distribution and default-off capability), ADR-0001 (surfaces), ADR-0015 (capability manifest), ADR-0007 (permission classes), ADR-0022 (`administrator`)
 - **Supersedes:** —
 - **Related:** ADR-0018 (gateway contract), ADR-0019 (ledger), ADR-0021 (tool contracts), ADR-0026 (a core tool that stays core)
-- **Implementation:** implemented — evidence: `eidesoul/engine/plugins.py` (manifest, tree digest, fetch-by-digest, one entry import, lifecycle/state), `plugins/google/` (manifest + credits + tool), `google` extra removed, `eidesoul plugins` CLI, `tests/test_plugins.py`, `tests/test_google_plugin.py`; gate result: `pytest -q` 798 passed, `uv lock --check` clean
+- **Implementation:** implemented — evidence: `monoagens/engine/plugins.py` (manifest, tree digest, fetch-by-digest, one entry import, lifecycle/state), `plugins/google/` (manifest + credits + tool), `google` extra removed, `monoagens plugins` CLI, `tests/test_plugins.py`, `tests/test_google_plugin.py`; gate result: `pytest -q` 798 passed, `uv lock --check` clean
 - **Location note:** this ADR is cross-cutting (it defines a distribution unit used by every surface), so it sits at the root of the ADR home. The Indonesian copy is `docs/v0.1.0/adr/id/0028-plugin-model.md`.
-- **Amendments:** 2026-11-03 — first version. 2026-11-03 — the unit is called `plugin` everywhere: the loader is `eidesoul/engine/plugins.py` (`PluginLoader`, `Plugin`, `PluginError`), the config section is `plugin.{root,fetch,source}` and the CLI verb is `eidesoul plugins list|install|enable|disable|remove`. The manifest file name `plugin.yaml`, the `plugins.<name>.enabled|digest` map, and the `plugins/google/` source tree keep their names; there is no alias and no shim.
+- **Amendments:** 2026-11-03 — first version. 2026-11-03 — the unit is called `plugin` everywhere: the loader is `monoagens/engine/plugins.py` (`PluginLoader`, `Plugin`, `PluginError`), the config section is `plugin.{root,fetch,source}` and the CLI verb is `monoagens plugins list|install|enable|disable|remove`. The manifest file name `plugin.yaml`, the `plugins.<name>.enabled|digest` map, and the `plugins/google/` source tree keep their names; there is no alias and no shim.
 
 ---
 
@@ -16,12 +16,12 @@
 
 | Fact | Evidence |
 |---|---|
-| `google` is a core tool today | `eidesoul/engine/tools/google.py` sits beside `read.py`, `shell.py`, … |
+| `google` is a core tool today | `monoagens/engine/tools/google.py` sits beside `read.py`, `shell.py`, … |
 | `google` is also a build-time extra | `pyproject.toml` `google = ["google-api-python-client…", "google-auth…", "httpx…"]` |
-| A tool is a module implementing one contract | repo rule: a module in `eidesoul/engine/tools/` with `TOOL = Handler(...)`, filename matching `name` |
+| A tool is a module implementing one contract | repo rule: a module in `monoagens/engine/tools/` with `TOOL = Handler(...)`, filename matching `name` |
 | Permissions never come from a handler | repo rule: only roles grant `tools`/`commands`; a missing entry denies |
-| Gateways are already separable packages | `eidesoul/gateways/<name>/` with `tools|commands` of their own, transport-only (ADR-0018) |
-| Data surfaces exist for optional content | `eidesoul/library/**` packs, selected by `soul.style` |
+| Gateways are already separable packages | `monoagens/gateways/<name>/` with `tools|commands` of their own, transport-only (ADR-0018) |
+| Data surfaces exist for optional content | `monoagens/library/**` packs, selected by `soul.style` |
 
 The owner's decision: capability that is not the spine is a **plugin**, and Google is the first one —
 not a core tool, and not a build-time extra. A plugin's code is fetched when the plugin is enabled, so
@@ -121,7 +121,7 @@ credits:                      # the README credits row this plugin owes (license
 
 ### 4.4 Loading, isolation, dependencies
 
-- A single engine module (`eidesoul/engine/plugins.py`) owns manifests, digest verification,
+- A single engine module (`monoagens/engine/plugins.py`) owns manifests, digest verification,
   the fetch step, and the one import of `entry`. Nothing else in the engine imports plugin code.
 - The loader hands `provides` to the existing registries: tools as `TOOL = Handler(...)` modules,
   commands as `COMMAND = Handler(...)` modules, gateways through the gateway registry (ADR-0018). The
@@ -134,7 +134,7 @@ credits:                      # the README credits row this plugin owes (license
 
 ### 4.5 Google is the first plugin
 
-- `eidesoul/engine/tools/google.py` moves out of the core and becomes the `google` plugin providing
+- `monoagens/engine/tools/google.py` moves out of the core and becomes the `google` plugin providing
   mail and calendar tools (and any digest command it needs).
 - The `google` **extra** is removed from `pyproject.toml` (the same commit regenerates `uv.lock`); its
   README credits rows move into the plugin manifest's `credits`.
@@ -172,7 +172,7 @@ Secrets are `.env` names only; a plugin that needs a value it cannot find is `un
 
 | Metric | Initial target |
 |---|---|
-| Plugin code imported by `eidesoul/engine` at module import time | 0 |
+| Plugin code imported by `monoagens/engine` at module import time | 0 |
 | Plugin dependencies inside the image's locked set | 0 |
 | Installs without a verified digest | 0 (fails closed) |
 | Caps not granted by a role but reachable through a plugin | 0 |
@@ -187,11 +187,11 @@ Secrets are `.env` names only; a plugin that needs a value it cannot find is `un
 - [ ] Enabling a plugin with an unsatisfied `secrets` entry reports `unavailable` with the missing env name, without crashing the engine or logging the value.
 - [ ] A plugin that shadows a core tool name is refused at load with the collision named.
 - [ ] A plugin raising during registration is disabled with one warning and the engine keeps running.
-- [ ] `google` is no longer importable from `eidesoul/engine/tools/`; the `google` extra is gone from `pyproject.toml` and `uv.lock` matches.
+- [ ] `google` is no longer importable from `monoagens/engine/tools/`; the `google` extra is gone from `pyproject.toml` and `uv.lock` matches.
 - [ ] With the `google` plugin absent, a mail request produces an honest model-authored refusal, never fabricated data and never a plugin traceback.
 - [ ] Disable keeps files and stops the capability; remove deletes files and state; both leave ledger rows.
 - [ ] A non-operator cannot install, enable, disable, or remove a plugin (guard test).
-- [ ] `eidesoul selftest` lists each plugin with `absent | installed | enabled`.
+- [ ] `monoagens selftest` lists each plugin with `absent | installed | enabled`.
 
 ## 8. Risks and mitigations
 
@@ -216,13 +216,13 @@ Secrets are `.env` names only; a plugin that needs a value it cannot find is `un
 
 ## 10. Code references
 
-- `plugins/google/` — the plugin that replaced `eidesoul/engine/tools/google.py`.
+- `plugins/google/` — the plugin that replaced `monoagens/engine/tools/google.py`.
 - `pyproject.toml` `[project.optional-dependencies] google` — the extra to remove (with `uv.lock`).
-- `eidesoul/engine/tools/__init__.py` — the registry the loader feeds; `execute` stays the only permission check.
-- `eidesoul/engine/commands/__init__.py` — the command registry.
-- `eidesoul/gateways/` — the gateway packages the loader may expose.
-- `eidesoul/library/**` — the pack-id rule (`^[a-z0-9][a-z0-9-]{0,63}$`) the plugin name reuses.
-- `eidesoul/engine/plugins.py` — manifest, digest, fetch, one import, lifecycle.
+- `monoagens/engine/tools/__init__.py` — the registry the loader feeds; `execute` stays the only permission check.
+- `monoagens/engine/commands/__init__.py` — the command registry.
+- `monoagens/gateways/` — the gateway packages the loader may expose.
+- `monoagens/library/**` — the pack-id rule (`^[a-z0-9][a-z0-9-]{0,63}$`) the plugin name reuses.
+- `monoagens/engine/plugins.py` — manifest, digest, fetch, one import, lifecycle.
 
 ---
 

@@ -1,4 +1,4 @@
-> Terjemahan turunan — jangan sunting; sumber: engine/0018-gateway-contract.md (sha256: b296b5a70595)
+> Terjemahan turunan — jangan sunting; sumber: engine/0018-gateway-contract.md (sha256: 29eced20ccd2)
 > Teks ini ditulis manusia; baris yang tidak bisa diterjemahkan mesin disalin apa adanya ke sumber English, jadi sumber bercampur dua bahasa.
 
 # ADR-0018: Kontrak Gateway — Core, Rich, Directory
@@ -29,7 +29,7 @@
 Tiga akibat:
 
 1. **Stub wajib.** `cli/gateway.py:88-140` harus menyediakan keenam belas method; separuhnya `pass` atau `return []`. Gateway baru membayar biaya yang sama untuk kemampuan yang tidak ia punya.
-2. **Permukaan mati.** `list_targets` dan `data_paths` tidak dipanggil siapa pun di `eidesoul/` — kontrak yang tidak dipakai tetapi mengikat.
+2. **Permukaan mati.** `list_targets` dan `data_paths` tidak dipanggil siapa pun di `monoagens/` — kontrak yang tidak dipakai tetapi mengikat.
 3. **Nama yang berbohong.** `send_reaction` mengirim **sticker** (`whatsapp/gateway.py:348-356` membaca `reaction_stickers`), bukan reaksi ke pesan.
 4. **Seam yang belum ada.** ADR-0007 §4.5 mewajibkan `participants(thread_id)` sebagai sumber kebenaran keanggotaan; method itu tidak ada di kontrak sehingga implementasinya akan lahir sebagai atribut liar per gateway.
 
@@ -103,7 +103,7 @@ Tidak ada kunci konfigurasi baru dalam ADR ini. Kapabilitas gateway adalah sifat
 - [ ] Gateway tanpa `Directory`: lintas room ditolak, bukan ditebak.
 - [ ] `participants()` mengembalikan `None` → tolak; mengembalikan himpunan → izin mengikuti himpunan.
 - [ ] Gateway yang tidak memenuhi Core gagal saat boot, dengan nama method yang hilang di pesan error.
-- [ ] Tidak ada referensi `send_reaction`, `list_targets`, atau `data_paths` tersisa di `eidesoul/engine/` maupun `eidesoul/gateways/`.
+- [ ] Tidak ada referensi `send_reaction`, `list_targets`, atau `data_paths` tersisa di `monoagens/engine/` maupun `monoagens/gateways/`.
 - [ ] WhatsApp mengimplementasi `Rich` + `Directory`; CLI mengimplementasi Core (dan `Rich` sebisanya), tanpa stub kosong untuk yang tidak dipakai.
 
 ## 8. Risiko dan mitigasi
@@ -125,12 +125,12 @@ Tidak ada kunci konfigurasi baru dalam ADR ini. Kapabilitas gateway adalah sifat
 
 ## 10. Referensi kode
 
-- `eidesoul/engine/inbound.py:31-72` — Protocol 16 method (sebelum dipecah).
-- `eidesoul/engine/agent.py:311,335,354` — pemanggilan `send_text`, `send_file`, `send_reaction`.
-- `eidesoul/engine/agent.py:763,977` — `prompt_hints` di payload.
-- `eidesoul/gateways/cli/gateway.py:88-140` — stub enam belas method (bukti biaya kontrak gemuk).
-- `eidesoul/gateways/whatsapp/gateway.py:348-356` — `send_reaction` yang mengirim sticker.
-- `eidesoul/engine/access/permissions.py:48` — `command_allowed` (gerbang command, tidak berubah).
+- `monoagens/engine/inbound.py:31-72` — Protocol 16 method (sebelum dipecah).
+- `monoagens/engine/agent.py:311,335,354` — pemanggilan `send_text`, `send_file`, `send_reaction`.
+- `monoagens/engine/agent.py:763,977` — `prompt_hints` di payload.
+- `monoagens/gateways/cli/gateway.py:88-140` — stub enam belas method (bukti biaya kontrak gemuk).
+- `monoagens/gateways/whatsapp/gateway.py:348-356` — `send_reaction` yang mengirim sticker.
+- `monoagens/engine/access/permissions.py:48` — `command_allowed` (gerbang command, tidak berubah).
 
 ---
 

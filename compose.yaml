@@ -1,32 +1,32 @@
-# Eidesoul deployment: Postgres+pgvector as the soul database, Eidesoul as the primary.
+# MonoAgens deployment: Postgres+pgvector as the soul database, MonoAgens as the primary.
 # Defaults only — everything here is meant to run as is. The single file you write is `.env`,
-# which `eidesoul init --provider <name>` scaffolds along with config.yaml, roles.yaml, and
+# which `monoagens init --provider <name>` scaffolds along with config.yaml, roles.yaml, and
 # soul.yaml. Never commit `.env`; it is the only place a secret lives.
 #
 # The test stack runs beside the dev stack with its own project, database, and port (ADR-0029 §5):
-#   COMPOSE_PROJECT_NAME=eidesoul-test POSTGRES_DB=eidesoul_test POSTGRES_PORT=5433 \
+#   COMPOSE_PROJECT_NAME=monoagens-test POSTGRES_DB=monoagens_test POSTGRES_PORT=5433 \
 #     podman compose up -d postgres
-name: ${COMPOSE_PROJECT_NAME:-eidesoul}
+name: ${COMPOSE_PROJECT_NAME:-monoagens}
 
 services:
   postgres:
     image: pgvector/pgvector:pg16
     restart: unless-stopped
     environment:
-      POSTGRES_DB: ${POSTGRES_DB:-eidesoul}
-      POSTGRES_USER: eidesoul
+      POSTGRES_DB: ${POSTGRES_DB:-monoagens}
+      POSTGRES_USER: monoagens
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
     ports:
       - "${POSTGRES_PORT:-5432}:5432"
     volumes:
-      - eidesoul-pg:/var/lib/postgresql/data
+      - monoagens-pg:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U eidesoul -d ${POSTGRES_DB:-eidesoul}"]
+      test: ["CMD-SHELL", "pg_isready -U monoagens -d ${POSTGRES_DB:-monoagens}"]
       interval: 5s
       timeout: 5s
       retries: 20
 
-  eidesoul:
+  monoagens:
     build:
       context: .
       args:
@@ -40,12 +40,12 @@ services:
         condition: service_healthy
     env_file: .env
     environment:
-      EIDESOUL_DATABASE_URL: postgresql+psycopg://eidesoul:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}@postgres:5432/${POSTGRES_DB:-eidesoul}
+      MONOAGENS_DATABASE_URL: postgresql+psycopg://monoagens:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}@postgres:5432/${POSTGRES_DB:-monoagens}
     volumes:
       - ./config.yaml:/app/config.yaml
       - ./roles.yaml:/app/roles.yaml
       - ./soul.yaml:/app/soul.yaml
-      - ./.eidesoul:/app/.eidesoul
+      - ./.monoagens:/app/.monoagens
       # The sandbox runs containers on the host, so it needs the docker socket. Uncomment together
       # with the `sandbox` profile below when you turn `sandbox.runtime` on.
       # - /var/run/docker.sock:/var/run/docker.sock
@@ -59,16 +59,16 @@ services:
     volumes:
       - ./deploy/sandbox-proxy/squid.conf:/etc/squid/squid.conf:ro
     networks:
-      - eidesoul-sandbox
-      - eidesoul-egress
+      - monoagens-sandbox
+      - monoagens-egress
 
 volumes:
-  eidesoul-pg:
+  monoagens-pg:
 
 networks:
-  eidesoul-sandbox:
-    name: ${EIDESOUL_SANDBOX_NETWORK:-eidesoul-sandbox}
+  monoagens-sandbox:
+    name: ${MONOAGENS_SANDBOX_NETWORK:-monoagens-sandbox}
     internal: true
   # The sandbox proxy's way out; replace it with your own external network if the host has one.
-  eidesoul-egress:
-    name: ${EIDESOUL_EGRESS_NETWORK:-eidesoul-egress}
+  monoagens-egress:
+    name: ${MONOAGENS_EGRESS_NETWORK:-monoagens-egress}

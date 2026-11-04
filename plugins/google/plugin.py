@@ -5,7 +5,7 @@ to the normal tool/command registries. Permissions still come only from roles.
 """
 
 
-from eidesoul.engine.registry import Handler
+from monoagens.engine.registry import Handler
 
 from .tools import google
 

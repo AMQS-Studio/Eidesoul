@@ -19,7 +19,7 @@
 
 | Fact | Evidence |
 |---|---|
-| The core speaks chat | `chat_id` 635 times in `eidesoul/engine`, `send` 301, `reply` 135, `dm` 125, `ChatMessage` 71, `group` 62 |
+| The core speaks chat | `chat_id` 635 times in `monoagens/engine`, `send` 301, `reply` 135, `dm` 125, `ChatMessage` 71, `group` 62 |
 | The seam is chat-shaped | `Inbound` carries `chat_id`, `is_dm`, `is_mention`, `is_reply` (`inbound.py:18-29`) |
 | Storage is chat-shaped | tables `chats`, `chat_eras`, `chat_people` (`schema.py:69,164,187`) |
 | Language data sits in modules | `privacy.py:27`, `context.py:317-320`, `character.py:18`, `guard/patterns.py:16`, `prompts.py:97,239,242,277`; default pronoun `"aku"` in `soul.py:57,221` |
@@ -39,7 +39,7 @@ foundations below fix the vocabulary before more features are built on it.
 | One owner per concept | Each vocabulary item has a single home and a single ADR owner |
 | No aliases, no shims | A rename lands as one cutover (repo rule), so the old name cannot linger |
 | Honest degradation | Missing language data weakens a feature visibly, never silently in the wrong language |
-| Flat package | New surfaces live outside `eidesoul/`; the package keeps its six subpackages |
+| Flat package | New surfaces live outside `monoagens/`; the package keeps its six subpackages |
 | Foundations first | The invariants are implemented before the features that would otherwise bake in chat |
 
 ## 3. Options considered
@@ -55,15 +55,15 @@ foundations below fix the vocabulary before more features are built on it.
 
 ### 4.1 Surface shape (what may live where)
 
-`eidesoul/` holds the spine and its appendages only: `engine/`, `gateways/`, `providers/`,
+`monoagens/` holds the spine and its appendages only: `engine/`, `gateways/`, `providers/`,
 `library/`, `lang/`, `vendor/`, `admin/`, `__main__.py`. Everything else lives at the repo root:
 `docs/`, `scripts/`, `tests/`, and any future `panel/` or `apps/`. A new tree is never added inside
-`eidesoul/engine/`; a body is a package under `eidesoul/gateways/<name>/` (ADR-0018), and an
+`monoagens/engine/`; a body is a package under `monoagens/gateways/<name>/` (ADR-0018), and an
 application that imports the engine (dashboard, editor UI) is a separate process outside the package.
 
 ### 4.2 Language data lives in data surfaces
 
-Language-specific lists move to `eidesoul/library/lexicon/<lang>.json` with the schema
+Language-specific lists move to `monoagens/library/lexicon/<lang>.json` with the schema
 `{version, language, negations, stopwords, assistant_tells, injection, prompt_examples}`; the engine
 loads the pack for `soul.language` lazily and caches it.
 
@@ -76,7 +76,7 @@ loads the pack for `soul.language` lazily and caches it.
   and no longer falls back to the handler literal, while `Handler.description` stays the
   **model-facing** tool description.
 - CLI demo conversations move to `tests/fixtures/`.
-- Enforcement: `tests/test_language.py` scans string literals in `eidesoul/engine/**` against the word
+- Enforcement: `tests/test_language.py` scans string literals in `monoagens/engine/**` against the word
   list taken **from** `library/lexicon/id.json`, checks catalog parity, and checks that no default
   pronoun literal returns.
 
@@ -117,7 +117,7 @@ old names disappear in the same change and every caller is migrated.
 
 ### 4.5 Chat-only capabilities leave the core
 
-`send` (chat egress) and `chat_history` (archive browsing) move to `eidesoul/gateways/whatsapp/tools`
+`send` (chat egress) and `chat_history` (archive browsing) move to `monoagens/gateways/whatsapp/tools`
 and `.../tools` of whichever body owns an archive. The engine keeps only body-agnostic tools:
 `read`, `write`, `shell`, `sandbox`, `web_search`, `mcp`, `memory`, `recipe`, `skill`, `settings`.
 A robot body exposes motion/sensor tools, a harness body exposes run/inspect tools, an editor body
@@ -134,9 +134,9 @@ the core).
 ### 4.7 Enforcement
 
 - `tests/test_language.py` (§4.2).
-- `tests/test_architecture.py`: an AST scan asserting that `eidesoul/engine/**` contains no transport
+- `tests/test_architecture.py`: an AST scan asserting that `monoagens/engine/**` contains no transport
   vocabulary outside an explicit allowlist (`hints` keys, gateway-neutral names), and that no module
-  under `eidesoul/` outside `gateways/` imports `neonize` or a gateway package (repo rule made
+  under `monoagens/` outside `gateways/` imports `neonize` or a gateway package (repo rule made
   mechanical).
 - `scripts/adr.py --check` stays the gate for this document set; it now enforces the folder layout
   (root, `engine/`, `web/`), globally unique chronological numbers, and resolvable references
@@ -145,31 +145,31 @@ the core).
 ## 5. Configuration
 
 No new engine keys for the seam. Language data derives its path from `soul.language`
-(`eidesoul/library/lexicon/<code>.json`), with a test-only `engine.language.lexicon_dir` override.
+(`monoagens/library/lexicon/<code>.json`), with a test-only `engine.language.lexicon_dir` override.
 A body declares its name and capabilities in its own config section under `gateways.<name>`.
 
 ## 6. Metrics and gates
 
 | Metric | Initial target |
 |---|---|
-| Transport vocabulary in `eidesoul/engine/**` (`chat_id`, `is_dm`, `ChatMessage`, `chat_eras`) | 0 after the rename |
-| Indonesian literals in `eidesoul/engine/**` (outside the lexicon) | 0 (scanner) |
+| Transport vocabulary in `monoagens/engine/**` (`chat_id`, `is_dm`, `ChatMessage`, `chat_eras`) | 0 after the rename |
+| Indonesian literals in `monoagens/engine/**` (outside the lexicon) | 0 (scanner) |
 | Catalog parity `en` ⇄ `id` | 0 missing keys per side |
 | Commands without `command.<name>.description` | 0 (boot fails otherwise) |
 | Bodies that run end-to-end (smoke) | ≥ 2 — chat plus one non-chat body |
-| Body-specific tools inside `eidesoul/engine/tools` | 0 |
-| New trees inside `eidesoul/engine/` | 0 |
+| Body-specific tools inside `monoagens/engine/tools` | 0 |
+| New trees inside `monoagens/engine/` | 0 |
 
 ## 7. Acceptance criteria
 
-- [ ] `library/lexicon/{id,en}.json` exist, pass their check, and the engine reads them; grep finds no Indonesian word literal in `eidesoul/engine/**`.
+- [ ] `library/lexicon/{id,en}.json` exist, pass their check, and the engine reads them; grep finds no Indonesian word literal in `monoagens/engine/**`.
 - [ ] A soul with `language: en` and empty `pronouns` resolves an English pronoun; a catalog missing `soul.pronoun.default` fails at boot.
 - [ ] `/konteks` and every other handler answer only through `t()`; `/help` refuses to boot when a command description key is missing; `__main__.py` keeps no demo conversation.
 - [ ] `Percept`/`Action` replace `Inbound`/`ChatMessage` in the engine; `hints` carry `dm`/`mention`/`reply`; no engine branch on a transport name (AST test).
 - [ ] The rename lands as one cutover: no `chat_id`/`is_dm`/`ChatMessage`/`chat_eras` remain in the engine, and the DDL migration is in the ADR-0016 sequence.
-- [ ] `send` and `chat_history` live in a gateway package; `eidesoul/engine/tools` holds no body-specific tool.
+- [ ] `send` and `chat_history` live in a gateway package; `monoagens/engine/tools` holds no body-specific tool.
 - [ ] One non-chat body completes a smoke run (percept in, action out) without any engine special case.
-- [ ] `docs/`, `scripts/`, `tests/`, `panel/`, `apps/` stay outside `eidesoul/`, and `AGENTS.md` says so.
+- [ ] `docs/`, `scripts/`, `tests/`, `panel/`, `apps/` stay outside `monoagens/`, and `AGENTS.md` says so.
 
 ## 8. Risks and mitigations
 
@@ -196,17 +196,17 @@ A body declares its name and capabilities in its own config section under `gatew
 
 ## 10. Code references
 
-- `eidesoul/engine/inbound.py:18-29` — `Inbound` and `Gateway` (the seam to replace).
-- `eidesoul/engine/schema.py:44-67,69,164,187` — `messages`, `chats`, `chat_eras`, `chat_people`.
-- `eidesoul/engine/agent.py` — send calls and turn handling (rename + seam).
-- `eidesoul/engine/turn/prompts.py:141-147` — role rendering; body facts join the payload here.
-- `eidesoul/gateways/whatsapp/tools/send.py` and `eidesoul/gateways/whatsapp/tools/chat_history.py` — the two chat-only tools, both out of the core.
-- `eidesoul/engine/soul.py:57,221` — `pronouns` default (to remove).
-- `eidesoul/engine/access/privacy.py:27`, `context.py:317-320`, `character.py:18`, `guard/patterns.py:16`, `prompts.py:97,239,242,277` — language data (to move).
-- `eidesoul/engine/commands/konteks.py:21` — hardcoded reply (to route through `t()`).
-- `eidesoul/__main__.py:429,456` — Indonesian fixtures (to move to `tests/fixtures/`).
-- `eidesoul/lang/en.yaml`, `eidesoul/lang/id.yaml` — 201 keys each, parity 0/0.
-- `eidesoul/library/patterns|facts|affect/**` — precedent for a checked data surface.
+- `monoagens/engine/inbound.py:18-29` — `Inbound` and `Gateway` (the seam to replace).
+- `monoagens/engine/schema.py:44-67,69,164,187` — `messages`, `chats`, `chat_eras`, `chat_people`.
+- `monoagens/engine/agent.py` — send calls and turn handling (rename + seam).
+- `monoagens/engine/turn/prompts.py:141-147` — role rendering; body facts join the payload here.
+- `monoagens/gateways/whatsapp/tools/send.py` and `monoagens/gateways/whatsapp/tools/chat_history.py` — the two chat-only tools, both out of the core.
+- `monoagens/engine/soul.py:57,221` — `pronouns` default (to remove).
+- `monoagens/engine/access/privacy.py:27`, `context.py:317-320`, `character.py:18`, `guard/patterns.py:16`, `prompts.py:97,239,242,277` — language data (to move).
+- `monoagens/engine/commands/konteks.py:21` — hardcoded reply (to route through `t()`).
+- `monoagens/__main__.py:429,456` — Indonesian fixtures (to move to `tests/fixtures/`).
+- `monoagens/lang/en.yaml`, `monoagens/lang/id.yaml` — 201 keys each, parity 0/0.
+- `monoagens/library/patterns|facts|affect/**` — precedent for a checked data surface.
 
 ---
 

@@ -6,10 +6,10 @@ import asyncio
 import pytest
 from support import StubEncoder, build_config, database, stub_vector
 
-from eidesoul.engine import embed
-from eidesoul.engine.memory import build_memory
-from eidesoul.engine.memory.mem0 import Mem0Backend
-from eidesoul.engine.memory.store import MemoryStore
+from monoagens.engine import embed
+from monoagens.engine.memory import build_memory
+from monoagens.engine.memory.mem0 import Mem0Backend
+from monoagens.engine.memory.store import MemoryStore
 
 
 @pytest.fixture(autouse=True)

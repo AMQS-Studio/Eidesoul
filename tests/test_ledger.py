@@ -3,7 +3,7 @@
 
 from support import database
 
-from eidesoul.engine.memory.ledger import ActionLedger
+from monoagens.engine.memory.ledger import ActionLedger
 
 
 def test_log_and_recent_order(tmp_path) -> None:

@@ -10,7 +10,7 @@ PROBE = r"""
 import json
 import sys
 
-from eidesoul.engine.memory.evidence import EntityDetector, load_pack
+from monoagens.engine.memory.evidence import EntityDetector, load_pack
 
 
 def status_kb(key: str) -> int:

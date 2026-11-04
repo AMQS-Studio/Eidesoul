@@ -3,7 +3,7 @@
 
 from support import FakeGateway, make_agent
 
-from eidesoul.engine.registry import Handler, RegistryError
+from monoagens.engine.registry import Handler, RegistryError
 
 
 def handler(name: str, description: str = "test") -> Handler:
@@ -73,7 +73,7 @@ def test_a_duplicate_inside_one_body_is_a_boot_failure(tmp_path) -> None:
 
 
 def test_the_prompt_names_the_other_bodies_once(tmp_path) -> None:
-    from eidesoul.engine.turn.prompts import PromptContext, system_prompt
+    from monoagens.engine.turn.prompts import PromptContext, system_prompt
 
     gateway = FakeGateway(name="a", tools=[handler("speak")])
     env = make_agent(tmp_path, gateway=gateway)

@@ -123,7 +123,7 @@ The gate:
 4. Two episodes with the same tools and targets but different `turns.app` produce different signatures and do not merge.
 5. A reflection candidate from an episode of `a` is stored with `app='a'`; a shared episode stores `''`.
 6. A turn without the hint never fails and never sees an app-scoped skill.
-7. The neutral gate finds no app name literal in `eidesoul/engine/**`; only the pattern constant exists.
+7. The neutral gate finds no app name literal in `monoagens/engine/**`; only the pattern constant exists.
 8. `tests/test_migrations.py` covers `0017`; `pytest -q` and the prompt contract suite stay green.
 
 ## 7. Acceptance criteria
@@ -157,15 +157,15 @@ The gate:
 
 ## 10. Code references
 
-- `eidesoul/engine/schema.py:467-489` — `skills`, the scope CHECK, and the scope index; `:827-845` episodes; `:854-878` turns.
-- `eidesoul/engine/stores/skills.py:164-170,188-260` — `_visible`, `_mentions`, `_vector`, `retrieve`, `_inject`.
-- `eidesoul/engine/stores/skills.py:303-330` — `view`/`read`; the operator path that must name the app too.
-- `eidesoul/engine/agent.py:1306-1316` — the single retrieval call that will pass `hints["app"]`.
-- `eidesoul/engine/stores/history.py:273-283` — the intake transaction that records `turns.app`.
-- `eidesoul/engine/memory/episodes.py:90-122,158-177` — episode start and signature.
-- `eidesoul/engine/jobs/cognition.py:948-980,1069-1078` — promote/merge and the distill write that must copy the app.
-- `eidesoul/engine/inbound.py:13-20` — the documented hint keys.
-- `eidesoul/engine/tools/__init__.py:28-100` — `ToolContext`, which gains `app`.
+- `monoagens/engine/schema.py:467-489` — `skills`, the scope CHECK, and the scope index; `:827-845` episodes; `:854-878` turns.
+- `monoagens/engine/stores/skills.py:164-170,188-260` — `_visible`, `_mentions`, `_vector`, `retrieve`, `_inject`.
+- `monoagens/engine/stores/skills.py:303-330` — `view`/`read`; the operator path that must name the app too.
+- `monoagens/engine/agent.py:1306-1316` — the single retrieval call that will pass `hints["app"]`.
+- `monoagens/engine/stores/history.py:273-283` — the intake transaction that records `turns.app`.
+- `monoagens/engine/memory/episodes.py:90-122,158-177` — episode start and signature.
+- `monoagens/engine/jobs/cognition.py:948-980,1069-1078` — promote/merge and the distill write that must copy the app.
+- `monoagens/engine/inbound.py:13-20` — the documented hint keys.
+- `monoagens/engine/tools/__init__.py:28-100` — `ToolContext`, which gains `app`.
 - `tests/test_skills.py`, `tests/test_prompt_contract.py`, `tests/test_migrations.py` — the three suites this decision extends.
 
 ---

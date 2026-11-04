@@ -3,8 +3,8 @@
 
 import pytest
 
-from eidesoul.engine.config import DEFAULT_SENSITIVE_COMMANDS, ApprovalConfig
-from eidesoul.engine.guard import (
+from monoagens.engine.config import DEFAULT_SENSITIVE_COMMANDS, ApprovalConfig
+from monoagens.engine.guard import (
     ActionRequest,
     ApprovalPolicy,
     approval_class,
@@ -14,7 +14,7 @@ from eidesoul.engine.guard import (
     scan_command,
     scope_proof,
 )
-from eidesoul.engine.tools import REGISTRY as TOOLS
+from monoagens.engine.tools import REGISTRY as TOOLS
 
 
 def declared(tool: str) -> dict:
@@ -97,7 +97,7 @@ def verdict(config: ApprovalConfig, tool: str, **args) -> str:
 ALLOWED_SHELL = [
     "ls -la",
     "git status",
-    "printf eidesoul-ok",
+    "printf monoagens-ok",
     "python -c 'print(1)'",
     "echo hi > notes.txt",
 ]

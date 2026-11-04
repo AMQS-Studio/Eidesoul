@@ -5,7 +5,7 @@ import asyncio
 
 from support import build_config, database
 
-from eidesoul.engine.memory.store import MemoryStore
+from monoagens.engine.memory.store import MemoryStore
 
 DM = "628111@s.whatsapp.net"
 GROUP_A = "111@g.us"

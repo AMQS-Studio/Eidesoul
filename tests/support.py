@@ -11,22 +11,26 @@ from pathlib import Path
 
 from sqlalchemy import text
 
-from eidesoul.engine.access.roles import Role, RoleRegistry
-from eidesoul.engine.config import (
-    AffectConfig,
+from monoagens.engine.access.roles import Role, RoleRegistry
+from monoagens.engine.config import (
     ApprovalConfig,
     Config,
     DatabaseConfig,
-    HumanizeConfig,
     LLMConfig,
     Paths,
     SandboxConfig,
-    StyleConfig,
 )
-from eidesoul.engine.db import Database
-from eidesoul.engine.inbound import CoreDefaults, GatewayError
-from eidesoul.engine.memory import MemoryContext, MemoryHit
-from eidesoul.engine.soul import Soul, SoulStyle
+from monoagens.engine.db import Database
+from monoagens.engine.inbound import CoreDefaults, GatewayError
+from monoagens.engine.memory import MemoryContext, MemoryHit
+from monoagens.engine.soul import (
+    AffectConfig,
+    CharacterConfig,
+    HumanizeConfig,
+    Soul,
+    StyleConfig,
+    VoiceConfig,
+)
 
 EMBED_DIM = 384
 TOKEN = re.compile(r"[0-9a-z]+")
@@ -34,7 +38,7 @@ TOKEN = re.compile(r"[0-9a-z]+")
 
 def test_dsn() -> str:
     """The one test database; unset is a loud failure from conftest, never a fallback."""
-    return os.environ["EIDESOL_TEST_DATABASE_URL"]
+    return os.environ["MONOAGENS_TEST_DATABASE_URL"]
 
 
 def stub_vector(text: str) -> list[float]:
@@ -66,18 +70,19 @@ def role(name: str, **kwargs) -> Role:
 
 
 def default_soul(**overrides) -> Soul:
-    """Fixture soul: the shipped packs stay selected so agent tests keep real data."""
+    """Fixture soul: voice is explicitly on so store-backed tests keep their old behavior."""
     body = {
-        "name": "Eidesoul",
+        "name": "MonoAgens",
         "language": "id",
         "locale": "id-ID",
         "timezone": "UTC",
         "persona": "p",
-        "style": SoulStyle(
-            patterns=("jawatimur",),
-            facts=("indonesia",),
-            max_patterns=2,
-            max_facts=3,
+        "voice": VoiceConfig(
+            enabled=True,
+            affect=AffectConfig(enabled=True),
+            style=StyleConfig(enabled=True),
+            character=CharacterConfig(enabled=False),
+            humanize=HumanizeConfig(enabled=True),
         ),
     }
     body.update(overrides)
@@ -93,6 +98,10 @@ def build_config(
     soul: Soul | None = None,
     database_config: DatabaseConfig | None = None,
     approval: ApprovalConfig | None = None,
+    affect: AffectConfig | None = None,
+    style: StyleConfig | None = None,
+    humanize: HumanizeConfig | None = None,
+    character: CharacterConfig | None = None,
     **overrides,
 ) -> Config:
     base = Path(root)
@@ -102,6 +111,17 @@ def build_config(
     if default_role not in role_map:
         default_role = "member" if "member" in role_map else next(iter(role_map))
     workspace_path = Path(workspace) if workspace is not None else base / "workspace"
+    voice = (soul.voice if soul is not None else default_soul().voice)
+    if affect is not None:
+        voice = replace(voice, affect=affect)
+    if style is not None:
+        voice = replace(voice, style=style)
+    if humanize is not None:
+        voice = replace(voice, humanize=humanize)
+    if character is not None:
+        voice = replace(voice, character=character)
+    if soul is not None:
+        soul = replace(soul, voice=voice)
     return Config(
         paths=Paths(
             config=base / "config.yaml",
@@ -117,7 +137,7 @@ def build_config(
         roles=RoleRegistry(by_name=role_map, default=default_role),
         default_role=default_role,
         gateways={},
-        soul=soul or default_soul(),
+        soul=soul or replace(default_soul(), voice=voice),
         sandbox=SandboxConfig(),
         mcp={},
         **overrides,
@@ -501,15 +521,15 @@ def make_agent(
     """Build a full Agent on the test store with the rich directory fake."""
     from types import SimpleNamespace
 
-    from eidesoul.engine.access.approvals import ApprovalStore
-    from eidesoul.engine.agent import Agent
-    from eidesoul.engine.memory.ledger import ActionLedger
-    from eidesoul.engine.stores.affect import AffectStore
-    from eidesoul.engine.stores.history import HistoryStore
-    from eidesoul.engine.stores.recipes import RecipeStore
-    from eidesoul.engine.stores.skills import SkillStore
-    from eidesoul.engine.stores.style import StyleStore
-    from eidesoul.engine.turn.context import WorkingMemory
+    from monoagens.engine.access.approvals import ApprovalStore
+    from monoagens.engine.agent import Agent
+    from monoagens.engine.memory.ledger import ActionLedger
+    from monoagens.engine.stores.affect import AffectStore
+    from monoagens.engine.stores.history import HistoryStore
+    from monoagens.engine.stores.recipes import RecipeStore
+    from monoagens.engine.stores.skills import SkillStore
+    from monoagens.engine.stores.style import StyleStore
+    from monoagens.engine.turn.context import WorkingMemory
 
     db = database()
     config = build_config(
@@ -523,10 +543,16 @@ def make_agent(
             )
         },
         default_role=default_role,
-        soul=soul,
-        affect=AffectConfig(enabled=affect),
-        style=StyleConfig(enabled=False),
-        humanize=humanize or HumanizeConfig(enabled=False),
+        soul=replace(
+            soul or default_soul(),
+            voice=replace(
+                (soul or default_soul()).voice,
+                enabled=bool(affect),
+                affect=AffectConfig(enabled=bool(affect)),
+                style=StyleConfig(enabled=False),
+                humanize=humanize or HumanizeConfig(enabled=False),
+            ),
+        ),
         approval=approvals or ApprovalConfig(),
     )
     config.workspace.mkdir(parents=True, exist_ok=True)
@@ -540,10 +566,14 @@ def make_agent(
     ledger = ActionLedger(db)
     skills = SkillStore(db, config.skills)
     recipes = RecipeStore(db)
-    affect_store = AffectStore(db, config.affect, soul=config.soul.persona) if affect else None
+    affect_store = (
+        AffectStore(db, config.soul.voice.affect, soul=config.soul.persona)
+        if affect
+        else None
+    )
     style = (
-        StyleStore(db, config.style, language=config.soul.language)
-        if config.style.enabled
+        StyleStore(db, config.soul.voice.style, language=config.soul.language)
+        if config.soul.voice.style.enabled
         else None
     )
     memory = memory if memory is not None else FakeMemory()
@@ -606,8 +636,8 @@ def inbound_message(
 ):
     from datetime import datetime
 
-    from eidesoul.engine.inbound import MESSAGE, Percept
-    from eidesoul.engine.turn.context import Message
+    from monoagens.engine.inbound import MESSAGE, Percept
+    from monoagens.engine.turn.context import Message
 
     hints: dict[str, object] = {"dm": dm, "mention": mention, "reply": reply}
     if app:
@@ -637,24 +667,24 @@ def make_runtime(
     role_tools='["*"]',
     settings_approval: bool = True,
 ):
-    """Bootstrap like `eidesoul run` but without a real gateway/LLM."""
+    """Bootstrap like `monoagens run` but without a real gateway/LLM."""
     from types import SimpleNamespace
 
-    from eidesoul.engine.access.approvals import ApprovalStore
-    from eidesoul.engine.agent import Agent
-    from eidesoul.engine.config import load_config, load_host
-    from eidesoul.engine.memory.ledger import ActionLedger
-    from eidesoul.engine.stores.documents import DocumentStore
-    from eidesoul.engine.stores.history import HistoryStore
-    from eidesoul.engine.stores.recipes import RecipeStore
-    from eidesoul.engine.stores.skills import SkillStore
-    from eidesoul.engine.turn.context import WorkingMemory
+    from monoagens.engine.access.approvals import ApprovalStore
+    from monoagens.engine.agent import Agent
+    from monoagens.engine.config import load_config, load_host
+    from monoagens.engine.memory.ledger import ActionLedger
+    from monoagens.engine.stores.documents import DocumentStore
+    from monoagens.engine.stores.history import HistoryStore
+    from monoagens.engine.stores.recipes import RecipeStore
+    from monoagens.engine.stores.skills import SkillStore
+    from monoagens.engine.turn.context import WorkingMemory
 
     base = Path(tmp_path)
     monkeypatch.setenv("K", "x")
-    monkeypatch.setenv("EIDESOUL_DATABASE_URL", test_dsn())
+    monkeypatch.setenv("MONOAGENS_DATABASE_URL", test_dsn())
     (base / "config.yaml").write_text(
-        "database:\n  url_env: EIDESOUL_DATABASE_URL\nworkspace: .eidesoul/workspace\n"
+        "database:\n  url_env: MONOAGENS_DATABASE_URL\nworkspace: .monoagens/workspace\n"
         "roles_file: roles.yaml\nsoul_file: soul.yaml\n"
         "engine:\n"
         "  llm:\n    provider: custom\n    base_url: http://x\n    api_key_env: K\n    model: m\n"
@@ -671,8 +701,8 @@ def make_runtime(
         encoding="utf-8",
     )
     (base / "soul.yaml").write_text(
-        "name: Eidesoul\nlanguage: id\nlocale: id-ID\ntimezone: UTC\n"
-        "pronouns: aku\npersona: Kamu Eidesoul yang hidup di chat.\n",
+        "name: MonoAgens\nlanguage: id\nlocale: id-ID\ntimezone: UTC\n"
+        "pronouns: aku\npersona: Kamu MonoAgens yang hidup di chat.\n",
         encoding="utf-8",
     )
 

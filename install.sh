@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Eidesoul installer: one path, two stacks (native and compose).
+# MonoAgens installer: one path, two stacks (native and compose).
 #
 #   bash install.sh                  # install on this machine, interactive setup
 #   bash install.sh --dry-run        # print every action, write nothing
@@ -8,13 +8,13 @@
 #
 # It never runs sudo, never installs a system package, and never edits PATH: a missing
 # package is printed with the exact command that installs it. Everything is appended to
-# ~/.eidesoul/logs/install.log. No secret value is ever logged or printed.
+# ~/.monoagens/logs/install.log. No secret value is ever logged or printed.
 #
-# Repository: https://github.com/inimuqsith/Eidesoul
+# Repository: https://github.com/AMQS-Studio/MonoAgens
 # Decision:   docs/v0.1.0/adr/0030-install-and-init.md
 set -euo pipefail
 
-REPO_URL="https://github.com/inimuqsith/Eidesoul"
+REPO_URL="https://github.com/AMQS-Studio/MonoAgens"
 REVISION="main"
 
 # --- uv pin: bump UV_VERSION and both digests together --------------------------------
@@ -25,10 +25,10 @@ UV_SHA256_X86_64="c5221ff41b7892bfc223543883600125f6a47fe845093e0f5bdff4f359196d
 UV_SHA256_AARCH64="71279f8d3c67241e807b9d8db872d1bf541579fb9f08b7d1eb1682196d1e57dc"
 # --------------------------------------------------------------------------------------
 
-eidesoul_home="${HOME}/.eidesoul"
-default_dir="${eidesoul_home}/app"
-log_file="${eidesoul_home}/logs/install.log"
-uv_bin="${eidesoul_home}/bin/uv"
+monoagens_home="${HOME}/.monoagens"
+default_dir="${monoagens_home}/app"
+log_file="${monoagens_home}/logs/install.log"
+uv_bin="${monoagens_home}/bin/uv"
 
 dir="$default_dir"
 stack="native"
@@ -69,7 +69,7 @@ warn() {
 }
 
 die() {
-    warn "eidesoul install: $*"
+    warn "monoagens install: $*"
     exit 1
 }
 
@@ -84,28 +84,28 @@ stage() {
 usage() {
     local code="$1" message="${2:-}"
     if [[ -n "$message" ]]; then
-        printf 'eidesoul install: %s\n\n' "$message" >&2
+        printf 'monoagens install: %s\n\n' "$message" >&2
     fi
     cat <<'EOF'
-Eidesoul installer - one path, two stacks.
+MonoAgens installer - one path, two stacks.
 
 Usage: bash install.sh [options]
 
-  --dir PATH             install directory (default: ~/.eidesoul/app)
+  --dir PATH             install directory (default: ~/.monoagens/app)
   --stack STACK          native (this machine) or compose (the stack in --dir)
   --dry-run              print every action and write nothing
   --non-interactive      never prompt; fail when a required value is missing
-  --provider NAME        provider for `eidesoul init`
-  --model ID             model id for `eidesoul init` (optional)
+  --provider NAME        provider for `monoagens init`
+  --model ID             model id for `monoagens init` (optional)
   --database-url URL     Postgres URL; written to .env, never to YAML or the log
   --label TEXT           label for the first administrator (roles.yaml)
   --voice-layer on|off   keep emotion, humanize, character (default on) or turn them off
-  --skip-selftest        skip the closing `eidesoul selftest`
+  --skip-selftest        skip the closing `monoagens selftest`
   --no-color             plain output (also honoured via NO_COLOR)
   -h, --help             this text
 
 The script never runs sudo and never installs a package: when Postgres, git, or Python is
-missing it prints the exact command and stops that stage. Log: ~/.eidesoul/logs/install.log
+missing it prints the exact command and stops that stage. Log: ~/.monoagens/logs/install.log
 EOF
     exit "$code"
 }
@@ -131,7 +131,7 @@ log_init() {
     mkdir -p -- "$(dirname -- "$log_file")"
     touch -- "$log_file"
     chmod 0600 -- "$log_file" 2>/dev/null || true
-    log "== eidesoul install $(date -Is) =="
+    log "== monoagens install $(date -Is) =="
     log "dir=$dir stack=$stack provider=${provider:-<ask>} model=${model:-<unset>} voice=${voice_layer:-<ask>}"
 }
 
@@ -161,7 +161,7 @@ interrupted() {
     local signal="$1" code="$2"
     trap - INT TERM HUP
     log "== interrupted by SIG$signal =="
-    printf '\neidesoul install: interrupted; nothing else was started\n' >&2
+    printf '\nmonoagens install: interrupted; nothing else was started\n' >&2
     kill -s "$signal" $$ 2>/dev/null || exit "$code"
     exit "$code"
 }
@@ -429,7 +429,7 @@ uv_sync() {
 }
 
 uv_run_in_dir() {
-    ( cd -- "$dir" && exec "$uv" run eidesoul "$@" )
+    ( cd -- "$dir" && exec "$uv" run monoagens "$@" )
 }
 
 # --- init -----------------------------------------------------------------------------
@@ -448,7 +448,7 @@ build_init_args() {
 run_init() {
     local attached=0
     build_init_args
-    stage "configure the host (eidesoul init)"
+    stage "configure the host (monoagens init)"
     log_init_meta
     if [[ ! -t 0 ]] || (( non_interactive )); then
         INIT_ARGS+=(--non-interactive)
@@ -464,7 +464,7 @@ run_init() {
         die "no terminal and no --provider. Pass --provider <name> (optionally --model, --database-url, --label, --voice-layer), or run with a terminal"
     fi
     if (( dry_run )); then
-        detail "would run: uv run eidesoul init --dir $dir (the database URL stays out of this output)"
+        detail "would run: uv run monoagens init --dir $dir (the database URL stays out of this output)"
         return 0
     fi
     if (( attached )); then
@@ -479,11 +479,11 @@ run_init() {
         if (( code != 0 )); then
             detail "last log lines:"
             tail -n 15 -- "$log_file" | sed 's/^/     /' >&2 || true
-            die "eidesoul init failed (exit $code); see $log_file"
+            die "monoagens init failed (exit $code); see $log_file"
         fi
         return 0
     fi
-    run_logged "write the four host files" "eidesoul init --dir $dir --non-interactive" \
+    run_logged "write the four host files" "monoagens init --dir $dir --non-interactive" \
         uv_run_in_dir "${INIT_ARGS[@]}"
 }
 
@@ -501,11 +501,11 @@ postgres_hint() {
 }
 
 database_configured() {
-    if [[ -n "$database_url" || -n "${EIDESOUL_DATABASE_URL:-}" ]]; then
+    if [[ -n "$database_url" || -n "${MONOAGENS_DATABASE_URL:-}" ]]; then
         return 0
     fi
     [[ -f "$dir/.env" ]] || return 1
-    grep -Eq '^EIDESOUL_DATABASE_URL=[^[:space:]]' "$dir/.env"
+    grep -Eq '^MONOAGENS_DATABASE_URL=[^[:space:]]' "$dir/.env"
 }
 
 stage_database() {
@@ -514,25 +514,25 @@ stage_database() {
         if ! have_postgres; then
             postgres_hint
         fi
-        detail "EIDESOUL_DATABASE_URL is empty; after filling it run: eidesoul db upgrade"
+        detail "MONOAGENS_DATABASE_URL is empty; after filling it run: monoagens db upgrade"
         return 0
     fi
-    run_logged "publish the schema (eidesoul db upgrade)" "eidesoul db upgrade" \
+    run_logged "publish the schema (monoagens db upgrade)" "monoagens db upgrade" \
         uv_run_in_dir db upgrade
 }
 
 stage_selftest() {
     if (( skip_selftest )); then
         stage "self-check: skipped"
-        detail "run it yourself later: eidesoul selftest"
+        detail "run it yourself later: monoagens selftest"
         return 0
     fi
     if ! database_configured; then
         stage "self-check: skipped"
-        detail "it needs a database URL; fill .env, then run: eidesoul selftest"
+        detail "it needs a database URL; fill .env, then run: monoagens selftest"
         return 0
     fi
-    run_soft "self-check (eidesoul selftest)" "eidesoul selftest" uv_run_in_dir selftest || true
+    run_soft "self-check (monoagens selftest)" "monoagens selftest" uv_run_in_dir selftest || true
 }
 
 # --- compose stack --------------------------------------------------------------------
@@ -560,7 +560,7 @@ compose_up() {
 }
 
 compose_run() {
-    ( cd -- "$dir" && exec "${COMPOSE[@]}" exec -T eidesoul eidesoul "$@" )
+    ( cd -- "$dir" && exec "${COMPOSE[@]}" exec -T monoagens monoagens "$@" )
 }
 
 stage_compose() {
@@ -577,12 +577,12 @@ stage_compose() {
     fi
     run_logged "bring the stack up" "${COMPOSE[*]} up -d" compose_up
     run_logged "publish the schema (docker compose exec)" \
-        "${COMPOSE[*]} exec eidesoul eidesoul db upgrade" compose_run db upgrade
+        "${COMPOSE[*]} exec monoagens monoagens db upgrade" compose_run db upgrade
     if (( skip_selftest )); then
         detail "self-check skipped (--skip-selftest)"
     else
         run_soft "self-check (docker compose exec)" \
-            "${COMPOSE[*]} exec eidesoul eidesoul selftest" compose_run selftest || true
+            "${COMPOSE[*]} exec monoagens monoagens selftest" compose_run selftest || true
     fi
 }
 
@@ -616,20 +616,20 @@ print_cli_steps() {
         say "  Stay on the command line inside the stack:"
         say "    cd $dir"
         if ! postgres_password_set; then
-            say "    # fill .env first: POSTGRES_PASSWORD, EIDESOUL_DATABASE_URL, and the provider key"
+            say "    # fill .env first: POSTGRES_PASSWORD, MONOAGENS_DATABASE_URL, and the provider key"
         fi
-        say "    $runner exec eidesoul eidesoul db upgrade"
-        say "    $runner exec eidesoul eidesoul run"
-        say "  Run the setup inside the container too: $runner exec eidesoul eidesoul init --dir ."
+        say "    $runner exec monoagens monoagens db upgrade"
+        say "    $runner exec monoagens monoagens run"
+        say "  Run the setup inside the container too: $runner exec monoagens monoagens init --dir ."
     else
         say "  Stay on the command line:"
         say "    cd $dir"
         if ! database_configured; then
-            say "    # fill .env first: EIDESOUL_DATABASE_URL, POSTGRES_PASSWORD, and the provider key"
+            say "    # fill .env first: MONOAGENS_DATABASE_URL, POSTGRES_PASSWORD, and the provider key"
         fi
-        say "    uv run eidesoul db upgrade"
-        say "    uv run eidesoul run"
-        say "  Run the setup again: uv run eidesoul init --dir ."
+        say "    uv run monoagens db upgrade"
+        say "    uv run monoagens run"
+        say "  Run the setup again: uv run monoagens init --dir ."
     fi
     say ""
     say "  Log: $log_file"
@@ -637,11 +637,11 @@ print_cli_steps() {
 
 open_panel() {
     if (( dry_run )); then
-        detail "would start the panel: (cd $dir && uv run --project panel eidesoul-panel)"
+        detail "would start the panel: (cd $dir && uv run --project panel monoagens-panel)"
         return 0
     fi
     say "  starting the panel; Ctrl-C stops it"
-    ( cd -- "$dir" && exec "$uv" run --project panel eidesoul-panel )
+    ( cd -- "$dir" && exec "$uv" run --project panel monoagens-panel )
 }
 
 finish() {
@@ -658,7 +658,7 @@ finish() {
                 return 0
             fi
         else
-            detail "start it with: (cd $dir && uv run --project panel eidesoul-panel)"
+            detail "start it with: (cd $dir && uv run --project panel monoagens-panel)"
         fi
     else
         detail "panel: not built in this version, so the command line is the only path."
@@ -673,7 +673,7 @@ main() {
     parse_args "$@"
     setup_colors
     detect_arch
-    say "Eidesoul installer - $REPO_URL ($(revision_label))"
+    say "MonoAgens installer - $REPO_URL ($(revision_label))"
     say "stack: $stack | uv pin: $UV_VERSION | arch: $arch | dry-run: $([[ $dry_run == 1 ]] && echo yes || echo no)"
     log_init
     install_traps
@@ -695,6 +695,6 @@ main() {
     return 0
 }
 
-if [[ -z "${EIDESOUL_INSTALL_SOURCED:-}" ]]; then
+if [[ -z "${MONOAGENS_INSTALL_SOURCED:-}" ]]; then
     main "$@"
 fi

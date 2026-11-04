@@ -26,7 +26,7 @@
 Three consequences:
 
 1. **Mandatory stubs.** `cli/gateway.py:88-140` must provide all sixteen methods; half of them are `pass` or `return []`. A new gateway pays the same cost for capabilities it does not have.
-2. **A dead surface.** `list_targets` and `data_paths` are called by no one in `eidesoul/` — a contract that is unused but binding.
+2. **A dead surface.** `list_targets` and `data_paths` are called by no one in `monoagens/` — a contract that is unused but binding.
 3. **Names that lie.** `send_reaction` sends a **sticker** (`whatsapp/gateway.py:348-356` reads `reaction_stickers`), not a reaction to a message.
 4. **A seam that does not exist yet.** ADR-0007 §4.5 requires `participants(thread_id)` as the source of truth for membership; that method is not in the contract, so its implementation will be born as a wild attribute per gateway.
 
@@ -100,7 +100,7 @@ There is no new configuration key in this ADR. Gateway capabilities are properti
 - [ ] Gateway without `Directory`: cross-room is rejected, not guessed.
 - [ ] `participants()` returns `None` → reject; returns a set → permission follows the set.
 - [ ] A gateway that does not meet the Core fails at boot, with the missing method name in the error message.
-- [ ] No reference to `send_reaction`, `list_targets`, or `data_paths` remains in `eidesoul/engine/` or `eidesoul/gateways/`.
+- [ ] No reference to `send_reaction`, `list_targets`, or `data_paths` remains in `monoagens/engine/` or `monoagens/gateways/`.
 - [ ] WhatsApp implements `Rich` + `Directory`; the CLI implements Core (and `Rich` as far as possible), with no empty stubs for what is unused.
 
 ## 8. Risks and mitigations
@@ -122,12 +122,12 @@ There is no new configuration key in this ADR. Gateway capabilities are properti
 
 ## 10. Code references
 
-- `eidesoul/engine/inbound.py:31-72` — the 16-method Protocol (before it is split).
-- `eidesoul/engine/agent.py:311,335,354` — calls to `send_text`, `send_file`, `send_reaction`.
-- `eidesoul/engine/agent.py:763,977` — `prompt_hints` in the payload.
-- `eidesoul/gateways/cli/gateway.py:88-140` — the sixteen-method stub (evidence of the fat contract's cost).
-- `eidesoul/gateways/whatsapp/gateway.py:348-356` — `send_reaction` that sends the sticker.
-- `eidesoul/engine/access/permissions.py:48` — `command_allowed` (command gate, unchanged).
+- `monoagens/engine/inbound.py:31-72` — the 16-method Protocol (before it is split).
+- `monoagens/engine/agent.py:311,335,354` — calls to `send_text`, `send_file`, `send_reaction`.
+- `monoagens/engine/agent.py:763,977` — `prompt_hints` in the payload.
+- `monoagens/gateways/cli/gateway.py:88-140` — the sixteen-method stub (evidence of the fat contract's cost).
+- `monoagens/gateways/whatsapp/gateway.py:348-356` — `send_reaction` that sends the sticker.
+- `monoagens/engine/access/permissions.py:48` — `command_allowed` (command gate, unchanged).
 
 ---
 

@@ -15,7 +15,7 @@
 
 | Fact | Evidence |
 |---|---|
-| Tools today: `read`, `write`, `shell`, `sandbox`, `web_search`, `chat_history`, `memory`, `google`, `mcp`, `settings`, `recipe`, `skill` | `eidesoul/engine/tools/` |
+| Tools today: `read`, `write`, `shell`, `sandbox`, `web_search`, `chat_history`, `memory`, `google`, `mcp`, `settings`, `recipe`, `skill` | `monoagens/engine/tools/` |
 | No file-content search and no URL reading | there is no `grep.py`/`fetch.py` |
 | `read` takes `start`/`limit` (default **400 lines**) | `tools/read.py:13-18` |
 | `member` does not hold `shell` | `roles.yaml:8-14` |
@@ -174,13 +174,13 @@ Another per-tool cap (§4.1) is a code default, not a mandatory key.
 
 ## 10. Code references
 
-- `eidesoul/engine/tools/__init__.py:17-19` — global `MAX_OUTPUT`/`MAX_ERROR`/`TRUNCATED` (replaced by per-tool caps).
-- `eidesoul/engine/tools/__init__.py:120-141` — `workspace_roots` and `resolve_path` (root + symlink rejection).
-- `eidesoul/engine/tools/__init__.py:180-200` — `execute`: the one permission gate, where the cap is installed.
-- `eidesoul/engine/tools/read.py:10-30` — `start`/`limit` and the `line: text` format (the `grep` output pattern).
-- `eidesoul/engine/tools/web_search.py:22-61` — the search result shape and the use of the stdlib `urllib`.
-- `eidesoul/engine/guard/patterns.py:12,14` — `SENSITIVE`/`INJECTION` for flagging `fetch` content.
-- `eidesoul/engine/config.py:112-115` — `WebSearchConfig` (where the `fetch` key is added).
+- `monoagens/engine/tools/__init__.py:17-19` — global `MAX_OUTPUT`/`MAX_ERROR`/`TRUNCATED` (replaced by per-tool caps).
+- `monoagens/engine/tools/__init__.py:120-141` — `workspace_roots` and `resolve_path` (root + symlink rejection).
+- `monoagens/engine/tools/__init__.py:180-200` — `execute`: the one permission gate, where the cap is installed.
+- `monoagens/engine/tools/read.py:10-30` — `start`/`limit` and the `line: text` format (the `grep` output pattern).
+- `monoagens/engine/tools/web_search.py:22-61` — the search result shape and the use of the stdlib `urllib`.
+- `monoagens/engine/guard/patterns.py:12,14` — `SENSITIVE`/`INJECTION` for flagging `fetch` content.
+- `monoagens/engine/config.py:112-115` — `WebSearchConfig` (where the `fetch` key is added).
 - `roles.yaml:8-14` — the `member` tool list (adding `grep`, `fetch`).
 
 ---

@@ -6,7 +6,7 @@
 - **Context:** follows ADR-0008 (rules), ADR-0025 (turn cost), ADR-0033 (neutral core), ADR-0034 (prompt parts), ADR-0038 (privacy), ADR-0041 (voice configuration), ADR-0043 (research contract), and ADR-0044 (provider wire adapters); removes the runtime character catalogue, the `soul.style` selector, the gender distinction, and the character level table, and moves voice tuning to `soul.voice`.
 - **Supersedes:** ADR-0041 (configuration location and the `soul.style` premise only; its master/off-by-default semantics remain)
 - **Related:** ADR-0008 (memory integrity), ADR-0025 (turn cost), ADR-0033 (neutral core), ADR-0034 (prompt parts), ADR-0038 (privacy), ADR-0041 (voice configuration), ADR-0043 (research contract), ADR-0044 (provider wire adapters)
-- **Implementation:** draft — the decisions are recorded; the pack removal, the prompt change, the mode sampling, and the tests are not implemented in this ADR.
+- **Implementation:** implemented — packs, resolver, gender, and level table are removed; `soul.voice` carries the tuning and the tests cover it.
 - **Location note:** the change binds the engine turn, so this ADR sits under `adr/engine/`. The Indonesian copy is `docs/v0.1.0/adr/engine/id/0045-character-without-local-packs.md`.
 
 ---
@@ -108,7 +108,7 @@ depend on them are replaced.
 
 - `patterns`, `facts`, `registers`, `max_patterns`, and `max_facts` leave `soul.yaml`;
 - `SoulStyle`, `style_block()`, and `_style()` leave `soul.py`;
-- `eidesoul library resolve` and `admin/library.py` are retired;
+- `monoagens library resolve` and `admin/library.py` are retired;
 - `init` stops writing a `style:` block and stops running the resolver;
 - the `style:` block is not kept as an empty compatibility surface.
 
@@ -381,23 +381,23 @@ still gated by the adapter capability from ADR-0044.
 
 ## 7. Acceptance criteria
 
-- [ ] No runtime path reads `library/patterns` or `library/facts`.
-- [ ] `select_patterns()` and `select_facts()` no longer exist.
-- [ ] `soul.style` and `eidesoul library resolve` no longer exist.
-- [ ] The character prompt has no room-pattern or known-facts block.
-- [ ] The character path has no gender field, gender prompt line, or gender target.
-- [ ] The character path has no toxicity/adult table, severity pack, level scan, or level rewrite.
-- [ ] `soul.voice.profanity` and `soul.voice.safety` are configurable per soul.
-- [ ] `engine.affect`, `engine.style`, `engine.character`, and `engine.humanize` no longer exist.
-- [ ] `soul.voice` has sampling, affect, style, character, and humanize sub-sections.
-- [ ] No daily or professional temperature remains in `engine.llm`.
-- [ ] `voice.safety` is the only safety selector and `off` fails when unsupported.
-- [ ] A missing `voice` block resolves to `profanity: avoid` and `safety: inherit`.
-- [ ] `character.py` still polishes a robotic draft and preserves facts and tool results.
-- [ ] Daily and professional temperatures are operator-configurable.
-- [ ] Professional mode remains task-selected, not the default for ordinary chat.
-- [ ] `affect`, `humanize`, privacy levels, and the tool guard still work.
-- [ ] No external character library or new runtime dependency is added.
+- [x] No runtime path reads `library/patterns` or `library/facts`.
+- [x] `select_patterns()` and `select_facts()` no longer exist.
+- [x] `soul.style` and `monoagens library resolve` no longer exist.
+- [x] The character prompt has no room-pattern or known-facts block.
+- [x] The character path has no gender field, gender prompt line, or gender target.
+- [x] The character path has no toxicity/adult table, severity pack, level scan, or level rewrite.
+- [x] `soul.voice.profanity` and `soul.voice.safety` are configurable per soul.
+- [x] `engine.affect`, `engine.style`, `engine.character`, and `engine.humanize` no longer exist.
+- [x] `soul.voice` has sampling, affect, style, character, and humanize sub-sections.
+- [x] No daily or professional temperature remains in `engine.llm`.
+- [x] `voice.safety` is the only safety selector and `off` fails when unsupported.
+- [x] A missing `voice` block resolves to `profanity: avoid` and `safety: inherit`.
+- [x] `character.py` still polishes a robotic draft and preserves facts and tool results.
+- [x] Daily and professional temperatures are operator-configurable.
+- [x] Professional mode remains task-selected, not the default for ordinary chat.
+- [x] `affect`, `humanize`, privacy levels, and the tool guard still work.
+- [x] No external character library or new runtime dependency is added.
 
 ## 8. Risks and mitigations
 
@@ -435,30 +435,30 @@ still gated by the adapter capability from ADR-0044.
 
 ## 10. Code references
 
-- `eidesoul/engine/character/patterns.py:1-27` — the local pattern catalogue and its selection helpers.
-- `eidesoul/engine/character/knowledge.py:1-30` — the local fact catalogue.
-- `eidesoul/engine/character/character.py:190-268` — `severity()`, `effective_limits()`, and `over_level()`.
-- `eidesoul/engine/character/character.py:310-360` — `regulate()` and its rewrite path.
-- `eidesoul/engine/character/lexicon.py:23-47` — lexicon keys, including `level_words` and prompt examples.
-- `eidesoul/engine/soul.py:49-55` — `SoulStyle`.
-- `eidesoul/engine/soul.py:95-109` — `style_block()`.
-- `eidesoul/engine/soul.py:255-285` — soul loading and `style` assignment.
-- `eidesoul/engine/turn/loop.py:16-17` — imports of `select_facts` and `select_patterns`.
-- `eidesoul/engine/turn/loop.py:393-414` — per-turn pattern and fact selection.
-- `eidesoul/engine/turn/loop.py:534-579` — daily polish and level regulation.
-- `eidesoul/engine/turn/prompts.py:171-214` — `character_block()` and the level text.
-- `eidesoul/engine/turn/prompts.py:442-449` — the character prompt part.
-- `eidesoul/engine/turn/decision.py:25-26` — the daily/professional decision contract.
-- `eidesoul/engine/turn/decision.py:392-397` — the identity prompt with the gender line.
-- `eidesoul/engine/config.py:582-614` — `AffectConfig`, `StyleConfig`, `CharacterConfig`, and
+- `monoagens/engine/character/patterns.py:1-27` — the local pattern catalogue and its selection helpers.
+- `monoagens/engine/character/knowledge.py:1-30` — the local fact catalogue.
+- `monoagens/engine/character/character.py:190-268` — `severity()`, `effective_limits()`, and `over_level()`.
+- `monoagens/engine/character/character.py:310-360` — `regulate()` and its rewrite path.
+- `monoagens/engine/character/lexicon.py:23-47` — lexicon keys, including `level_words` and prompt examples.
+- `monoagens/engine/soul.py:49-55` — `SoulStyle`.
+- `monoagens/engine/soul.py:95-109` — `style_block()`.
+- `monoagens/engine/soul.py:255-285` — soul loading and `style` assignment.
+- `monoagens/engine/turn/loop.py:16-17` — imports of `select_facts` and `select_patterns`.
+- `monoagens/engine/turn/loop.py:393-414` — per-turn pattern and fact selection.
+- `monoagens/engine/turn/loop.py:534-579` — daily polish and level regulation.
+- `monoagens/engine/turn/prompts.py:171-214` — `character_block()` and the level text.
+- `monoagens/engine/turn/prompts.py:442-449` — the character prompt part.
+- `monoagens/engine/turn/decision.py:25-26` — the daily/professional decision contract.
+- `monoagens/engine/turn/decision.py:392-397` — the identity prompt with the gender line.
+- `monoagens/engine/config.py:582-614` — `AffectConfig`, `StyleConfig`, `CharacterConfig`, and
   `HumanizeConfig`.
-- `eidesoul/engine/config.py:1724-1732` — character config parsing.
-- `eidesoul/engine/soul.py:58-72` — `Soul` fields that will carry `voice`.
-- `eidesoul/engine/soul.py:255-285` — soul loading and the future `voice` assignment.
-- `eidesoul/admin/library.py:1-27` — the pack resolver.
-- `eidesoul/admin/templates.py:389` — the generated soul style block.
-- `eidesoul/__main__.py:102-111` — `AffectStore`, `StyleStore`, and `VibeRunner` construction.
-- `eidesoul/__main__.py:600` — the `library resolve` call.
+- `monoagens/engine/config.py:1724-1732` — character config parsing.
+- `monoagens/engine/soul.py:58-72` — `Soul` fields that will carry `voice`.
+- `monoagens/engine/soul.py:255-285` — soul loading and the future `voice` assignment.
+- `monoagens/admin/library.py:1-27` — the pack resolver.
+- `monoagens/admin/templates.py:389` — the generated soul style block.
+- `monoagens/__main__.py:102-111` — `AffectStore`, `StyleStore`, and `VibeRunner` construction.
+- `monoagens/__main__.py:600` — the `library resolve` call.
 - `tests/test_library.py` — pack-selection coverage.
 - `tests/test_resolver.py` — resolver coverage.
 - `tests/test_character.py` — polish and regulate coverage.

@@ -1,4 +1,4 @@
-> Terjemahan turunan — jangan sunting; sumber: 0009-adr-home.md (sha256: fbca2fee5a8b)
+> Terjemahan turunan — jangan sunting; sumber: 0009-adr-home.md (sha256: df5cc3c430a7)
 > Teks ini ditulis manusia; baris yang tidak bisa diterjemahkan mesin disalin apa adanya ke sumber English, jadi sumber bercampur dua bahasa.
 
 # ADR-0009: Rumah ADR, Folder Dokumen Berversi & Penjaganya
@@ -28,7 +28,7 @@ Larangan itu masuk akal (mencegah dokumen liar yang basi), tetapi justru **keput
 artefak termahal kalau hilang — yang tertahan di luarnya.
 
 **Bahasa pun belum punya izin.** `AGENTS.md:7-12` menjadikan English sebagai default dan membatasi
-permukaan non-English pada katalog `eidesoul/lang/`, `soul.yaml`, `eidesoul/library/**`, dan
+permukaan non-English pada katalog `monoagens/lang/`, `soul.yaml`, `monoagens/library/**`, dan
 `README.id.md`. Prosa ADR hari ini Indonesia; tanpa perubahan aturan, memindahkannya ke repo berarti
 melanggar aturan sendiri secara diam-diam.
 
@@ -50,8 +50,8 @@ memori — dua peran dalam satu berkas.
 | Fakta | Bukti | Akibat |
 |---|---|---|
 | `docs/` belum ada | `ls` root repo | Membuat direktori baru di root |
-| Docs tidak ikut distribusi | `pyproject.toml:47-48` — `include = ["eidesoul*"]` | Nol dampak ke wheel/Docker |
-| Docs tidak dipindai analisis | `sonar-project.properties:5` — `sonar.sources=eidesoul,scripts` | Tidak perlu exclusion baru |
+| Docs tidak ikut distribusi | `pyproject.toml:47-48` — `include = ["monoagens*"]` | Nol dampak ke wheel/Docker |
+| Docs tidak dipindai analisis | `sonar-project.properties:5` — `sonar.sources=monoagens,scripts` | Tidak perlu exclusion baru |
 | Pola penjaga sudah ada | `README.md:254-258` dan `scripts/{patterns,fakta,affect}.py --check` | Skrip penjaga ADR mengikuti konvensi yang sudah terbukti |
 | Versi paket masih pra-rilis | `pyproject.toml` `version = 0.0.0.dev0`, `AGENTS.md` §Shape | Nama folder versi harus jujur: penanda **target**, bukan klaim rilis |
 
@@ -74,7 +74,7 @@ memori — dua peran dalam satu berkas.
 | Opsi | Bentuk | Kelebihan | Kekurangan | Status |
 |---|---|---|---|---|
 | **A. Status quo** | ADR tetap di luar repo | Nol perubahan | Tidak ikut riwayat; hilang bersama folder pribadi; tidak bisa ditaut | Ditolak |
-| **B. `adr/` di root** | Direktori ADR sejajar `eidesoul/`, `tests/`, `deploy/` | Paling terlihat | Root sudah berisi 21 entri dan bercampur kode; tidak ada tempat untuk dokumen rilis | Ditolak |
+| **B. `adr/` di root** | Direktori ADR sejajar `monoagens/`, `tests/`, `deploy/` | Paling terlihat | Root sudah berisi 21 entri dan bercampur kode; tidak ada tempat untuk dokumen rilis | Ditolak |
 | **C. `docs/adr/` versionless + `docs/v0.1.0/` untuk naratif** | Dua rumah dokumen | Keputusan tidak pernah perlu dipindah | Dua tempat dokumen untuk satu rilis; pemilik memilih satu folder versi sebagai rumah dokumen | Ditolak |
 | **D. `docs/<versi>/` sebagai rumah dokumen + `adr/` di dalamnya** | Satu folder per siklus rilis; `docs/v0.1.0/README.md` jadi indeks; satu set ADR hidup dipindah dengan `git mv` saat siklus baru | Satu rumah untuk satu rilis; riwayat utuh; nol dampak distribusi | Perlu aturan pemindahan yang tegas supaya tidak ada dua set | **Dipilih** |
 | **E. Wiki / GitHub Discussions** | Keluar dari berkas | Enak dibaca | Butuh jaringan, tidak bisa di-`grep` offline, tidak ikut review perubahan | Ditolak |
@@ -321,11 +321,11 @@ Tabel ini sumbernya, dan istilah kanonik baru masuk di commit yang sama saat ia 
 | `voice layer` | emosi, humanize, dan karakter: aktif secara default, ditanyakan sekali saat `init` dengan jawaban default tetap nyala, masing-masing bisa dimatikan; bukan kategori kapabilitas | 0027 | `persona layer` (prosa), `tone layer` (prosa) |
 | `operator action` | install/enable/disable/remove yang dimulai manusia, tercatat di `config_changes` dan ledger | 0027 | `manual step` (prosa) |
 | `test store` | suite jalan di store yang dikirim (Postgres+pgvector); SQLite bukan store | 0029 | `in-memory store` (prosa), `sqlite` (prosa) |
-| `EIDESOL_TEST_DATABASE_URL` | DSN database tes sekali pakai; kosong berarti suite gagal dengan instruksi | 0029 | `TEST_DB` (prosa), `DATABASE_URL_TEST` (prosa) |
+| `MONOAGENS_TEST_DATABASE_URL` | DSN database tes sekali pakai; kosong berarti suite gagal dengan instruksi | 0029 | `TEST_DB` (prosa), `DATABASE_URL_TEST` (prosa) |
 | `truncate per test` | aturan isolasi: satu DDL per sesi, `TRUNCATE ... RESTART IDENTITY CASCADE` per tes | 0029 | `rollback` (prosa, sebagai aturan isolasi), `recreate schema` (prosa) |
 | `stub embedder` | embedder deterministik 384 dimensi yang dipakai hanya di dalam tes | 0029 | `fake model` (prosa), `dummy encoder` (prosa) |
 | `install.sh` | installer on-machine tunggal di akar repo: preflight, `uv` yang dipin, `uv sync --locked`, lalu menyerahkan ke `init` | 0030 | `bootstrap.sh` (prosa), `setup.sh` (prosa) |
-| `interactive init` | `eidesoul init` bertanya di TTY dan gagal tertutup di luarnya, menyebut flag yang dibutuhkan | 0030 | `wizard command` (prosa), `setup` (prosa, sebagai perintah terpisah) |
+| `interactive init` | `monoagens init` bertanya di TTY dan gagal tertutup di luarnya, menyebut flag yang dibutuhkan | 0030 | `wizard command` (prosa), `setup` (prosa, sebagai perintah terpisah) |
 | `logo slot` | area banner yang dipesan untuk mark produk, diisi belakangan; tidak pernah jadi kunci config | 0030 | `theme` (prosa), `branding config` (prosa) |
 | `dry run` | `--dry-run` mencetak setiap aksi dan tidak menulis apa pun | 0030 | `simulate` (prosa), `noop mode` (prosa) |
 | `rooms_of(person_id)` | himpunan room tempat penanya menjadi anggota; dasar izin **baca** (kirim punya kelasnya sendiri, §4.5) | 0007 | `user_rooms` |
@@ -444,7 +444,7 @@ Konteks dokumen yang sudah ada tidak berubah: `docs/v0.1.0/README.md` bisa masuk
 - [ ] `scripts/adr.py --check` gagal pada: sinonim terlarang §4.12 di fence YAML/SQL, nama berkas salah, nomor duplikat/hilang, judul bagian tidak berurutan, `Status` tidak sah, tanggal bukan ISO, `Supersedes` tidak timbal balik, rujukan `ADR-XXXX` menggantung, pagar kode ganjil, pagar telanjang di sel tabel, dua direktori `adr/`, hash terjemahan basi.
 - [ ] `scripts/adr.py --new` menghasilkan kerangka dengan sepuluh bagian wajib, dan angka romawi/nomor bernomor benar tanpa menebak isi.
 - [ ] Turunan English ditandai jelas sebagai turunan beserta hash sumber; berkas tanpanya tidak dianggap gagal.
-- [ ] `pyproject.toml` tetap `include = ["eidesoul*"]` sehingga `docs/` tidak masuk wheel; `uv sync --locked` dan `pytest -q` tetap hijau.
+- [ ] `pyproject.toml` tetap `include = ["monoagens*"]` sehingga `docs/` tidak masuk wheel; `uv sync --locked` dan `pytest -q` tetap hijau.
 - [ ] Tidak ada `.md` baru di luar `docs/v*/`; `git ls-files '*.md'` tetap bersih dari dokumen liar.
 
 ## 8. Risiko dan mitigasi
@@ -474,10 +474,10 @@ Konteks dokumen yang sudah ada tidak berubah: `docs/v0.1.0/README.md` bisa masuk
 
 - `AGENTS.md:7-12` — aturan bahasa (permukaan non-English yang diizinkan; tempat amandemen §4.9).
 - `AGENTS.md:17-18` — daftar dokumen tracked (tempat amandemen §4.9).
-- `pyproject.toml:42-51` — build backend setuptools, `include = ["eidesoul*"]`, package-data
+- `pyproject.toml:42-51` — build backend setuptools, `include = ["monoagens*"]`, package-data
   (bukti `docs/` tidak ikut distribusi).
 - `pyproject.toml` `version = 0.0.0.dev0` — versi pra-rilis sesuai `AGENTS.md` §Shape.
-- `sonar-project.properties:5` — `sonar.sources=eidesoul,scripts` (bukti tanpa exclusion baru).
+- `sonar-project.properties:5` — `sonar.sources=monoagens,scripts` (bukti tanpa exclusion baru).
 - `README.md:254-258` — dokumentasi `scripts/patterns.py`/`fakta.py --check` (preseden penjaga).
 - `scripts/affect.py`, `scripts/patterns.py`, `scripts/fakta.py` — pola “data + skrip penjaga”.
 - `tests/` — rumah uji yang memanggil `scripts/adr.py --check`.

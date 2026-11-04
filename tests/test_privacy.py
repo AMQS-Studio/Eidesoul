@@ -8,16 +8,16 @@ from types import SimpleNamespace
 
 from support import FakeLLM, FakeMem0, build_config, database, inbound_message, make_agent
 
-from eidesoul.engine.access.roles import Role
-from eidesoul.engine.config import DatabaseConfig, PrivacyConfig
-from eidesoul.engine.jobs.cognition import CognitionWorker
-from eidesoul.engine.memory import MemoryHit
-from eidesoul.engine.memory.assess import assess_budget
-from eidesoul.engine.memory.mem0 import Mem0Backend
-from eidesoul.engine.memory.privacy import PrivacyPolicy
-from eidesoul.engine.memory.store import MemoryStore
-from eidesoul.engine.stores.history import HistoryStore
-from eidesoul.engine.turn.context import Message
+from monoagens.engine.access.roles import Role
+from monoagens.engine.config import DatabaseConfig, PrivacyConfig
+from monoagens.engine.jobs.cognition import CognitionWorker
+from monoagens.engine.memory import MemoryHit
+from monoagens.engine.memory.assess import assess_budget
+from monoagens.engine.memory.mem0 import Mem0Backend
+from monoagens.engine.memory.privacy import PrivacyPolicy
+from monoagens.engine.memory.store import MemoryStore
+from monoagens.engine.stores.history import HistoryStore
+from monoagens.engine.turn.context import Message
 
 
 def policy() -> PrivacyPolicy:
@@ -420,7 +420,7 @@ def test_unclear_answer_keeps_pending(tmp_path) -> None:
 
 
 def test_memory_tool_requires_admin_for_global_and_subject_for_veto(tmp_path) -> None:
-    from eidesoul.engine.tools.memory import _memory
+    from monoagens.engine.tools.memory import _memory
 
     env = make_agent(tmp_path)
     member = env.config.roles.default_role()
@@ -470,7 +470,7 @@ def test_agent_turn_asks_then_sends_after_confirmation(tmp_path) -> None:
         confirmed=True,
     )
     group = inbound_message(
-        "halo eidesoul", thread="111@g.us", dm=False, mention=True
+        "halo monoagens", thread="111@g.us", dm=False, mention=True
     )
 
     asyncio.run(env.agent.handle(group, env.gateway))
@@ -492,7 +492,9 @@ def test_agent_turn_asks_then_sends_after_confirmation(tmp_path) -> None:
 def test_vetoed_memory_is_excluded_from_context(tmp_path) -> None:
     config = build_config(
         tmp_path,
-        database_config=DatabaseConfig(url="postgresql+psycopg://u:p@db:5432/eidesoul", url_env=""),
+        database_config=DatabaseConfig(
+            url="postgresql+psycopg://u:p@db:5432/monoagens", url_env=""
+        ),
     )
     memory = Mem0Backend(config=config, db=None)
     memory._memory = FakeMem0()

@@ -6,7 +6,7 @@
 - **Context:** follows ADR-0027 (distribution), ADR-0030 (install and init), ADR-0031 (engine structure), ADR-0033 (neutral core), ADR-0039 (setup terminal), ADR-0041 (voice configuration), and ADR-0045 (voice tuning in `soul.yaml`); replaces the manual `config import` step for normal file edits.
 - **Supersedes:** —
 - **Related:** ADR-0027 (distribution), ADR-0030 (install and init), ADR-0031 (module structure), ADR-0033 (neutral core), ADR-0039 (setup terminal), ADR-0041 (voice configuration), ADR-0045 (voice tuning in `soul.yaml`)
-- **Implementation:** draft — the decision is recorded; the hash sync and the startup call are not implemented in this ADR.
+- **Implementation:** implemented — hash sync, advisory lock, DB-wins conflicts, and startup calls are live.
 - **Location note:** the document store binds the engine runtime, so this ADR sits under `adr/engine/`. The Indonesian copy is `docs/v0.1.0/adr/engine/id/0042-sync-on-start.md`.
 
 ---
@@ -15,16 +15,16 @@
 
 The database documents are the source of truth; `config.yaml`, `soul.yaml`, and `roles.yaml` are seeds
 plus mirrors. `DocumentStore.seed()` fills missing documents from the files, and an existing document
-is left untouched. A manual edit after that requires `eidesoul config import`; the reverse direction
-requires `eidesoul config export`.
+is left untouched. A manual edit after that requires `monoagens config import`; the reverse direction
+requires `monoagens config export`.
 
 That rule is safe but expensive in daily operation:
 
 | Surface | Current path | Friction |
 | --- | --- | --- |
-| `roles.yaml` | edit the file, then `eidesoul config import` | roles are tuned often; every tuning round needs a CLI step |
-| `soul.yaml` | edit persona or `voice`, then `eidesoul config import` | one CLI step for every character or voice tune |
-| `config.yaml` engine | edit the section, then `eidesoul config import` | one CLI step |
+| `roles.yaml` | edit the file, then `monoagens config import` | roles are tuned often; every tuning round needs a CLI step |
+| `soul.yaml` | edit persona or `voice`, then `monoagens config import` | one CLI step for every character or voice tune |
+| `config.yaml` engine | edit the section, then `monoagens config import` | one CLI step |
 
 `sync_documents: true` does not solve this: it only seeds missing documents. The operator sees the
 file change and expects it to apply; the CLI step is easy to forget, and a forgotten step means the
@@ -105,7 +105,7 @@ workspace, sandbox, and the rest) is not a document change and is read from the 
 
 ### 4.4 What stays explicit
 
-- `eidesoul config import` and `eidesoul config export` remain for a forced direction and for
+- `monoagens config import` and `monoagens config export` remain for a forced direction and for
   recovery.
 - A running process does not watch the files; an edit applies on the next start. A future `/reload`
   can reuse the same pass, but it is not part of this decision.
@@ -148,16 +148,16 @@ The values are hashes only; no file content and no secret is stored in the state
 
 ## 7. Acceptance criteria
 
-- [ ] A changed `roles.yaml` applies on the next start without `eidesoul config import`.
-- [ ] A changed `soul.yaml` — including the `voice` block — imports on the next start.
-- [ ] No resolver, model call, or embedding runs during the sync.
-- [ ] A DB-only change exports the document into the file mirror.
-- [ ] A file-and-DB change resolves in favour of the DB, exports the mirror, and warns.
-- [ ] The first sync with no state resolves in favour of the DB and warns.
-- [ ] A missing file imports from the DB; a missing document imports from the file.
-- [ ] A standby cannot apply the pass while another instance holds the advisory lock.
-- [ ] `sync_documents: false` performs no seed, sync, import, or export.
-- [ ] No watcher or new runtime dependency is added.
+- [x] A changed `roles.yaml` applies on the next start without `monoagens config import`.
+- [x] A changed `soul.yaml` — including the `voice` block — imports on the next start.
+- [x] No resolver, model call, or embedding runs during the sync.
+- [x] A DB-only change exports the document into the file mirror.
+- [x] A file-and-DB change resolves in favour of the DB, exports the mirror, and warns.
+- [x] The first sync with no state resolves in favour of the DB and warns.
+- [x] A missing file imports from the DB; a missing document imports from the file.
+- [x] A standby cannot apply the pass while another instance holds the advisory lock.
+- [x] `sync_documents: false` performs no seed, sync, import, or export.
+- [x] No watcher or new runtime dependency is added.
 
 ## 8. Risks and mitigations
 
@@ -185,15 +185,15 @@ The values are hashes only; no file content and no secret is stored in the state
 
 ## 10. Code references
 
-- `eidesoul/engine/stores/documents.py` — `sync()`, `seed()`, `import_from_files()`,
+- `monoagens/engine/stores/documents.py` — `sync()`, `seed()`, `import_from_files()`,
   `export_to_files()`, and the hash comparison.
-- `eidesoul/engine/config.py` — the `sync_documents` host key.
-- `eidesoul/engine/schema.py` — the `state` table used for the sync hashes.
-- `eidesoul/engine/jobs/lease.py` — the advisory lock used to make one writer.
-- `eidesoul/__main__.py` — the `run`, `console`, and `database seed` call sites.
-- `eidesoul/gateways/whatsapp/cli.py` — the gateway document load.
-- `eidesoul/admin/database.py` — the database seed path.
-- `eidesoul/engine/soul.py` — the soul document, including the future `voice` block.
+- `monoagens/engine/config.py` — the `sync_documents` host key.
+- `monoagens/engine/schema.py` — the `state` table used for the sync hashes.
+- `monoagens/engine/jobs/lease.py` — the advisory lock used to make one writer.
+- `monoagens/__main__.py` — the `run`, `console`, and `database seed` call sites.
+- `monoagens/gateways/whatsapp/cli.py` — the gateway document load.
+- `monoagens/admin/database.py` — the database seed path.
+- `monoagens/engine/soul.py` — the soul document, including the future `voice` block.
 - `tests/` — the four-case table, first sync, missing side, and lock coverage.
 
 ---

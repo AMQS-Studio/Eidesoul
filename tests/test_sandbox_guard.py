@@ -6,9 +6,9 @@ import asyncio
 import pytest
 from support import make_agent, role
 
-from eidesoul.engine.config import DEFAULT_SENSITIVE_COMMANDS, GuardConfig
-from eidesoul.engine.guard import GUARD_SYSTEM, SandboxGuard, screen
-from eidesoul.engine.tools import execute
+from monoagens.engine.config import DEFAULT_SENSITIVE_COMMANDS, GuardConfig
+from monoagens.engine.guard import GUARD_SYSTEM, SandboxGuard, screen
+from monoagens.engine.tools import execute
 
 CHAT = "cli:local"
 SENSITIVE = DEFAULT_SENSITIVE_COMMANDS
@@ -65,7 +65,7 @@ def test_unclassified_command_goes_to_the_classifier() -> None:
     assert len(llm.calls) == 1
     call = llm.calls[0]
     assert call["system"] == GUARD_SYSTEM
-    assert call["session"] == "eidesoul-guard"
+    assert call["session"] == "monoagens-guard"
     assert call["temperature"] == 0
     assert call["max_tokens"] == 120
     assert "python3 script.py" in call["user"]

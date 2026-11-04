@@ -1,4 +1,4 @@
-> Terjemahan turunan — jangan sunting; sumber: 0040-monoagens-naming.md (sha256: e7d0b7b9cae2)
+> Terjemahan turunan — jangan sunting; sumber: 0040-monoagens-naming.md (sha256: 9bd1834af7b3)
 
 # ADR-0040: Penamaan — MonoAgens dan Persistent Agent Harness
 
@@ -8,7 +8,7 @@
 - **Konteks:** mengikuti ADR-0009 (ADR home), ADR-0027 (distribusi), ADR-0031 (struktur engine), ADR-0033 (core netral), dan ADR-0039 (setup terminal); menggantikan nama produk Eidesoul.
 - **Supersedes:** —
 - **Terkait:** ADR-0000 (invariant awal), ADR-0027 (distribusi), ADR-0031 (struktur modul), ADR-0033 (core netral), ADR-0039 (setup terminal)
-- **Implementasi:** draft — keputusan dicatat; rename kode, repository, dan dokumentasi tidak dieksekusi di ADR ini.
+- **Implementasi:** implemented — package, CLI, environment, direktori state, docs, dan URL repository memakai MonoAgens; tidak ada alias.
 - **Catatan lokasi:** penamaan bersifat cross-cutting, jadi ADR ini duduk di root ADR home. Salinan Indonesia di `docs/v0.1.0/adr/id/0040-monoagens-naming.md`.
 
 ---
@@ -79,18 +79,18 @@ Rename adalah cutover bersih. ADR ini mencatat cakupannya; ia tidak mengeksekusi
 
 | Permukaan | Dari | Ke |
 | --- | --- | --- |
-| Paket Python | `eidesoul/` | `monoagens/` |
-| Root import | `eidesoul.*` | `monoagens.*` |
-| Nama distribusi | `eidesoul` | `monoagens` |
-| CLI | `eidesoul` | `monoagens` |
-| Repository | `github.com/inimuqsith/Eidesoul` | `github.com/inimuqsith/MonoAgens` |
-| Direktori state | `.eidesoul/` | `.monoagens/` |
-| Prefix environment | `EIDESOUL_*` | `MONOAGENS_*` |
-| Wordmark | `EIDESOUL` | `MONOAGENS` |
+| Paket Python | `monoagens/` | `monoagens/` |
+| Root import | `monoagens.*` | `monoagens.*` |
+| Nama distribusi | `monoagens` | `monoagens` |
+| CLI | `monoagens` | `monoagens` |
+| Repository | `github.com/inimuqsith/Eidesoul` | `github.com/AMQS-Studio/MonoAgens` |
+| Direktori state | `.monoagens/` | `.monoagens/` |
+| Prefix environment | `MONOAGENS_*` | `MONOAGENS_*` |
+| Wordmark | `MONOAGENS` | `MONOAGENS` |
 | README dan README.id | Eidesoul | MonoAgens |
 | AGENTS, TASK, LOG | Eidesoul | MonoAgens |
-| Referensi kode ADR | `eidesoul/...` | `monoagens/...` |
-| Image dan file Docker | `eidesoul` | `monoagens` |
+| Referensi kode ADR | `monoagens/...` | `monoagens/...` |
+| Image dan file Docker | `monoagens` | `monoagens` |
 | Lockfile | saat ini | dibuat ulang setelah `pyproject.toml` |
 
 Yang **tidak** berubah:
@@ -103,8 +103,8 @@ Yang **tidak** berubah:
 Urutan cutover:
 
 1. `pyproject.toml`: `name`, `[project.scripts]`, `[tool.setuptools.packages.find]`, URL proyek.
-2. `git mv eidesoul monoagens`; tulis ulang import di engine, gateways, admin, providers, tests, scripts, dan `migrations/env.py`.
-3. Path runtime: `.eidesoul/` ke `.monoagens/`, prefix environment, default gateway.
+2. `git mv monoagens monoagens`; tulis ulang import di engine, gateways, admin, providers, tests, scripts, dan `migrations/env.py`.
+3. Path runtime: `.monoagens/` ke `.monoagens/`, prefix environment, default gateway.
 4. Branding: `admin/brand.py`, `admin/logo_art.py`, alt text `assets/logo.png`, dan assertion lockup di `tests/test_init.py`.
 5. Docs: `README.md`, `README.id.md`, `AGENTS.md`, `TASK.md`, `LOG.md`, dan referensi kode ADR.
 6. Rename repository, badge, dan tautan.
@@ -133,7 +133,7 @@ Key `soul.yaml`, dokumen `soul`, dan section `engine` mempertahankan namanya.
 
 | Metrik | Target |
 | --- | ---: |
-| Kemunculan `eidesoul` setelah cutover | 0 di luar prosa ADR historis |
+| Kemunculan `monoagens` setelah cutover | 0 di luar prosa ADR historis |
 | Import rusak di engine, gateways, admin, providers, tests, scripts, migrations | 0 |
 | `pytest -q` | lolos |
 | `ruff check` | lolos |
@@ -147,27 +147,27 @@ Key `soul.yaml`, dokumen `soul`, dan section `engine` mempertahankan namanya.
 
 ## 8. Kriteria penerimaan
 
-- [ ] `monoagens` ter-import dan `pytest -q` lolos.
-- [ ] `monoagens selftest` berjalan di store nyata.
-- [ ] `README.md` dan `README.id.md` memakai MonoAgens, tagline, dan naming note.
-- [ ] `AGENTS.md`, `TASK.md`, dan `LOG.md` memakai MonoAgens.
-- [ ] Referensi kode ADR resolve ke path `monoagens/...`.
-- [ ] Wordmark dan assertion `tests/test_init.py` memakai MONOAGENS.
-- [ ] `uv.lock` dibuat ulang dan `uv sync --locked` lolos.
-- [ ] `grep -R eidesoul` hanya mengembalikan prosa ADR historis.
-- [ ] Repository, badge, dan URL proyek menunjuk MonoAgens.
-- [ ] Tidak ada paket alias, shim, atau CLI ganda.
+- [x] `monoagens` ter-import dan `pytest -q` lolos.
+- [x] `monoagens selftest` berjalan di store nyata.
+- [x] `README.md` dan `README.id.md` memakai MonoAgens, tagline, dan naming note.
+- [x] `AGENTS.md`, `TASK.md`, dan `LOG.md` memakai MonoAgens.
+- [x] Referensi kode ADR resolve ke path `monoagens/...`.
+- [x] Wordmark dan assertion `tests/test_init.py` memakai MONOAGENS.
+- [x] `uv.lock` dibuat ulang dan `uv sync --locked` lolos.
+- [x] `grep -R monoagens` hanya mengembalikan prosa ADR historis.
+- [x] Repository, badge, dan URL proyek menunjuk MonoAgens.
+- [x] Tidak ada paket alias, shim, atau CLI ganda.
 
 ## 9. Risiko dan mitigasi
 
 | Risiko | Mitigasi |
 | --- | --- |
 | Rename parsial merusak import | Satu branch cutover; test dijalankan sebelum repository di-rename |
-| Referensi basi bertahan di docs atau scripts | Gate `grep -R eidesoul` dan check ADR |
+| Referensi basi bertahan di docs atau scripts | Gate `grep -R monoagens` dan check ADR |
 | Nama PyPI atau GitHub sudah terpakai | Verifikasi keduanya sebelum cutover; fallback ke repository ber-scope owner bila perlu |
 | Wordmark ANSI dihasilkan salah | Perbarui `admin/logo_art.py` dengan baris baru dan assert di `tests/test_init.py` |
 | ADR historis menunjuk path lama | Perbarui referensi kode saja; prosa keputusan tidak diubah |
-| State `.eidesoul/` terputus | Dokumentasikan `mv .eidesoul .monoagens` sekali di catatan cutover; tanpa fallback runtime |
+| State `.monoagens/` terputus | Dokumentasikan `mv .monoagens .monoagens` sekali di catatan cutover; tanpa fallback runtime |
 | Pengguna CLI terpasang rusak | Pra-rilis; breaking change diterima dan dicatat di `LOG.md` |
 
 ## 10. Interaksi dengan ADR lain
@@ -181,11 +181,11 @@ Key `soul.yaml`, dokumen `soul`, dan section `engine` mempertahankan namanya.
 ## 11. Referensi kode
 
 - `pyproject.toml` — nama distribusi, scripts, package discovery, dan URL proyek.
-- `eidesoul/__main__.py` — dispatch CLI dan entry point yang di-rename.
-- `eidesoul/config.py` — path host dan direktori state.
-- `eidesoul/admin/brand.py` — wordmark dan tagline.
-- `eidesoul/admin/logo_art.py` — baris half-block yang dihasilkan.
-- `eidesoul/admin/init.py` — default yang menyebut direktori state.
+- `monoagens/__main__.py` — dispatch CLI dan entry point yang di-rename.
+- `monoagens/config.py` — path host dan direktori state.
+- `monoagens/admin/brand.py` — wordmark dan tagline.
+- `monoagens/admin/logo_art.py` — baris half-block yang dihasilkan.
+- `monoagens/admin/init.py` — default yang menyebut direktori state.
 - `migrations/env.py` — import paket di environment Alembic.
 - `tests/` — import dan assertion wordmark.
 - `scripts/` — import dan konstanta path.

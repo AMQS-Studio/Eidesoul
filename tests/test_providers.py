@@ -4,21 +4,21 @@
 import pytest
 import yaml
 
-from eidesoul.admin import templates
-from eidesoul.engine.config import ConfigError, load_config
-from eidesoul.providers import PROVIDERS, resolve
+from monoagens.admin import templates
+from monoagens.engine.config import ConfigError, load_config
+from monoagens.providers import PROVIDERS, resolve
 
-SOUL = "name: Eidesoul\nlanguage: en\nlocale: en-US\ntimezone: UTC\npronouns: aku\n"
+SOUL = "name: MonoAgens\nlanguage: en\nlocale: en-US\ntimezone: UTC\npronouns: aku\n"
 ROLES = {"roles": {"guest": {"name": "guest", "tools": ["read"], "commands": ["help"]}}}
 
 
 def write_folder(tmp_path, llm: dict) -> None:
     body = {
         "database": {
-        "url": "postgresql+psycopg://eidesoul:eidesoul@127.0.0.1:5433/eidesoul_test",
+        "url": "postgresql+psycopg://monoagens:monoagens@127.0.0.1:5433/monoagens_test",
         "url_env": "",
     },
-        "workspace": ".eidesoul/workspace",
+        "workspace": ".monoagens/workspace",
         "roles_file": "roles.yaml",
         "soul_file": "soul.yaml",
         "engine": {"llm": llm, "default_role": "guest"},
@@ -29,12 +29,14 @@ def write_folder(tmp_path, llm: dict) -> None:
     (tmp_path / "soul.yaml").write_text(SOUL, encoding="utf-8")
 
 
-def test_google_defaults_use_the_openai_compatible_endpoint():
+def test_google_defaults_use_the_native_generate_content_wire():
     name, defaults = resolve("google", "", "")
 
     assert name == "google"
-    assert defaults.base_url == "https://generativelanguage.googleapis.com/v1beta/openai/"
+    assert defaults.base_url == "https://generativelanguage.googleapis.com/v1beta"
     assert defaults.api_key_env == "GEMINI_API_KEY"
+    assert defaults.wire == "gemini"
+    assert defaults.safety_supported is True
     assert defaults.session_header == ""
     assert defaults.api_key_optional is False
 

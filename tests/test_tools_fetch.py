@@ -7,8 +7,8 @@ from typing import ClassVar
 import pytest
 from support import build_config, role
 
-from eidesoul.engine.config import FetchConfig
-from eidesoul.engine.tools import ToolContext, execute, fetch
+from monoagens.engine.config import FetchConfig
+from monoagens.engine.tools import ToolContext, execute, fetch
 
 
 def config(tmp_path):

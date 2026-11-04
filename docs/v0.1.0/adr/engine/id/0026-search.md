@@ -1,4 +1,4 @@
-> Terjemahan turunan — jangan sunting; sumber: engine/0026-search.md (sha256: 7b397bad3699)
+> Terjemahan turunan — jangan sunting; sumber: engine/0026-search.md (sha256: 65077121a077)
 > Teks ini ditulis manusia; baris yang tidak bisa diterjemahkan mesin disalin apa adanya ke sumber English, jadi sumber bercampur dua bahasa.
 
 # ADR-0026: Pencarian — Full-Text Pesan, Trigram, dan Scope
@@ -18,11 +18,11 @@
 
 | Fakta | Bukti |
 |---|---|
-| Pencarian pesan memakai `ILIKE` per term atas `text`/`sender_name`, `limit` ≤ 50 | `eidesoul/engine/stores/history.py:318-347` |
-| Command `/cari` memanggil store itu untuk room aktif | `eidesoul/engine/commands/cari.py:25-40` |
-| Tool `chat_history` bisa menelusuri arsip room lain, dengan buffer `cross_reads` | `eidesoul/gateways/whatsapp/tools/chat_history.py` |
-| Index pesan: `(thread_id, ts, id)` dan `(sender_address)` — tidak ada index teks | `eidesoul/engine/schema.py:66-67` |
-| Memori punya jalur sendiri (Mem0 + `memories_readable`), bukan `messages` | `eidesoul/engine/commands/memori.py:69,99`, ADR-0001 |
+| Pencarian pesan memakai `ILIKE` per term atas `text`/`sender_name`, `limit` ≤ 50 | `monoagens/engine/stores/history.py:318-347` |
+| Command `/cari` memanggil store itu untuk room aktif | `monoagens/engine/commands/cari.py:25-40` |
+| Tool `chat_history` bisa menelusuri arsip room lain, dengan buffer `cross_reads` | `monoagens/gateways/whatsapp/tools/chat_history.py` |
+| Index pesan: `(thread_id, ts, id)` dan `(sender_address)` — tidak ada index teks | `monoagens/engine/schema.py:66-67` |
+| Memori punya jalur sendiri (Mem0 + `memories_readable`), bukan `messages` | `monoagens/engine/commands/memori.py:69,99`, ADR-0001 |
 | Scope baca = keanggotaan room + gerbang `visibility` | ADR-0007 §4.5 |
 | `pgvector` sudah jadi preseden extension di baseline | ADR-0001/0016 |
 | Keluaran tool punya cap dan penanda `next` | ADR-0021 |
@@ -130,12 +130,12 @@ engine:
 
 ## 10. Referensi kode
 
-- `eidesoul/engine/stores/history.py:318-347` — `search()` hari ini (`ILIKE`, `limit` ≤ 50); titik ganti query.
-- `eidesoul/engine/commands/cari.py:25-40` — `/cari` (satu-satunya pemakai `history.search` dari command).
-- `eidesoul/gateways/whatsapp/tools/chat_history.py` — `_target`/`_remember_cross`/`_search` (arsip room lain + buffer `cross_reads`).
-- `eidesoul/engine/schema.py:44-67` — tabel `messages` dan index `ix_messages_chat_ts`/`ix_messages_sender`.
-- `eidesoul/engine/commands/memori.py:69,99` — jalur memori (Mem0) yang tidak diubah.
-- `eidesoul/engine/config.py` — blok config baru `engine.search` mengikuti pola `SandboxConfig`/`WebSearchConfig`.
+- `monoagens/engine/stores/history.py:318-347` — `search()` hari ini (`ILIKE`, `limit` ≤ 50); titik ganti query.
+- `monoagens/engine/commands/cari.py:25-40` — `/cari` (satu-satunya pemakai `history.search` dari command).
+- `monoagens/gateways/whatsapp/tools/chat_history.py` — `_target`/`_remember_cross`/`_search` (arsip room lain + buffer `cross_reads`).
+- `monoagens/engine/schema.py:44-67` — tabel `messages` dan index `ix_messages_chat_ts`/`ix_messages_sender`.
+- `monoagens/engine/commands/memori.py:69,99` — jalur memori (Mem0) yang tidak diubah.
+- `monoagens/engine/config.py` — blok config baru `engine.search` mengikuti pola `SandboxConfig`/`WebSearchConfig`.
 
 ---
 

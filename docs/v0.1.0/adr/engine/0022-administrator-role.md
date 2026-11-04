@@ -51,7 +51,7 @@ Moreover, the soul today only sees role + description (`prompts.py:141-147`), so
 
 - `administrator` carries `protected: true` (forced by the loader; the value `false` is rejected when loading).
 - The loader **rejects boot** when: the role `administrator` does not exist; its `users` is empty; its `tools` does not include `"*"`; or its `commands` does not contain `approve`.
-- This role **cannot be removed** and its identifier **cannot be renamed** via the role editor/admin manager; changes go only through `roles.yaml` + `eidesoul config import` (with a backup) or an action by the owner on the host.
+- This role **cannot be removed** and its identifier **cannot be renamed** via the role editor/admin manager; changes go only through `roles.yaml` + `monoagens config import` (with a backup) or an action by the owner on the host.
 - There is no path that creates the role `administrator` from a conversation; any tool/command that writes roles rejects this name except through import.
 
 ### 4.3 Address term (`label`) optional for every role
@@ -66,7 +66,7 @@ Moreover, the soul today only sees role + description (`prompts.py:141-147`), so
 
 ### 4.4 Migration in one go
 
-- `eidesoul config import` runs the migration: document `role:administrator` → `role:administrator` (the document name and the content of `name`), the key `owner:` in `roles.yaml` → `administrator:`, the role list in `approvals.roles` that still mentions `administrator` → `administrator`, and the field `administrator` on automation lines is left alone (it is the job owner, not the role).
+- `monoagens config import` runs the migration: document `role:administrator` → `role:administrator` (the document name and the content of `name`), the key `owner:` in `roles.yaml` → `administrator:`, the role list in `approvals.roles` that still mentions `administrator` → `administrator`, and the field `administrator` on automation lines is left alone (it is the job owner, not the role).
 - A backup is written before the changes; the migration is idempotent and recorded in `config_changes` as `role_rename`.
 - Boot **fails with a message naming the migration command** if `role:administrator` is still present and `role:administrator` is not.
 - If **both exist**, boot fails (no automatic merge): the operator chooses which one is correct, since merging could give permission to the wrong holder.
@@ -76,10 +76,10 @@ Moreover, the soul today only sees role + description (`prompts.py:141-147`), so
 | File | Changes |
 |---|---|
 | `roles.yaml` | key `owner:` → `administrator:` + `label` (optional, every role), `protected: true` |
-| `eidesoul/engine/stores/recipes.py:29` | `DEFAULT_ROLES = ("administrator", "member")` |
-| `eidesoul/admin/templates.py:143,158-159` | default role in the template |
+| `monoagens/engine/stores/recipes.py:29` | `DEFAULT_ROLES = ("administrator", "member")` |
+| `monoagens/admin/templates.py:143,158-159` | default role in the template |
 | role name check on engine | every literal `"owner"` that means the role → `"administrator"` |
-| `eidesoul/engine/turn/prompts.py:141-147` | `roles_block` includes `label` when present (`; panggil dia "..."`) |
+| `monoagens/engine/turn/prompts.py:141-147` | `roles_block` includes `label` when present (`; panggil dia "..."`) |
 | `ADR-0015` `redact_infra: non_owner` | → value `non_administrator` |
 | `ADR-0019` `status_owner_only` | → `status_administrator_only` |
 | `ADR-0007` role approver | → `(administrator)` |
@@ -124,7 +124,7 @@ roles:
 - [ ] The `label` is empty on any role → the prompt uses the person or role name; no blank label is printed.
 - [ ] Changing the `label` does not change the outcome of any permission check (test: "God" vs. empty, identical permission matrix).
 - [ ] The `label` cannot be changed from a conversation (tool/command write object), and never appears in log/audit as an identifier.
-- [ ] Grep test: no literal `"owner"` that means the role in `eidesoul/` and `roles.yaml`.
+- [ ] Grep test: no literal `"owner"` that means the role in `monoagens/` and `roles.yaml`.
 - [ ] `owner_id`, `lease_owner`, and `administrator` in automation keep working after the migration (round-trip test).
 - [ ] `approvals.roles` entries containing `administrator` are migrated; an unmapped old approval is marked and rejected at `/approve`, not executed.
 
@@ -154,12 +154,12 @@ roles:
 ## 10. Code references
 
 - `roles.yaml:31` — the role key `administrator` (rename target).
-- `eidesoul/engine/stores/recipes.py:29` `DEFAULT_ROLES`.
-- `eidesoul/admin/templates.py:143,158-159`
-- `eidesoul/engine/turn/prompts.py:141-147` `roles_block` (where `label` is used).
-- `eidesoul/engine/access/permissions.py` `normalize`/`allows` (the role name is normalized here).
-- `eidesoul/engine/config.py` the `roles` section (seed/import).
-- `eidesoul/engine/schema.py` `people.name` (fallback address if the label is empty); no change to the role table.
+- `monoagens/engine/stores/recipes.py:29` `DEFAULT_ROLES`.
+- `monoagens/admin/templates.py:143,158-159`
+- `monoagens/engine/turn/prompts.py:141-147` `roles_block` (where `label` is used).
+- `monoagens/engine/access/permissions.py` `normalize`/`allows` (the role name is normalized here).
+- `monoagens/engine/config.py` the `roles` section (seed/import).
+- `monoagens/engine/schema.py` `people.name` (fallback address if the label is empty); no change to the role table.
 - `AGENTS.md` — role rule in the safety section (called `administrator`).
 
 ---

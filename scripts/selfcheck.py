@@ -5,7 +5,7 @@ Run it from the repo root::
     python scripts/selfcheck.py --check
 
 Exit code 0 means every `behavior:<id>` resolves, every topic stays under its limit and leaks no
-runtime fact, and the engine imports no gateway (ADR-0015 §4.8). `eidesoul selftest` calls the
+runtime fact, and the engine imports no gateway (ADR-0015 §4.8). `monoagens selftest` calls the
 same `check()` so a stale manifest fails the shipped smoke test too.
 """
 
@@ -18,9 +18,9 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from eidesoul.admin.init import host_locale, host_timezone
-from eidesoul.engine.access.roles import RoleRegistry
-from eidesoul.engine.config import (
+from monoagens.admin.init import host_locale, host_timezone
+from monoagens.engine.access.roles import RoleRegistry
+from monoagens.engine.config import (
     ApprovalConfig,
     Config,
     DatabaseConfig,
@@ -29,18 +29,18 @@ from eidesoul.engine.config import (
     SandboxConfig,
     SelfKnowledgeConfig,
 )
-from eidesoul.engine.self_knowledge import SelfKnowledge, check
-from eidesoul.engine.soul import Soul
+from monoagens.engine.self_knowledge import SelfKnowledge, check
+from monoagens.engine.soul import Soul
 
-ENGINE = ROOT / "eidesoul" / "engine"
+ENGINE = ROOT / "monoagens" / "engine"
 TOP_LEVEL_CAP = 16
 # ADR-0031 §4.1 caps. The allowlist is the four modules this ADR does not split.
 LINE_CAPS: dict[str, int] = {}
 OVER_CAP_ALLOWED = {
-    "eidesoul/engine/config.py",
-    "eidesoul/engine/stores/affect.py",
-    "eidesoul/engine/jobs/cognition.py",
-    "eidesoul/engine/schema.py",
+    "monoagens/engine/config.py",
+    "monoagens/engine/stores/affect.py",
+    "monoagens/engine/jobs/cognition.py",
+    "monoagens/engine/schema.py",
 }
 MODULE_CAP = 800
 
@@ -78,9 +78,9 @@ def sample_config() -> Config:
             config=ROOT / "config.yaml",
             roles=ROOT / "roles.yaml",
             soul_yaml=ROOT / "soul.yaml",
-            workspace=ROOT / ".eidesoul" / "workspace",
+            workspace=ROOT / ".monoagens" / "workspace",
         ),
-        database=DatabaseConfig(url="postgresql://localhost/eidesoul", url_env=""),
+        database=DatabaseConfig(url="postgresql://localhost/monoagens", url_env=""),
         documents=None,
         llm=LLMConfig(
             provider="custom",
@@ -88,13 +88,13 @@ def sample_config() -> Config:
             model="selfcheck-model",
             api_key_env="SELFCHECK_KEY",
         ),
-        workspace=ROOT / ".eidesoul" / "workspace",
+        workspace=ROOT / ".monoagens" / "workspace",
         approval=ApprovalConfig(),
         roles=RoleRegistry(by_name={}, default="member"),
         default_role="member",
         gateways={},
         soul=Soul(
-            name="Eidesoul",
+            name="MonoAgens",
             language="en",
             locale=host_locale() or "en-US",
             timezone=host_timezone() or "UTC",

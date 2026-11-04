@@ -28,7 +28,7 @@ users. Measured on 2026-11-04:
 | --- | --- |
 | a role hint is trusted from every body | `agent.py:654-662` reads `hints["roles"]`; `inbound.py:13-20` documents it as local console only |
 | the seed administrator has no user | `roles.yaml:5`, `admin/templates.py:306-320`; `require_administrator()` rejects it |
-| init cannot fill the administrator user | `eidesoul init --label` sets `label`, not `users` (`admin/init.py:227-230`) |
+| init cannot fill the administrator user | `monoagens init --label` sets `label`, not `users` (`admin/init.py:227-230`) |
 | the seed is culture-bound and stale | `description: Committee member`; commands `cari`, `memori`, `kirim`; tool `google` (`roles.yaml:31-46`) |
 | `protected` is not restricted to the administrator | `parse_role` accepts `protected: true` on any role (`roles.py:165-174`), while `prompts.py:42` and `status.py:61` treat any protected role as privileged |
 | `users` accepts any string | `parse_role` calls `_str_tuple` and stops (`roles.py:151-183`); a raw address silently matches no `per_...` and falls to `default_role` |
@@ -88,7 +88,7 @@ in policy. It does not exist now.
 
 - It must exist, carry `tools: ["*"]`, allow `approve`, and have at least one `per_...` user.
 - It cannot be deleted or renamed; only `label` and its user list may change, through `roles.yaml`
-  plus `eidesoul config import` (ADR-0022).
+  plus `monoagens config import` (ADR-0022).
 - There is no `admin` alias. A second role with `"*"` is allowed and explicit, but it is not
   protected and does not satisfy the boot gate.
 - `priority` orders matched roles; it does not make one role override another. Grants are additive.
@@ -135,7 +135,7 @@ to the adopted `per_...` ids, not kept as a second form.
 A new subcommand creates the first administrator without hand-editing YAML:
 
 ```text
-eidesoul people add <gateway> <address> --role administrator [--name <display name>]
+monoagens people add <gateway> <address> --role administrator [--name <display name>]
 ```
 
 It performs one transaction: create the `people` row with a fresh `per_...`, insert the
@@ -144,7 +144,7 @@ It performs one transaction: create the `people` row with a fresh `per_...`, ins
 unknown gateway, an unknown role, a role that is not `administrator` for the first user (unless the
 role already has users), and an address already linked to another person.
 
-`eidesoul init` prints this command as the first next step. `eidesoul run` keeps the existing boot
+`monoagens init` prints this command as the first next step. `monoagens run` keeps the existing boot
 gate: with no administrator user it refuses and names the command. It never auto-grants the first
 sender.
 
@@ -242,18 +242,18 @@ The gate:
 
 ## 10. Code references
 
-- `eidesoul/engine/access/roles.py:19,27-38,60-72,84-108,151-183` — the reserved name, the Role
+- `monoagens/engine/access/roles.py:19,27-38,60-72,84-108,151-183` — the reserved name, the Role
   fields, identity lookup, the boot gate, and parsing.
-- `eidesoul/engine/access/identity.py:30-48,107-145` — `per_...` shape and resolution.
-- `eidesoul/engine/agent.py:654-662,851-862` — the role hint branch and the identity hand-in.
-- `eidesoul/engine/inbound.py:13-20,47-53` — the hint list and `HINT_KEYS`.
-- `eidesoul/gateways/cli/config.py:8-21` and `gateways/cli/gateway.py:66-67` — the CLI role option
+- `monoagens/engine/access/identity.py:30-48,107-145` — `per_...` shape and resolution.
+- `monoagens/engine/agent.py:654-662,851-862` — the role hint branch and the identity hand-in.
+- `monoagens/engine/inbound.py:13-20,47-53` — the hint list and `HINT_KEYS`.
+- `monoagens/gateways/cli/config.py:8-21` and `gateways/cli/gateway.py:66-67` — the CLI role option
   and the hint it writes.
-- `eidesoul/engine/turn/prompts.py:42`, `eidesoul/engine/commands/status.py:61` — the privilege
+- `monoagens/engine/turn/prompts.py:42`, `monoagens/engine/commands/status.py:61` — the privilege
   predicate sites.
-- `eidesoul/engine/access/roles.py` import path and `eidesoul/admin/roles.py` — the audited write
+- `monoagens/engine/access/roles.py` import path and `monoagens/admin/roles.py` — the audited write
   path `people add` reuses.
-- `roles.yaml`, `eidesoul/admin/templates.py:306-320`, `eidesoul/admin/init.py:227-230` — the seed
+- `roles.yaml`, `monoagens/admin/templates.py:306-320`, `monoagens/admin/init.py:227-230` — the seed
   and the `--label` behavior.
 - `tests/test_roles.py`, `tests/test_cli_gateway.py`, `tests/test_architecture.py` — the suites this
   decision changes.

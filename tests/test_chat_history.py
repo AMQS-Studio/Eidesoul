@@ -7,9 +7,9 @@ from datetime import datetime
 from support import make_agent, role, specs
 from test_whatsapp_gateway import make_gateway
 
-from eidesoul.engine.tools import execute
-from eidesoul.engine.turn.context import Message
-from eidesoul.gateways.whatsapp import directory
+from monoagens.engine.tools import execute
+from monoagens.engine.turn.context import Message
+from monoagens.gateways.whatsapp import directory
 
 TARGET = "628999999999@s.whatsapp.net"
 

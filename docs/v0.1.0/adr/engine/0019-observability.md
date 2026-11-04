@@ -17,7 +17,7 @@
 |---|---|
 | The log is free text only, with no correlation id | `__main__.py:22` `logging.basicConfig(level=INFO, format="%(asctime)s %(levelname)s %(message)s")` |
 | Tokens are never read | `llm.py:150-200` returns only `content`; there is no `response.usage` |
-| No metrics | no counter/latency in `eidesoul/`; `ablate.replay_metrics` is offline analysis only |
+| No metrics | no counter/latency in `monoagens/`; `ablate.replay_metrics` is offline analysis only |
 | Diagnosis today | read the log and guess; cannot answer "how many tokens this turn" or "how deep the cognition queue" |
 
 This is not tidiness: without measured tokens, the cost decisions in ADR-0014/0015 (budget, `run_budget_seconds`, compaction) run without feedback; without `turn_id`, a single user complaint cannot be traced to a single turn.
@@ -131,12 +131,12 @@ engine:
 
 ## 10. Code references
 
-- `eidesoul/__main__.py:22` — the only logging configuration at this time.
-- `eidesoul/engine/llm.py:150-200` — `run()` returns `content`; the read point for `response.usage`.
-- `eidesoul/engine/agent.py:413` — the start of `handle()` (where `turn_id` is created).
-- `eidesoul/engine/schema.py` — tables `turns`/`cognition_jobs` (source of `turn_id` and `queue_depth`).
-- `eidesoul/engine/commands/status.py` — the extended `status` command.
-- `eidesoul/engine/db.py:24` — `redact_dsn` (used for the `/status` redaction).
+- `monoagens/__main__.py:22` — the only logging configuration at this time.
+- `monoagens/engine/llm.py:150-200` — `run()` returns `content`; the read point for `response.usage`.
+- `monoagens/engine/agent.py:413` — the start of `handle()` (where `turn_id` is created).
+- `monoagens/engine/schema.py` — tables `turns`/`cognition_jobs` (source of `turn_id` and `queue_depth`).
+- `monoagens/engine/commands/status.py` — the extended `status` command.
+- `monoagens/engine/db.py:24` — `redact_dsn` (used for the `/status` redaction).
 
 ---
 

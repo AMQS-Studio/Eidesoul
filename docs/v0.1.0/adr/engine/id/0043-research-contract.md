@@ -1,4 +1,4 @@
-> Terjemahan turunan — jangan sunting; sumber: engine/0043-research-contract.md (sha256: fde9f466c731)
+> Terjemahan turunan — jangan sunting; sumber: engine/0043-research-contract.md (sha256: ca7e0a6d245c)
 
 # ADR-0043: Kontrak Riset — Prior Model, Websearch, dan ResearchCard Ephemeral
 
@@ -8,7 +8,7 @@
 - **Konteks:** mengikuti ADR-0021 (output tool dan `fetch`), ADR-0033 (core netral), ADR-0034 (prompt parts), ADR-0038 (privasi), dan ADR-0041 (konfigurasi voice); menghapus pemakaian runtime fact pack lokal untuk pengetahuan publik dan menetapkan kapan model boleh menjawab dari prior, kapan wajib mencari, dan bagaimana bukti search masuk ke satu turn.
 - **Supersedes:** —
 - **Terkait:** ADR-0001 (sumber kebenaran memori), ADR-0019 (observability), ADR-0021 (output tool), ADR-0027 (clean by default), ADR-0031 (struktur modul), ADR-0033 (core netral), ADR-0034 (prompt parts), ADR-0038 (privasi), ADR-0041 (konfigurasi voice)
-- **Implementasi:** draft — kontrak dicatat; trigger search, pembangun card, verifier, dan test-nya belum diimplementasikan di ADR ini.
+- **Implementasi:** partial — trigger, card, verifier sitasi/freshness, dan abstain sudah live; enrich fetch halaman otomatis dan fixture eval 40 kasus belum.
 - **Catatan lokasi:** kontrak mengikat turn engine dan tool-nya, jadi ADR ini duduk di `adr/engine/`. Salinan Indonesia di `docs/v0.1.0/adr/engine/id/0043-research-contract.md`.
 
 ---
@@ -273,18 +273,18 @@ Eval set adalah fixture test, bukan data library: minimal 40 kasus mencakup fakt
 
 ## 10. Referensi kode
 
-- `eidesoul/engine/turn/prompts.py:218-229` — `research_block()`: instruksi prompt saat ini dan batasnya.
-- `eidesoul/engine/turn/prompts.py:477` — bagian riset sudah menjadi prompt part; card menjadi input volatile-nya.
-- `eidesoul/engine/tools/web_search.py:84-118` — `_web_search` dan schema `query`/`max_results` saat ini; belum ada parameter freshness.
-- `eidesoul/engine/tools/fetch.py:205-240` — `_fetch` mengembalikan teks untrusted dan menandai injection.
-- `eidesoul/engine/tools/fetch.py:244-257` — handler `fetch` dan batas output-nya.
-- `eidesoul/engine/config.py:202-220` — `FetchConfig` dan `WebSearchConfig`; section host yang dipakai ulang ADR ini.
-- `eidesoul/engine/turn/loop.py:410-413` — pemilihan fakta lokal saat ini memberi makan `character_block`.
-- `eidesoul/engine/turn/loop.py:500-519` — turn memanggil model dengan spec tool dan tool context.
-- `eidesoul/engine/tools/__init__.py:335-365` — `execute()` adalah satu-satunya gate tool untuk izin, argumen, dan batas output.
-- `eidesoul/engine/character/knowledge.py:176-200` — `select_facts()` adalah jalur pemilihan fakta lokal yang dihapus dari runtime oleh ADR ini.
+- `monoagens/engine/turn/prompts.py:218-229` — `research_block()`: instruksi prompt saat ini dan batasnya.
+- `monoagens/engine/turn/prompts.py:477` — bagian riset sudah menjadi prompt part; card menjadi input volatile-nya.
+- `monoagens/engine/tools/web_search.py:84-118` — `_web_search` dan schema `query`/`max_results` saat ini; belum ada parameter freshness.
+- `monoagens/engine/tools/fetch.py:205-240` — `_fetch` mengembalikan teks untrusted dan menandai injection.
+- `monoagens/engine/tools/fetch.py:244-257` — handler `fetch` dan batas output-nya.
+- `monoagens/engine/config.py:202-220` — `FetchConfig` dan `WebSearchConfig`; section host yang dipakai ulang ADR ini.
+- `monoagens/engine/turn/loop.py:410-413` — pemilihan fakta lokal saat ini memberi makan `character_block`.
+- `monoagens/engine/turn/loop.py:500-519` — turn memanggil model dengan spec tool dan tool context.
+- `monoagens/engine/tools/__init__.py:335-365` — `execute()` adalah satu-satunya gate tool untuk izin, argumen, dan batas output.
+- `monoagens/engine/character/knowledge.py:176-200` — `select_facts()` adalah jalur pemilihan fakta lokal yang dihapus dari runtime oleh ADR ini.
 - `tests/test_prompts_status.py:216-226` — test yang ada untuk `research_block()`.
-- `usulan` — `eidesoul/engine/turn/research.py`: klasifikasi trigger, pembangunan/rendering card, dan verifier.
+- `usulan` — `monoagens/engine/turn/research.py`: klasifikasi trigger, pembangunan/rendering card, dan verifier.
 - `usulan` — `tests/test_research_contract.py`: fixture kontrak 40 kasus dan gate di §6.
 
 ---

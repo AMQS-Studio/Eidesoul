@@ -1,4 +1,4 @@
-> Terjemahan turunan — jangan sunting; sumber: engine/0032-address-and-command.md (sha256: aad4a118cd23)
+> Terjemahan turunan — jangan sunting; sumber: engine/0032-address-and-command.md (sha256: 8b8f5f823612)
 > Ditulis tangan (bukan mesin), mengikuti sumber English baris demi baris.
 
 # ADR-0032: Satu Alamat, Satu Command — Keluaran Netral terhadap Body, Menolak daripada Menebak
@@ -125,7 +125,7 @@ Tanpa kunci baru. Aturan kelas datang dari role dan `approvals`; rute dari `thre
 | Kiriman lintas body yang melewati persetujuan | 0 (tanpa jalur) | setiap satunya |
 | Body yang terjangkau lewat nama dari body lain | tidak ada | setiap body yang aktif |
 
-Gate: `pytest -q`, `python scripts/adr.py --check`, `python scripts/adr.py --translate-check`, `python scripts/selfcheck.py --check`, tes conformance yang menjalankan skenario yang sama ke setiap body lewat pintu (thread lokal, room lain milik si peminta, room yang bukan miliknya, body tanpa `Directory`, nama ambigu), dan gate grep: `grep -rn "gateway\.send_text(\|gateway\.send_file(" eidesoul/engine` hanya cocok dengan modul pintunya.
+Gate: `pytest -q`, `python scripts/adr.py --check`, `python scripts/adr.py --translate-check`, `python scripts/selfcheck.py --check`, tes conformance yang menjalankan skenario yang sama ke setiap body lewat pintu (thread lokal, room lain milik si peminta, room yang bukan miliknya, body tanpa `Directory`, nama ambigu), dan gate grep: `grep -rn "gateway\.send_text(\|gateway\.send_file(" monoagens/engine` hanya cocok dengan modul pintunya.
 
 ## 7. Acceptance criteria
 
@@ -162,14 +162,14 @@ ADR-0000 memiliki `Percept`, `Action`, dan penempatan `send`/`chat_history`; ADR
 
 ## 11. Referensi kode
 
-- `eidesoul/engine/inbound.py` — `Percept`, `Action`, `GatewayCore`, `Directory`, `refusal`, `directory_refusal`.
-- `eidesoul/engine/agent.py` — `send_text`, `_gateway_for`, `ask_memory`, `ask_dispute`; dua panggilan body langsung.
-- `eidesoul/engine/jobs/automation.py` — `_deliver`, `_gateway`, `_thread_gateway`.
-- `eidesoul/engine/turn/reply.py` — kebijakan teks chat (chunking, rendering).
-- `eidesoul/engine/access/privacy.py`, `eidesoul/engine/access/relay.py` — pemanggil yang menjadi pemanggil pintu.
-- `eidesoul/engine/tools/__init__.py` — `rooms_of`, `cross_refusal`, pintu registry datar.
-- `eidesoul/gateways/whatsapp/tools/chat_history.py`, `.../send_to.py` — tool body yang menjadi sadar-alamat.
-- `eidesoul/engine/stores/history.py` — `_route`, `gateway_of`, `rooms_of`.
+- `monoagens/engine/inbound.py` — `Percept`, `Action`, `GatewayCore`, `Directory`, `refusal`, `directory_refusal`.
+- `monoagens/engine/agent.py` — `send_text`, `_gateway_for`, `ask_memory`, `ask_dispute`; dua panggilan body langsung.
+- `monoagens/engine/jobs/automation.py` — `_deliver`, `_gateway`, `_thread_gateway`.
+- `monoagens/engine/turn/reply.py` — kebijakan teks chat (chunking, rendering).
+- `monoagens/engine/access/privacy.py`, `monoagens/engine/access/relay.py` — pemanggil yang menjadi pemanggil pintu.
+- `monoagens/engine/tools/__init__.py` — `rooms_of`, `cross_refusal`, pintu registry datar.
+- `monoagens/gateways/whatsapp/tools/chat_history.py`, `.../send_to.py` — tool body yang menjadi sadar-alamat.
+- `monoagens/engine/stores/history.py` — `_route`, `gateway_of`, `rooms_of`.
 
 ---
 

@@ -6,11 +6,11 @@ from datetime import datetime, timedelta
 
 from support import FakeLLM, build_config, database
 
-from eidesoul.engine.config import AffectConfig
-from eidesoul.engine.jobs.ambient import Ambient, drift
-from eidesoul.engine.stores.affect import AffectStore
-from eidesoul.engine.stores.history import HistoryStore
-from eidesoul.engine.turn.context import Message
+from monoagens.engine.jobs.ambient import Ambient, drift
+from monoagens.engine.soul import AffectConfig
+from monoagens.engine.stores.affect import AffectStore
+from monoagens.engine.stores.history import HistoryStore
+from monoagens.engine.turn.context import Message
 
 CHAT = "chat"
 
@@ -27,7 +27,7 @@ class DigestLLM(FakeLLM):
 def build(tmp_path, digest: dict):
     db = database()
     config = build_config(tmp_path, affect=AffectConfig(enabled=True))
-    affect = AffectStore(db, config.affect, soul=config.soul.persona)
+    affect = AffectStore(db, config.soul.voice.affect, soul=config.soul.persona)
     history = HistoryStore(db, config.workspace)
     for index in range(3):
         history.add(

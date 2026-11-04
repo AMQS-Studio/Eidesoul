@@ -67,12 +67,12 @@ re-stamp the hash. No machine translator ships with the repo.
 | [0037](adr/engine/0037-module-budgets.md) | Module Budgets — Split Before the Cap, One Reason per Module | engine | implemented |
 | [0038](adr/engine/0038-privacy-layers.md) | Layered Privacy — Evidence Before Level, Deterministic Policy, Advisory Models | engine | partial |
 | [0039](adr/0039-setup-terminal.md) | Init as a First-Class Terminal Interface | root | implemented |
-| [0040](adr/0040-monoagens-naming.md) | Naming — MonoAgens and the Persistent Agent Harness | root | draft |
-| [0041](adr/engine/0041-voice-layer-off-by-default.md) | Voice Layer Configuration — One Section, Off by Default, and a Fully Commented Config | engine | draft |
-| [0042](adr/engine/0042-sync-on-start.md) | Sync on Start — File Changes Apply Without the CLI | engine | draft |
-| [0043](adr/engine/0043-research-contract.md) | Research Contract — Model Prior, Websearch, and the Ephemeral ResearchCard | engine | draft |
-| [0044](adr/engine/0044-provider-wire-adapters.md) | Provider Wire Adapters — Native Gemini First, One Seam | engine | draft |
-| [0045](adr/engine/0045-character-without-local-packs.md) | Character Without Local Packs — Soul, Exemplars, No Gender Gate, No Level Table | engine | draft |
+| [0040](adr/0040-monoagens-naming.md) | Naming — MonoAgens and the Persistent Agent Harness | root | implemented |
+| [0041](adr/engine/0041-voice-layer-off-by-default.md) | Voice Layer Configuration — One Section, Off by Default, and a Fully Commented Config | engine | implemented |
+| [0042](adr/engine/0042-sync-on-start.md) | Sync on Start — File Changes Apply Without the CLI | engine | implemented |
+| [0043](adr/engine/0043-research-contract.md) | Research Contract — Model Prior, Websearch, and the Ephemeral ResearchCard | engine | partial |
+| [0044](adr/engine/0044-provider-wire-adapters.md) | Provider Wire Adapters — Native Gemini First, One Seam | engine | implemented |
+| [0045](adr/engine/0045-character-without-local-packs.md) | Character Without Local Packs — Soul, Exemplars, No Gender Gate, No Level Table | engine | implemented |
 | [0033](adr/0033-neutral-core.md) | Neutral Core, Specialized Edges — No Culture, Transport, or Vendor in Mechanism | root | implemented |
 
 ADRs are grouped by folder: cross-cutting decisions at the `adr/` root, engine decisions under
@@ -85,7 +85,7 @@ Indonesian copies in its own `id/` subfolder.
 
 ```
 python scripts/adr.py --check
-OK: 46/46 ADR lolos check; folder root=10, engine=36, web=0; implemented=36 partial=4 draft=6; sinonim digerbang=119 baris prosa=44
+OK: 46/46 ADR lolos check; folder root=10, engine=36, web=0; implemented=41 partial=5 draft=0; sinonim digerbang=119 baris prosa=44
 
 python scripts/adr.py --translate-check
 TURUNAN 46 berkas, 0 masalah

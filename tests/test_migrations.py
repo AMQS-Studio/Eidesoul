@@ -9,7 +9,7 @@ from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.engine import make_url
 from support import test_dsn as _dsn
 
-from eidesoul.engine.db import SCHEMA_VERSION, Database, MigrationError
+from monoagens.engine.db import SCHEMA_VERSION, Database, MigrationError
 
 
 def _admin_engine(test_url: str):
@@ -22,7 +22,7 @@ def _admin_engine(test_url: str):
 def fresh_database() -> str:
     """A throwaway database for the migration tests; dropped after (ADR-0029 §4.2)."""
     base = _dsn()
-    name = f"eidesoul_migration_{uuid.uuid4().hex[:12]}"
+    name = f"monoagens_migration_{uuid.uuid4().hex[:12]}"
     with _admin_engine(base).connect() as conn:
         conn.execute(text(f'CREATE DATABASE "{name}"'))
     yield make_url(base).set(database=name).render_as_string(hide_password=False)

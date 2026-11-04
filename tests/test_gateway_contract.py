@@ -21,8 +21,8 @@ from support import (
     specs,
 )
 
-from eidesoul.engine.config import ConfigError, GatewaySettings
-from eidesoul.engine.inbound import (
+from monoagens.engine.config import ConfigError, GatewaySettings
+from monoagens.engine.inbound import (
     Directory,
     GatewayCore,
     Rich,
@@ -30,9 +30,9 @@ from eidesoul.engine.inbound import (
     ensure_core,
     refusal,
 )
-from eidesoul.engine.registry import Handler, RegistryError
-from eidesoul.engine.stores.history import HistoryStore
-from eidesoul.engine.turn.context import WorkingMemory
+from monoagens.engine.registry import Handler, RegistryError
+from monoagens.engine.stores.history import HistoryStore
+from monoagens.engine.turn.context import WorkingMemory
 
 
 def handler(name: str) -> Handler:
@@ -52,7 +52,7 @@ def call_tool(env, name: str, args: dict, *, thread: str = "chat"):
     ctx = env.agent.tool_context(
         thread, "628111", (env.config.roles.get("owner"),), env.gateway
     )
-    from eidesoul.engine.tools import execute
+    from monoagens.engine.tools import execute
 
     return asyncio.run(execute(specs(env), name, args, ctx))
 
@@ -132,7 +132,7 @@ def test_with_rich_a_file_is_a_file_and_typing_is_real(tmp_path) -> None:
 
 
 def test_without_directory_a_cross_thread_read_is_refused(tmp_path) -> None:
-    from eidesoul.gateways.whatsapp.tools.chat_history import TOOL as CHAT_HISTORY
+    from monoagens.gateways.whatsapp.tools.chat_history import TOOL as CHAT_HISTORY
 
     gateway = FakeGateway(tools=[CHAT_HISTORY])
     env = make_agent(
@@ -190,7 +190,7 @@ def test_a_body_without_core_fails_at_boot_naming_the_method() -> None:
 def test_build_gateways_logs_capabilities_and_refuses_a_broken_body(
     tmp_path, monkeypatch, caplog
 ) -> None:
-    from eidesoul import gateways as gateway_package
+    from monoagens import gateways as gateway_package
 
     class Buildable(RichDirectoryFakeGateway):
         def __init__(self, config, db, history, windows, *, settings=None):
@@ -263,20 +263,20 @@ def test_capability_report_marks_the_optional_surfaces() -> None:
 def test_the_whatsapp_catalog_owns_the_archive_tool(tmp_path) -> None:
     from test_whatsapp_gateway import make_gateway
 
-    from eidesoul.engine.tools import REGISTRY as CORE
+    from monoagens.engine.tools import REGISTRY as CORE
 
     gateway = make_gateway(tmp_path)
     names = {item.name for item in gateway.tools()}
     assert "chat_history" in names
     assert "chat_history" not in CORE.names()
     root = Path(__file__).resolve().parents[1]
-    assert not (root / "eidesoul" / "engine" / "tools" / "chat_history.py").exists()
-    assert (root / "eidesoul" / "gateways" / "whatsapp" / "tools" / "chat_history.py").is_file()
+    assert not (root / "monoagens" / "engine" / "tools" / "chat_history.py").exists()
+    assert (root / "monoagens" / "gateways" / "whatsapp" / "tools" / "chat_history.py").is_file()
 
 
 def test_core_imports_without_neonize() -> None:
     root = Path(__file__).resolve().parents[1]
-    code = "import sys; sys.modules['neonize']=None; import eidesoul.engine; print('ok')"
+    code = "import sys; sys.modules['neonize']=None; import monoagens.engine; print('ok')"
     result = subprocess.run(
         [sys.executable, "-c", code], cwd=root, capture_output=True, text=True, timeout=60
     )
@@ -291,7 +291,7 @@ def test_core_gateway_meets_only_core() -> None:
 
 
 def test_the_harness_body_completes_a_turn_and_returns_its_actions(tmp_path) -> None:
-    from eidesoul.gateways.harness.gateway import HarnessGateway
+    from monoagens.gateways.harness.gateway import HarnessGateway
 
     config = build_config(tmp_path)
     gateway = HarnessGateway(
@@ -318,8 +318,8 @@ def test_the_harness_body_completes_a_turn_and_returns_its_actions(tmp_path) -> 
 
 
 def test_the_harness_tools_go_through_the_same_tool_door(tmp_path) -> None:
-    from eidesoul.engine.tools import execute
-    from eidesoul.gateways.harness.gateway import HarnessGateway
+    from monoagens.engine.tools import execute
+    from monoagens.gateways.harness.gateway import HarnessGateway
 
     config = build_config(tmp_path)
     gateway = HarnessGateway(

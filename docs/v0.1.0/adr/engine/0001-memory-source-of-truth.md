@@ -180,15 +180,15 @@ index, ADR-0009). The long list is no longer maintained in this section.
 
 ## 15. Code references
 
-- `eidesoul/engine/memory/__init__.py:131-188` — `NullMemory`, `build_memory`.
-- `eidesoul/engine/memory/mem0.py:139-203` — `available`, config, monkey-patched client.
-- `eidesoul/engine/memory/mem0.py:246-290` — `_metadata` and merge order.
-- `eidesoul/engine/memory/mem0.py:496-531` — `set_privacy`, `veto`.
-- `eidesoul/engine/memory/rekey.py:15-62` — `RESERVED`, `_move`.
-- `eidesoul/engine/memory/context.py:127-131` — retrieval filter.
-- `eidesoul/engine/access/privacy.py:222-303` — capture and assess.
-- `eidesoul/engine/agent.py:614,906-921` — gate `can_memory` and spawn capture.
-- `eidesoul/engine/stores/affect.py` — a state-document pattern that can be copied for `memory_events`.
+- `monoagens/engine/memory/__init__.py:131-188` — `NullMemory`, `build_memory`.
+- `monoagens/engine/memory/mem0.py:139-203` — `available`, config, monkey-patched client.
+- `monoagens/engine/memory/mem0.py:246-290` — `_metadata` and merge order.
+- `monoagens/engine/memory/mem0.py:496-531` — `set_privacy`, `veto`.
+- `monoagens/engine/memory/rekey.py:15-62` — `RESERVED`, `_move`.
+- `monoagens/engine/memory/context.py:127-131` — retrieval filter.
+- `monoagens/engine/access/privacy.py:222-303` — capture and assess.
+- `monoagens/engine/agent.py:614,906-921` — gate `can_memory` and spawn capture.
+- `monoagens/engine/stores/affect.py` — a state-document pattern that can be copied for `memory_events`.
 
 ---
 

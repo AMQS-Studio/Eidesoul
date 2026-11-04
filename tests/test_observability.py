@@ -11,13 +11,13 @@ from types import SimpleNamespace
 from sqlalchemy import insert, select
 from support import FakeLLM, build_config, database, inbound_message, make_agent
 
-from eidesoul.engine.access.roles import Role
-from eidesoul.engine.commands.status import latency, percentile
-from eidesoul.engine.llm import LLM
-from eidesoul.engine.memory.store import MemoryStore
-from eidesoul.engine.schema import llm_calls, messages, turns
-from eidesoul.engine.soul import Soul
-from eidesoul.engine.turn import observability
+from monoagens.engine.access.roles import Role
+from monoagens.engine.commands.status import latency, percentile
+from monoagens.engine.llm import LLM
+from monoagens.engine.memory.store import MemoryStore
+from monoagens.engine.schema import llm_calls, messages, turns
+from monoagens.engine.soul import Soul
+from monoagens.engine.turn import observability
 
 
 class Capture(logging.Handler):
@@ -50,7 +50,7 @@ def test_json_lines_have_the_mandatory_fields() -> None:
     handler = captured("json")
     try:
         with observability.bind(turn_id="t-1", thread_id="th-1", gateway="cli"):
-            logging.getLogger("eidesoul.test").info(
+            logging.getLogger("monoagens.test").info(
                 "turn done", extra={"event": "turn.done", "duration_ms": 12}
             )
         lines = handler.records()
@@ -59,7 +59,7 @@ def test_json_lines_have_the_mandatory_fields() -> None:
     found = next(line for line in lines if line["event"] == "turn.done")
     assert found["ts"]
     assert found["level"] == "INFO"
-    assert found["logger"] == "eidesoul.test"
+    assert found["logger"] == "monoagens.test"
     assert found["turn_id"] == "t-1"
     assert found["thread_id"] == "th-1"
     assert found["gateway"] == "cli"
@@ -71,7 +71,7 @@ def test_json_formatter_redacts_credentials() -> None:
     handler = captured("json")
     try:
         with observability.bind(turn_id="t-2"):
-            logging.getLogger("eidesoul.test").warning(
+            logging.getLogger("monoagens.test").warning(
                 "dsn postgresql://user:supersecret@db/x key sk-abcdefghijkl",
                 extra={"event": "db.failed"},
             )

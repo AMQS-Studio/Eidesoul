@@ -1,4 +1,4 @@
-> Terjemahan turunan — jangan sunting; sumber: engine/0041-voice-layer-off-by-default.md (sha256: 30fea6ffee51)
+> Terjemahan turunan — jangan sunting; sumber: engine/0041-voice-layer-off-by-default.md (sha256: f15d51c60232)
 
 # ADR-0041: Konfigurasi Voice Layer — Satu Section, Off secara Default, dan Config yang Berkomentar Penuh
 
@@ -8,7 +8,7 @@
 - **Konteks:** mengikuti ADR-0027 (clean by default), ADR-0031 (struktur engine), ADR-0033 (core netral), ADR-0039 (setup terminal), dan ADR-0040 (penamaan); menggantikan empat section voice top-level dengan satu section `engine.voice` dan membuat `config.yaml` yang dihasilkan mendokumentasikan dirinya.
 - **Supersedes:** —
 - **Terkait:** ADR-0001 (memory source of truth), ADR-0027 (distribusi), ADR-0031 (struktur modul), ADR-0033 (core netral), ADR-0039 (setup terminal), ADR-0040 (penamaan)
-- **Implementasi:** draft — keputusan dicatat; schema, loader, dan template berkomentar belum diimplementasikan di ADR ini.
+- **Implementasi:** implemented — lokasi `soul.voice` per ADR-0045; master, template berkomentar, dan semantik inert-by-default sudah live.
 - **Catatan lokasi:** voice layer mengikat runtime engine, jadi ADR ini duduk di `adr/engine/`. Salinan Indonesia di `docs/v0.1.0/adr/engine/id/0041-voice-layer-off-by-default.md`.
 - **Pembaruan lokasi:** ADR-0045 memindahkan section dari `engine.voice` ke `soul.voice`, menghapus blok pack `soul.style` lama, dan menghapus pemilihan pack dari bagian karakter. Baca setiap jalur `engine.voice` di bawah sebagai `soul.voice`; semantik master/off-by-default tetap berlaku. Opsi E tidak lagi ditolak: tuning voice adalah data per soul.
 
@@ -78,7 +78,7 @@ engine:
 
 Master adalah `engine.voice.enabled`, default `false`. Setiap sub-section mempertahankan `enabled`-nya, default `true`, tetapi nilainya inert selama master `false`. Section top-level lama (`engine.affect`, `engine.humanize`, `engine.character`, `engine.style`) dihapus.
 
-`engine.style` di-rename menjadi `engine.voice.rhythm` agar kata `style` tidak lagi menamai dua hal berbeda. `soul.style` tidak berubah: ia tetap pemilihan pack (`patterns`, `facts`, `registers`, `max_patterns`, `max_facts`) yang diturunkan `eidesoul library resolve` dari teks soul.
+`engine.style` di-rename menjadi `engine.voice.rhythm` agar kata `style` tidak lagi menamai dua hal berbeda. `soul.style` tidak berubah: ia tetap pemilihan pack (`patterns`, `facts`, `registers`, `max_patterns`, `max_facts`) yang diturunkan `monoagens library resolve` dari teks soul.
 
 ### 4.2 State efektif
 
@@ -111,7 +111,7 @@ Nilai eksplisit di `config.yaml` yang ada tidak pernah ditimpa `init`. Master da
 - Setiap key di setiap kedalaman punya komentar: tujuannya, default-nya, dan efek `true` serta `false` bila nilainya sakelar.
 - Tidak ada key yang dibiarkan telanjang; tidak ada section yang dirender sebagai mapping kosong tanpa komentar yang menjelaskan bentuknya.
 - Komentar berbahasa Inggris, seperti permukaan operator lainnya, dan dihasilkan dari satu sumber (`admin/templates.py`), sehingga default tidak dapat melenceng antara komentar dan pohon dataclass.
-- Komentar diabaikan loader dan `eidesoul config import`; file tetap YAML valid.
+- Komentar diabaikan loader dan `monoagens config import`; file tetap YAML valid.
 
 Peta komentar adalah data yang di-key oleh dotted path (`database.pool_size`, `engine.llm.retry.base_seconds`, `sandbox.image`, `gateways.cli.enabled`). Sebuah test menelusuri YAML yang dihasilkan dan memastikan setiap leaf key punya komentar.
 
@@ -167,16 +167,16 @@ Tidak ada key `parts` yang diperkenalkan. Key lama `engine.affect`, `engine.huma
 
 ## 8. Kriteria penerimaan
 
-- [ ] `engine.voice` adalah satu-satunya section voice; empat section top-level lama hilang.
-- [ ] `engine.voice.enabled` default `false`; sub-section inert selama master off.
-- [ ] Tidak ada key `parts` di config, wizard, atau loader.
-- [ ] `engine.style` di-rename `engine.voice.rhythm`; `soul.style` tidak berubah.
-- [ ] `--voice-layer` hanya menerima `off` dan `on`; wizard hanya bertanya master.
-- [ ] `voice.character.enabled: false` mematikan pass polish dan pemilihan pattern/fact.
-- [ ] `voice.humanize.enabled: false` menghasilkan satu pesan tanpa typing atau delay antar-bubble.
-- [ ] `config.yaml` yang dihasilkan punya komentar di setiap key di setiap kedalaman — host, engine, dan gateways.
-- [ ] Tidak ada key telanjang; tidak ada section yang dihasilkan sebagai mapping kosong tanpa komentar penjelas.
-- [ ] `eidesoul config import` dan loader mem-parse file berkomentar.
+- [x] `engine.voice` adalah satu-satunya section voice; empat section top-level lama hilang.
+- [x] `engine.voice.enabled` default `false`; sub-section inert selama master off.
+- [x] Tidak ada key `parts` di config, wizard, atau loader.
+- [x] `engine.style` di-rename `engine.voice.rhythm`; `soul.style` tidak berubah.
+- [x] `--voice-layer` hanya menerima `off` dan `on`; wizard hanya bertanya master.
+- [x] `voice.character.enabled: false` mematikan pass polish dan pemilihan pattern/fact.
+- [x] `voice.humanize.enabled: false` menghasilkan satu pesan tanpa typing atau delay antar-bubble.
+- [x] `config.yaml` yang dihasilkan punya komentar di setiap key di setiap kedalaman — host, engine, dan gateways.
+- [x] Tidak ada key telanjang; tidak ada section yang dihasilkan sebagai mapping kosong tanpa komentar penjelas.
+- [x] `monoagens config import` dan loader mem-parse file berkomentar.
 
 ## 9. Risiko dan mitigasi
 
@@ -202,18 +202,18 @@ Tidak ada key `parts` yang diperkenalkan. Key lama `engine.affect`, `engine.huma
 
 ## 11. Referensi kode
 
-- `eidesoul/admin/templates.py` — template `config.yaml` berkomentar dan peta komentar.
-- `eidesoul/engine/config.py` — `VoiceConfig`, empat sub-config, dan fallback loader.
-- `eidesoul/engine/turn/loop.py` — call site emotion, rhythm, character, dan humanize.
-- `eidesoul/engine/character/character.py` — gate `polish`/`regulate` dan pemilihan pattern/fact.
-- `eidesoul/engine/stores/affect.py` — affect store, dibangun hanya saat `voice.emotion` on.
-- `eidesoul/engine/stores/style.py` — rhythm store, dibangun hanya saat `voice.rhythm` on.
-- `eidesoul/engine/turn/reply.py` — `plan_chunks` dan jalur humanize-off.
-- `eidesoul/engine/turn/delivery.py` — `typing_delay` dan delay antar-bubble.
-- `eidesoul/admin/init.py` — sakelar master, penghapusan `VOICE_PARTS`/`voice_off()`, dan `build()`.
-- `eidesoul/admin/wizard.py` — prompt voice master-only dan default-nya.
-- `eidesoul/__main__.py` — argumen `--voice-layer` dan teks help-nya.
-- `eidesoul/engine/agent.py` — laporan konfigurasi `/status` untuk bagian voice.
+- `monoagens/admin/templates.py` — template `config.yaml` berkomentar dan peta komentar.
+- `monoagens/engine/config.py` — `VoiceConfig`, empat sub-config, dan fallback loader.
+- `monoagens/engine/turn/loop.py` — call site emotion, rhythm, character, dan humanize.
+- `monoagens/engine/character/character.py` — gate `polish`/`regulate` dan pemilihan pattern/fact.
+- `monoagens/engine/stores/affect.py` — affect store, dibangun hanya saat `voice.emotion` on.
+- `monoagens/engine/stores/style.py` — rhythm store, dibangun hanya saat `voice.rhythm` on.
+- `monoagens/engine/turn/reply.py` — `plan_chunks` dan jalur humanize-off.
+- `monoagens/engine/turn/delivery.py` — `typing_delay` dan delay antar-bubble.
+- `monoagens/admin/init.py` — sakelar master, penghapusan `VOICE_PARTS`/`voice_off()`, dan `build()`.
+- `monoagens/admin/wizard.py` — prompt voice master-only dan default-nya.
+- `monoagens/__main__.py` — argumen `--voice-layer` dan teks help-nya.
+- `monoagens/engine/agent.py` — laporan konfigurasi `/status` untuk bagian voice.
 - `README.md`, `README.id.md` — paragraf voice layer.
 - `tests/` — cakupan default-off, master-on, sub-off, template berkomentar, dan satu pesan.
 

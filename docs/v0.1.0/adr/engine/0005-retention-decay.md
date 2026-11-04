@@ -1,7 +1,7 @@
 # ADR-0005: Retention & Decay — hybrid TTL, Renewal On Use, and Auto Pin
 
 - **Status:** accepted
-- **Implementation:** implemented — evidence: `pinned`/`durability`/`category`/`use_*`/`expires_at`/`max_lifetime_at`, renewal per delivered turn, auto-pin, `memory purge` with `--dry-run` and library-copy removal, the MiniLM remember/forget prototypes (`eidesoul/library/intent/`, `eidesoul/engine/memory/intent.py`, `scripts/intent.py --check`), the remember hint in capture, the deterministic "forget that …" path, and the scheduled purge with `memory.retention.purge.{grace_days,batch}` on the daily audit job; gate: `pytest -q` 831 passed, `scripts/adr.py --check`
+- **Implementation:** implemented — evidence: `pinned`/`durability`/`category`/`use_*`/`expires_at`/`max_lifetime_at`, renewal per delivered turn, auto-pin, `memory purge` with `--dry-run` and library-copy removal, the MiniLM remember/forget prototypes (`monoagens/library/intent/`, `monoagens/engine/memory/intent.py`, `scripts/intent.py --check`), the remember hint in capture, the deterministic "forget that …" path, and the scheduled purge with `memory.retention.purge.{grace_days,batch}` on the daily audit job; gate: `pytest -q` 831 passed, `scripts/adr.py --check`
 - **Date:** 2026-11-01
 - **Deciders:** Muqsith (owner), omp (reviewer)
 - **Context:** follows from ADR-0001 (canonical), ADR-0003 (worker & consolidation), ADR-0004 (TTL for non-`ok` states); default-on memory needs an age policy
@@ -121,7 +121,7 @@ Risks **accepted**: important facts that are never mentioned again within their 
 
 ### 4.5 Purge
 
-- A job scheduled nightly; also manual: `eidesoul memory purge [--dry-run]`.
+- A job scheduled nightly; also manual: `monoagens memory purge [--dry-run]`.
 - Selects `expires_at <= now - grace_days` (grace 1 day) and `pinned=false`.
 - Order per batch: remove index → remove canonical → **remove the library copy** (the `history`/`messages` rows
 in `mem0_history.db` for that id/session) → write a tombstone; one transaction per batch.
@@ -253,12 +253,12 @@ memory:
 
 ## 10. Code references
 
-- `eidesoul/engine/memory/mem0.py:496-531` — `set_privacy`, `veto`.
-- `eidesoul/engine/memory/context.py:48-108` — retrieval and render (the “used” touch point).
-- `eidesoul/engine/memory/rekey.py` — an example metadata migration that must honor retention.
-- `eidesoul/engine/access/privacy.py:222-278` — capture and level.
-- `eidesoul/engine/config.py:118-138` — `PrivacyConfig`, `MemoryConfig`.
-- `eidesoul/engine/db.py:112-145` — `upsert` for the batch phase.
+- `monoagens/engine/memory/mem0.py:496-531` — `set_privacy`, `veto`.
+- `monoagens/engine/memory/context.py:48-108` — retrieval and render (the “used” touch point).
+- `monoagens/engine/memory/rekey.py` — an example metadata migration that must honor retention.
+- `monoagens/engine/access/privacy.py:222-278` — capture and level.
+- `monoagens/engine/config.py:118-138` — `PrivacyConfig`, `MemoryConfig`.
+- `monoagens/engine/db.py:112-145` — `upsert` for the batch phase.
 
 ---
 

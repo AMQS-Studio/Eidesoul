@@ -8,8 +8,8 @@ from types import SimpleNamespace
 
 import pytest
 
-from eidesoul.engine.config import ConfigError, SandboxConfig, load_config
-from eidesoul.engine.tools import sandbox
+from monoagens.engine.config import ConfigError, SandboxConfig, load_config
+from monoagens.engine.tools import sandbox
 
 
 class FakeProc:
@@ -37,7 +37,7 @@ def make_ctx(
     workspace = tmp_path / "work"
     (workspace / "public").mkdir(parents=True, exist_ok=True)
     (workspace / "scratch").mkdir(parents=True, exist_ok=True)
-    cfg.setdefault("network", "eidesoul-sandbox")
+    cfg.setdefault("network", "monoagens-sandbox")
     cfg.setdefault("proxy", "http://sandbox-proxy:3128")
     return SimpleNamespace(
         config=SimpleNamespace(workspace=workspace, sandbox=SandboxConfig(**cfg)),
@@ -87,7 +87,7 @@ def test_podman_argv_has_keep_id_and_selinux_suffix(tmp_path: Path, monkeypatch)
         f"{workspace / 'scratch' / 'chat1'}:/work/scratch:Z",
     ]
     assert argv[argv.index("-w") + 1] == "/work/scratch"
-    assert argv[argv.index("--network") + 1] == "eidesoul-sandbox"
+    assert argv[argv.index("--network") + 1] == "monoagens-sandbox"
     assert argv[argv.index("--cap-drop") + 1] == "ALL"
     assert argv[argv.index("--security-opt") + 1] == "no-new-privileges"
     assert argv[argv.index("--pids-limit") + 1] == "256"
@@ -164,7 +164,7 @@ def test_docker_argv_drops_podman_flags_and_uses_host_workspace(
     assert argv[argv.index("--user") + 1] == f"{os.getuid()}:{os.getgid()}"
     assert not mount.endswith(":Z")
     assert mount == f"{host_ws}:/work"
-    assert argv[argv.index("--network") + 1] == "eidesoul-sandbox"
+    assert argv[argv.index("--network") + 1] == "monoagens-sandbox"
     pairs = [argv[index + 1] for index, item in enumerate(argv) if item == "--env"]
     assert "NO_PROXY=localhost" in pairs
 
@@ -266,23 +266,23 @@ def test_container_env_does_not_inherit_secrets(tmp_path: Path, monkeypatch) -> 
 
 
 def test_load_config_reads_host_workspace_and_rejects_file(tmp_path: Path, monkeypatch) -> None:
-    monkeypatch.setenv("EIDESOUL_TEST_KEY", "x")
+    monkeypatch.setenv("MONOAGENS_TEST_KEY", "x")
     host_ws = tmp_path / "host-workspace"
     host_ws.mkdir()
     (tmp_path / "soul.yaml").write_text(
-        "name: Eidesoul\nlanguage: id\nlocale: id-ID\ntimezone: UTC\n", encoding="utf-8"
+        "name: MonoAgens\nlanguage: id\nlocale: id-ID\ntimezone: UTC\n", encoding="utf-8"
     )
     target = tmp_path / "config.yaml"
     target.write_text(
         f"""
 database:
-  url: "postgresql+psycopg://eidesoul:eidesoul@127.0.0.1:5433/eidesoul_test"
-workspace: ".eidesoul/workspace"
+  url: "postgresql+psycopg://monoagens:monoagens@127.0.0.1:5433/monoagens_test"
+workspace: ".monoagens/workspace"
 engine:
   llm:
     provider: custom
     base_url: http://x
-    api_key_env: EIDESOUL_TEST_KEY
+    api_key_env: MONOAGENS_TEST_KEY
     model: test-model
   default_role: administrator
 gateways: {{}}

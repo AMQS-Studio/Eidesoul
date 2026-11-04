@@ -3,7 +3,7 @@ roles:
     name: administrator
     label: ''
     protected: true
-    description: Administrator of Eidesoul
+    description: Administrator of MonoAgens
     priority: 100
     users: []
     tools:
@@ -11,7 +11,7 @@ roles:
     commands:
     - '*'
     memory_admin: true
-    context: 'You are talking to the administrator of Eidesoul, who sets the direction,
+    context: 'You are talking to the administrator of MonoAgens, who sets the direction,
       permissions, and soul.
 
       Allows corrections, config/soul changes, and full reports.

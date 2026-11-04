@@ -13,10 +13,10 @@ import pytest
 from sqlalchemy import select
 from support import FakeGateway, FakeLLM, HumanizeConfig, inbound_message, make_agent
 
-from eidesoul.engine.config import TurnConfig
-from eidesoul.engine.i18n import t
-from eidesoul.engine.memory.ledger import OutboundLedger
-from eidesoul.engine.schema import turns
+from monoagens.engine.config import TurnConfig
+from monoagens.engine.i18n import t
+from monoagens.engine.memory.ledger import OutboundLedger
+from monoagens.engine.schema import turns
 
 DM = "628111@s.whatsapp.net"
 OTHER = "628222@s.whatsapp.net"
@@ -82,7 +82,7 @@ def test_a_delivered_turn_is_never_processed_twice(tmp_path) -> None:
 
 
 def test_a_mid_turn_failure_resumes_without_a_duplicate_send(tmp_path) -> None:
-    from eidesoul.engine.inbound import GatewayError
+    from monoagens.engine.inbound import GatewayError
 
     class FailingGateway(FakeGateway):
         def __init__(self) -> None:
@@ -204,7 +204,7 @@ def test_the_turn_deadline_interrupts_once_with_one_notice(tmp_path) -> None:
 
 
 def test_remaining_below_min_call_starts_no_llm_call(tmp_path, monkeypatch) -> None:
-    from eidesoul.engine.llm import LLM, DeadlineExceeded
+    from monoagens.engine.llm import LLM, DeadlineExceeded
 
     monkeypatch.setenv("K", "x")
     env = make_agent(tmp_path)
@@ -345,7 +345,7 @@ def test_a_duplicate_message_does_not_fork_the_turn(tmp_path) -> None:
 
 
 def _turns_table():
-    from eidesoul.engine.schema import turns
+    from monoagens.engine.schema import turns
 
     return turns
 

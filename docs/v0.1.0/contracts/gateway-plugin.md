@@ -1,6 +1,6 @@
 # Gateway, Plugin, and MCP Contract
 
-**Scope:** the extension surface of the Eidesoul engine: how a body (gateway) and an installable
+**Scope:** the extension surface of the MonoAgens engine: how a body (gateway) and an installable
 capability bundle (plugin) plug in, what each owns, and what neither may do.
 **Context:** written after ADR-0034 (prompt parts) and ADR-0035 (app-scoped skills). Clauses that
 depend on those two are marked **[after 0034]** and **[after 0035]** and become binding when the
@@ -37,7 +37,7 @@ They are not interchangeable:
 | Is it an external tool server reached live over a standard protocol, with no install step? | MCP server |
 | Can a gateway be "just a plugin"? | No. It may be *shipped* by a plugin, but it is registered and enabled as a gateway (ADR-0028 §4.1). |
 | Can a plugin open its own transport? | Only through a gateway it ships and declares; never as an import-time side effect. |
-| Can core contain a gateway's actions? | No. Gateway actions live in `eidesoul/gateways/<name>/tools|commands`; a plugin's actions live in the plugin tree. |
+| Can core contain a gateway's actions? | No. Gateway actions live in `monoagens/gateways/<name>/tools|commands`; a plugin's actions live in the plugin tree. |
 
 The one-line test: **a gateway is where bytes come from; a plugin is what can be installed; an MCP
 server is a tool supplier you configure; a tool is what the model may call.**
@@ -48,18 +48,18 @@ server is a tool supplier you configure; a tool is what the model may call.**
 
 ### 2.1 Location and discovery
 
-- A core-shipped gateway is a package under `eidesoul/gateways/<name>/`.
+- A core-shipped gateway is a package under `monoagens/gateways/<name>/`.
 - A gateway shipped by a plugin is code under `plugins/<name>/`, declared in
   `plugin.yaml: provides.gateways`, and registered through the gateway path. It is never described
   as a "plugin gateway" and its tools never enter the global plugin tool list.
-- The engine never imports a gateway eagerly. `eidesoul/engine/**` must not import
-  `eidesoul.gateways` or a plugin module at import time.
+- The engine never imports a gateway eagerly. `monoagens/engine/**` must not import
+  `monoagens.gateways` or a plugin module at import time.
 - A gateway is enabled by config (`gateways.<name>.enabled: true`), never by installing a plugin as
-  a side effect. The shipped default body is `eidesoul/gateways/cli`.
+  a side effect. The shipped default body is `monoagens/gateways/cli`.
 
 ### 2.2 Mandatory surface
 
-A body implements `GatewayCore` from `eidesoul/engine/inbound.py`:
+A body implements `GatewayCore` from `monoagens/engine/inbound.py`:
 
 ```python
 name: str
@@ -298,7 +298,7 @@ These are the rules that keep "modular" from meaning "overlapping".
    `provides.gateways`, registered through the gateway path, and enabled by gateway config. It does
    not enter the plugin's tool list and does not gain plugin lifecycle semantics.
 4. **Body actions stay in the body.** A gateway's tools/commands live in
-   `eidesoul/gateways/<name>/tools|commands` (or the plugin tree that ships it). Core never holds a
+   `monoagens/gateways/<name>/tools|commands` (or the plugin tree that ships it). Core never holds a
    WhatsApp reply command, a robot alarm tool, or a calendar API.
 5. **A tool does not choose its transport.** A capability receives `ToolContext`; it does not read
    a transport name to decide behavior. If it needs a body fact, the fact is in `ctx`.
@@ -375,7 +375,7 @@ name.
 
 - **Roles are the only source of permission.** A gateway's or plugin's handler has no default
   grant; a missing `tools`/`commands` entry denies everything. The one check is
-  `eidesoul/engine/tools/__init__.py:execute`.
+  `monoagens/engine/tools/__init__.py:execute`.
 - **Approval class is declared by the handler**, not by its name. A plugin that wants to be safe
   declares `approval_class="none"` only when the action is fail-safe; every unknown handler
   defaults to `authorization`.
@@ -413,12 +413,12 @@ name.
 
 A gateway is conformant when:
 
-1. it implements `GatewayCore` and imports only `eidesoul.engine.inbound`, `registry`, and the turn
+1. it implements `GatewayCore` and imports only `monoagens.engine.inbound`, `registry`, and the turn
    types it needs;
 2. `run()` produces `Percept` and never touches stores or the model directly;
 3. `dispatch()` refuses unknown capabilities with `GatewayError`;
 4. `prompt_section()` is static, English, and within 1200 characters;
-5. its tools/commands live in its own tree and never in `eidesoul/engine/tools|commands`;
+5. its tools/commands live in its own tree and never in `monoagens/engine/tools|commands`;
 6. it normalizes its own identities and never parses transport ids in core;
 7. with the body stopped, no loop, task, or connection survives.
 
@@ -478,7 +478,7 @@ These are defects against this contract, not options:
 - Plugin prompt parts do not exist until ADR-0034 lands; today `register()` returns only
   tools/commands.
 - `Inbound` appears in older prose (including `AGENTS.md`); the live seam is `Percept`/`Action` in
-  `eidesoul/engine/inbound.py`. This contract uses the live names.
+  `monoagens/engine/inbound.py`. This contract uses the live names.
 - MCP `env` values are read from `config.yaml` as literal strings; unlike plugin `secrets`, there is
   no env-name indirection or verification. Keep secrets out of that mapping until the gap is
   closed.
@@ -492,13 +492,13 @@ These are defects against this contract, not options:
 
 ## 11. References
 
-- `eidesoul/engine/inbound.py` — `Percept`, `Action`, `Address`, `Receipt`, `GatewayCore`, `Rich`,
+- `monoagens/engine/inbound.py` — `Percept`, `Action`, `Address`, `Receipt`, `GatewayCore`, `Rich`,
   `Directory`, `PrivateThread`, `HINT_KEYS`, `PROMPT_SECTION_MAX`.
-- `eidesoul/engine/plugins.py` — manifest schema, `tree_digest`, `_verify`, `_register`,
+- `monoagens/engine/plugins.py` — manifest schema, `tree_digest`, `_verify`, `_register`,
   lifecycle states, `PluginError`.
-- `eidesoul/engine/registry.py` and `eidesoul/engine/tools/__init__.py` — `Handler`, `ToolContext`,
+- `monoagens/engine/registry.py` and `monoagens/engine/tools/__init__.py` — `Handler`, `ToolContext`,
   `execute`, the one permission check.
-- `eidesoul/engine/agent.py` — `handle(percept, gateway)` intake, `dispatch(...)` outbound door,
+- `monoagens/engine/agent.py` — `handle(percept, gateway)` intake, `dispatch(...)` outbound door,
   the gateway tool/command merge.
 - ADR-0027 §4.1 — a gateway, a tool, and a plugin are three different things.
 - ADR-0028 §4.1–4.4 — plugin unit, manifest, lifecycle, loading.
@@ -506,8 +506,8 @@ These are defects against this contract, not options:
 - ADR-0033 §4.5 — one body `prompt_section`.
 - ADR-0034 — prompt parts: static plugin parts, one body contribution.
 - ADR-0035 — app namespace: gateway supplies `hints["app"]`, plugin reads `ctx.app`, core filters.
-- `eidesoul/engine/jobs/mcp.py` — the `Hub`, discovery, `mcp__<server>__<tool>` naming, timeouts,
+- `monoagens/engine/jobs/mcp.py` — the `Hub`, discovery, `mcp__<server>__<tool>` naming, timeouts,
   result rendering.
-- `eidesoul/engine/config.py:649-656,870-895` — `MCPServerConfig` and `mcp.servers` validation.
-- `eidesoul/__main__.py:112-113,476` — `Hub` start at process boot and stop in the selftest path;
-  `eidesoul/engine/agent.py:1796-1798` — `hub.stop()` on agent shutdown.
+- `monoagens/engine/config.py:649-656,870-895` — `MCPServerConfig` and `mcp.servers` validation.
+- `monoagens/__main__.py:112-113,476` — `Hub` start at process boot and stop in the selftest path;
+  `monoagens/engine/agent.py:1796-1798` — `hub.stop()` on agent shutdown.

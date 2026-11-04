@@ -8,8 +8,8 @@ import pytest
 from sqlalchemy import text as sql
 from support import build_config, database
 
-from eidesoul.engine.memory import reflect
-from eidesoul.engine.memory.store import MemoryStore
+from monoagens.engine.memory import reflect
+from monoagens.engine.memory.store import MemoryStore
 
 THREAD = "628111@s.whatsapp.net"
 PERSON = "628111"
@@ -171,7 +171,7 @@ def test_a_pass_reports_the_pairs_it_opened(tmp_path) -> None:
 
 
 def test_the_worker_asks_one_question_per_pass(tmp_path) -> None:
-    from eidesoul.engine.jobs.cognition import CognitionWorker, Job
+    from monoagens.engine.jobs.cognition import CognitionWorker, Job
 
     memory = store(tmp_path)
     write(memory, "aku suka kopi")

@@ -1,7 +1,7 @@
 # ADR-0017: Turn Isolation, Deadline, and Primary Gate
 
 - **Status:** accepted
-- **Implementation:** implemented — evidence: `agent.py` per-thread LRU locks, turn deadline + `min_call_seconds`, `eidesoul/engine/io.py` executor, `_send_gate` (mode + generation), `tests/test_turn_lifecycle.py`, `tests/test_architecture.py` async-DB rule; gate result: `pytest -q` 604 passed after the wave
+- **Implementation:** implemented — evidence: `agent.py` per-thread LRU locks, turn deadline + `min_call_seconds`, `monoagens/engine/io.py` executor, `_send_gate` (mode + generation), `tests/test_turn_lifecycle.py`, `tests/test_architecture.py` async-DB rule; gate result: `pytest -q` 604 passed after the wave
 - **Date:** 2026-11-03
 - **Deciders:** Muqsith (owner), omp (reviewer)
 - **Context:** review (`Eidesoul-Review-Arsitektur-2026-11-01.md`) §15 P0-4: `turn_lock` is global, synchronous DB/mem0 work blocks the same event loop that renews the heartbeat lease, and `agent.mode` is never read, so a standby instance could still send
@@ -19,7 +19,7 @@ Four code facts, each reinforcing the others:
 | Fact | Evidence |
 |---|---|
 | One lock for all chats | `agent.py:143` `self.turn_lock = asyncio.Lock()`, used at `:448` for every non-command turn |
-| Synchronous DB inside `async def` | `db.py:53` `create_engine(...)`, `db.py:95` `connect()` synchronous; not one `to_thread` anywhere in `eidesoul/engine/` |
+| Synchronous DB inside `async def` | `db.py:53` `create_engine(...)`, `db.py:95` `connect()` synchronous; not one `to_thread` anywhere in `monoagens/engine/` |
 | Synchronous embedder | `embed.py:53-62` `SentenceTransformer.encode`, called from `knowledge.py:147`, `patterns.py:235`, and on the mem0 path |
 | Standby not checked at the gate | `supervisor.py:62,111` writes `agent.mode`; not a single read of `self.mode` before `send_text`/`send_file` (`agent.py:311,335`) |
 | The LLM deadline **restarts per call** | `llm.py:126` `timeout=120` per request; `llm.py:165-169` `run_budget_seconds: 240` is counted from `start` **inside** `run()`; `max_retries` is unset (library default 2) |
@@ -54,7 +54,7 @@ The consequences are not theoretical:
 ### 4.1 Offload at the seams, not in each handler
 
 - A bounded executor (`engine.io.workers`, default 8) is shared by `Database.connect` (every query block on one job), `embed.encode`, and the synchronous mem0 call.
-- **Hard rule:** `with db.connect()` must not appear inside an `async def` in `eidesoul/engine/`; it is allowed only inside an offloaded helper. Enforced by an AST test (ADR-0019 provides the same check infrastructure as `topology`).
+- **Hard rule:** `with db.connect()` must not appear inside an `async def` in `monoagens/engine/`; it is allowed only inside an offloaded helper. Enforced by an AST test (ADR-0019 provides the same check infrastructure as `topology`).
 - Async handlers (LLM, sandbox, MCP) are unchanged.
 
 ### 4.2 Lock per chat, not per process
@@ -97,7 +97,7 @@ The consequences are not theoretical:
 | Background workers (cognition/ambient/`distill`) | `worker_attempts: 3` | Exponential backoff `base_seconds × 2^n` with ceiling `cap_seconds` + `jitter`; `Retry-After` honoured; → job `failed` for a reason visible in `/status` |
 | Automation run | joins ADR-0014 §4.7 | Automation retry rules are not duplicated here. |
 
-- There is no retry for 4xx other than 429. The old exception of "drop the image and then retry once" still exists, and it is **not** part of the general retry (`eidesoul/engine/llm.py:195-198`).
+- There is no retry for 4xx other than 429. The old exception of "drop the image and then retry once" still exists, and it is **not** part of the general retry (`monoagens/engine/llm.py:195-198`).
 - Every attempt writes its own `llm_calls` row (ADR-0019), so a retry is never hidden from the cost count.
 - A retry never passes `turn.timeout_seconds`: an attempt that does not fit does not start.
 
@@ -174,14 +174,14 @@ No new keys for shutdown: `grace_seconds`/`drain_seconds`/`notice_seconds` remai
 
 ## 10. Code references
 
-- `eidesoul/engine/agent.py:143,413,448,1066` — global lock, `handle()`, lock wait point, gather on shutdown.
-- `eidesoul/engine/db.py:53,95` — `create_engine` and the synchronous `connect()` (offload seam).
-- `eidesoul/engine/embed.py:53-62` — synchronous `encode`.
-- `eidesoul/engine/jobs/supervisor.py:62,111` — where `mode` primary/standby is written.
-- `eidesoul/engine/jobs/lease.py:56-101` — `acquire`/`renew` (owner of `generation`).
-- `eidesoul/engine/guard/sandbox.py:168` — precedent for `asyncio.wait_for` around bounded work.
-- `eidesoul/engine/llm.py:122-128` — `run()` client `AsyncOpenAI(timeout=...)`; `:165-169` `run_budget_seconds` counted per `run()` (basis for the two-layer split).
-- `eidesoul/gateways/cli/gateway.py:81`, `eidesoul/gateways/whatsapp/gateway.py:124` — the two callers of `handle()`.
+- `monoagens/engine/agent.py:143,413,448,1066` — global lock, `handle()`, lock wait point, gather on shutdown.
+- `monoagens/engine/db.py:53,95` — `create_engine` and the synchronous `connect()` (offload seam).
+- `monoagens/engine/embed.py:53-62` — synchronous `encode`.
+- `monoagens/engine/jobs/supervisor.py:62,111` — where `mode` primary/standby is written.
+- `monoagens/engine/jobs/lease.py:56-101` — `acquire`/`renew` (owner of `generation`).
+- `monoagens/engine/guard/sandbox.py:168` — precedent for `asyncio.wait_for` around bounded work.
+- `monoagens/engine/llm.py:122-128` — `run()` client `AsyncOpenAI(timeout=...)`; `:165-169` `run_budget_seconds` counted per `run()` (basis for the two-layer split).
+- `monoagens/gateways/cli/gateway.py:81`, `monoagens/gateways/whatsapp/gateway.py:124` — the two callers of `handle()`.
 
 ---
 

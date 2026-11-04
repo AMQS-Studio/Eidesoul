@@ -1,4 +1,4 @@
-> Terjemahan turunan — jangan sunting; sumber: 0030-install-and-init.md (sha256: 250efa224e71)
+> Terjemahan turunan — jangan sunting; sumber: 0030-install-and-init.md (sha256: 24fd0f76108d)
 > Ditulis tangan (bukan mesin), mengikuti sumber English baris demi baris.
 
 # ADR-0030: Install On-Machine dan Init Interaktif — Wizard Kita Sendiri, Satu Installer, Dua Stack
@@ -9,7 +9,7 @@
 - **Konteks:** lanjutan ADR-0027 (distribusi & konfigurasi web-first), ADR-0007 (kelas approval), ADR-0016 (migrasi), ADR-0022 (role `administrator` yang dilindungi), ADR-0029 (store tes)
 - **Supersedes:** —
 - **Terkait:** ADR-0009 (rumah dokumen), ADR-0015 (manifest kapabilitas), ADR-0019 (observability), ADR-0028 (plugin)
-- **Implementasi:** partial — ada: `install.sh` (tanpa sudo, digest uv dipin, `--dry-run`, log, signal, dua stack), `eidesoul init` interaktif/fail-closed dengan review/receipt, `--label`/`--stack`/`--voice-layer`, `tests/test_init.py`, `tests/test_install.py`; sisa: cabang panel di layar akhir menunggu `panel/` (ADR-0027)
+- **Implementasi:** partial — ada: `install.sh` (tanpa sudo, digest uv dipin, `--dry-run`, log, signal, dua stack), `monoagens init` interaktif/fail-closed dengan review/receipt, `--label`/`--stack`/`--voice-layer`, `tests/test_init.py`, `tests/test_install.py`; sisa: cabang panel di layar akhir menunggu `panel/` (ADR-0027)
 - **Catatan lokasi:** ADR ini mengikat semua permukaan (ia menentukan bagaimana sebuah host lahir), jadi ia duduk di akar rumah ADR. Salinan Indonesia di `docs/v0.1.0/adr/id/0030-install-and-init.md`.
 - **Amandemen:** 2026-11-03 — versi pertama. 2026-11-03 — wizard menanyakan lapisan suara sekali (jawaban default tetap nyala) dan membawa `--voice-layer on|off` untuk paritas headless (ADR-0027 §4.3). 2026-11-03 — `--label` (alamat administrator) dan `--stack native|compose` masuk tabel flag: aturan §6 "langkah tanpa padanan flag = 0" menuntutnya.
 
@@ -20,8 +20,8 @@
 | Fakta | Bukti |
 |---|---|
 | Tidak ada jalur install on-machine | quickstart `README.md` dimulai dengan `podman compose up -d postgres`; satu-satunya jalur non-container adalah "clone lalu `uv sync`" dalam bentuk prosa |
-| `init` non-interaktif dan menuntut flag | `eidesoul init --provider <name>` wajib (`eidesoul/__main__.py:709-714`), ditulis dari template kode (`eidesoul/admin/init.py:26-46`) |
-| Default sudah hidup di satu tempat | `eidesoul/admin/templates.py:1` — "one source of truth, no separate example files" (ADR-0027 §4.6) |
+| `init` non-interaktif dan menuntut flag | `monoagens init --provider <name>` wajib (`monoagens/__main__.py:709-714`), ditulis dari template kode (`monoagens/admin/init.py:26-46`) |
+| Default sudah hidup di satu tempat | `monoagens/admin/templates.py:1` — "one source of truth, no separate example files" (ADR-0027 §4.6) |
 | Panel belum ada | tidak ada tree `panel/`; ADR-0027 §4.4 merencanakannya aktif secara default begitu selesai |
 | Referensi, bukan template | bootstrap Hermes (`hermes-agent.nousresearch.com/install.sh`, 1302 baris) dipelajari: stage protocol, `uv` dipin dengan SHA-256 per arch, disiplin keluaran tenang, install log, penanganan sinyal, repair idempoten |
 | Arahan pemilik | setup interaktif tidak boleh meniru: gaya kita sendiri, lebih mampu, dengan slot logo yang diisi belakangan |
@@ -46,7 +46,7 @@
 | **A. Meniru installer referensi** | menyalin banner, stage protocol, dan kalimatnya | Ditolak: itu identitas produk lain, dan stage protocol ada untuk driver GUI mereka, yang kita tidak punya |
 | **B. Installer dan wizard kita sendiri** | `install.sh` di akar repo, `init` interaktif dengan bahasa visual kita, satu slot logo | **Dipilih** |
 | **C. Prompt hanya di bash** | installer yang bertanya, Python tak pernah | Ditolak: paritas headless dan kemampuan uji jadi korban, dan default akan mengalir balik ke shell |
-| **D. Paket distro (RPM/COPR)** | `dnf install eidesoul` | Ditunda: butuh rilis yang belum ada (§Versioning) dan cerita maintainer |
+| **D. Paket distro (RPM/COPR)** | `dnf install monoagens` | Ditunda: butuh rilis yang belum ada (§Versioning) dan cerita maintainer |
 
 ## 4. Keputusan
 
@@ -60,11 +60,11 @@ Satu skrip Bash, dipanggil dari klon (`bash install.sh`) atau dari jaringan
 | Izin menyentuh host | **tidak pernah** menjalankan `sudo`; paket yang hilang mencetak perintah tepatnya (`dnf install postgresql-server pgvector`, `postgresql-setup --initdb`) lalu menghentikan stage itu |
 | `uv` | kalau absen: unduh rilis yang dipin untuk arsitektur yang berjalan dan verifikasi SHA-256 sebelum dipakai; pin hidup di satu blok berkomentar dengan baris "cara menaikkannya" |
 | Python | menuntut 3.11+ dan melaporkan interpreter yang ia temukan; image container mempertahankan pin 3.12-nya — perbedaannya dinyatakan, tidak disembunyikan |
-| Dependency | `uv sync --locked` di dalam direktori instalasi (`--dir`, default `~/.eidesoul/app`); tak ada dependency yang dipasang di luarnya |
-| Setup | menyerahkan ke `eidesoul init` (§4.3): interaktif di terminal, digerakkan flag kalau bukan |
-| Lanjutan | `eidesoul db upgrade`, lalu `eidesoul selftest` |
+| Dependency | `uv sync --locked` di dalam direktori instalasi (`--dir`, default `~/.monoagens/app`); tak ada dependency yang dipasang di luarnya |
+| Setup | menyerahkan ke `monoagens init` (§4.3): interaktif di terminal, digerakkan flag kalau bukan |
+| Lanjutan | `monoagens db upgrade`, lalu `monoagens selftest` |
 | Penutup | menawarkan pilihan (§4.5): buka panel, atau tetap di command line |
-| Pengamatan | satu baris status selama child berjalan, semuanya ditambahkan ke `~/.eidesoul/logs/install.log`, dan kegagalan mencetak baris terakhir plus path log |
+| Pengamatan | satu baris status selama child berjalan, semuanya ditambahkan ke `~/.monoagens/logs/install.log`, dan kegagalan mencetak baris terakhir plus path log |
 | Sinyal | `INT`/`TERM`/`HUP` menandai jalannya `interrupted` dan di-raise ulang, jadi exit status tetap milik sinyalnya |
 | Jalan ulang | repair: tidak pernah menimpa berkas yang ada atau meng-clone ulang di atas perubahan lokal tanpa ditanya |
 | Platform | Linux x86_64 dan aarch64 di versi ini; selain itu ditolak dengan satu baris |
@@ -84,12 +84,12 @@ Setup interaktif dirancang di sini, bukan dipinjam. Yang dipinjam dari referensi
 | Warna | hanya di terminal, `NO_COLOR` dihormati, tanpa animasi, dan tanpa box drawing yang rusak di terminal 60 kolom |
 | Suara | teks operator berbahasa English (diagnostik internal, sesuai aturan repo); bahasa soul mengatur chat, bukan installer |
 
-### 4.3 `eidesoul init` jadi interaktif di terminal
+### 4.3 `monoagens init` jadi interaktif di terminal
 
 - Di TTY, `init` menanyakan hal yang sama seperti yang dibawa flag-nya: provider, model (opsional), URL database, label administrator pertama, dan **lapisan suara** — tetap nyalakan emosi, humanize, dan karakter (jawaban default) atau matikan salah satunya. Berkas yang sudah ada ditawarkan sebagai `keep` / `change` / `replace`.
 - Di luar terminal (pipa, CI, `--non-interactive`), ia **gagal tertutup**: ia menyebut flag yang dibutuhkan alih-alih menunggu input yang tak mungkin datang.
-- Rahasia tidak pernah masuk YAML: wizard menulis **nama** env dan menaruh nilainya di `.env` (`0600`), tepat seperti jalur non-interaktif sekarang (`eidesoul/admin/init.py:14-20`).
-- Setiap nilai yang ditulisnya berasal dari `eidesoul/admin/templates.py` plus jawaban operator — wizard tidak memiliki default sendiri.
+- Rahasia tidak pernah masuk YAML: wizard menulis **nama** env dan menaruh nilainya di `.env` (`0600`), tepat seperti jalur non-interaktif sekarang (`monoagens/admin/init.py:14-20`).
+- Setiap nilai yang ditulisnya berasal dari `monoagens/admin/templates.py` plus jawaban operator — wizard tidak memiliki default sendiri.
 - Validasi terjadi sebelum menulis: nama provider yang tak dikenal, model yang tidak ada di daftar provider saat daftar itu terjangkau, atau URL database yang tak bisa dipakai dilaporkan di langkah yang menanyakannya, bukan setelah berkas ada di disk.
 - Berkas ditulis hanya setelah seluruh wizard berhasil (tulis-lalu-rename), sehingga jalannya yang terputus tak bisa meninggalkan host setengah terkonfigurasi.
 
@@ -99,13 +99,13 @@ Setup interaktif dirancang di sini, bukan dipinjam. Yang dipinjam dari referensi
 |---|---|
 `config.yaml`, `roles.yaml`, `soul.yaml`, `.env` di direktori yang dipilih, dari template | berkas config kedua, salinan `.example`, atau default yang tidak ada di `templates.py` |
 `.env` dengan nama dan nilai kosong, mode `0600` | nilai rahasia di YAML, di log, atau di riwayat shell |
-direktori `.eidesoul/workspace` | apa pun di luar `--dir`; tanpa `sudo`, tanpa layanan sistem, tanpa baris PATH tanpa penjaga duplikat |
+direktori `.monoagens/workspace` | apa pun di luar `--dir`; tanpa `sudo`, tanpa layanan sistem, tanpa baris PATH tanpa penjaga duplikat |
 
 ### 4.5 Akhir instalasi adalah pilihan, bukan kejutan
 
 Installer berakhir dengan menawarkan: **buka panel** (begitu panel ada dan `web.enabled` bernilai true — ADR-0027 §4.4) atau **tetap di command line** (cetak perintah headless-nya). Ia tidak pernah memutuskan untuk operator, dan selama panel belum ada, opsi kedua satu-satunya dan diberi label begitu.
 
-Jalur compose mempertahankan bentuk yang sama: nyalakan stack-nya, lalu pakai panel atau jalankan `init` yang sama di dalam container (`docker compose exec eidesoul eidesoul init ...`). Tidak ada installer kedua untuk container.
+Jalur compose mempertahankan bentuk yang sama: nyalakan stack-nya, lalu pakai panel atau jalankan `init` yang sama di dalam container (`docker compose exec monoagens monoagens init ...`). Tidak ada installer kedua untuk container.
 
 ### 4.6 Logo menyusul, slot-nya tidak berpindah
 
@@ -115,7 +115,7 @@ Banner memesan area logo sekarang supaya mark-nya bisa ditaruh tanpa menyentuh t
 
 | Flag | Arti |
 |---|---|
-| `--dir PATH` | direktori instalasi (default `~/.eidesoul/app`) |
+| `--dir PATH` | direktori instalasi (default `~/.monoagens/app`) |
 | `--dry-run` | cetak setiap aksi, tak menulis apa pun |
 | `--non-interactive` | tak pernah bertanya; gagal kalau nilai wajib tidak ada |
 | `--provider NAME` / `--model ID` | diteruskan ke `init` |
@@ -130,7 +130,7 @@ Tidak ada kunci yang ditambahkan ke `config.yaml` oleh ADR ini: perilaku install
 
 | Metrik | Target awal |
 |---|---|
-| Nilai default yang hidup di luar `eidesoul/admin/templates.py` | 0 |
+| Nilai default yang hidup di luar `monoagens/admin/templates.py` | 0 |
 | Pemanggilan `sudo` oleh installer | 0 |
 | Prompt saat stdin bukan terminal | 0 (gagal dengan daftar flag) |
 | Rahasia yang ditulis wizard ke YAML, log, atau riwayat | 0 |
@@ -145,8 +145,8 @@ Tidak ada kunci yang ditambahkan ke `config.yaml` oleh ADR ini: perilaku install
 - [ ] Di mesin tanpa `uv`, rilis yang dipin diunduh, SHA-256-nya diverifikasi, dan ketidakcocokan membatalkan sebelum apa pun terjadi.
 - [ ] Di mesin tanpa Postgres, installer mencetak perintah `dnf` tepatnya dan tidak menjalankannya.
 - [ ] `install.sh` tidak melakukan pemanggilan `sudo` (dibuktikan dengan menjalankannya di PATH tanpa `sudo`).
-- [ ] `eidesoul init` di TTY menyusuri provider → model → URL database → label administrator, menampilkan layar review, lalu menulis empat berkas dengan `.env` dan `roles.yaml` bermode `0600`.
-- [ ] `eidesoul init` dengan stdin pipa dan tanpa flag keluar non-zero sambil menyebut flag yang kurang; ia tidak pernah menggantung.
+- [ ] `monoagens init` di TTY menyusuri provider → model → URL database → label administrator, menampilkan layar review, lalu menulis empat berkas dengan `.env` dan `roles.yaml` bermode `0600`.
+- [ ] `monoagens init` dengan stdin pipa dan tanpa flag keluar non-zero sambil menyebut flag yang kurang; ia tidak pernah menggantung.
 - [ ] `Ctrl-C` di langkah wizard mana pun tidak meninggalkan berkas baru maupun berkas separuh (diperiksa dengan daftar sebelum/sesudah).
 - [ ] Nama provider yang tak dikenal atau daftar model yang tak terjangkau gagal di langkah yang menanyakannya, sebelum berkas apa pun ditulis.
 - [ ] Menjalankan wizard dua kali menawarkan `keep` / `change` / `replace` dan tidak pernah menimpa diam-diam.
@@ -181,10 +181,10 @@ Tidak ada kunci yang ditambahkan ke `config.yaml` oleh ADR ini: perilaku install
 
 ## 10. Referensi kode
 
-- `eidesoul/admin/init.py:14-46` — penulisnya, mode `0600`-nya, dan aturan tidak-menimpa.
-- `eidesoul/admin/templates.py:1,151,253` — sumber default tunggal yang dipakai ulang wizard.
-- `eidesoul/__main__.py:587,709-714` — `_init`, subperintah `init`, dan `--provider` yang wajib.
-- `eidesoul/providers/__init__.py` — nama provider dan variabel kuncinya, dipakai untuk validasi.
+- `monoagens/admin/init.py:14-46` — penulisnya, mode `0600`-nya, dan aturan tidak-menimpa.
+- `monoagens/admin/templates.py:1,151,253` — sumber default tunggal yang dipakai ulang wizard.
+- `monoagens/__main__.py:587,709-714` — `_init`, subperintah `init`, dan `--provider` yang wajib.
+- `monoagens/providers/__init__.py` — nama provider dan variabel kuncinya, dipakai untuk validasi.
 - `README.md:88-105`, `README.id.md:96-112` — quickstart yang jalur native ADR ini duduk di sampingnya.
 - `compose.yaml` — jalur container yang mempertahankan `init` yang sama.
 - `install.sh` — berkas baru di akar repo (usulan, belum dibuat).

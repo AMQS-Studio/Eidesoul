@@ -7,11 +7,11 @@ import time
 
 from support import build_config, database
 
-from eidesoul.engine.jobs.cognition import CognitionWorker
-from eidesoul.engine.memory import efficiency
-from eidesoul.engine.memory.ledger import ActionLedger
-from eidesoul.engine.memory.store import MemoryStore
-from eidesoul.engine.schema import (
+from monoagens.engine.jobs.cognition import CognitionWorker
+from monoagens.engine.memory import efficiency
+from monoagens.engine.memory.ledger import ActionLedger
+from monoagens.engine.memory.store import MemoryStore
+from monoagens.engine.schema import (
     approvals,
     automation_runs,
     automations,
@@ -22,10 +22,10 @@ from eidesoul.engine.schema import (
     turn_steps,
     turns,
 )
-from eidesoul.engine.schema import (
+from monoagens.engine.schema import (
     episodes as episodes_table,
 )
-from eidesoul.engine.stores.skills import SkillStore
+from monoagens.engine.stores.skills import SkillStore
 
 THREAD = "628111@s.whatsapp.net"
 PERSON = "628111"
@@ -274,7 +274,7 @@ def test_propose_automation_creates_an_approval_and_no_row(tmp_path) -> None:
             }
         ]
     )
-    from eidesoul.engine.jobs.automation_store import AutomationStore
+    from monoagens.engine.jobs.automation_store import AutomationStore
 
     store = AutomationStore(db, env.agent.config.automations)
 

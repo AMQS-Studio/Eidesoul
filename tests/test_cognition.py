@@ -10,13 +10,13 @@ import pytest
 from sqlalchemy import text as sql
 from support import FakeLLM, build_config, database
 
-from eidesoul.admin import templates
-from eidesoul.engine.jobs.cognition import CognitionQueue, CognitionWorker
-from eidesoul.engine.jobs.lease import Lease
-from eidesoul.engine.memory import gate
-from eidesoul.engine.memory.store import MemoryStore
-from eidesoul.engine.stores.history import HistoryStore
-from eidesoul.engine.turn.context import Message
+from monoagens.admin import templates
+from monoagens.engine.jobs.cognition import CognitionQueue, CognitionWorker
+from monoagens.engine.jobs.lease import Lease
+from monoagens.engine.memory import gate
+from monoagens.engine.memory.store import MemoryStore
+from monoagens.engine.stores.history import HistoryStore
+from monoagens.engine.turn.context import Message
 
 THREAD = "628111@s.whatsapp.net"
 PERSON = "628111"

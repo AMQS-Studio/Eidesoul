@@ -15,11 +15,11 @@
 
 | Fact | Evidence |
 |---|---|
-| Message search uses `ILIKE` per term over `text`/`sender_name`, `limit` ≤ 50 | `eidesoul/engine/stores/history.py:318-347` |
-| Command `/cari` calls that store for the active room | `eidesoul/engine/commands/cari.py:25-40` |
-| Tool `chat_history` can search other rooms' archives, with the `cross_reads` buffer | `eidesoul/gateways/whatsapp/tools/chat_history.py` |
-| Message index: `(thread_id, ts, id)` and `(sender_address)` — no text index | `eidesoul/engine/schema.py:66-67` |
-| Memory has its own path (Mem0 + `memories_readable`), not `messages` | `eidesoul/engine/commands/memori.py:69,99`, ADR-0001 |
+| Message search uses `ILIKE` per term over `text`/`sender_name`, `limit` ≤ 50 | `monoagens/engine/stores/history.py:318-347` |
+| Command `/cari` calls that store for the active room | `monoagens/engine/commands/cari.py:25-40` |
+| Tool `chat_history` can search other rooms' archives, with the `cross_reads` buffer | `monoagens/gateways/whatsapp/tools/chat_history.py` |
+| Message index: `(thread_id, ts, id)` and `(sender_address)` — no text index | `monoagens/engine/schema.py:66-67` |
+| Memory has its own path (Mem0 + `memories_readable`), not `messages` | `monoagens/engine/commands/memori.py:69,99`, ADR-0001 |
 | Read scope = room membership + the `visibility` gate | ADR-0007 §4.5 |
 | `pgvector` is already a precedent extension in the baseline | ADR-0001/0016 |
 | Tool output has caps and a `next` marker | ADR-0021 |
@@ -127,12 +127,12 @@ engine:
 
 ## 10. Code references
 
-- `eidesoul/engine/stores/history.py:318-347` — `search()` today (`ILIKE`, `limit` ≤ 50); the query replacement point.
-- `eidesoul/engine/commands/cari.py:25-40` — `/cari` (the only command caller of `history.search`).
-- `eidesoul/gateways/whatsapp/tools/chat_history.py` — `_target`/`_remember_cross`/`_search` (other rooms' archives + the `cross_reads` buffer).
-- `eidesoul/engine/schema.py:44-67` — the `messages` table and the indexes `ix_messages_chat_ts`/`ix_messages_sender`.
-- `eidesoul/engine/commands/memori.py:69,99` — the unchanged memory path (Mem0).
-- `eidesoul/engine/config.py` — new config block `engine.search` following the `SandboxConfig`/`WebSearchConfig` pattern.
+- `monoagens/engine/stores/history.py:318-347` — `search()` today (`ILIKE`, `limit` ≤ 50); the query replacement point.
+- `monoagens/engine/commands/cari.py:25-40` — `/cari` (the only command caller of `history.search`).
+- `monoagens/gateways/whatsapp/tools/chat_history.py` — `_target`/`_remember_cross`/`_search` (other rooms' archives + the `cross_reads` buffer).
+- `monoagens/engine/schema.py:44-67` — the `messages` table and the indexes `ix_messages_chat_ts`/`ix_messages_sender`.
+- `monoagens/engine/commands/memori.py:69,99` — the unchanged memory path (Mem0).
+- `monoagens/engine/config.py` — new config block `engine.search` following the `SandboxConfig`/`WebSearchConfig` pattern.
 
 ---
 

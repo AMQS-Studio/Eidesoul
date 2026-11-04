@@ -2,7 +2,7 @@
 .github
 .gitignore
 .venv
-.eidesoul
+.monoagens
 .env
 config.yaml
 __pycache__

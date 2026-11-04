@@ -10,12 +10,12 @@ import pytest
 import yaml
 from support import build_config
 
-from eidesoul.engine import plugins
-from eidesoul.engine.access.roles import Role
-from eidesoul.engine.config import PluginSettings
-from eidesoul.engine.registry import Registry
-from eidesoul.engine.tools import REGISTRY as CORE_TOOLS
-from eidesoul.engine.tools import ToolContext, execute
+from monoagens.engine import plugins
+from monoagens.engine.access.roles import Role
+from monoagens.engine.config import PluginSettings
+from monoagens.engine.registry import Registry
+from monoagens.engine.tools import REGISTRY as CORE_TOOLS
+from monoagens.engine.tools import ToolContext, execute
 
 ROOT = Path(__file__).resolve().parents[1]
 BAD_DIGEST = "sha256:" + "0" * 64
@@ -30,7 +30,7 @@ CREDITS = [
 
 TOOL = '''"""Fixture plugin tool."""
 
-from eidesoul.engine.registry import Handler
+from monoagens.engine.registry import Handler
 
 
 async def _run(args, ctx):
@@ -87,8 +87,8 @@ def write_plugin(
     )
     entry = (
         '"""Fixture plugin entry."""\n'
-        "from eidesoul.engine.registry import Handler\n"
-        "from eidesoul.engine.turn.prompts import PromptPart\n\n"
+        "from monoagens.engine.registry import Handler\n"
+        "from monoagens.engine.turn.prompts import PromptPart\n\n"
         f"{imports}\n\n\n"
         "def register() -> dict[str, list[Handler]]:\n"
         f"    {action}\n"
@@ -263,15 +263,15 @@ def test_a_shadowed_core_tool_is_refused(tmp_path: Path) -> None:
 def test_a_missing_secret_reports_the_env_name(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.delenv("EIDESOUL_FIXTURE_TOKEN", raising=False)
+    monkeypatch.delenv("MONOAGENS_FIXTURE_TOKEN", raising=False)
     root = tmp_path / "plugins"
-    write_plugin(root, secrets=("EIDESOUL_FIXTURE_TOKEN",))
+    write_plugin(root, secrets=("MONOAGENS_FIXTURE_TOKEN",))
 
     loaded = plugins.load(settings(root, demo={"enabled": True}))
 
     assert loaded.state("demo") == "unavailable"
     reason = next(item.reason for item in loaded.plugins if item.name == "demo")
-    assert "EIDESOUL_FIXTURE_TOKEN" in reason
+    assert "MONOAGENS_FIXTURE_TOKEN" in reason
 
 
 def test_a_plugin_that_raises_during_registration_is_unavailable(tmp_path: Path) -> None:
@@ -323,7 +323,7 @@ def test_enable_disable_remove(tmp_path: Path) -> None:
 
 
 def test_a_plugin_tool_declares_its_own_family_and_target() -> None:
-    from eidesoul.engine.registry import Handler, validate
+    from monoagens.engine.registry import Handler, validate
 
     handler = Handler(
         name="robot_arm",
@@ -345,7 +345,7 @@ async def _async_noop(args: dict, ctx) -> str:
 def test_google_is_a_plugin_and_not_a_core_tool() -> None:
     assert "google" not in CORE_TOOLS.names()
     with pytest.raises(ModuleNotFoundError):
-        importlib.import_module("eidesoul.engine.tools.google")
+        importlib.import_module("monoagens.engine.tools.google")
 
     manifest = plugins.read_manifest(ROOT / "plugins" / "google" / "plugin.yaml")
     assert manifest.provides.tools == ("google",)
@@ -369,7 +369,7 @@ def test_manifest_requires_credits(tmp_path: Path) -> None:
 
 
 def test_a_plugin_prompt_reaches_the_assembled_prompt(tmp_path: Path) -> None:
-    from eidesoul.engine.turn.prompts import CORE_PARTS, PromptContext, system_prompt
+    from monoagens.engine.turn.prompts import CORE_PARTS, PromptContext, system_prompt
 
     root = tmp_path / "plugins"
     write_plugin(root, prompts=("guide",))

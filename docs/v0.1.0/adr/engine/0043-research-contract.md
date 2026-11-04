@@ -6,7 +6,7 @@
 - **Context:** follows ADR-0021 (tool output and `fetch`), ADR-0033 (neutral core), ADR-0034 (prompt parts), ADR-0038 (privacy), and ADR-0041 (voice configuration); removes the runtime use of local fact packs for public knowledge and defines when the model may answer from its prior, when it must search, and how search evidence enters a turn.
 - **Supersedes:** —
 - **Related:** ADR-0001 (memory source of truth), ADR-0019 (observability), ADR-0021 (tool output), ADR-0027 (clean by default), ADR-0031 (module structure), ADR-0033 (neutral core), ADR-0034 (prompt parts), ADR-0038 (privacy), ADR-0041 (voice configuration)
-- **Implementation:** draft — the contract is recorded; search triggers, the card builder, the verifier, and their tests are not implemented in this ADR.
+- **Implementation:** partial — trigger, card, citation/freshness verifier, and abstention are live; automatic page fetch enrichment and the 40-case eval fixture remain.
 - **Location note:** the contract binds the engine turn and its tools, so this ADR sits under `adr/engine/`. The Indonesian copy is `docs/v0.1.0/adr/engine/id/0043-research-contract.md`.
 
 ---
@@ -271,18 +271,18 @@ The eval set is a test fixture, not a data library: at least 40 cases covering c
 
 ## 10. Code references
 
-- `eidesoul/engine/turn/prompts.py:218-229` — `research_block()`: the current prompt instruction and its limits.
-- `eidesoul/engine/turn/prompts.py:477` — the research part is already a prompt part; the card becomes its volatile input.
-- `eidesoul/engine/tools/web_search.py:84-118` — `_web_search` and its current `query`/`max_results` schema; no freshness parameter yet.
-- `eidesoul/engine/tools/fetch.py:205-240` — `_fetch` returns untrusted text and flags injection.
-- `eidesoul/engine/tools/fetch.py:244-257` — the `fetch` handler and its output cap.
-- `eidesoul/engine/config.py:202-220` — `FetchConfig` and `WebSearchConfig`; the host section this ADR reuses.
-- `eidesoul/engine/turn/loop.py:410-413` — local fact selection currently feeds `character_block`.
-- `eidesoul/engine/turn/loop.py:500-519` — the turn calls the model with the tool specs and the tool context.
-- `eidesoul/engine/tools/__init__.py:335-365` — `execute()` is the single tool gate for permissions, arguments, and output caps.
-- `eidesoul/engine/character/knowledge.py:176-200` — `select_facts()` is the current local fact selection path that this ADR removes from runtime use.
+- `monoagens/engine/turn/prompts.py:218-229` — `research_block()`: the current prompt instruction and its limits.
+- `monoagens/engine/turn/prompts.py:477` — the research part is already a prompt part; the card becomes its volatile input.
+- `monoagens/engine/tools/web_search.py:84-118` — `_web_search` and its current `query`/`max_results` schema; no freshness parameter yet.
+- `monoagens/engine/tools/fetch.py:205-240` — `_fetch` returns untrusted text and flags injection.
+- `monoagens/engine/tools/fetch.py:244-257` — the `fetch` handler and its output cap.
+- `monoagens/engine/config.py:202-220` — `FetchConfig` and `WebSearchConfig`; the host section this ADR reuses.
+- `monoagens/engine/turn/loop.py:410-413` — local fact selection currently feeds `character_block`.
+- `monoagens/engine/turn/loop.py:500-519` — the turn calls the model with the tool specs and the tool context.
+- `monoagens/engine/tools/__init__.py:335-365` — `execute()` is the single tool gate for permissions, arguments, and output caps.
+- `monoagens/engine/character/knowledge.py:176-200` — `select_facts()` is the current local fact selection path that this ADR removes from runtime use.
 - `tests/test_prompts_status.py:216-226` — existing tests for `research_block()`.
-- `usulan` — `eidesoul/engine/turn/research.py`: trigger classification, card construction/rendering, and verifier.
+- `usulan` — `monoagens/engine/turn/research.py`: trigger classification, card construction/rendering, and verifier.
 - `usulan` — `tests/test_research_contract.py`: the 40-case contract fixture and the gates in §6.
 
 ---

@@ -6,7 +6,7 @@
 - **Context:** follows ADR-0027 (distribution and web-first configuration), ADR-0007 (approval classes), ADR-0016 (migration), ADR-0022 (the protected `administrator` role), ADR-0029 (the test store)
 - **Supersedes:** —
 - **Related:** ADR-0009 (the document home), ADR-0015 (capability manifest), ADR-0019 (observability), ADR-0028 (plugins)
-- **Implementation:** partial — present: `install.sh` (no sudo, pinned uv digest, `--dry-run`, log, signals, both stacks), interactive/fail-closed `eidesoul init` with review/receipt, `--label`/`--stack`/`--voice-layer`, `tests/test_init.py`, `tests/test_install.py`; remaining: the panel branch of the finish screen waits for `panel/` (ADR-0027)
+- **Implementation:** partial — present: `install.sh` (no sudo, pinned uv digest, `--dry-run`, log, signals, both stacks), interactive/fail-closed `monoagens init` with review/receipt, `--label`/`--stack`/`--voice-layer`, `tests/test_init.py`, `tests/test_install.py`; remaining: the panel branch of the finish screen waits for `panel/` (ADR-0027)
 - **Location note:** this ADR binds every surface (it decides how a host is born), so it sits at the root of the ADR home. The Indonesian copy is `docs/v0.1.0/adr/id/0030-install-and-init.md`.
 - **Amendments:** 2026-11-03 — first version. 2026-11-03 — the wizard asks the voice layer once (keep-on is the default answer) and carries `--voice-layer on|off` for headless parity (ADR-0027 §4.3). 2026-11-03 — `--label` (administrator address) and `--stack native|compose` join the flag table: §6's "steps without a flag equivalent = 0" requires them.
 
@@ -17,8 +17,8 @@
 | Fact | Evidence |
 |---|---|
 | There is no on-machine install path | `README.md` quickstart starts with `podman compose up -d postgres`; the only non-container path is "clone and `uv sync`" in prose |
-| `init` is non-interactive and demands flags | `eidesoul init --provider <name>` is required (`eidesoul/__main__.py:709-714`), written from code templates (`eidesoul/admin/init.py:26-46`) |
-| The defaults already live in one place | `eidesoul/admin/templates.py:1` — "one source of truth, no separate example files" (ADR-0027 §4.6) |
+| `init` is non-interactive and demands flags | `monoagens init --provider <name>` is required (`monoagens/__main__.py:709-714`), written from code templates (`monoagens/admin/init.py:26-46`) |
+| The defaults already live in one place | `monoagens/admin/templates.py:1` — "one source of truth, no separate example files" (ADR-0027 §4.6) |
 | The panel does not exist yet | no `panel/` tree; ADR-0027 §4.4 plans it on by default once finished |
 | A reference, not a template | the Hermes bootstrap (`hermes-agent.nousresearch.com/install.sh`, 1302 lines) was studied: stage protocol, pinned `uv` with per-arch SHA-256, quiet output discipline, install log, signal handling, idempotent repair |
 | The user's direction | the interactive setup must not be a copy: our own style, more capable, with a logo slot that is filled later |
@@ -43,7 +43,7 @@
 | **A. Imitate the reference installer** | copy the banner, the stage protocol, and the wording | Rejected: it is another product's identity, and the stage protocol exists for their GUI driver, which we do not have |
 | **B. Our own installer and wizard** | `install.sh` at the repo root, an interactive `init` with our own visual language, one logo slot | **Chosen** |
 | **C. Prompts in bash only** | the installer asks, Python never does | Rejected: headless parity and testability suffer, and the defaults would drift back into shell |
-| **D. Distro packages (RPM/COPR)** | `dnf install eidesoul` | Deferred: needs releases that do not exist yet (§Versioning) and a maintainer story |
+| **D. Distro packages (RPM/COPR)** | `dnf install monoagens` | Deferred: needs releases that do not exist yet (§Versioning) and a maintainer story |
 
 ## 4. Decision
 
@@ -58,11 +58,11 @@ install path for both stacks.
 | License to touch the host | **never** runs `sudo`; a missing package prints the exact command (`dnf install postgresql-server pgvector`, `postgresql-setup --initdb`) and stops that stage |
 | `uv` | if absent, download the pinned release for the running architecture and verify its SHA-256 before use; the pin lives in one commented block with a "how to bump" line |
 | Python | requires 3.11+ and reports the interpreter it found; the container image keeps its own 3.12 pin — the difference is stated, not hidden |
-| Dependencies | `uv sync --locked` inside the install directory (`--dir`, default `~/.eidesoul/app`); no dependency is installed outside it |
-| Setup | hands over to `eidesoul init` (§4.3): interactive on a terminal, flag-driven otherwise |
-| Continue | `eidesoul db upgrade`, then `eidesoul selftest` |
+| Dependencies | `uv sync --locked` inside the install directory (`--dir`, default `~/.monoagens/app`); no dependency is installed outside it |
+| Setup | hands over to `monoagens init` (§4.3): interactive on a terminal, flag-driven otherwise |
+| Continue | `monoagens db upgrade`, then `monoagens selftest` |
 | Finish | offers a choice (§4.5): open the panel, or stay on the command line |
-| Observation | one status line while a child runs, everything appended to `~/.eidesoul/logs/install.log`, and a failure prints the last lines plus the log path |
+| Observation | one status line while a child runs, everything appended to `~/.monoagens/logs/install.log`, and a failure prints the last lines plus the log path |
 | Signals | `INT`/`TERM`/`HUP` mark the run `interrupted` and are re-raised, so the exit status stays the signal's |
 | Re-run | a repair: it never overwrites an existing file or re-clones over local changes without being asked |
 | Platform | Linux x86_64 and aarch64 in this version; anything else is refused with one line |
@@ -83,7 +83,7 @@ The interactive setup is designed here, not borrowed. What it borrows from the r
 | Colour | terminal-only, `NO_COLOR` respected, no animation, and no box drawing that breaks on a 60-column terminal |
 | Voice | English operator text (internal diagnostics, per the repo rule); the soul's language governs chat, not the installer |
 
-### 4.3 `eidesoul init` becomes interactive on a terminal
+### 4.3 `monoagens init` becomes interactive on a terminal
 
 - On a TTY, `init` asks the same questions the flags carry: provider, model (optional), database URL,
   the first administrator's label, and the **voice layer** — keep emotion, humanize, and character on
@@ -91,8 +91,8 @@ The interactive setup is designed here, not borrowed. What it borrows from the r
 - Off a terminal (piped, CI, `--non-interactive`), it **fails closed**: it names the flags it needs
   instead of waiting for input that cannot arrive.
 - Secrets never reach YAML: the wizard writes env **names** and puts values in `.env` (`0600`), exactly
-  as the non-interactive path already does (`eidesoul/admin/init.py:14-20`).
-- Every value it writes comes from `eidesoul/admin/templates.py` plus the operator's answers — the
+  as the non-interactive path already does (`monoagens/admin/init.py:14-20`).
+- Every value it writes comes from `monoagens/admin/templates.py` plus the operator's answers — the
   wizard owns no default of its own.
 - Validation happens before writing: an unknown provider name, a model that is not in the provider's
   list when that list is reachable, or an unusable database URL is reported at the step that asked for
@@ -106,7 +106,7 @@ The interactive setup is designed here, not borrowed. What it borrows from the r
 |---|---|
 `config.yaml`, `roles.yaml`, `soul.yaml`, `.env` in the chosen directory, from the templates | a second config file, an `.example` copy, or a default that is not in `templates.py` |
 `.env` with names and empty values, mode `0600` | a secret value in YAML, in the log, or in the shell history |
-a `.eidesoul/workspace` directory | anything outside `--dir`; no `sudo`, no system service, no PATH line without a duplicate guard |
+a `.monoagens/workspace` directory | anything outside `--dir`; no `sudo`, no system service, no PATH line without a duplicate guard |
 
 ### 4.5 The end of an install is a choice, not a surprise
 
@@ -115,7 +115,7 @@ ADR-0027 §4.4) or **stay on the command line** (print the headless commands). I
 operator, and until the panel exists the second option is the only one and is labelled as such.
 
 The compose path keeps the same shape: bring the stack up, then either use the panel or run the same
-`init` inside the container (`docker compose exec eidesoul eidesoul init ...`). No second installer is
+`init` inside the container (`docker compose exec monoagens monoagens init ...`). No second installer is
 written for containers.
 
 ### 4.6 The logo lands later, the slot does not move
@@ -127,7 +127,7 @@ layout, and it is never a config key: the installer's appearance is code, not co
 
 | Flag | Meaning |
 |---|---|
-| `--dir PATH` | install directory (default `~/.eidesoul/app`) |
+| `--dir PATH` | install directory (default `~/.monoagens/app`) |
 | `--dry-run` | print every action, write nothing |
 | `--non-interactive` | never prompt; fail if a required value is missing |
 | `--provider NAME` / `--model ID` | forwarded to `init` |
@@ -143,7 +143,7 @@ configuration stays what `init` writes.
 
 | Metric | Initial target |
 |---|---|
-| Default values that exist outside `eidesoul/admin/templates.py` | 0 |
+| Default values that exist outside `monoagens/admin/templates.py` | 0 |
 | `sudo` invocations performed by the installer | 0 |
 | Prompts when stdin is not a terminal | 0 (fail with the flag list instead) |
 | Secrets written to YAML, logs, or history by the wizard | 0 |
@@ -158,8 +158,8 @@ configuration stays what `init` writes.
 - [ ] On a machine without `uv`, the pinned release is fetched, its SHA-256 verified, and a mismatch aborts before anything else happens.
 - [ ] On a machine without Postgres, the installer prints the exact `dnf` commands and does not run them.
 - [ ] `install.sh` performs no `sudo` call (asserted by running it under a PATH without `sudo`).
-- [ ] `eidesoul init` on a TTY walks provider → model → database URL → administrator label, shows a review screen, then writes the four files with `.env` and `roles.yaml` at `0600`.
-- [ ] `eidesoul init` with piped stdin and no flags exits non-zero naming the missing flags; it never blocks.
+- [ ] `monoagens init` on a TTY walks provider → model → database URL → administrator label, shows a review screen, then writes the four files with `.env` and `roles.yaml` at `0600`.
+- [ ] `monoagens init` with piped stdin and no flags exits non-zero naming the missing flags; it never blocks.
 - [ ] `Ctrl-C` at any wizard step leaves no new file and no partial file (checked with a before/after listing).
 - [ ] An unknown provider name or an unreachable model list fails at the asking step, before any file is written.
 - [ ] Running the wizard twice offers `keep` / `change` / `replace` and never overwrites silently.
@@ -199,10 +199,10 @@ configuration stays what `init` writes.
 
 ## 10. Code references
 
-- `eidesoul/admin/init.py:14-46` — the writer, its `0600` modes, and its never-overwrite rule.
-- `eidesoul/admin/templates.py:1,151,253` — the single default source the wizard reuses.
-- `eidesoul/__main__.py:587,709-714` — `_init`, the `init` subcommand, and the required `--provider`.
-- `eidesoul/providers/__init__.py` — provider names and their key variables, used for validation.
+- `monoagens/admin/init.py:14-46` — the writer, its `0600` modes, and its never-overwrite rule.
+- `monoagens/admin/templates.py:1,151,253` — the single default source the wizard reuses.
+- `monoagens/__main__.py:587,709-714` — `_init`, the `init` subcommand, and the required `--provider`.
+- `monoagens/providers/__init__.py` — provider names and their key variables, used for validation.
 - `README.md:88-105`, `README.id.md:96-112` — the quickstart this ADR's native path sits beside.
 - `compose.yaml` — the container path that keeps the same `init`.
 - `install.sh` — new file at the repository root (proposal, not created yet).

@@ -6,11 +6,11 @@ from pathlib import Path
 
 import pytest
 
-from eidesoul.engine.access.permissions import commands_for, tool_patterns, tools_for
-from eidesoul.engine.access.roles import Role
-from eidesoul.engine.commands import REGISTRY as COMMANDS
-from eidesoul.engine.registry import RegistryError, discover
-from eidesoul.engine.tools import REGISTRY as TOOLS
+from monoagens.engine.access.permissions import commands_for, tool_patterns, tools_for
+from monoagens.engine.access.roles import Role
+from monoagens.engine.commands import REGISTRY as COMMANDS
+from monoagens.engine.registry import RegistryError, discover
+from monoagens.engine.tools import REGISTRY as TOOLS
 
 
 def package(root: Path, name: str, files: dict[str, str]) -> Path:
@@ -73,7 +73,7 @@ def test_drop_in_tool_discovered(tmp_path: Path, monkeypatch: pytest.MonkeyPatch
         "plug_valid",
         {
             "echo.py": (
-                "from eidesoul.engine.registry import Handler\n"
+                "from monoagens.engine.registry import Handler\n"
                 "\n"
                 "async def fn(args, ctx):\n"
                 '    return "ok"\n'
@@ -97,7 +97,7 @@ def test_invalid_modules_aggregate_errors(tmp_path: Path, monkeypatch: pytest.Mo
         "plug_invalid",
         {
             "bad_name.py": (
-                "from eidesoul.engine.registry import Handler\n"
+                "from monoagens.engine.registry import Handler\n"
                 "\n"
                 "async def fn(args, ctx):\n"
                 '    return ""\n'

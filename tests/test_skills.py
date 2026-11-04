@@ -9,13 +9,13 @@ from types import SimpleNamespace
 import pytest
 from support import build_config, database, role
 
-from eidesoul.engine.commands import CommandContext
-from eidesoul.engine.commands.skill import COMMAND as SKILLCMD
-from eidesoul.engine.config import Config
-from eidesoul.engine.db import Database
-from eidesoul.engine.schema import skill_files
-from eidesoul.engine.stores.skills import SkillStore, parse_frontmatter
-from eidesoul.engine.tools import REGISTRY as TOOLS
+from monoagens.engine.commands import CommandContext
+from monoagens.engine.commands.skill import COMMAND as SKILLCMD
+from monoagens.engine.config import Config
+from monoagens.engine.db import Database
+from monoagens.engine.schema import skill_files
+from monoagens.engine.stores.skills import SkillStore, parse_frontmatter
+from monoagens.engine.tools import REGISTRY as TOOLS
 
 BODY = """# Deploy aman
 
@@ -274,7 +274,7 @@ def test_the_turn_app_hint_selects_the_skill_corpus(tmp_path: Path) -> None:
     from sqlalchemy import select
     from support import inbound_message, make_agent
 
-    from eidesoul.engine.schema import turns
+    from monoagens.engine.schema import turns
 
     env = make_agent(tmp_path)
     env.agent.skills.save(

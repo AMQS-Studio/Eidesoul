@@ -9,9 +9,9 @@ from sqlalchemy import select
 from sqlalchemy.dialects import postgresql
 from support import database
 
-from eidesoul.engine.db import SCHEMA_VERSION, redact_dsn
-from eidesoul.engine.schema import documents, messages, schema_meta, state
-from eidesoul.engine.stores.history import HistoryStore
+from monoagens.engine.db import SCHEMA_VERSION, redact_dsn
+from monoagens.engine.schema import documents, messages, schema_meta, state
+from monoagens.engine.stores.history import HistoryStore
 
 
 def test_ensure_is_idempotent_on_the_migrated_schema(tmp_path) -> None:
@@ -112,7 +112,7 @@ def test_state_roundtrip(tmp_path) -> None:
 def test_search_is_ilike_per_term(tmp_path) -> None:
     db = database()
     store = HistoryStore(db)
-    from eidesoul.engine.turn.context import Message
+    from monoagens.engine.turn.context import Message
 
     def message(mid: str, text: str, when: datetime) -> Message:
         return Message(id=mid, sender_name="Budi", sender_id="1", when=when, text=text)
@@ -130,7 +130,7 @@ def test_search_is_ilike_per_term(tmp_path) -> None:
 def test_search_time_window_and_other_chat_isolation(tmp_path) -> None:
     db = database()
     store = HistoryStore(db)
-    from eidesoul.engine.turn.context import Message
+    from monoagens.engine.turn.context import Message
 
     def message(mid: str, text: str, stamp: float) -> Message:
         return Message(
@@ -151,18 +151,18 @@ def test_search_time_window_and_other_chat_isolation(tmp_path) -> None:
 
 
 def test_redact_dsn_hides_password() -> None:
-    label = redact_dsn("postgresql+psycopg://eidesoul:secret@db:5432/eidesoul?sslmode=require")
+    label = redact_dsn("postgresql+psycopg://monoagens:secret@db:5432/monoagens?sslmode=require")
     assert "secret" not in label
     assert label.startswith("postgresql://")
-    assert "db:5432/eidesoul" in label
+    assert "db:5432/monoagens" in label
 
 
 def test_label_of_the_store_hides_the_password() -> None:
     db = database()
     try:
         assert db.label.startswith("postgresql://")
-        assert "eidesoul_test" in db.label
-        assert "eidesoul:eidesoul" not in db.label
+        assert "monoagens_test" in db.label
+        assert "monoagens:monoagens" not in db.label
     finally:
         db.dispose()
 

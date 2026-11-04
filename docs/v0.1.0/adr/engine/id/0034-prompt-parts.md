@@ -1,4 +1,4 @@
-> Terjemahan turunan — jangan sunting; sumber: engine/0034-prompt-parts.md (sha256: fbda400d8cba)
+> Terjemahan turunan — jangan sunting; sumber: engine/0034-prompt-parts.md (sha256: 2eab6a26fa5b)
 > Ditulis tangan (bukan mesin), mengikuti sumber English baris demi baris.
 
 # ADR-0034: Prompt Parts — Satu Registry untuk Metadata Blok, Bukan Kontrak Tool Kedua
@@ -164,12 +164,12 @@ Gate-nya:
 
 ## 10. Referensi kode
 
-- `eidesoul/engine/turn/prompts.py:16,45,244,400,407,428` — `Prompt`, `_capability_index`, `system_prompt`, dua kamus blok, dan tail volatil tetap.
-- `eidesoul/engine/turn/salience.py:11,12,13,26,53,68,75,87,90` — daftar nama dan setiap penggunaan keanggotaan/indeks.
-- `eidesoul/engine/agent.py:1101-1107,1184,1368-1372,1445-1464` — produsen emosi/vibe, panggilan decision, `character_block`, dan panggilan perakitan enam belas argumen.
-- `eidesoul/engine/llm.py:232-237` — dua pesan system yang menjadikan pemisahan sebagai keputusan cache.
-- `eidesoul/engine/inbound.py:220` — `prompt_section`, batasnya, dan kontribusi body.
-- `eidesoul/engine/plugins.py:261-268,505-520` — parsing `provides` dan `register()`; titik ekstensi yang didefinisikan ADR ini.
+- `monoagens/engine/turn/prompts.py:16,45,244,400,407,428` — `Prompt`, `_capability_index`, `system_prompt`, dua kamus blok, dan tail volatil tetap.
+- `monoagens/engine/turn/salience.py:11,12,13,26,53,68,75,87,90` — daftar nama dan setiap penggunaan keanggotaan/indeks.
+- `monoagens/engine/agent.py:1101-1107,1184,1368-1372,1445-1464` — produsen emosi/vibe, panggilan decision, `character_block`, dan panggilan perakitan enam belas argumen.
+- `monoagens/engine/llm.py:232-237` — dua pesan system yang menjadikan pemisahan sebagai keputusan cache.
+- `monoagens/engine/inbound.py:220` — `prompt_section`, batasnya, dan kontribusi body.
+- `monoagens/engine/plugins.py:261-268,505-520` — parsing `provides` dan `register()`; titik ekstensi yang didefinisikan ADR ini.
 - `tests/test_salience.py:5,18,44,83-84` — tes yang mengimpor daftar nama dan akan dibangun ulang dari fixture.
 - `tests/test_prompt_contract.py`, `tests/data/prompt_cases.yaml` — kontrak properti per body dan hash stabil yang harus tetap lolos.
 

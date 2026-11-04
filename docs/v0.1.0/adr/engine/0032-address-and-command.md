@@ -120,7 +120,7 @@ No new key. The class rules come from roles and `approvals`; the route from `thr
 | Cross-body sends that pass an approval | 0 (no path) | every one |
 | Bodies reachable by name from another body | none | every enabled body |
 
-Gates: `pytest -q`, `python scripts/adr.py --check`, `python scripts/adr.py --translate-check`, `python scripts/selfcheck.py --check`, a conformance test that runs the same scenarios against every body through the door (local thread, another room of the requester, a room the requester is not in, a body without `Directory`, an ambiguous name), and a grep gate: `grep -rn "gateway\.send_text(\|gateway\.send_file(" eidesoul/engine` matches only the door's module.
+Gates: `pytest -q`, `python scripts/adr.py --check`, `python scripts/adr.py --translate-check`, `python scripts/selfcheck.py --check`, a conformance test that runs the same scenarios against every body through the door (local thread, another room of the requester, a room the requester is not in, a body without `Directory`, an ambiguous name), and a grep gate: `grep -rn "gateway\.send_text(\|gateway\.send_file(" monoagens/engine` matches only the door's module.
 
 ## 7. Acceptance criteria
 
@@ -157,14 +157,14 @@ ADR-0000 owns `Percept`, `Action`, and the `send`/`chat_history` placement; this
 
 ## 11. Code references
 
-- `eidesoul/engine/inbound.py` — `Percept`, `Action`, `GatewayCore`, `Directory`, `refusal`, `directory_refusal`.
-- `eidesoul/engine/agent.py` — `send_text`, `_gateway_for`, `ask_memory`, `ask_dispute`; the two direct body calls.
-- `eidesoul/engine/jobs/automation.py` — `_deliver`, `_gateway`, `_thread_gateway`.
-- `eidesoul/engine/turn/reply.py` — the chat text policy (chunking, rendering).
-- `eidesoul/engine/access/privacy.py`, `eidesoul/engine/access/relay.py` — callers that become door callers.
-- `eidesoul/engine/tools/__init__.py` — `rooms_of`, `cross_refusal`, the flat registry door.
-- `eidesoul/gateways/whatsapp/tools/chat_history.py`, `.../send_to.py` — body tools that become address-aware.
-- `eidesoul/engine/stores/history.py` — `_route`, `gateway_of`, `rooms_of`.
+- `monoagens/engine/inbound.py` — `Percept`, `Action`, `GatewayCore`, `Directory`, `refusal`, `directory_refusal`.
+- `monoagens/engine/agent.py` — `send_text`, `_gateway_for`, `ask_memory`, `ask_dispute`; the two direct body calls.
+- `monoagens/engine/jobs/automation.py` — `_deliver`, `_gateway`, `_thread_gateway`.
+- `monoagens/engine/turn/reply.py` — the chat text policy (chunking, rendering).
+- `monoagens/engine/access/privacy.py`, `monoagens/engine/access/relay.py` — callers that become door callers.
+- `monoagens/engine/tools/__init__.py` — `rooms_of`, `cross_refusal`, the flat registry door.
+- `monoagens/gateways/whatsapp/tools/chat_history.py`, `.../send_to.py` — body tools that become address-aware.
+- `monoagens/engine/stores/history.py` — `_route`, `gateway_of`, `rooms_of`.
 
 ---
 

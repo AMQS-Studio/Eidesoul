@@ -1,4 +1,4 @@
-> Terjemahan turunan — jangan sunting; sumber: engine/0001-memory-source-of-truth.md (sha256: abaed6a68b14)
+> Terjemahan turunan — jangan sunting; sumber: engine/0001-memory-source-of-truth.md (sha256: 9b23621bb0e3)
 > Teks ini ditulis manusia; baris yang tidak bisa diterjemahkan mesin disalin apa adanya ke sumber English, jadi sumber bercampur dua bahasa.
 
 # ADR-0001: Sumber Kebenaran Memori — Postgres Canonical, Mem0 sebagai Memory Intelligence
@@ -183,15 +183,15 @@ ADR, ADR-0009). Daftar panjang di bagian ini tidak lagi dirawat di sini.
 
 ## 15. Referensi kode
 
-- `eidesoul/engine/memory/__init__.py:131-188` — `NullMemory`, `build_memory`.
-- `eidesoul/engine/memory/mem0.py:139-203` — `available`, config, monkey-patch client.
-- `eidesoul/engine/memory/mem0.py:246-290` — `_metadata` dan urutan merge.
-- `eidesoul/engine/memory/mem0.py:496-531` — `set_privacy`, `veto`.
-- `eidesoul/engine/memory/rekey.py:15-62` — `RESERVED`, `_move`.
-- `eidesoul/engine/memory/context.py:127-131` — filter retrieval.
-- `eidesoul/engine/access/privacy.py:222-303` — capture dan assess.
-- `eidesoul/engine/agent.py:614,906-921` — gate `can_memory` dan spawn capture.
-- `eidesoul/engine/stores/affect.py` — pola state document yang bisa ditiru untuk `memory_events`.
+- `monoagens/engine/memory/__init__.py:131-188` — `NullMemory`, `build_memory`.
+- `monoagens/engine/memory/mem0.py:139-203` — `available`, config, monkey-patch client.
+- `monoagens/engine/memory/mem0.py:246-290` — `_metadata` dan urutan merge.
+- `monoagens/engine/memory/mem0.py:496-531` — `set_privacy`, `veto`.
+- `monoagens/engine/memory/rekey.py:15-62` — `RESERVED`, `_move`.
+- `monoagens/engine/memory/context.py:127-131` — filter retrieval.
+- `monoagens/engine/access/privacy.py:222-303` — capture dan assess.
+- `monoagens/engine/agent.py:614,906-921` — gate `can_memory` dan spawn capture.
+- `monoagens/engine/stores/affect.py` — pola state document yang bisa ditiru untuk `memory_events`.
 
 ---
 

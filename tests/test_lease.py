@@ -9,9 +9,9 @@ import pytest
 from sqlalchemy import select, text
 from support import database
 
-from eidesoul.engine.jobs import lease as lease_module
-from eidesoul.engine.jobs.lease import Lease, Superseded
-from eidesoul.engine.schema import actions
+from monoagens.engine.jobs import lease as lease_module
+from monoagens.engine.jobs.lease import Lease, Superseded
+from monoagens.engine.schema import actions
 
 
 def lease(db, name: str, host: str = "host-a", pid: int = 1) -> Lease:

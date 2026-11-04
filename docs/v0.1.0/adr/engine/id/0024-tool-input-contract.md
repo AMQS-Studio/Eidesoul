@@ -1,4 +1,4 @@
-> Terjemahan turunan — jangan sunting; sumber: engine/0024-tool-input-contract.md (sha256: 0db96db87443)
+> Terjemahan turunan — jangan sunting; sumber: engine/0024-tool-input-contract.md (sha256: 5c80004206d0)
 > Teks ini ditulis manusia; baris yang tidak bisa diterjemahkan mesin disalin apa adanya ke sumber English, jadi sumber bercampur dua bahasa.
 
 # ADR-0024: Kontrak Input Tool — Validasi Argumen, Handler Async, dan `env` Shell
@@ -18,14 +18,14 @@
 
 | Fakta | Bukti |
 |---|---|
-| `execute` menjalankan urutan nama → izin → `fn` kosong → safety/approval → eksekusi; argumen tidak pernah diperiksa | `eidesoul/engine/tools/__init__.py:182-239` |
-| Handler dipanggil dengan `await spec.fn(args, ctx)` | `eidesoul/engine/tools/__init__.py:235` |
-| Command juga di-`await` | `eidesoul/engine/agent.py:986` |
-| Skema argumen hanya diperiksa **bentuknya** saat discovery (`parameters` dict, `type: object`, `properties` objek) | `eidesoul/engine/registry.py:45-53`, `eidesoul/engine/registry.py:104-108` |
-| `validate()` memeriksa nama/alias/keluarga/deskripsi, tidak pernah memeriksa jenis `fn` | `eidesoul/engine/registry.py:70-108` |
-| `shell` menjalankan `create_subprocess_shell` tanpa `env=` → child mewarisi environment proses | `eidesoul/engine/tools/shell.py:10-26` |
-| `sandbox` sudah punya pola env minimal (container + CLI klien) | `eidesoul/engine/tools/sandbox.py:18-20,83-85,155` |
-| Tidak ada `inspect.iscoroutinefunction` di seluruh `eidesoul/` | grep repositori |
+| `execute` menjalankan urutan nama → izin → `fn` kosong → safety/approval → eksekusi; argumen tidak pernah diperiksa | `monoagens/engine/tools/__init__.py:182-239` |
+| Handler dipanggil dengan `await spec.fn(args, ctx)` | `monoagens/engine/tools/__init__.py:235` |
+| Command juga di-`await` | `monoagens/engine/agent.py:986` |
+| Skema argumen hanya diperiksa **bentuknya** saat discovery (`parameters` dict, `type: object`, `properties` objek) | `monoagens/engine/registry.py:45-53`, `monoagens/engine/registry.py:104-108` |
+| `validate()` memeriksa nama/alias/keluarga/deskripsi, tidak pernah memeriksa jenis `fn` | `monoagens/engine/registry.py:70-108` |
+| `shell` menjalankan `create_subprocess_shell` tanpa `env=` → child mewarisi environment proses | `monoagens/engine/tools/shell.py:10-26` |
+| `sandbox` sudah punya pola env minimal (container + CLI klien) | `monoagens/engine/tools/sandbox.py:18-20,83-85,155` |
+| Tidak ada `inspect.iscoroutinefunction` di seluruh `monoagens/` | grep repositori |
 
 Akibat hari ini: argumen bertipe salah baru gagal **di tengah handler**, sesudah efek samping mungkin terjadi; skema yang salah bentuk hanya ketahuan saat tool dipakai; dan `shell` bisa membaca `OPENAI_API_KEY`/DSN hanya karena ia ada di environment induk.
 
@@ -68,11 +68,11 @@ Deviasi sadar dari JSON Schema: kunci asing ditolak secara default; handler yang
 
 ### 4.5 Handler wajib coroutine
 
-`validate()` menolak `fn` non-coroutine untuk tool **dan** command; pesan menyebut berkas (`<source>.py: fn must be async`). Alasan: kedua pemanggil memakai `await` (`eidesoul/engine/tools/__init__.py:235`, `eidesoul/engine/agent.py:986`), jadi handler sinkron adalah bug yang lebih murah ditemukan saat boot.
+`validate()` menolak `fn` non-coroutine untuk tool **dan** command; pesan menyebut berkas (`<source>.py: fn must be async`). Alasan: kedua pemanggil memakai `await` (`monoagens/engine/tools/__init__.py:235`, `monoagens/engine/agent.py:986`), jadi handler sinkron adalah bug yang lebih murah ditemukan saat boot.
 
 ### 4.6 `env` shell dihitung, bukan diwarisi
 
-`shell` memakai whitelist `engine.shell.env` (default `PATH, HOME, LANG, TZ, XDG_RUNTIME_DIR, TMPDIR, TERM`) mengikuti pola `client_env()` di `eidesoul/engine/tools/sandbox.py:83-85`. Wildcard `*` ditolak saat boot; isi `.env` tidak pernah diteruskan ke child; variabel di luar whitelist tidak ikut meski ada di environment proses. `sandbox` tidak berubah.
+`shell` memakai whitelist `engine.shell.env` (default `PATH, HOME, LANG, TZ, XDG_RUNTIME_DIR, TMPDIR, TERM`) mengikuti pola `client_env()` di `monoagens/engine/tools/sandbox.py:83-85`. Wildcard `*` ditolak saat boot; isi `.env` tidak pernah diteruskan ke child; variabel di luar whitelist tidak ikut meski ada di environment proses. `sandbox` tidak berubah.
 
 ### 4.7 Batas dengan kredensial
 
@@ -131,16 +131,16 @@ Tidak ada `tools.args: off`: mematikan validasi berarti membuka kembali lubang y
 
 ## 10. Referensi kode
 
-- `eidesoul/engine/tools/__init__.py:182-239` — `execute`, satu pintu (tempat validasi argumen disisipkan); `:235` `await spec.fn`.
-- `eidesoul/engine/tools/__init__.py:17-19` — `MAX_OUTPUT`/`MAX_ERROR`/`TRUNCATED`.
-- `eidesoul/engine/registry.py:45-53` — `_schema_errors` (bentuk skema).
-- `eidesoul/engine/registry.py:70-108` — `validate()` (tempat pemeriksaan coroutine ditambahkan).
-- `eidesoul/engine/registry.py:148-182` — `discover`/`discover_many`.
-- `eidesoul/engine/registry.py:31` — `Handler.parameters`.
-- `eidesoul/engine/agent.py:986` — dispatch command `await handler.fn(ctx)`.
-- `eidesoul/engine/tools/shell.py:10-26` — `create_subprocess_shell` tanpa `env`.
-- `eidesoul/engine/tools/sandbox.py:18-20,83-85,155` — pola whitelist env yang dipakai ulang.
-- `eidesoul/engine/config.py:98-108` — `SandboxConfig`, acuan bentuk blok config `shell`.
+- `monoagens/engine/tools/__init__.py:182-239` — `execute`, satu pintu (tempat validasi argumen disisipkan); `:235` `await spec.fn`.
+- `monoagens/engine/tools/__init__.py:17-19` — `MAX_OUTPUT`/`MAX_ERROR`/`TRUNCATED`.
+- `monoagens/engine/registry.py:45-53` — `_schema_errors` (bentuk skema).
+- `monoagens/engine/registry.py:70-108` — `validate()` (tempat pemeriksaan coroutine ditambahkan).
+- `monoagens/engine/registry.py:148-182` — `discover`/`discover_many`.
+- `monoagens/engine/registry.py:31` — `Handler.parameters`.
+- `monoagens/engine/agent.py:986` — dispatch command `await handler.fn(ctx)`.
+- `monoagens/engine/tools/shell.py:10-26` — `create_subprocess_shell` tanpa `env`.
+- `monoagens/engine/tools/sandbox.py:18-20,83-85,155` — pola whitelist env yang dipakai ulang.
+- `monoagens/engine/config.py:98-108` — `SandboxConfig`, acuan bentuk blok config `shell`.
 
 ---
 

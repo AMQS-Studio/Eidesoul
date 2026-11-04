@@ -1,4 +1,4 @@
-"""`eidesoul models`: the provider lists its ids, the operator picks one."""
+"""`monoagens models`: the provider lists its ids, the operator picks one."""
 
 
 import json
@@ -7,8 +7,8 @@ from dataclasses import replace
 import pytest
 from support import build_config
 
-from eidesoul.admin import models
-from eidesoul.engine.config import ConfigError
+from monoagens.admin import models
+from monoagens.engine.config import ConfigError
 
 
 class FakeResponse:

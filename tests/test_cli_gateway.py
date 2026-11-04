@@ -6,9 +6,9 @@ import io
 
 from support import build_config, database
 
-from eidesoul.engine.config import GatewaySettings
-from eidesoul.engine.stores.history import HistoryStore
-from eidesoul.engine.turn.context import WorkingMemory
+from monoagens.engine.config import GatewaySettings
+from monoagens.engine.stores.history import HistoryStore
+from monoagens.engine.turn.context import WorkingMemory
 
 
 class RecordingAgent:
@@ -22,7 +22,7 @@ class RecordingAgent:
 
 
 def make_cli(tmp_path):
-    from eidesoul.gateways.cli.gateway import CliGateway
+    from monoagens.gateways.cli.gateway import CliGateway
 
     config = build_config(tmp_path)
     db = database()
@@ -61,7 +61,7 @@ def test_send_text_prints_with_prefix(tmp_path, capsys) -> None:
     message_id = asyncio.run(gateway.send_text("cli:local", "halo dunia"))
 
     out = capsys.readouterr().out
-    assert "Eidesoul: halo dunia" in out
+    assert "MonoAgens: halo dunia" in out
     assert message_id.startswith("cli-")
 
 
@@ -73,7 +73,7 @@ def test_render_is_identity_and_hints_are_plain(tmp_path) -> None:
 
 
 def test_the_cli_is_core_only(tmp_path) -> None:
-    from eidesoul.engine.inbound import Directory, GatewayCore, PrivateThread, Rich
+    from monoagens.engine.inbound import Directory, GatewayCore, PrivateThread, Rich
 
     gateway = make_cli(tmp_path)
 

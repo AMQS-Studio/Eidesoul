@@ -305,17 +305,17 @@ memory:
 
 ## 10. Code references
 
-- `eidesoul/engine/guard/patterns.py:11-35,16-26` — `SENSITIVE`, `safe_text`, `INJECTION`.
-- `eidesoul/engine/guard/sandbox.py:139-192` — deterministic patterns + a small classifier.
-- `eidesoul/engine/agent.py:906-918` — the capture gate (injection, length, `can_memory`).
-- `eidesoul/engine/access/privacy.py:225-277,295-310` — the capture turn and `_assess`.
-- `eidesoul/engine/memory/mem0.py:308-392,323-338,527-530` — metadata, supersede, veto.
-- `eidesoul/engine/memory/context.py:91-133` — `render` (where id/kind are added) and `build`.
-- `eidesoul/engine/tools/memory.py:69-105,175-183,230-234` — `add`, `kind`, `supersedes`, `veto`.
-- `eidesoul/engine/commands/memori.py:83-134` — the command door (source `command`).
-- `eidesoul/engine/jobs/ambient.py:251-256,310-315` — soul synthesis (source `ambient:<chat>`).
-- `eidesoul/engine/turn/prompts.py:53-56,266,300-316` — the memory and crisis prompt rules.
-- `eidesoul/engine/schema.py:129-142` — the `people` table (relationship trust, not memory trust).
+- `monoagens/engine/guard/patterns.py:11-35,16-26` — `SENSITIVE`, `safe_text`, `INJECTION`.
+- `monoagens/engine/guard/sandbox.py:139-192` — deterministic patterns + a small classifier.
+- `monoagens/engine/agent.py:906-918` — the capture gate (injection, length, `can_memory`).
+- `monoagens/engine/access/privacy.py:225-277,295-310` — the capture turn and `_assess`.
+- `monoagens/engine/memory/mem0.py:308-392,323-338,527-530` — metadata, supersede, veto.
+- `monoagens/engine/memory/context.py:91-133` — `render` (where id/kind are added) and `build`.
+- `monoagens/engine/tools/memory.py:69-105,175-183,230-234` — `add`, `kind`, `supersedes`, `veto`.
+- `monoagens/engine/commands/memori.py:83-134` — the command door (source `command`).
+- `monoagens/engine/jobs/ambient.py:251-256,310-315` — soul synthesis (source `ambient:<chat>`).
+- `monoagens/engine/turn/prompts.py:53-56,266,300-316` — the memory and crisis prompt rules.
+- `monoagens/engine/schema.py:129-142` — the `people` table (relationship trust, not memory trust).
 
 ---
 

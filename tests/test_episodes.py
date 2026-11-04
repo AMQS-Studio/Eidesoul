@@ -6,11 +6,11 @@ import time
 
 from support import build_config, database
 
-from eidesoul.engine.jobs.cognition import CognitionWorker
-from eidesoul.engine.memory import episodes
-from eidesoul.engine.memory.store import MemoryStore
-from eidesoul.engine.schema import message_media, messages, turn_steps, turns
-from eidesoul.engine.stores.skills import SkillStore
+from monoagens.engine.jobs.cognition import CognitionWorker
+from monoagens.engine.memory import episodes
+from monoagens.engine.memory.store import MemoryStore
+from monoagens.engine.schema import message_media, messages, turn_steps, turns
+from monoagens.engine.stores.skills import SkillStore
 
 THREAD = "628111@s.whatsapp.net"
 PERSON = "628111"
@@ -79,7 +79,7 @@ def seed_artifact(db, msg_id: str, *, thread: str = THREAD, ts: float) -> None:
                     "msg_id": msg_id,
                     "ts": ts,
                     "sender_id": "",
-                    "sender_name": "eidesoul",
+                    "sender_name": "monoagens",
                     "sender_address": "",
                     "text": "hasil",
                     "outgoing": True,

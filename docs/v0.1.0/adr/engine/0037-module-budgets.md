@@ -19,9 +19,9 @@ three concentrated modules with private caps and four permanent exceptions:
 
 | Module | Lines | Cap | Headroom |
 | --- | --- | --- | --- |
-| `eidesoul/engine/agent.py` | 1,800 | 1,800 | **0** |
-| `eidesoul/engine/memory/store.py` | 2,376 | 2,400 | 24 |
-| `eidesoul/engine/jobs/automation.py` | 1,971 | 2,000 | 29 |
+| `monoagens/engine/agent.py` | 1,800 | 1,800 | **0** |
+| `monoagens/engine/memory/store.py` | 2,376 | 2,400 | 24 |
+| `monoagens/engine/jobs/automation.py` | 1,971 | 2,000 | 29 |
 
 The four other modules above 800 (`config.py`, `stores/affect.py`, `jobs/cognition.py`,
 `schema.py`) are explicit exceptions in ADR-0031 and are not in scope here.
@@ -187,8 +187,8 @@ Counts to drive to zero, measured 2026-11-04:
 
 The gate, per split commit:
 
-1. `pytest -q` (with `EIDESOL_TEST_DATABASE_URL`) passes; no test changes its assertion.
-2. `ruff check eidesoul scripts tests plugins migrations` is clean.
+1. `pytest -q` (with `MONOAGENS_TEST_DATABASE_URL`) passes; no test changes its assertion.
+2. `ruff check monoagens scripts tests plugins migrations` is clean.
 3. `python -P scripts/types.py --check` reports no new errors.
 4. `python scripts/selfcheck.py --check` passes with the lowered cap.
 5. `python scripts/adr.py --check` and `--translate-check` pass.
@@ -243,14 +243,14 @@ The gate, per split commit:
 ## 10. Code references
 
 - `scripts/selfcheck.py:36-74` — `LINE_CAPS`, `OVER_CAP_ALLOWED`, `MODULE_CAP`, and the size gate.
-- `eidesoul/engine/agent.py:753-818,1005-1640,1646-1707,1774-1800` — delivery, `_run_turn`, command
+- `monoagens/engine/agent.py:753-818,1005-1640,1646-1707,1774-1800` — delivery, `_run_turn`, command
   dispatch, settings/close.
-- `eidesoul/engine/jobs/automation.py:75-599,600-1255,1256-1971` — manifest/authority, store, worker.
-- `eidesoul/engine/memory/store.py:314-1145,1334-1596,1597-1762,1972-2363` — writes/candidates,
+- `monoagens/engine/jobs/automation.py:75-599,600-1255,1256-1971` — manifest/authority, store, worker.
+- `monoagens/engine/memory/store.py:314-1145,1334-1596,1597-1762,1972-2363` — writes/candidates,
   retention, reads, reflection/disputes.
-- `eidesoul/engine/memory/queries.py` — the SQL statements; the helpers call it, they do not replace
+- `monoagens/engine/memory/queries.py` — the SQL statements; the helpers call it, they do not replace
   it.
-- `eidesoul/engine/turn/` — the folder that receives the new turn modules; `reply.py` stays text
+- `monoagens/engine/turn/` — the folder that receives the new turn modules; `reply.py` stays text
   shaping, `assembly.py`/`prompts.py` keep their roles.
 - `tests/test_turn_lifecycle.py`, `tests/test_automation.py`, `tests/test_memory.py` — the suites
   that prove resume, claim, and memory behavior across the moves.

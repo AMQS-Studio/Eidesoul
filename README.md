@@ -1,10 +1,10 @@
 <p align="center">
-  <img src="assets/logo.png" alt="Eidesoul" width="260">
+  <img src="assets/logo.png" alt="MonoAgens" width="260">
 </p>
 
-<h1 align="center">Eidesoul</h1>
+<h1 align="center">MonoAgens</h1>
 
-<p align="center"><em>a soul engine: one self, always remembering, always learning, the same person wherever it lives.</em></p>
+<p align="center"><em>persistent mono agent, always remembering, always learning, the same person wherever it lives.</em></p>
 
 <p align="center">
   <a href="docs/v0.1.0/README.md"><img alt="Docs" src="https://img.shields.io/badge/docs-v0.1.0-111111?style=flat-square&labelColor=555555"></a>
@@ -19,7 +19,7 @@
 <p align="center">
   <a href="#architecture">Architecture</a> · <a href="#tools-are-capabilities">Tools</a> ·
   <a href="#quickstart">Quickstart</a> ·
-  <a href="#soulyaml">soul.yaml</a> · <a href="#character-library">Character library</a> ·
+  <a href="#soulyaml">soul.yaml</a> · <a href="#character-and-research">Character and research</a> ·
   <a href="#supported-gateways">Gateways</a> · <a href="#roles-and-permissions">Roles and permissions</a> ·
   <a href="#safety">Safety</a> · <a href="#credits">Credits</a>
 </p>
@@ -49,13 +49,13 @@ design; this section is the delta that runs today.
 
 Memory is the floor, not the whole soul. Emotion has its own engine: a PAD state with a personality
 baseline that decays between turns, drives that pulse, and a relationship per person that moves through
-stages. Context has its own engine too: facts are selected semantically per turn, and character moves
-come from packs with gates on register and harshness, so what it knows and how it talks are assembled,
-not improvised. Humanized pacing is the timing on top.
+stages. Character is the soul's own persona and a few real examples, not a local pattern catalogue:
+the model carries stable prior, `web_search` supplies current facts through an ephemeral
+`ResearchCard`, and Mem0 supplies personal facts. Humanized pacing is the timing on top.
 
-Clean by default covers gateway, tool, and plugin: each is off until enabled, and the spine is the only
-exception. The voice layer — emotion, humanize, character — is on by default, `init` asks once whether
-to keep it, and each part can be switched off.
+Clean by default covers gateway, tool, plugin, and voice: each is off until enabled, and the spine is
+the only exception. The voice layer — emotion, style, character, and humanize — lives in `soul.voice`,
+starts off, and one master switch keeps every part inert.
 
 ## Where it sits among harnesses
 
@@ -64,14 +64,14 @@ keeps state and context, applies approval, and keeps work moving. Harnesses are 
 autonomous harness agent runs unattended, a developer harness agent changes a repository — and the
 mature ones already ship memory, skills, todos, and approval rules.
 
-Eidesoul is a **soul harness**: a harness whose state is a self. It remembers across sessions, keeps one
+MonoAgens is a **persistent agent harness**: a harness whose state is a self. It remembers across sessions, keeps one
 persona, and behaves as one believable character across every embodiment.
 
 | | Where state lives | How a turn gets its context | Optimizes for |
 |---|---|---|---|
 | Autonomous harness agent | the task's history and its workspace, enough to resume where it left off | the context window, compacted when it fills | finishing work unattended |
 | Developer harness agent | the repository and its files | the context window, filled from files and tool output | changing code correctly |
-| Eidesoul (soul harness) | one canonical store — Postgres with a vector index — holding memories, affect, and transcripts | rebuilt every turn from that store, scoped to the person and the chat; the window is a working set, not the memory | staying the same person, general-purpose — remembering, learning, privacy, permission |
+| MonoAgens (persistent agent harness) | one canonical store — Postgres with a vector index — holding memories, affect, and transcripts | rebuilt every turn from that store, scoped to the person and the chat; the window is a working set, not the memory | staying the same person, general-purpose — remembering, learning, privacy, permission |
 
 A conventional harness treats the context window as working memory and compacts it when it fills. Here
 the store is the memory and the window is only this turn's working set, so a long conversation does not
@@ -115,11 +115,11 @@ Twelve walls. Each line names the usual build, then what this engine does instea
   writes carry references, derivation is one level deep, rules come only from the soul document, and new
   memory stays quarantined until corroborated.
 - **A reply that invents what it does not know.** Usually the model fills gaps confidently. Here a
-  knowledge layer selects vetted facts per turn, with a keyword fallback when vectors are absent, and the
-  character pass may change tone but never facts, numbers, or tool results.
+  persona and a few examples anchor the voice; current facts come from `web_search` with citations, and
+  the character pass may change tone but never facts, numbers, or tool results.
 - **A reply that sounds like a machine.** Usually a prompt says "be friendly". Here emotion is its own
   engine — a PAD state with a decaying baseline, drives, and a relationship per person — the context
-  engine picks character moves gated by register and harshness, and a humanize pass paces the reply; all
+  engine polishes a robotic draft and a humanize pass paces the reply; all
   of it is a switch.
 - **An automation that is really a cron job.** Usually a crontab line with no owner, no permission, and
   no dedupe. Here event, condition, and a closed list of steps; one run per occurrence keyed by the
@@ -152,7 +152,7 @@ flowchart LR
     TURN[Turn loop<br/>context - recall - decide - reply]
     TURN --> PROMPT[Prompt + language catalog]
     TURN --> MEM[Semantic memory + privacy]
-    TURN --> AFFECT[Affect, style, character]
+    TURN --> VOICE[affect, style, character, humanize]
     TURN --> TOOLS[Tools<br/>removable capabilities]
     TURN --> LLM[LLM client]
   end
@@ -200,7 +200,7 @@ Requirements: Python 3.14, Postgres 14+ with `pgvector`, and a reachable OpenAI-
 endpoint. The container image pins Python 3.14; running from source needs 3.14 or newer.
 
 The shortest path is the installer; it never runs `sudo`, pins `uv`, writes the four host files,
-and hands over to `eidesoul init`:
+and hands over to `monoagens init`:
 
 ```bash
 bash install.sh                 # native
@@ -212,13 +212,13 @@ From source, the same steps by hand:
 
 ```bash
 # 1. Scaffold config.yaml, roles.yaml, soul.yaml, and .env; the provider is the operator's pick
-eidesoul init --provider openai
+monoagens init --provider openai
 
 # 2. Make it this soul, not the default one
 $EDITOR soul.yaml
 
 # 3. Fill .env: the provider key, the database URL, and POSTGRES_PASSWORD for compose
-#      EIDESOUL_DATABASE_URL=postgresql+psycopg://eidesoul:<password>@127.0.0.1:5432/eidesoul
+#      MONOAGENS_DATABASE_URL=postgresql+psycopg://monoagens:<password>@127.0.0.1:5432/monoagens
 #      POSTGRES_PASSWORD=<same password>
 #      OPENAI_API_KEY=...
 
@@ -226,22 +226,22 @@ $EDITOR soul.yaml
 podman compose up -d postgres
 
 # 5. Create the schema and seed the host files into it
-eidesoul db upgrade
+monoagens db upgrade
 
 # 6. Run the gateways enabled in config.yaml
-eidesoul run
+monoagens run
 
 # Local REPL against the same soul and database; takes the lease
-eidesoul console --takeover
+monoagens console --takeover
 ```
 
-`eidesoul run` loads the documents, acquires the primary lease, and starts the enabled gateways. A
+`monoagens run` loads the documents, acquires the primary lease, and starts the enabled gateways. A
 second instance stays standby and frozen until it takes over through the lease, so
-`eidesoul console --takeover` is the supported way to talk to a running deployment by hand.
+`monoagens console --takeover` is the supported way to talk to a running deployment by hand.
 
-`eidesoul db check` prints the schema and content summary; `eidesoul selftest` exercises stores,
-tools, and the LLM once without starting a gateway. `eidesoul people list` shows the identities and
-their gateway addresses, and `eidesoul people adopt` moves legacy raw addresses (a phone number,
+`monoagens db check` prints the schema and content summary; `monoagens selftest` exercises stores,
+tools, and the LLM once without starting a gateway. `monoagens people list` shows the identities and
+their gateway addresses, and `monoagens people adopt` moves legacy raw addresses (a phone number,
 `local`) onto `per_…` ids, folding their affect and style state and rewriting the role documents; it
 is idempotent, so an upgraded deployment runs it once.
 
@@ -250,10 +250,10 @@ dev or production one) and export the DSN; without the variable the suite fails 
 instead of falling back to SQLite:
 
 ```bash
-podman run -d --name eidesoul-test-pg -p 5433:5432 \
-  -e POSTGRES_DB=eidesoul_test -e POSTGRES_USER=eidesoul -e POSTGRES_PASSWORD=eidesoul \
+podman run -d --name monoagens-test-pg -p 5433:5432 \
+  -e POSTGRES_DB=monoagens_test -e POSTGRES_USER=monoagens -e POSTGRES_PASSWORD=monoagens \
   docker.io/pgvector/pgvector:pg17
-export EIDESOL_TEST_DATABASE_URL='postgresql+psycopg://eidesoul:eidesoul@127.0.0.1:5433/eidesoul_test'
+export MONOAGENS_TEST_DATABASE_URL='postgresql+psycopg://monoagens:monoagens@127.0.0.1:5433/monoagens_test'
 pytest -q
 ```
 
@@ -274,58 +274,73 @@ when enabled (see Optional integrations).
 
 ## soul.yaml
 
-One database is one soul, and `soul.yaml` is where that soul is written down. Every key except
-`name` is optional; unknown keys are ignored. After the first `db upgrade` the stored soul is
-authoritative and `soul.yaml` is its seed and mirror — edit the file, then run
-`eidesoul config import` to fold the change in, or `eidesoul config export` to write the mirror back
-out.
+One database is one soul, and `soul.yaml` is where that soul is written down. After the first
+`db upgrade` the stored soul is authoritative and `soul.yaml` is its seed and mirror. Normal edits
+apply on the next start: the engine compares file and DB hashes and imports the file when only the
+file changed; a DB-side change wins a conflict and rewrites the mirror. `monoagens config import`
+and `monoagens config export` remain for a forced direction.
 
 ```yaml
-name: Eidesoul                  # required; falls back to "Eidesoul"
+name: MonoAgens
 description: ""                 # one line, shown in the persona block
 language: id                    # installed catalog: id | en
+locale: id-ID                   # context locale used by prompts
+timezone: Asia/Jakarta          # required IANA zone; no code default
 pronouns: aku
-gender: unspecified             # male | female | nonbinary | unspecified
 role: assistant                 # the active role
 roles: [assistant]              # optional; defaults to [role]
-locale: id-ID                   # context locale used by prompts and currents
 background: ""                  # free text: where this soul comes from
 persona: ""                     # free-form markdown: personality, voice, values
-style:                          # written by `eidesoul library resolve`, not by hand
-  patterns: []                  # pattern pack ids from eidesoul/library/patterns/
-  facts: []                     # fact pack ids from eidesoul/library/facts/
-  registers: []                 # optional allow-list of registers; empty = pack default
-  max_patterns: 0               # pattern moves per turn, 0..6
-  max_facts: 0                  # facts per turn, 0..6
+voice:
+  enabled: false                # one master switch; every part below is inert while false
+  sampling:
+    daily_temperature: 0.9
+    professional_temperature: 0.3
+    top_p:                      # empty means the provider default
+    top_k:
+    min_p:
+  affect:
+    enabled: true
+  style:
+    enabled: true
+  character:
+    enabled: false
+    max_chars: 400
+    max_tokens: 500
+    temperature: 0.7
+  humanize:
+    enabled: true
+    cpms: 25.0
+    min_delay: 0.5
+    max_delay: 5.0
+    between_delay: 0.7
+    max_bubbles: 3
+    reaction_stickers: []
+  profanity: avoid              # free | avoid
+  safety: inherit               # inherit | off; off needs a native adapter
 examples: []                    # optional [{user: "...", soul: "..."}]
+rules: []                       # behavior rules, not style
 ```
 
 Rules the loader enforces:
 
-- `name` must be non-empty, otherwise the default is used.
-- `gender` must be one of `male`, `female`, `nonbinary`, or `unspecified`; anything else falls back
-  to `unspecified` with a warning.
-- `roles` defaults to `[role]` when absent; if `role` is not listed in `roles`, it is prepended,
-  and the rendered persona only lists the other roles when there is more than one.
-- Pack ids and registers must match `^[a-z0-9][a-z0-9-]{0,63}$`; an invalid id is an error, not a
-  silent skip.
-- `max_patterns` and `max_facts` clamp to `0..6`.
+- `language`, `locale`, and `timezone` are required; `monoagens init` writes them.
+- `roles` defaults to `[role]` when absent; if `role` is not listed in `roles`, it is prepended.
 - `persona` is rendered in a fixed order: name, description, active role, available roles, locale,
   background, free-form persona, then dialogue examples. Empty sections are omitted.
-- `style` is derived: `eidesoul init` seeds it and `eidesoul library resolve --force` rewrites it
-  from `description` + `background` + `persona` + `examples`, keeping only packs whose `language`
-  matches the soul. A weak match, a tie, or no match selects nothing, and a kind that resolves
-  nothing keeps the packs the soul already had.
+- `voice.enabled` is the only master switch. `sampling`, `profanity`, and `safety` are request-level
+  and keep working while the master is off; `affect`, `style`, `character`, and `humanize` are inert.
+- `voice.profanity` is a prompt instruction, not a numeric toxicity table. `voice.safety: off` is
+  accepted only when the selected provider wire reports a request-level safety capability.
+- A missing `voice` block resolves to the safe defaults above: off, `profanity: avoid`,
+  `safety: inherit`, and empty `top_p` / `top_k` / `min_p`.
+- The old `engine.affect`, `engine.style`, `engine.character`, `engine.humanize`, and
+  `engine.llm.temperature` keys are rejected; they moved here.
 
-The active role and the style packs are the two knobs that shape a turn. The active role decides
-permissions and working posture; the style packs decide how the soul sounds, and how much of that
-character data it may use per turn. A soul with no packs selected has no borrowed colloquialisms and
-no facts — just its own `persona` and `background`.
-
-A short example (omit `style` and let the resolver write it):
+A short example:
 
 ```yaml
-name: Eidesoul
+name: MonoAgens
 language: id
 role: companion
 roles: [assistant, companion]
@@ -335,77 +350,43 @@ background: |
 persona: |
   ## Personality
   Direct, dry, warm once trust is earned.
-style:
-  patterns: [jawatimur]
-  facts: [indonesia]
-  max_patterns: 3
-  max_facts: 2
+voice:
+  enabled: true
+  profanity: avoid
 examples:
   - user: "long day"
     soul: "come here, sit down first"
 ```
 
-## Character library
+## Character and research
 
-Character data is a library the soul opts into, not something the engine ships in its voice.
-Selection is top-down: `soul.yaml` names the packs, `eidesoul init` seeds that list for the soul's
-language, and `eidesoul library resolve` re-derives it from what the author actually wrote. An empty
-`style` means no patterns and no facts.
+Character comes from `soul.yaml` and the model, not from a runtime pack catalogue:
 
-Packs live under `eidesoul/library/`:
+- `persona` and `examples` are the few-shot anchor; keep examples short and synthetic.
+- Stable common knowledge (capitals, definitions, ordinary history) may come from the model prior.
+- Current, specific, local, numeric, disputed, or citation-required claims trigger `web_search`.
+  Search results enter the prompt only as an untrusted `ResearchCard` with titled sources, IDs, and
+  timestamps; the answer cites `[R1]`, and an unsupported current claim abstains instead of guessing.
+- Personal facts and episodes stay in Mem0; `soul.yaml` never holds a public fact catalogue.
+- If the model is unsure but no deterministic trigger fired, it may call `web_search` itself. The
+  returned card is still the only search evidence the prompt sees.
 
-- `patterns/<pack>.json` — conditional moves ("if this, then that") tagged with a register, a
-  gender target, and toxicity and adult gates. A pack carries `version`, `model`, `language`, a
-  `lexicon` of conversational tokens, and the `patterns` rows.
-- `facts/<pack>.json` — short grounded facts, each with at least one source URL. A pack carries
-  `version`, `model`, `language`, and the `facts` rows.
-
-Two packs ship as worked examples: `jawatimur` (East Javanese conversational moves) and `indonesia`
-(Indonesian facts). Select them, ignore them, or write your own:
-
-```yaml
-style:
-  patterns: [jawatimur]
-  facts: [indonesia]
-  registers: [serious, laughter]   # optional: keep only these registers
-  max_patterns: 3
-  max_facts: 2
-```
-
-Selection is deterministic per turn: the engine reads the recent messages, derives the room
-register, and picks at most `max_patterns` moves and `max_facts` facts. Keyword hits come first, then
-cosine similarity on the shared embedder (`eidesoul/engine/embed.py`). A pack that is missing, unreadable, or named outside
-the id pattern contributes nothing and logs a warning instead of failing the turn.
-
-No raw transcripts are shipped. A `say` line in a pattern pack is an approved exemplar, never a
-copied private message, and fact rows carry sources rather than conversation.
-
-Edit packs with the scripts, never by hand:
-
-```bash
-python scripts/patterns.py --pack jawatimur --check     # schema, gates, duplicates, reachability
-python scripts/patterns.py --pack jawatimur --embed     # rebuild the pack vectors
-python scripts/fakta.py --pack indonesia --check        # schema and vectors
-python scripts/fakta.py --pack indonesia --embed
-python scripts/grow.py --pack jawatimur --patterns      # propose new rows from a corpus
-```
-
-`--embed` must run after any content change so vectors match the rows. A new pack is a new file pair
-in the same directories with a name that matches the id pattern; no code change is required to
-select it.
+There is no `library/patterns`, `library/facts`, `library resolve`, or character level table. The
+`library/` tree keeps only detector data (`lexicon`, `privacy`, `safety`, `style`, `affect`, and
+`intent`), not prompt examples or public-fact rows.
 
 ## Supported gateways
 
 This is the whole list; nowhere else in the docs enumerates gateways.
 
-- **CLI** — built in. The default config enables it, and it is how `eidesoul run` and
-  `eidesoul console` talk to a soul without any network transport.
+- **CLI** — built in. The default config enables it, and it is how `monoagens run` and
+  `monoagens console` talk to a soul without any network transport.
 - **WhatsApp** — an optional extra. Install it with `uv sync --extra whatsapp` and enable it in the
   `gateways` section; omit both and it does not exist for this deployment. The core never imports
   it, and the default member role never receives its `send` tool.
 - **Your own embodiment** — a robot, a voice loop, a device, or a private HTTP endpoint is just
   another gateway. Implement the inbound envelope and the gateway interface, ship the class as an
-  entry point under the `eidesoul.gateways` group or enable it by name, and it joins the same soul.
+  entry point under the `monoagens.gateways` group or enable it by name, and it joins the same soul.
 
 A gateway is a transport, not a brain. It normalizes input, delivers replies, and owns whatever
 body-specific tool modules it wants to expose. Gateway-owned tools are granted to roles explicitly,
@@ -440,7 +421,7 @@ roles:
 - `approve` is a command permission like any other: only a role that lists it can clear a pending
   action.
 - `memory_admin: true` is required to write the soul's global memory.
-- A role lists opaque `per_…` identities (`eidesoul people list`), never a phone number or JID:
+- A role lists opaque `per_…` identities (`monoagens people list`), never a phone number or JID:
   `person_links` maps each gateway address to that identity, `/link` attaches a second gateway
   to the same person, and `/unlink` detaches one. Identities in several roles are unioned;
   `context` blocks are ordered by priority, then name.
@@ -448,7 +429,7 @@ roles:
   its own scratch area, and the sandbox mirrors that with read-only shared mounts and one writable
   scratch mount.
 
-Hand-editing `roles.yaml` is supported: run `eidesoul config import` afterwards so the database sees
+Hand-editing `roles.yaml` is supported: run `monoagens config import` afterwards so the database sees
 it.
 
 ## Safety
@@ -493,8 +474,8 @@ local network even when it is allowed to run.
 
 ```bash
 uv sync --extra whatsapp                  # the optional gateway
-eidesoul plugins install google        # a plugin: fetch + verify by digest
-eidesoul plugins enable google         # register its tools into the same catalog
+monoagens plugins install google        # a plugin: fetch + verify by digest
+monoagens plugins enable google         # register its tools into the same catalog
 ```
 
 ```bash
@@ -504,7 +485,7 @@ podman build --build-arg EXTRAS="--extra whatsapp" .
 Memory, the embedder, and the affect prototypes are part of the core install; there is no extra to
 add for them. Storage is Postgres+pgvector only, the same store the tests use.
 
-- **Affect vibes** read the shared embedder against `eidesoul/library/affect/*.json`; with no
+- **Affect vibes** read the shared embedder against `monoagens/library/affect/*.json`; with no
   embedder the room mood stays neutral instead of guessing.
 - **WhatsApp** (`whatsapp`): the optional gateway. Never enabled by default.
 - **Google Workspace** (`google`): a plugin, not a core tool and not an extra. While it is absent
@@ -517,7 +498,7 @@ committed.
 ## Credits
 
 Every component below keeps its own license and attribution. Versions are the ones the lock file
-installs; the last column says what Eidesoul uses it for.
+installs; the last column says what MonoAgens uses it for.
 
 | Component | License | Author / org | Source | Used for |
 |---|---|---|---|---|
@@ -551,8 +532,8 @@ installs; the last column says what Eidesoul uses it for.
 
 ## License
 
-Eidesoul is released under the [Apache License 2.0](LICENSE). Copyright 2026 Abdul Muqsith.
+MonoAgens is released under the [Apache License 2.0](LICENSE). Copyright 2026 Abdul Muqsith.
 
 Third-party components keep their own terms; the table above lists each license, author, and source.
 The vendored emotion engine carries its license next to its source as
-`eidesoul/vendor/LICENSE.emotion-engine`.
+`monoagens/vendor/LICENSE.emotion-engine`.

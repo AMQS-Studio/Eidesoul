@@ -548,77 +548,6 @@ wheels = [
 ]
 
 [[package]]
-name = "eidesoul"
-version = "0.0.0.dev0"
-source = { editable = "." }
-dependencies = [
-    { name = "alembic" },
-    { name = "ddgs" },
-    { name = "mcp" },
-    { name = "mem0ai" },
-    { name = "openai" },
-    { name = "presidio-analyzer" },
-    { name = "psycopg", extra = ["binary"] },
-    { name = "psycopg-pool" },
-    { name = "pyyaml" },
-    { name = "sentence-transformers" },
-    { name = "spacy" },
-    { name = "sqlalchemy" },
-    { name = "torch", version = "2.15.0", source = { registry = "https://download.pytorch.org/whl/cpu" }, marker = "sys_platform == 'darwin'" },
-    { name = "torch", version = "2.15.0+cpu", source = { registry = "https://download.pytorch.org/whl/cpu" }, marker = "sys_platform != 'darwin'" },
-    { name = "xx-ent-wiki-sm" },
-]
-
-[package.optional-dependencies]
-whatsapp = [
-    { name = "neonize" },
-    { name = "segno" },
-]
-
-[package.dev-dependencies]
-dev = [
-    { name = "httpx" },
-    { name = "neonize" },
-    { name = "pyright" },
-    { name = "pytest" },
-    { name = "pytest-cov" },
-    { name = "ruff" },
-    { name = "segno" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "alembic", specifier = ">=1.13,<2" },
-    { name = "ddgs", specifier = ">=9" },
-    { name = "mcp", specifier = ">=2.3,<3" },
-    { name = "mem0ai", specifier = ">=2.2,<3" },
-    { name = "neonize", marker = "extra == 'whatsapp'", specifier = ">=0.5.2,<0.6" },
-    { name = "openai", specifier = ">=2,<4" },
-    { name = "presidio-analyzer", specifier = ">=2.2,<3" },
-    { name = "psycopg", extras = ["binary"], specifier = ">=3.2,<4" },
-    { name = "psycopg-pool", specifier = ">=3.2,<4" },
-    { name = "pyyaml", specifier = ">=6" },
-    { name = "segno", marker = "extra == 'whatsapp'", specifier = ">=1.6" },
-    { name = "sentence-transformers", specifier = ">=5.2,<6" },
-    { name = "spacy", specifier = ">=3.8,<4" },
-    { name = "sqlalchemy", specifier = ">=2.0,<3" },
-    { name = "torch", specifier = ">=2.2", index = "https://download.pytorch.org/whl/cpu" },
-    { name = "xx-ent-wiki-sm", url = "https://github.com/explosion/spacy-models/releases/download/xx_ent_wiki_sm-3.8.0/xx_ent_wiki_sm-3.8.0-py3-none-any.whl" },
-]
-provides-extras = ["whatsapp"]
-
-[package.metadata.requires-dev]
-dev = [
-    { name = "httpx", specifier = ">=0.27,<1" },
-    { name = "neonize", specifier = ">=0.5.2,<0.6" },
-    { name = "pyright", specifier = ">=1.1.390" },
-    { name = "pytest", specifier = ">=8" },
-    { name = "pytest-cov", specifier = ">=6" },
-    { name = "ruff", specifier = ">=0.17" },
-    { name = "segno", specifier = ">=1.6" },
-]
-
-[[package]]
 name = "filelock"
 version = "4.2.4"
 source = { registry = "https://pypi.org/simple" }
@@ -1207,6 +1136,77 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/08/28/151a796111f90017ec09b052ac09a55e7b3ae5e976542f38f35c54270f8e/mem0ai-2.2.1.tar.gz", hash = "sha256:099a7d58368908d0a05a633c5da3920f607a57db00d4f168800de05966b2a4a8", size = 256091, upload-time = "2026-09-25T17:36:09.406Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/aa/48/7051dd9009232802c11a4c4d9e58ea32968c8e076ea79e2e8a6d243e49b3/mem0ai-2.2.1-py3-none-any.whl", hash = "sha256:fe91bb91ac8926231993a4aa58df00a60c6c74c709e6a338fe399500776eef4d", size = 351907, upload-time = "2026-09-25T17:36:07.48Z" },
+]
+
+[[package]]
+name = "monoagens"
+version = "0.0.0.dev0"
+source = { editable = "." }
+dependencies = [
+    { name = "alembic" },
+    { name = "ddgs" },
+    { name = "httpx" },
+    { name = "mcp" },
+    { name = "mem0ai" },
+    { name = "openai" },
+    { name = "presidio-analyzer" },
+    { name = "psycopg", extra = ["binary"] },
+    { name = "psycopg-pool" },
+    { name = "pyyaml" },
+    { name = "sentence-transformers" },
+    { name = "spacy" },
+    { name = "sqlalchemy" },
+    { name = "torch", version = "2.15.0", source = { registry = "https://download.pytorch.org/whl/cpu" }, marker = "sys_platform == 'darwin'" },
+    { name = "torch", version = "2.15.0+cpu", source = { registry = "https://download.pytorch.org/whl/cpu" }, marker = "sys_platform != 'darwin'" },
+    { name = "xx-ent-wiki-sm" },
+]
+
+[package.optional-dependencies]
+whatsapp = [
+    { name = "neonize" },
+    { name = "segno" },
+]
+
+[package.dev-dependencies]
+dev = [
+    { name = "neonize" },
+    { name = "pyright" },
+    { name = "pytest" },
+    { name = "pytest-cov" },
+    { name = "ruff" },
+    { name = "segno" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "alembic", specifier = ">=1.13,<2" },
+    { name = "ddgs", specifier = ">=9" },
+    { name = "httpx", specifier = ">=0.27,<1" },
+    { name = "mcp", specifier = ">=2.3,<3" },
+    { name = "mem0ai", specifier = ">=2.2,<3" },
+    { name = "neonize", marker = "extra == 'whatsapp'", specifier = ">=0.5.2,<0.6" },
+    { name = "openai", specifier = ">=2,<4" },
+    { name = "presidio-analyzer", specifier = ">=2.2,<3" },
+    { name = "psycopg", extras = ["binary"], specifier = ">=3.2,<4" },
+    { name = "psycopg-pool", specifier = ">=3.2,<4" },
+    { name = "pyyaml", specifier = ">=6" },
+    { name = "segno", marker = "extra == 'whatsapp'", specifier = ">=1.6" },
+    { name = "sentence-transformers", specifier = ">=5.2,<6" },
+    { name = "spacy", specifier = ">=3.8,<4" },
+    { name = "sqlalchemy", specifier = ">=2.0,<3" },
+    { name = "torch", specifier = ">=2.2", index = "https://download.pytorch.org/whl/cpu" },
+    { name = "xx-ent-wiki-sm", url = "https://github.com/explosion/spacy-models/releases/download/xx_ent_wiki_sm-3.8.0/xx_ent_wiki_sm-3.8.0-py3-none-any.whl" },
+]
+provides-extras = ["whatsapp"]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "neonize", specifier = ">=0.5.2,<0.6" },
+    { name = "pyright", specifier = ">=1.1.390" },
+    { name = "pytest", specifier = ">=8" },
+    { name = "pytest-cov", specifier = ">=6" },
+    { name = "ruff", specifier = ">=0.17" },
+    { name = "segno", specifier = ">=1.6" },
 ]
 
 [[package]]

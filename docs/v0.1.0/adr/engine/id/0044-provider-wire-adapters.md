@@ -1,4 +1,4 @@
-> Terjemahan turunan — jangan sunting; sumber: engine/0044-provider-wire-adapters.md (sha256: f6c31908ce22)
+> Terjemahan turunan — jangan sunting; sumber: engine/0044-provider-wire-adapters.md (sha256: e98a1ece66ed)
 
 # ADR-0044: Adapter Wire Provider — Gemini Native Lebih Dulu, Satu Seam
 
@@ -8,7 +8,7 @@
 - **Konteks:** mengikuti ADR-0027 (clean by default), ADR-0031 (struktur modul), ADR-0033 (core netral), dan ADR-0041 (konfigurasi voice); menggantikan asumsi bahwa setiap provider harus berbicara wire OpenAI dengan batas adapter protokol.
 - **Supersedes:** —
 - **Terkait:** ADR-0027 (distribusi), ADR-0031 (struktur modul), ADR-0033 (core netral), ADR-0041 (konfigurasi voice), ADR-0045 (sampling mode)
-- **Implementasi:** draft — batas adapter, client Gemini native, dan field sampling generik dicatat; belum ada adapter runtime yang diimplementasikan di ADR ini.
+- **Implementasi:** implemented — Gemini native `generateContent`, response ternormalisasi, sampling/safety bergerbang capability, dan fixture test sudah live; Anthropic native tetap ditunda oleh ADR ini.
 - **Catatan lokasi:** seam provider mengikat loop LLM engine, jadi ADR ini duduk di `adr/engine/`. Salinan Indonesia di `docs/v0.1.0/adr/engine/id/0044-provider-wire-adapters.md`.
 
 ---
@@ -239,16 +239,16 @@ config dimuat.
 
 ## 7. Kriteria penerimaan
 
-- [ ] `ProviderDefaults` membawa wire dan `llm.py` memilih adapter tanpa cabang nama provider.
-- [ ] Satu tipe response ternormalisasi membawa teks, tool call, usage, finish reason, dan status blocked.
-- [ ] Gemini bisa mengirim `safetySettings` saat `soul.voice.safety: off` dan `topK` saat dikonfigurasi.
-- [ ] Alasan blok Gemini dan kandidat kosong terlihat oleh turn, bukan dilaporkan sebagai jawaban.
-- [ ] Provider OpenAI-compatible mempertahankan request dan perilaku tool yang ada.
-- [ ] Anthropic tetap di lapisan kompatibilitas sampai adapter native diterima.
-- [ ] `top_p`, `top_k`, dan `min_p` hanya dikirim bila didukung; nilai tidak didukung gagal saat load.
-- [ ] Test adapter memakai fixture request dan response dan tidak memanggil endpoint live.
-- [ ] Error provider native tetap mencatat satu baris `llm_calls` dengan purpose yang benar.
-- [ ] Temperature daily, professional, dan utility bisa dikonfigurasi operator.
+- [x] `ProviderDefaults` membawa wire dan `llm.py` memilih adapter tanpa cabang nama provider.
+- [x] Satu tipe response ternormalisasi membawa teks, tool call, usage, finish reason, dan status blocked.
+- [x] Gemini bisa mengirim `safetySettings` saat `soul.voice.safety: off` dan `topK` saat dikonfigurasi.
+- [x] Alasan blok Gemini dan kandidat kosong terlihat oleh turn, bukan dilaporkan sebagai jawaban.
+- [x] Provider OpenAI-compatible mempertahankan request dan perilaku tool yang ada.
+- [x] Anthropic tetap di lapisan kompatibilitas sampai adapter native diterima.
+- [x] `top_p`, `top_k`, dan `min_p` hanya dikirim bila didukung; nilai tidak didukung gagal saat load.
+- [x] Test adapter memakai fixture request dan response dan tidak memanggil endpoint live.
+- [x] Error provider native tetap mencatat satu baris `llm_calls` dengan purpose yang benar.
+- [x] Temperature daily, professional, dan utility bisa dikonfigurasi operator.
 
 ## 8. Risiko dan mitigasi
 
@@ -276,16 +276,16 @@ config dimuat.
 
 ## 10. Referensi kode
 
-- `eidesoul/providers/base.py:12-18` — `ProviderDefaults` dan field `wire` mendatang.
-- `eidesoul/providers/__init__.py:19-54` — registry provider dan `resolve`.
-- `eidesoul/providers/gemini.py:1-13` — entry kompatibilitas OpenAI saat ini.
-- `eidesoul/providers/anthropic.py:1-15` — lapisan kompatibilitas dan catatannya.
-- `eidesoul/engine/llm.py:173-183` — konstruksi `AsyncOpenAI`.
-- `eidesoul/engine/llm.py:287-323` — satu panggilan provider dan pencatatannya.
-- `eidesoul/engine/llm.py:368-379` — kwargs request OpenAI dan `temperature`.
-- `eidesoul/engine/llm.py:590-625` — panggilan `complete` tanpa tool dan temperature-nya.
-- `eidesoul/engine/config.py:147-160` — `LLMConfig`.
-- `eidesoul/admin/templates.py:100` — temperature engine yang dihasilkan.
+- `monoagens/providers/base.py:12-18` — `ProviderDefaults` dan field `wire` mendatang.
+- `monoagens/providers/__init__.py:19-54` — registry provider dan `resolve`.
+- `monoagens/providers/gemini.py:1-13` — entry kompatibilitas OpenAI saat ini.
+- `monoagens/providers/anthropic.py:1-15` — lapisan kompatibilitas dan catatannya.
+- `monoagens/engine/llm.py:173-183` — konstruksi `AsyncOpenAI`.
+- `monoagens/engine/llm.py:287-323` — satu panggilan provider dan pencatatannya.
+- `monoagens/engine/llm.py:368-379` — kwargs request OpenAI dan `temperature`.
+- `monoagens/engine/llm.py:590-625` — panggilan `complete` tanpa tool dan temperature-nya.
+- `monoagens/engine/config.py:147-160` — `LLMConfig`.
+- `monoagens/admin/templates.py:100` — temperature engine yang dihasilkan.
 - `pyproject.toml:9-28` — set dependensi.
 - `tests/test_providers.py` — cakupan registry provider.
 - `tests/test_llm.py` — cakupan loop LLM yang ada.

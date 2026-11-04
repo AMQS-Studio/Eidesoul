@@ -6,11 +6,11 @@ import pytest
 import yaml
 from support import build_config
 
-from eidesoul.engine.access.roles import Role
-from eidesoul.engine.inbound import PROMPT_SECTION_MAX, CoreDefaults, prompt_section
-from eidesoul.engine.llm import prompt_prefix_hash
-from eidesoul.engine.soul import Soul
-from eidesoul.engine.turn.prompts import Prompt, PromptContext, system_prompt
+from monoagens.engine.access.roles import Role
+from monoagens.engine.inbound import PROMPT_SECTION_MAX, CoreDefaults, prompt_section
+from monoagens.engine.llm import prompt_prefix_hash
+from monoagens.engine.soul import Soul
+from monoagens.engine.turn.prompts import Prompt, PromptContext, system_prompt
 
 ROOT = Path(__file__).resolve().parents[1]
 CASES = yaml.safe_load((ROOT / "tests" / "data" / "prompt_cases.yaml").read_text())[
@@ -23,7 +23,7 @@ def _soul(case: dict) -> Soul:
         language=case["language"],
         locale=case["locale"],
         timezone=case["timezone"],
-        name="Eidesoul",
+        name="MonoAgens",
         persona="p",
     )
 
@@ -31,7 +31,7 @@ def _soul(case: dict) -> Soul:
 def _section(case: dict) -> str:
     source = case.get("section_from")
     if source == "cli":
-        from eidesoul.gateways.cli.gateway import CliGateway
+        from monoagens.gateways.cli.gateway import CliGateway
 
         return CliGateway.prompt_section(None)
     return str(case.get("section") or "")
@@ -44,8 +44,6 @@ def _prompt(tmp_path, case: dict) -> Prompt:
         roles=(Role("member"),),
         body_section=prompt_section(_Body(_section(case))),
         language=case["language"],
-        limits=(3, 2),
-        safety="Hard floor no level unlocks: sexual content with minors.",
         query="hello",
     )
     return system_prompt(config, (Role("member"),), context=context)
@@ -97,7 +95,7 @@ def test_the_section_cap_is_enforced() -> None:
 
 
 def test_the_cli_section_is_static_and_under_the_cap() -> None:
-    from eidesoul.gateways.cli.gateway import CliGateway
+    from monoagens.gateways.cli.gateway import CliGateway
 
     first = CliGateway.prompt_section(None)
     second = CliGateway.prompt_section(None)
@@ -108,22 +106,23 @@ def test_the_cli_section_is_static_and_under_the_cap() -> None:
 def test_the_whatsapp_section_is_static_and_under_the_cap() -> None:
     from types import SimpleNamespace
 
-    from eidesoul.gateways.whatsapp.gateway import WhatsAppGateway
+    from monoagens.gateways.whatsapp.gateway import WhatsAppGateway
 
-    body = SimpleNamespace(self_handles=lambda: {"eidesoul"})
+    body = SimpleNamespace(self_handles=lambda: {"monoagens"})
     first = WhatsAppGateway.prompt_section(body)
     second = WhatsAppGateway.prompt_section(body)
     assert first == second
     assert 0 < len(first) <= PROMPT_SECTION_MAX
 
 
-def test_the_register_never_classifies_a_person() -> None:
-    from eidesoul.engine.turn.prompts import character_block
+def test_the_voice_never_classifies_a_person() -> None:
+    from monoagens.engine.soul import VoiceConfig
+    from monoagens.engine.turn.prompts import voice_block
 
-    block = character_block((3, 2), language="en")
-    for word in ("male", "female", "confidence", "gender_gate"):
-        assert word not in block
-    assert "stay gentle" in block
+    block = voice_block(VoiceConfig(profanity="avoid"))
+    for word in ("male", "female", "confidence", "gender_gate", "toxicity"):
+        assert word not in block.lower()
+    assert "avoid swearing" in block
 
 
 def test_a_language_without_a_catalog_is_refused() -> None:

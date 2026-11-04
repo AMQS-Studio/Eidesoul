@@ -1,4 +1,4 @@
-> Terjemahan turunan — jangan sunting; sumber: engine/0007-capability-authorization.md (sha256: bcd3c443bd50)
+> Terjemahan turunan — jangan sunting; sumber: engine/0007-capability-authorization.md (sha256: b5ed74c432b8)
 > Teks ini ditulis manusia; baris yang tidak bisa diterjemahkan mesin disalin apa adanya ke sumber English, jadi sumber bercampur dua bahasa.
 
 # ADR-0007: Capability vs Authorization — Tiga Kelas Izin dan Approval sebagai Kelanjutan Izin Tool
@@ -432,26 +432,26 @@ peran. Implementasi menyusul di `chat_history`/`send` dengan satu helper bersama
 
 ## 10. Referensi kode
 
-- `eidesoul/engine/agent.py:614-628,857-861` — capture gate, blok memori, guard cross-chat.
-- `eidesoul/engine/tools/__init__.py:180-235` — satu pintu `execute` + `allows`.
-- `eidesoul/engine/tools/memory.py:64-73,104-119,127-183` — `global`, `confirmed`, `forget`, `veto`.
-- `eidesoul/engine/commands/memori.py:41-43,83-92,121-123` — pintu command untuk scope/`memory_admin`.
-- `eidesoul/engine/commands/approve.py:20-80` — binding chat/sender/TTL dan re-run lewat `execute`.
-- `eidesoul/engine/guard/policy.py:105-215` — `sensitive_tools`, destructive actions, shell scan.
-- `eidesoul/engine/memory/mem0.py:476-530` — `forget`, `set_privacy`, `veto`.
-- `eidesoul/engine/access/roles.py:18-28,100-116` — `Role` (tanpa flag room; keanggotaan dihitung saat dipakai).
-- `eidesoul/gateways/whatsapp/tools/chat_history.py` — baca room lain + buffer `cross_reads` untuk guard kebocoran.
-- `eidesoul/engine/tools/settings.py:294-413` — approval untuk perubahan internal.
-- `eidesoul/engine/stores/documents.py:137` — `export_to_files` (mirror dokumen config).
-- `eidesoul/engine/stores/history.py:318-352` — `search` (tempat ceiling `visibility` dipasang) dan `recent_chats`.
-- `eidesoul/gateways/whatsapp/tools/chat_history.py` — `chat_history` dan pemisahan room ini vs room lain.
-- `eidesoul/engine/memory/rekey.py:83-97` — pola `_chats(db, person_id)` untuk `rooms_of(person_id)`.
-- `eidesoul/engine/inbound.py:29-70` — kontrak `Gateway` (tempat kapabilitas `participants(thread_id)` ditambahkan, opsional).
-- `eidesoul/engine/turn/context.py:72-81,288-300` — `clamp_visibility`, `entry_tag`, `set_visibility`.
-- `eidesoul/engine/config.py:148-152` — `ApprovalConfig` (mode, ttl, settings).
-- `eidesoul/engine/turn/prompts.py:195-355` — `system_prompt` (tempat aturan “di luar jangkauan → tolak singkat, jangan berspekulasi”).
-- `eidesoul/engine/guard/patterns.py:12,14` — `SENSITIVE`/`INJECTION`, bentuk pola yang sudah ada; kelas kredensial §4.8 **belum ada di kode** (usulan, ikut ADR-0024 saat implementasi).
-- `eidesoul/engine/config.py:227-232` — `GuardConfig`, tempat `credential_patterns` ditambahkan.
+- `monoagens/engine/agent.py:614-628,857-861` — capture gate, blok memori, guard cross-chat.
+- `monoagens/engine/tools/__init__.py:180-235` — satu pintu `execute` + `allows`.
+- `monoagens/engine/tools/memory.py:64-73,104-119,127-183` — `global`, `confirmed`, `forget`, `veto`.
+- `monoagens/engine/commands/memori.py:41-43,83-92,121-123` — pintu command untuk scope/`memory_admin`.
+- `monoagens/engine/commands/approve.py:20-80` — binding chat/sender/TTL dan re-run lewat `execute`.
+- `monoagens/engine/guard/policy.py:105-215` — `sensitive_tools`, destructive actions, shell scan.
+- `monoagens/engine/memory/mem0.py:476-530` — `forget`, `set_privacy`, `veto`.
+- `monoagens/engine/access/roles.py:18-28,100-116` — `Role` (tanpa flag room; keanggotaan dihitung saat dipakai).
+- `monoagens/gateways/whatsapp/tools/chat_history.py` — baca room lain + buffer `cross_reads` untuk guard kebocoran.
+- `monoagens/engine/tools/settings.py:294-413` — approval untuk perubahan internal.
+- `monoagens/engine/stores/documents.py:137` — `export_to_files` (mirror dokumen config).
+- `monoagens/engine/stores/history.py:318-352` — `search` (tempat ceiling `visibility` dipasang) dan `recent_chats`.
+- `monoagens/gateways/whatsapp/tools/chat_history.py` — `chat_history` dan pemisahan room ini vs room lain.
+- `monoagens/engine/memory/rekey.py:83-97` — pola `_chats(db, person_id)` untuk `rooms_of(person_id)`.
+- `monoagens/engine/inbound.py:29-70` — kontrak `Gateway` (tempat kapabilitas `participants(thread_id)` ditambahkan, opsional).
+- `monoagens/engine/turn/context.py:72-81,288-300` — `clamp_visibility`, `entry_tag`, `set_visibility`.
+- `monoagens/engine/config.py:148-152` — `ApprovalConfig` (mode, ttl, settings).
+- `monoagens/engine/turn/prompts.py:195-355` — `system_prompt` (tempat aturan “di luar jangkauan → tolak singkat, jangan berspekulasi”).
+- `monoagens/engine/guard/patterns.py:12,14` — `SENSITIVE`/`INJECTION`, bentuk pola yang sudah ada; kelas kredensial §4.8 **belum ada di kode** (usulan, ikut ADR-0024 saat implementasi).
+- `monoagens/engine/config.py:227-232` — `GuardConfig`, tempat `credential_patterns` ditambahkan.
 
 ---
 

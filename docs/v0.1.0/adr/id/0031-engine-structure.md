@@ -1,4 +1,4 @@
-> Terjemahan turunan — jangan sunting; sumber: 0031-engine-structure.md (sha256: 5f8b1620b813)
+> Terjemahan turunan — jangan sunting; sumber: 0031-engine-structure.md (sha256: 5ad678e12879)
 > Ditulis tangan (bukan mesin), mengikuti sumber English baris demi baris.
 
 # ADR-0031: Struktur Engine — Tata Letak, Anggaran Pertumbuhan, dan Baseline Toolchain
@@ -18,7 +18,7 @@
 
 Engine memuat 100 modul (tanpa `__init__.py`) dan 32.835 baris. Diukur pada 2026-11-03:
 
-- 41 berkas duduk datar di atas `eidesoul/engine/`, terurut alfabet, sehingga domain yang tak berhubungan bercampur: `ablate.py` di atas `agent.py`, `approvals.py` di antara `ambient.py` dan `assembly.py`.
+- 41 berkas duduk datar di atas `monoagens/engine/`, terurut alfabet, sehingga domain yang tak berhubungan bercampur: `ablate.py` di atas `agent.py`, `approvals.py` di antara `ambient.py` dan `assembly.py`.
 - Tiga modul menanggung 22% pohon: `memory/store.py` (2.785), `agent.py` (2.215), `automation.py` (2.106). Empat modul lain di atas 800 baris (`config.py` 1.776, `stores/affect.py` 1.285, `cognition.py` 1.164, `schema.py` 954).
 - Kodenya tidak gemuk: 84% baris adalah kode, 11% kosong, 5% docstring atau komentar; pemindaian klon 8-baris menemukan 21 jendela berulang (sekitar 170 baris); satu-satunya modul yang tidak berada di jalur runtime adalah `ablate.py`, alat riset yang digerakkan `scripts/ablate.py`.
 - 60 dari 100 modul hidup di lima folder dengan kontrak tetap: 12 tool dan 22 command adalah satu berkas per unit (discovery folder, bukan edit registry), 9 store menyimpan persistensi, 3 modul guard dan 14 modul memori masing-masing punya satu alasan untuk berubah.
@@ -70,7 +70,7 @@ Belum ada folder baru, karena pemecahan dan pemindahan dalam satu commit menyemb
 25 modul pindah; `ablate.py` keluar dari engine ke `scripts/`. Top level turun dari 41 berkas menjadi 15.
 
 ```text
-eidesoul/engine/
+monoagens/engine/
   __init__.py
   agent.py                      # the handle: one turn, one orchestration
   inbound.py  plugins.py  registry.py  llm.py
@@ -149,7 +149,7 @@ Gate, setelah setiap commit dalam urutan: `pytest -q` pada store Postgres+pgvect
 ## 7. Acceptance criteria
 
 - `agent.py`, `automation.py`, dan `memory/store.py` di bawah targetnya, dan tidak ada modul melewati 800 baris kecuali yang tercantum di §6.
-- Top level `eidesoul/engine/` hanya memuat modul yang ditunjukkan §4.3.
+- Top level `monoagens/engine/` hanya memuat modul yang ditunjukkan §4.3.
 - `grep -rn "components\.\|ComponentSettings"` tetap kosong; tidak ada simbol yang diganti nama oleh pemindahan.
 - Setiap dari lima commit hijau pada keempat gate, dan 831 tes lulus sebelum dan sesudah.
 - `scripts/selfcheck.py --check` mencetak jumlah modul engine dan modul mana pun di atas 800 baris.
@@ -164,7 +164,7 @@ Gate, setelah setiap commit dalam urutan: `pytest -q` pada store Postgres+pgvect
 - **Path ADR menjadi basi.** Rujukan path ditulis ulang di commit yang sama, dan `--translate-check` gagal begitu salinan menyimpang.
 - **`git blame` jadi kurang berguna.** `git mv` tanpa reformat menjaga deteksi rename.
 - **Pemecahan berlebihan setelah cap.** Bukti memotong dua arah; cap 800 baris adalah plafon, bukan target, dan dasar dibiarkan.
-- **Pohon yang bergerak membingungkan agen.** `AGENTS.md` dan `eidesoul/engine/__init__.py` membawa peta, dan folder stabil setelah satu kali mendarat.
+- **Pohon yang bergerak membingungkan agen.** `AGENTS.md` dan `monoagens/engine/__init__.py` membawa peta, dan folder stabil setelah satu kali mendarat.
 - **Kenaikan floor meninggalkan image atau venv lama.** Dockerfile, `config.yaml`, `install.sh`, dan kedua README berubah di commit yang sama; interpreter 3.13 kini gagal cepat dengan satu pesan.
 - **Baseline ratchet menyembunyikan utang baru di dalam hitungan lama.** Skrip mencatat per direktori, bukan satu angka global, dan penurunan adalah commit tersendiri.
 - **Set aturan baru membanjiri gate.** Aturan mendarat dengan `--fix` lebih dulu, temuan sisanya ditriase sekali, dan aturan yang tidak bisa dipenuhi diabaikan secara eksplisit dengan alasan.
@@ -189,12 +189,12 @@ ADR-0009 mengatur di mana keputusan ini hidup dan menggerbangi salinannya. ADR-0
 
 ## 11. Referensi kode
 
-- `eidesoul/engine/agent.py` — handle; pengiriman dan counter keluar darinya di §4.2.
-- `eidesoul/engine/turn/reply.py` — menerima helper pengiriman.
-- `eidesoul/engine/runtime.py` — menerima counter kapabilitas.
-- `eidesoul/engine/memory/store.py` — port tunggal; statement pindah ke `memory/queries.py`.
-- `eidesoul/engine/jobs/automation.py` — salinan pengiriman kedua dihapus di §4.2.
-- `eidesoul/admin/templates.py` — default diturunkan dari pohon dataclass di §4.6.
+- `monoagens/engine/agent.py` — handle; pengiriman dan counter keluar darinya di §4.2.
+- `monoagens/engine/turn/reply.py` — menerima helper pengiriman.
+- `monoagens/engine/runtime.py` — menerima counter kapabilitas.
+- `monoagens/engine/memory/store.py` — port tunggal; statement pindah ke `memory/queries.py`.
+- `monoagens/engine/jobs/automation.py` — salinan pengiriman kedua dihapus di §4.2.
+- `monoagens/admin/templates.py` — default diturunkan dari pohon dataclass di §4.6.
 - `scripts/adr.py` — `--stamp` di §4.6.
 - `scripts/selfcheck.py` — melaporkan jumlah modul dan modul yang kelebihan ukuran di §6.
 - `pyproject.toml` — floor, pilihan ruff, dependency group, dan konfigurasi pyright di §4.7.

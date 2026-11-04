@@ -1,4 +1,4 @@
-> Terjemahan turunan — jangan sunting; sumber: engine/0002-capture-trigger.md (sha256: 2652f49ae996)
+> Terjemahan turunan — jangan sunting; sumber: engine/0002-capture-trigger.md (sha256: 8e04667ce755)
 > Teks ini ditulis manusia; baris yang tidak bisa diterjemahkan mesin disalin apa adanya ke sumber English, jadi sumber bercampur dua bahasa.
 
 # ADR-0002: Pemicu Capture — Gate Deterministik, Cek Kebaruan, Assess Batch
@@ -195,13 +195,13 @@ Angka ini usulan awal; dipakai untuk tuning, bukan dogma.
 
 ## 11. Referensi kode
 
-- `eidesoul/engine/agent.py:614,906-921` — gate `can_memory` dan spawn capture.
-- `eidesoul/engine/access/privacy.py:222-303` — `capture_turn` dan `_assess`.
-- `eidesoul/engine/memory/mem0.py:360-380` — guard `capture`.
-- `eidesoul/engine/memory/context.py:48-76` — `gather` dan retrieval scope.
-- `eidesoul/engine/embed.py:16-66` — MiniLM 384-d yang dipakai ulang.
-- `eidesoul/engine/guard/patterns.py:12-19` — hard exclusion yang sudah ada.
-- `eidesoul/engine/config.py:130-138` — `MemoryConfig`.
+- `monoagens/engine/agent.py:614,906-921` — gate `can_memory` dan spawn capture.
+- `monoagens/engine/access/privacy.py:222-303` — `capture_turn` dan `_assess`.
+- `monoagens/engine/memory/mem0.py:360-380` — guard `capture`.
+- `monoagens/engine/memory/context.py:48-76` — `gather` dan retrieval scope.
+- `monoagens/engine/embed.py:16-66` — MiniLM 384-d yang dipakai ulang.
+- `monoagens/engine/guard/patterns.py:12-19` — hard exclusion yang sudah ada.
+- `monoagens/engine/config.py:130-138` — `MemoryConfig`.
 
 ---
 

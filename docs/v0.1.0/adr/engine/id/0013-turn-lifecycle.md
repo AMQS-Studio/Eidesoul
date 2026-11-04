@@ -1,4 +1,4 @@
-> Terjemahan turunan — jangan sunting; sumber: engine/0013-turn-lifecycle.md (sha256: a7245feec7db)
+> Terjemahan turunan — jangan sunting; sumber: engine/0013-turn-lifecycle.md (sha256: 297d9db79d95)
 > Teks ini ditulis manusia; baris yang tidak bisa diterjemahkan mesin disalin apa adanya ke sumber English, jadi sumber bercampur dua bahasa.
 
 # ADR-0013: Turn Lifecycle, Resume, Backlog & Notice
@@ -11,7 +11,7 @@
 - **Supersedes:** —
 - **Terkait:** ADR-0011 (durability), ADR-0012 (fencing), ADR-0003 (worker), ADR-0004 (labeling)
 - **Catatan lokasi:** ADR hidup di `docs/v0.1.0/adr/engine/`; salinan Indonesia di `docs/v0.1.0/adr/engine/id/0013-turn-lifecycle.md`.
-- **Amandemen:** 2026-11-02 — normalisasi kerangka (ADR-0009 §4.4): menambah Opsi yang dipertimbangkan, Keputusan (ringkasan), dan Interaksi dengan ADR lain; penomoran 3–14 bergeser ke 5–17. 2026-11-03 — audit: rentang `supervisor.py` diperbaiki menjadi `36-129`; path `eidesoul/engine/gateways` dibetulkan menjadi `eidesoul/gateways/`; kunci notice diseragamkan ke `resume_notice.after_seconds`; baris basi soal ADR-0009 diselaraskan. 2026-11-03 — audit: status turn `pending` (tidak ada di enum) diganti `received`/`running`/`sending`/`interrupted`; klaim reaper memakai `clock_timestamp()`; ledger memakai `scope_key`. 2026-11-03 — `send`/`send_to` tidak lagi disebut "tool"; keduanya aksi engine (gateway), dan `send_to` sempat dianggap sinonim — koreksi 2026-11-03: `send` dan `send_to` adalah **tool gateway** (`gateways/whatsapp/tools/`), bukan langkah engine; yang perlu dibedakan adalah langkah otomasi ADR-0014. 2026-11-03 — ADR-0016 §4.1: nama tabel kanonik adalah `turn_steps` (ADR-0009/0016), jadi blok `turn_actions` diganti nama dan mendapat `step`/`started_at`/`finished_at` untuk riwayat langkah; kolom aksi tetap. 2026-11-03 — pacing §11 diimplementasikan sebagai `Agent._select_resume`: round-robin antar chat, `max_resume_per_chat` per ruang, dan anggaran enam puluh detik bergulir menggantikan batas per pass yang tetap; klaim yang tidak terpilih kembali lewat `TurnStore.release` tanpa membakar attempt, dan `per_message_then_consolidate` meng-expire sisa baris dengan `reason=consolidate` sementara turn `action` di `turns.category` selalu dipilih sendiri dan tidak pernah di-expire.
+- **Amandemen:** 2026-11-02 — normalisasi kerangka (ADR-0009 §4.4): menambah Opsi yang dipertimbangkan, Keputusan (ringkasan), dan Interaksi dengan ADR lain; penomoran 3–14 bergeser ke 5–17. 2026-11-03 — audit: rentang `supervisor.py` diperbaiki menjadi `36-129`; path `monoagens/engine/gateways` dibetulkan menjadi `monoagens/gateways/`; kunci notice diseragamkan ke `resume_notice.after_seconds`; baris basi soal ADR-0009 diselaraskan. 2026-11-03 — audit: status turn `pending` (tidak ada di enum) diganti `received`/`running`/`sending`/`interrupted`; klaim reaper memakai `clock_timestamp()`; ledger memakai `scope_key`. 2026-11-03 — `send`/`send_to` tidak lagi disebut "tool"; keduanya aksi engine (gateway), dan `send_to` sempat dianggap sinonim — koreksi 2026-11-03: `send` dan `send_to` adalah **tool gateway** (`gateways/whatsapp/tools/`), bukan langkah engine; yang perlu dibedakan adalah langkah otomasi ADR-0014. 2026-11-03 — ADR-0016 §4.1: nama tabel kanonik adalah `turn_steps` (ADR-0009/0016), jadi blok `turn_actions` diganti nama dan mendapat `step`/`started_at`/`finished_at` untuk riwayat langkah; kolom aksi tetap. 2026-11-03 — pacing §11 diimplementasikan sebagai `Agent._select_resume`: round-robin antar chat, `max_resume_per_chat` per ruang, dan anggaran enam puluh detik bergulir menggantikan batas per pass yang tetap; klaim yang tidak terpilih kembali lewat `TurnStore.release` tanpa membakar attempt, dan `per_message_then_consolidate` meng-expire sisa baris dengan `reason=consolidate` sementara turn `action` di `turns.category` selalu dipilih sendiri dan tidak pernah di-expire.
 
 ---
 
@@ -151,7 +151,7 @@ membisukan room.
 tidak berguna: pesan tetap dicatat, hanya balasan yang ditahan, dan tidak ada yang membutuhkannya. Ia
 dihapus bersama seluruh mekanismenya:
 
-- `eidesoul/engine/commands/stop.py` (command beserta alias `diam`);
+- `monoagens/engine/commands/stop.py` (command beserta alias `diam`);
 - `Agent.quiet` dan cabang `agent.py:439-440` ("message recorded without a reply");
 - `reply.quiet_seconds` (config, `config.yaml`, template admin);
 - kunci i18n `command.stop.*`;
@@ -323,12 +323,12 @@ Makna kunci:
 
 ## 17. Referensi kode
 
-- `eidesoul/engine/agent.py:413-926` — `handle` tanpa checkpoint.
-- `eidesoul/engine/agent.py:145-147` — `answered`/`backlog`/`quiet` in-memory.
-- `eidesoul/engine/agent.py:881-905` — loop pengiriman chunk dan penandaan `answered`.
-- `eidesoul/engine/jobs/supervisor.py:36-129` — lifecycle shutdown/primary.
-- `eidesoul/gateways/` — intake yang harus dihentikan saat draining (di luar core; core tidak mengimpornya).
-- `eidesoul/engine/tools/__init__.py:182-240` — satu pintu eksekusi (titik klasifikasi idempotensi).
+- `monoagens/engine/agent.py:413-926` — `handle` tanpa checkpoint.
+- `monoagens/engine/agent.py:145-147` — `answered`/`backlog`/`quiet` in-memory.
+- `monoagens/engine/agent.py:881-905` — loop pengiriman chunk dan penandaan `answered`.
+- `monoagens/engine/jobs/supervisor.py:36-129` — lifecycle shutdown/primary.
+- `monoagens/gateways/` — intake yang harus dihentikan saat draining (di luar core; core tidak mengimpornya).
+- `monoagens/engine/tools/__init__.py:182-240` — satu pintu eksekusi (titik klasifikasi idempotensi).
 
 ---
 

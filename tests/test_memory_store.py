@@ -13,13 +13,13 @@ from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
 from support import FakeMem0, build_config, database
 
-from eidesoul.engine.jobs.lease import Lease, Superseded
-from eidesoul.engine.memory import MemoryHit
-from eidesoul.engine.memory.integrity import TRUST_INFERENCE, TRUST_OTHER, TRUST_SELF
-from eidesoul.engine.memory.mem0 import Mem0Backend
-from eidesoul.engine.memory.store import MemoryStore
-from eidesoul.engine.stores.history import HistoryStore
-from eidesoul.engine.turn.context import Message
+from monoagens.engine.jobs.lease import Lease, Superseded
+from monoagens.engine.memory import MemoryHit
+from monoagens.engine.memory.integrity import TRUST_INFERENCE, TRUST_OTHER, TRUST_SELF
+from monoagens.engine.memory.mem0 import Mem0Backend
+from monoagens.engine.memory.store import MemoryStore
+from monoagens.engine.stores.history import HistoryStore
+from monoagens.engine.turn.context import Message
 
 
 class FakeIndex:
@@ -484,7 +484,7 @@ def test_rule_quarantine_and_promotion_requirements(tmp_path) -> None:
 
 
 def test_overflow_goes_to_staged_and_promotes(tmp_path) -> None:
-    from eidesoul.engine.memory.integrity import WriteQuota
+    from monoagens.engine.memory.integrity import WriteQuota
 
     memory = store(tmp_path, quota=WriteQuota(per_person_hour=1))
     first = memory.write(

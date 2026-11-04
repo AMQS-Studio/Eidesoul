@@ -1,7 +1,7 @@
 # ADR-0003: Cognition Worker & Model Batching — Gate vs Label Boundary
 
 - **Status:** accepted
-- **Implementation:** implemented — evidence: `cognition_jobs` (revision 5), `eidesoul/engine/jobs/cognition.py` queue + worker, `FOR UPDATE SKIP LOCKED` claim, reaper, backoff + dead-letter, intake enqueue in the same transaction, supervisor lifecycle, `tests/test_cognition.py`
+- **Implementation:** implemented — evidence: `cognition_jobs` (revision 5), `monoagens/engine/jobs/cognition.py` queue + worker, `FOR UPDATE SKIP LOCKED` claim, reaper, backoff + dead-letter, intake enqueue in the same transaction, supervisor lifecycle, `tests/test_cognition.py`
 - **Date:** 2026-11-01
 - **Deciders:** Muqsith (owner), omp (reviewer)
 - **Context:** follow-up to ADR-0001 (canonical + Mem0 adapter) and ADR-0002 (capture gate + assess batch); the default-on memory plan
@@ -34,7 +34,7 @@
 
 | Term | Meaning |
 |---|---|
-| **Runtime** | Eidesoul process (`eidesoul run`/`console`): supervisor, turn loop, worker |
+| **Runtime** | Eidesoul process (`monoagens run`/`console`): supervisor, turn loop, worker |
 | **Worker C** | In-process task in the runtime, only while primary; fast track |
 | **Worker D** | Scheduled runner for the slow track; starts in-process, can be separate |
 | **MiniLM** | Local embedder (384-d) inside the process; computes vectors |
@@ -70,7 +70,7 @@ flowchart TB
 ```
 
 - **Worker C is owned by the runtime**, it runs only while the lease is held (primary) and stops at freeze/standby.
-- **Worker D is owned by the scheduler**; by default it runs in-process as a scheduled task, with an exit door to `eidesoul cognition --slow` (separate process/container) when needed.
+- **Worker D is owned by the scheduler**; by default it runs in-process as a scheduled task, with an exit door to `monoagens cognition --slow` (separate process/container) when needed.
 - Both use **one job table** and **one write door** (`MemoryStore`).
 
 ### 5.2 Gate vs label boundary
@@ -245,13 +245,13 @@ The agreed default: **quick consolidation every 60 seconds, deep reflection ever
 
 ## 12. Code references
 
-- `eidesoul/engine/agent.py:917-921` — `spawn()` capture without retry.
-- `eidesoul/engine/access/privacy.py:141-214` — `review` (auditor) as the current gate.
-- `eidesoul/engine/guard/policy.py:200-213` — deterministic policy that stays inline.
-- `eidesoul/engine/tools/__init__.py:182-240` — the single tool execution door.
-- `eidesoul/engine/jobs/supervisor.py:36-129` — primary/standby lifecycle, the parent of worker C.
-- `eidesoul/engine/stores/affect.py` — a worker/state-document pattern that can be copied.
-- `eidesoul/engine/config.py:130-138` — `MemoryConfig` for the worker knobs.
+- `monoagens/engine/agent.py:917-921` — `spawn()` capture without retry.
+- `monoagens/engine/access/privacy.py:141-214` — `review` (auditor) as the current gate.
+- `monoagens/engine/guard/policy.py:200-213` — deterministic policy that stays inline.
+- `monoagens/engine/tools/__init__.py:182-240` — the single tool execution door.
+- `monoagens/engine/jobs/supervisor.py:36-129` — primary/standby lifecycle, the parent of worker C.
+- `monoagens/engine/stores/affect.py` — a worker/state-document pattern that can be copied.
+- `monoagens/engine/config.py:130-138` — `MemoryConfig` for the worker knobs.
 
 ---
 

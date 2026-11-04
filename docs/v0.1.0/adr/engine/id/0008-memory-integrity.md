@@ -1,4 +1,4 @@
-> Terjemahan turunan — jangan sunting; sumber: engine/0008-memory-integrity.md (sha256: 4ef3a03c04e8)
+> Terjemahan turunan — jangan sunting; sumber: engine/0008-memory-integrity.md (sha256: 89a1dddbacb4)
 > Teks ini ditulis manusia; baris yang tidak bisa diterjemahkan mesin disalin apa adanya ke sumber English, jadi sumber bercampur dua bahasa.
 
 # ADR-0008: Integritas Memori — Provenance, Trust, Karantina Instruksi, Anti-Poisoning
@@ -308,17 +308,17 @@ memory:
 
 ## 10. Referensi kode
 
-- `eidesoul/engine/guard/patterns.py:11-35,16-26` — `SENSITIVE`, `safe_text`, `INJECTION`.
-- `eidesoul/engine/guard/sandbox.py:139-192` — pola deterministik + klasifier kecil.
-- `eidesoul/engine/agent.py:906-918` — gerbang capture (injeksi, panjang, `can_memory`).
-- `eidesoul/engine/access/privacy.py:225-277,295-310` — capture turn dan `_assess`.
-- `eidesoul/engine/memory/mem0.py:308-392,323-338,527-530` — metadata, supersede, veto.
-- `eidesoul/engine/memory/context.py:91-133` — `render` (titik penambahan id/kind) dan `build`.
-- `eidesoul/engine/tools/memory.py:69-105,175-183,230-234` — `add`, `kind`, `supersedes`, `veto`.
-- `eidesoul/engine/commands/memori.py:83-134` — pintu command (source `command`).
-- `eidesoul/engine/jobs/ambient.py:251-256,310-315` — sintesis soul (source `ambient:<chat>`).
-- `eidesoul/engine/turn/prompts.py:53-56,266,300-316` — aturan prompt memori dan krisis.
-- `eidesoul/engine/schema.py:129-142` — tabel `people` (trust relasi, bukan trust memori).
+- `monoagens/engine/guard/patterns.py:11-35,16-26` — `SENSITIVE`, `safe_text`, `INJECTION`.
+- `monoagens/engine/guard/sandbox.py:139-192` — pola deterministik + klasifier kecil.
+- `monoagens/engine/agent.py:906-918` — gerbang capture (injeksi, panjang, `can_memory`).
+- `monoagens/engine/access/privacy.py:225-277,295-310` — capture turn dan `_assess`.
+- `monoagens/engine/memory/mem0.py:308-392,323-338,527-530` — metadata, supersede, veto.
+- `monoagens/engine/memory/context.py:91-133` — `render` (titik penambahan id/kind) dan `build`.
+- `monoagens/engine/tools/memory.py:69-105,175-183,230-234` — `add`, `kind`, `supersedes`, `veto`.
+- `monoagens/engine/commands/memori.py:83-134` — pintu command (source `command`).
+- `monoagens/engine/jobs/ambient.py:251-256,310-315` — sintesis soul (source `ambient:<chat>`).
+- `monoagens/engine/turn/prompts.py:53-56,266,300-316` — aturan prompt memori dan krisis.
+- `monoagens/engine/schema.py:129-142` — tabel `people` (trust relasi, bukan trust memori).
 
 ---
 

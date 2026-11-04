@@ -7,11 +7,11 @@ from pathlib import Path
 import pytest
 from support import build_config, database, inbound_message, make_agent, role
 
-from eidesoul.engine.config import Config
-from eidesoul.engine.registry import Handler
-from eidesoul.engine.schema import recipes as recipes_table
-from eidesoul.engine.stores.recipes import RecipeStore, run_recipe
-from eidesoul.engine.tools import ToolContext
+from monoagens.engine.config import Config
+from monoagens.engine.registry import Handler
+from monoagens.engine.schema import recipes as recipes_table
+from monoagens.engine.stores.recipes import RecipeStore, run_recipe
+from monoagens.engine.tools import ToolContext
 
 
 def make_config(root: Path) -> Config:

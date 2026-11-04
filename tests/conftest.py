@@ -1,6 +1,6 @@
 """Store-backed test harness: the real Postgres+pgvector store, migrated once (ADR-0029).
 
-Session: read `EIDESOL_TEST_DATABASE_URL`, enable pgvector, run the production migration path.
+Session: read `MONOAGENS_TEST_DATABASE_URL`, enable pgvector, run the production migration path.
 Test: truncate every table (`RESTART IDENTITY CASCADE`) so no test sees another's rows.
 Embedder: a deterministic 384-dimension stub, so no test loads or downloads a model.
 """
@@ -15,8 +15,8 @@ import pytest
 from sqlalchemy import text
 from support import StubEncoder, test_dsn
 
-from eidesoul.engine import embed
-from eidesoul.engine.db import SCHEMA_VERSION, Database
+from monoagens.engine import embed
+from monoagens.engine.db import SCHEMA_VERSION, Database
 
 # The plugin tree at the repo root is importable by tests (`plugins.google...`).
 ROOT = Path(__file__).resolve().parents[1]
@@ -26,13 +26,13 @@ if str(ROOT) not in sys.path:
 # mem0 reads this at import time; a test run never phones home (ADR-0029 §4.3).
 os.environ["MEM0_TELEMETRY"] = "false"
 
-ENV = "EIDESOL_TEST_DATABASE_URL"
+ENV = "MONOAGENS_TEST_DATABASE_URL"
 PODMAN = (
-    "podman run -d --name eidesoul-test-pg -p 5433:5432 "
-    "-e POSTGRES_DB=eidesoul_test -e POSTGRES_USER=eidesoul -e POSTGRES_PASSWORD=eidesoul "
+    "podman run -d --name monoagens-test-pg -p 5433:5432 "
+    "-e POSTGRES_DB=monoagens_test -e POSTGRES_USER=monoagens -e POSTGRES_PASSWORD=monoagens "
     "docker.io/pgvector/pgvector:pg17"
 )
-DSN = "postgresql+psycopg://eidesoul:eidesoul@127.0.0.1:5433/eidesoul_test"
+DSN = "postgresql+psycopg://monoagens:monoagens@127.0.0.1:5433/monoagens_test"
 
 # Schema bookkeeping belongs to the migrated fixture, not to a test's data.
 KEEP = {"alembic_version", "schema_meta"}
@@ -75,7 +75,7 @@ def test_store() -> Iterator[Database]:
             conn.execute(text("CREATE SCHEMA public"))
             conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
         db.upgrade()
-        from eidesoul.gateways import ensure_schemas
+        from monoagens.gateways import ensure_schemas
 
         ensure_schemas(db)
         version = db.scalar(text("SELECT version_num FROM alembic_version"))

@@ -25,7 +25,7 @@ The ban makes sense (it prevents stale wild documents), but it is precisely **ar
 the most expensive artifact to lose — that are held outside.
 
 **The language has no permission yet either.** `AGENTS.md:7-12` make English the default and limit the
-non-English surface to the catalog `eidesoul/lang/`, `soul.yaml`, `eidesoul/library/**`, and
+non-English surface to the catalog `monoagens/lang/`, `soul.yaml`, `monoagens/library/**`, and
 `README.id.md`. ADR prose is Indonesian today; without a change of rules, moving it into the repo means
 breaking our own rules in secret.
 
@@ -47,8 +47,8 @@ today across `/home/muqsith/Documents/` and `references/` (which holds chat logs
 | Fact | Evidence | Consequences |
 |---|---|---|
 | `docs/` does not exist yet | `ls` of the repo root | Create a new directory at the root |
-| Docs are not part of the distribution | `pyproject.toml:47-48` — `include = ["eidesoul*"]` | Zero impact on the wheel/Docker |
-| Docs are not scanned by analysis | `sonar-project.properties:5` — `sonar.sources=eidesoul,scripts` | No new exclusion is needed |
+| Docs are not part of the distribution | `pyproject.toml:47-48` — `include = ["monoagens*"]` | Zero impact on the wheel/Docker |
+| Docs are not scanned by analysis | `sonar-project.properties:5` — `sonar.sources=monoagens,scripts` | No new exclusion is needed |
 | A guard pattern already exists | `README.md:254-258` and `scripts/{patterns,fakta,affect}.py --check` | The ADR guard script follows proven conventions |
 | The package version is still pre-release | `pyproject.toml` `version = 0.0.0.dev0`, `AGENTS.md` §Shape | The version folder name must be honest: a **target** marker, not a release claim |
 
@@ -72,7 +72,7 @@ today across `/home/muqsith/Documents/` and `references/` (which holds chat logs
 | Option | Shape | Advantages | Drawbacks | Status |
 |---|---|---|---|---|
 | **A. Status quo** | ADRs stay outside the repo | Zero changes | Not in history; lost with personal folders; cannot be linked | Rejected |
-| **B. `adr/` at the root** | The ADR directory sits next to `eidesoul/`, `tests/`, `deploy/` | Most visible | The root already holds 21 entries and mixes in code; no place for release documents | Rejected |
+| **B. `adr/` at the root** | The ADR directory sits next to `monoagens/`, `tests/`, `deploy/` | Most visible | The root already holds 21 entries and mixes in code; no place for release documents | Rejected |
 | **C. `docs/adr/` versionless + `docs/v0.1.0/` for narrative** | Two document homes | Decisions never need to be moved | Two document places for one release; the owner picks one version folder as the document home | Rejected |
 | **D. `docs/<version>/` as the document home + `adr/` inside it** | One folder per release cycle; `docs/v0.1.0/README.md` becomes the index; the one live ADR set moves with `git mv` when a new cycle opens | One home for one release; history intact; zero distribution impact | A strict move rule is needed so that no two sets exist | **Selected** |
 | **E. Wiki / GitHub Discussions** | Outside the file tree | Pleasant to read | Needs a network, cannot be `grep`ped offline, not part of change review | Rejected |
@@ -317,11 +317,11 @@ This table is the source, and a canonical term enters it in the same commit in w
 | `voice layer` | emotion, humanize, and character: on by default, asked once at `init` with keep-on as the default answer, each one switchable off; not a capability category | 0027 | `persona layer` (prosa), `tone layer` (prosa) |
 | `operator action` | a human-initiated install/enable/disable/remove, recorded in `config_changes` and the ledger | 0027 | `manual step` (prosa) |
 | `test store` | the suite runs on the shipped store (Postgres+pgvector); SQLite is not a store | 0029 | `in-memory store` (prosa), `sqlite` (prosa) |
-| `EIDESOL_TEST_DATABASE_URL` | DSN of the throwaway test database; unset means the suite fails with instructions | 0029 | `TEST_DB` (prosa), `DATABASE_URL_TEST` (prosa) |
+| `MONOAGENS_TEST_DATABASE_URL` | DSN of the throwaway test database; unset means the suite fails with instructions | 0029 | `TEST_DB` (prosa), `DATABASE_URL_TEST` (prosa) |
 | `truncate per test` | isolation rule: one DDL per session, `TRUNCATE ... RESTART IDENTITY CASCADE` per test | 0029 | `rollback` (prosa, as the isolation rule), `recreate schema` (prosa) |
 | `stub embedder` | the deterministic 384-dimension embedder used inside tests only | 0029 | `fake model` (prosa), `dummy encoder` (prosa) |
 | `install.sh` | the one on-machine installer at the repo root: preflight, pinned `uv`, `uv sync --locked`, then hands over to `init` | 0030 | `bootstrap.sh` (prosa), `setup.sh` (prosa) |
-| `interactive init` | `eidesoul init` asks on a TTY and fails closed off one, naming the flags it needs | 0030 | `wizard command` (prosa), `setup` (prosa, as a separate command) |
+| `interactive init` | `monoagens init` asks on a TTY and fails closed off one, naming the flags it needs | 0030 | `wizard command` (prosa), `setup` (prosa, as a separate command) |
 | `logo slot` | the reserved banner area for the product mark, filled later; never a config key | 0030 | `theme` (prosa), `branding config` (prosa) |
 | `dry run` | `--dry-run` prints every action and writes nothing | 0030 | `simulate` (prosa), `noop mode` (prosa) |
 | `rooms_of(person_id)` | the set of rooms in which the asker is a member; the basis of **read** permission (sending has its own class, §4.5) | 0007 | `user_rooms` |
@@ -448,7 +448,7 @@ The existing document context is unchanged: `docs/v0.1.0/README.md` may join the
 - [ ] `scripts/adr.py --check` fails on: forbidden synonyms §4.12 in YAML/SQL fences, a wrong file name, duplicate/missing numbers, out-of-order section titles, an invalid `Status`, a non-ISO date, a non-reciprocal `Supersedes`, a dangling `ADR-XXXX` reference, an odd number of code fences, a bare fence in a table cell, two `adr/` directories, a stale translation hash.
 - [ ] `scripts/adr.py --new` produces a skeleton with the ten mandatory sections, and the numbering is correct without guessing content.
 - [ ] The English derivative is clearly marked as a derivative together with the source hash; a file without one is not counted as a failure.
-- [ ] `pyproject.toml` keeps `include = ["eidesoul*"]` so that `docs/` does not enter the wheel; `uv sync --locked` and `pytest -q` stay green.
+- [ ] `pyproject.toml` keeps `include = ["monoagens*"]` so that `docs/` does not enter the wheel; `uv sync --locked` and `pytest -q` stay green.
 - [ ] No new `.md` outside `docs/v*/`; `git ls-files '*.md'` stays free of wild documents.
 
 ## 8. Risks and mitigations
@@ -478,10 +478,10 @@ The existing document context is unchanged: `docs/v0.1.0/README.md` may join the
 
 - `AGENTS.md:7-12` — the language rules (permitted non-English surfaces; the place for the §4.9 amendment).
 - `AGENTS.md:17-18` — the tracked document list (the place for the §4.9 amendment).
-- `pyproject.toml:42-51` — setuptools build backend, `include = ["eidesoul*"]`, package-data
+- `pyproject.toml:42-51` — setuptools build backend, `include = ["monoagens*"]`, package-data
   (proof that `docs/` is not part of the distribution).
 - `pyproject.toml` `version = 0.0.0.dev0` — the pre-release version per `AGENTS.md` §Shape.
-- `sonar-project.properties:5` — `sonar.sources=eidesoul,scripts` (proof that no new exclusion is needed).
+- `sonar-project.properties:5` — `sonar.sources=monoagens,scripts` (proof that no new exclusion is needed).
 - `README.md:254-258` — documents `scripts/patterns.py`/`fakta.py --check` (the guard precedent).
 - `scripts/affect.py`, `scripts/patterns.py`, `scripts/fakta.py` — the "data + guard script" pattern.
 - `tests/` — the test home that calls `scripts/adr.py --check`.

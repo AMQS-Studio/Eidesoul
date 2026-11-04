@@ -1,4 +1,4 @@
-> Terjemahan turunan — jangan sunting; sumber: 0000-initial-invariants.md (sha256: e30f7e9ca1ce)
+> Terjemahan turunan — jangan sunting; sumber: 0000-initial-invariants.md (sha256: 4b418df58ce5)
 > Ditulis tangan (bukan mesin), mengikuti sumber English baris demi baris.
 
 # ADR-0000: Invarian Awal — Bentuk Permukaan, Data Bahasa, Seam Netral Embodiment
@@ -22,7 +22,7 @@
 
 | Fakta | Bukti |
 |---|---|
-| Core berbicara chat | `chat_id` 635 kali di `eidesoul/engine`, `send` 301, `reply` 135, `dm` 125, `ChatMessage` 71, `group` 62 |
+| Core berbicara chat | `chat_id` 635 kali di `monoagens/engine`, `send` 301, `reply` 135, `dm` 125, `ChatMessage` 71, `group` 62 |
 | Seam berbentuk chat | `Inbound` membawa `chat_id`, `is_dm`, `is_mention`, `is_reply` (`inbound.py:18-29`) |
 | Penyimpanan berbentuk chat | tabel `chats`, `chat_eras`, `chat_people` (`schema.py:69,164,187`) |
 | Data bahasa ada di modul | `privacy.py:27`, `context.py:317-320`, `character.py:18`, `guard/patterns.py:16`, `prompts.py:97,239,242,277`; default pronoun `"aku"` di `soul.py:57,221` |
@@ -42,7 +42,7 @@ bawah memperbaiki kosakata sebelum lebih banyak fitur dibangun di atasnya.
 | Satu pemilik per konsep | Setiap kosakata punya satu rumah dan satu ADR pemilik |
 | Tanpa alias, tanpa shim | Rename mendarat sebagai satu cutover (aturan repo), jadi nama lama tidak menggantung |
 | Degradasi jujur | Data bahasa yang hilang melemahkan fitur secara terlihat, bukan diam-diam dalam bahasa yang salah |
-| Paket datar | Permukaan baru hidup di luar `eidesoul/`; paket mempertahankan enam subpaketnya |
+| Paket datar | Permukaan baru hidup di luar `monoagens/`; paket mempertahankan enam subpaketnya |
 | Fondasi dulu | Invarian dijalankan sebelum fitur yang jika tidak akan memanggang chat ke dalamnya |
 
 ## 3. Opsi yang dipertimbangkan
@@ -58,15 +58,15 @@ bawah memperbaiki kosakata sebelum lebih banyak fitur dibangun di atasnya.
 
 ### 4.1 Bentuk permukaan (apa boleh tinggal di mana)
 
-`eidesoul/` hanya memuat spine dan appendage-nya: `engine/`, `gateways/`, `providers/`, `library/`,
+`monoagens/` hanya memuat spine dan appendage-nya: `engine/`, `gateways/`, `providers/`, `library/`,
 `lang/`, `vendor/`, `admin/`, `__main__.py`. Sisanya di akar repo: `docs/`, `scripts/`, `tests/`, dan
-`panel/` atau `apps/` di masa depan. Tree baru tidak pernah ditambahkan di dalam `eidesoul/engine/`;
-body adalah paket di `eidesoul/gateways/<name>/` (ADR-0018), dan aplikasi yang mengimpor engine
+`panel/` atau `apps/` di masa depan. Tree baru tidak pernah ditambahkan di dalam `monoagens/engine/`;
+body adalah paket di `monoagens/gateways/<name>/` (ADR-0018), dan aplikasi yang mengimpor engine
 (dashboard, editor UI) adalah proses terpisah di luar paket.
 
 ### 4.2 Data bahasa tinggal di permukaan data
 
-Daftar khas bahasa pindah ke `eidesoul/library/lexicon/<lang>.json` dengan skema
+Daftar khas bahasa pindah ke `monoagens/library/lexicon/<lang>.json` dengan skema
 `{version, language, negations, stopwords, assistant_tells, injection, prompt_examples}`; engine memuat
 pack untuk `soul.language` secara lazy lalu cache.
 
@@ -79,7 +79,7 @@ pack untuk `soul.language` secara lazy lalu cache.
   katalog dan tidak lagi memakai literal handler sebagai cadangan, sedangkan `Handler.description`
   tetap deskripsi tool **untuk model**.
 - Percakapan demo CLI pindah ke `tests/fixtures/`.
-- Penegakan: `tests/test_language.py` memindai literal string di `eidesoul/engine/**` terhadap daftar
+- Penegakan: `tests/test_language.py` memindai literal string di `monoagens/engine/**` terhadap daftar
   kata yang diambil **dari** `library/lexicon/id.json`, memeriksa paritas katalog, dan memastikan
   literal default pronoun tidak kembali.
 
@@ -120,7 +120,7 @@ hilang pada perubahan yang sama dan semua pemanggil dimigrasikan.
 
 ### 4.5 Kapabilitas khusus chat keluar dari core
 
-`send` (egress chat) dan `chat_history` (menelusuri arsip) pindah ke `eidesoul/gateways/whatsapp/tools`
+`send` (egress chat) dan `chat_history` (menelusuri arsip) pindah ke `monoagens/gateways/whatsapp/tools`
 dan `.../tools` milik body yang memiliki arsip. Engine hanya menyimpan tool netral body:
 `read`, `write`, `shell`, `sandbox`, `web_search`, `mcp`, `memory`, `recipe`, `skill`, `settings`.
 Body robot mengekspos tool gerak/sensor, body harness mengekspos tool run/inspect, body editor
@@ -137,40 +137,40 @@ pernah di core).
 ### 4.7 Penegakan
 
 - `tests/test_language.py` (§4.2).
-- `tests/test_architecture.py`: pemindaian AST yang memastikan `eidesoul/engine/**` tidak memuat kosakata
+- `tests/test_architecture.py`: pemindaian AST yang memastikan `monoagens/engine/**` tidak memuat kosakata
   transport di luar allowlist eksplisit (kunci `hints`, nama netral gateway), dan tidak ada modul di
-  `eidesoul/` di luar `gateways/` yang mengimpor `neonize` atau paket gateway (aturan repo dibuat mekanis).
+  `monoagens/` di luar `gateways/` yang mengimpor `neonize` atau paket gateway (aturan repo dibuat mekanis).
 - `scripts/adr.py --check` tetap menjadi gate dokumen ini; kini ia menegakkan layout folder (root,
   `engine/`, `web/`), nomor kronologis yang unik global, dan rujukan yang terselesaikan (ADR-0009 §4.1).
 
 ## 5. Konfigurasi
 
 Tidak ada kunci engine baru untuk seam. Data bahasa menurunkan path dari `soul.language`
-(`eidesoul/library/lexicon/<code>.json`), dengan override test-only `engine.language.lexicon_dir`.
+(`monoagens/library/lexicon/<code>.json`), dengan override test-only `engine.language.lexicon_dir`.
 Body mendeklarasikan nama dan kapabilitasnya di bagian config miliknya, `gateways.<name>`.
 
 ## 6. Metrik dan gate
 
 | Metrik | Target awal |
 |---|---|
-| Kosakata transport di `eidesoul/engine/**` (`chat_id`, `is_dm`, `ChatMessage`, `chat_eras`) | 0 sesudah rename |
-| Literal Indonesia di `eidesoul/engine/**` (di luar lexicon) | 0 (scanner) |
+| Kosakata transport di `monoagens/engine/**` (`chat_id`, `is_dm`, `ChatMessage`, `chat_eras`) | 0 sesudah rename |
+| Literal Indonesia di `monoagens/engine/**` (di luar lexicon) | 0 (scanner) |
 | Paritas katalog `en` ⇄ `id` | 0 kunci hilang per sisi |
 | Command tanpa `command.<name>.description` | 0 (boot gagal kalau ada) |
 | Body yang berjalan end-to-end (smoke) | ≥ 2 — chat plus satu body non-chat |
-| Tool khusus body di dalam `eidesoul/engine/tools` | 0 |
-| Tree baru di dalam `eidesoul/engine/` | 0 |
+| Tool khusus body di dalam `monoagens/engine/tools` | 0 |
+| Tree baru di dalam `monoagens/engine/` | 0 |
 
 ## 7. Acceptance criteria
 
-- [ ] `library/lexicon/{id,en}.json` ada, lolos check, dan dibaca engine; grep tidak menemukan literal kata Indonesia di `eidesoul/engine/**`.
+- [ ] `library/lexicon/{id,en}.json` ada, lolos check, dan dibaca engine; grep tidak menemukan literal kata Indonesia di `monoagens/engine/**`.
 - [ ] Soul dengan `language: en` dan `pronouns` kosong menghasilkan pronoun English; katalog tanpa `soul.pronoun.default` gagal saat boot.
 - [ ] `/konteks` dan handler lain menjawab hanya lewat `t()`; `/help` menolak boot saat kunci deskripsi command hilang; `__main__.py` tidak menyimpan percakapan demo.
 - [ ] `Percept`/`Action` menggantikan `Inbound`/`ChatMessage` di engine; `hints` membawa `dm`/`mention`/`reply`; tidak ada cabang engine pada nama transport (test AST).
 - [ ] Rename mendarat satu cutover: tidak ada `chat_id`/`is_dm`/`ChatMessage`/`chat_eras` tersisa di engine, dan migrasi DDL ada di urutan ADR-0016.
-- [ ] `send` dan `chat_history` hidup di paket gateway; `eidesoul/engine/tools` tidak memuat tool khusus body.
+- [ ] `send` dan `chat_history` hidup di paket gateway; `monoagens/engine/tools` tidak memuat tool khusus body.
 - [ ] Satu body non-chat menyelesaikan smoke run (percept masuk, action keluar) tanpa kasus khusus di engine.
-- [ ] `docs/`, `scripts/`, `tests/`, `panel/`, `apps/` tetap di luar `eidesoul/`, dan `AGENTS.md` menyatakannya.
+- [ ] `docs/`, `scripts/`, `tests/`, `panel/`, `apps/` tetap di luar `monoagens/`, dan `AGENTS.md` menyatakannya.
 
 ## 8. Risiko dan mitigasi
 
@@ -197,17 +197,17 @@ Body mendeklarasikan nama dan kapabilitasnya di bagian config miliknya, `gateway
 
 ## 10. Referensi kode
 
-- `eidesoul/engine/inbound.py:18-29` — `Inbound` dan `Gateway` (seam yang diganti).
-- `eidesoul/engine/schema.py:44-67,69,164,187` — `messages`, `chats`, `chat_eras`, `chat_people`.
-- `eidesoul/engine/agent.py` — pemanggilan kirim dan penanganan turn (rename + seam).
-- `eidesoul/engine/turn/prompts.py:141-147` — render role; fakta body masuk payload di sini.
-- `eidesoul/gateways/whatsapp/tools/send.py` dan `eidesoul/gateways/whatsapp/tools/chat_history.py` — dua tool khusus chat, keduanya sudah keluar dari core.
-- `eidesoul/engine/soul.py:57,221` — default `pronouns` (akan dihapus).
-- `eidesoul/engine/access/privacy.py:27`, `context.py:317-320`, `character.py:18`, `guard/patterns.py:16`, `prompts.py:97,239,242,277` — data bahasa (akan dipindah).
-- `eidesoul/engine/commands/konteks.py:21` — balasan hardcoded (akan lewat `t()`).
-- `eidesoul/__main__.py:429,456` — fixture Indonesia (akan pindah ke `tests/fixtures/`).
-- `eidesoul/lang/en.yaml`, `eidesoul/lang/id.yaml` — 201 kunci masing-masing, paritas 0/0.
-- `eidesoul/library/patterns|facts|affect/**` — preseden permukaan data yang diperiksa.
+- `monoagens/engine/inbound.py:18-29` — `Inbound` dan `Gateway` (seam yang diganti).
+- `monoagens/engine/schema.py:44-67,69,164,187` — `messages`, `chats`, `chat_eras`, `chat_people`.
+- `monoagens/engine/agent.py` — pemanggilan kirim dan penanganan turn (rename + seam).
+- `monoagens/engine/turn/prompts.py:141-147` — render role; fakta body masuk payload di sini.
+- `monoagens/gateways/whatsapp/tools/send.py` dan `monoagens/gateways/whatsapp/tools/chat_history.py` — dua tool khusus chat, keduanya sudah keluar dari core.
+- `monoagens/engine/soul.py:57,221` — default `pronouns` (akan dihapus).
+- `monoagens/engine/access/privacy.py:27`, `context.py:317-320`, `character.py:18`, `guard/patterns.py:16`, `prompts.py:97,239,242,277` — data bahasa (akan dipindah).
+- `monoagens/engine/commands/konteks.py:21` — balasan hardcoded (akan lewat `t()`).
+- `monoagens/__main__.py:429,456` — fixture Indonesia (akan pindah ke `tests/fixtures/`).
+- `monoagens/lang/en.yaml`, `monoagens/lang/id.yaml` — 201 kunci masing-masing, paritas 0/0.
+- `monoagens/library/patterns|facts|affect/**` — preseden permukaan data yang diperiksa.
 
 ---
 

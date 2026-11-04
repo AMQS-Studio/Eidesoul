@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from eidesoul.engine.inbound import (
+from monoagens.engine.inbound import (
     CORE_MEMBERS,
     Action,
     Address,
@@ -19,11 +19,11 @@ from eidesoul.engine.inbound import (
 )
 
 ROOT = Path(__file__).resolve().parents[1]
-ENGINE = ROOT / "eidesoul" / "engine"
+ENGINE = ROOT / "monoagens" / "engine"
 
 # The process entry point and the admin CLI build the gateway list; the engine never imports
 # them, so the "no gateway import" rule applies to every other module outside gateways/.
-COMPOSITION = {"eidesoul/__main__.py", "eidesoul/admin/database.py"}
+COMPOSITION = {"monoagens/__main__.py", "monoagens/admin/database.py"}
 
 # The only body words the engine may know: the documented `Percept.hints` keys.
 HINT_KEYS = frozenset({"dm", "mention", "reply", "group", "presence", "self", "roles"})
@@ -87,9 +87,9 @@ def test_no_transport_vocabulary_in_the_engine() -> None:
 
 def test_nothing_outside_gateways_imports_a_transport_or_a_gateway() -> None:
     hits: list[str] = []
-    for path in sorted((ROOT / "eidesoul").rglob("*.py")):
+    for path in sorted((ROOT / "monoagens").rglob("*.py")):
         relative = path.relative_to(ROOT).as_posix()
-        if "gateways" in path.relative_to(ROOT / "eidesoul").parts:
+        if "gateways" in path.relative_to(ROOT / "monoagens").parts:
             continue
         if relative in COMPOSITION:
             continue
@@ -105,10 +105,10 @@ def test_nothing_outside_gateways_imports_a_transport_or_a_gateway() -> None:
                 parts = name.lstrip(".").split(".")
                 if parts[0] == "neonize":
                     hits.append(f"{path.relative_to(ROOT)}:{node.lineno}: imports {name}")
-                if parts[0] == "gateways" or name.startswith("eidesoul.gateways"):
+                if parts[0] == "gateways" or name.startswith("monoagens.gateways"):
                     hits.append(f"{path.relative_to(ROOT)}:{node.lineno}: imports {name}")
                 if (
-                    name.startswith("eidesoul.")
+                    name.startswith("monoagens.")
                     and path.is_relative_to(ENGINE)
                     and len(parts) > 1
                     and parts[1] != "providers"
@@ -134,7 +134,7 @@ FORBIDDEN_FUTURE = "from __future__ " + "import annotations"
 
 def test_no_module_relies_on_future_annotations() -> None:
     """ADR-0031 §4.7: on 3.14 annotations are lazy, so the import is dead weight and banned."""
-    roots = [ROOT / name for name in ("eidesoul", "tests", "scripts", "plugins", "migrations")]
+    roots = [ROOT / name for name in ("monoagens", "tests", "scripts", "plugins", "migrations")]
     offenders = sorted(
         path.relative_to(ROOT).as_posix()
         for base in roots
@@ -179,8 +179,8 @@ def test_the_three_protocols_accept_the_right_fakes() -> None:
 
 
 def test_the_old_seam_names_are_gone() -> None:
-    from eidesoul.engine import inbound
-    from eidesoul.engine.turn import context
+    from monoagens.engine import inbound
+    from monoagens.engine.turn import context
 
     assert not hasattr(inbound, "Inbound")
     assert not hasattr(context, "ChatMessage")

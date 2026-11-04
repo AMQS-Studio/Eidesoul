@@ -9,13 +9,13 @@ import pytest
 import yaml
 from support import build_config, database
 
-from eidesoul.admin.templates import ROLES
-from eidesoul.engine import plugins
-from eidesoul.engine.access.roles import Role
-from eidesoul.engine.config import PluginConfig, PluginSettings
-from eidesoul.engine.schema import people
-from eidesoul.engine.tools import REGISTRY as CORE_TOOLS
-from eidesoul.engine.tools import ToolContext
+from monoagens.admin.templates import ROLES
+from monoagens.engine import plugins
+from monoagens.engine.access.roles import Role
+from monoagens.engine.config import PluginConfig, PluginSettings
+from monoagens.engine.schema import people
+from monoagens.engine.tools import REGISTRY as CORE_TOOLS
+from monoagens.engine.tools import ToolContext
 from plugins.google.google_workspace.service import (
     DOC_MIME,
     SHEET_MIME,

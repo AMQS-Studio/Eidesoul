@@ -14,10 +14,10 @@ from dataclasses import dataclass
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-ENGINE = ROOT / "eidesoul" / "engine"
-ADMIN = ROOT / "eidesoul" / "admin"
-LANG = ROOT / "eidesoul" / "lang"
-SAFETY = ROOT / "eidesoul" / "library" / "safety"
+ENGINE = ROOT / "monoagens" / "engine"
+ADMIN = ROOT / "monoagens" / "admin"
+LANG = ROOT / "monoagens" / "lang"
+SAFETY = ROOT / "monoagens" / "library" / "safety"
 
 # §4.12: spine components may be named in core. Each entry carries its ADR.
 SPINE = {
@@ -30,7 +30,7 @@ SPINE = {
 }
 # Optional dependencies a core tool needs to exist at all; they degrade when absent.
 OPTIONAL = {
-    "eidesoul/engine/tools/web_search.py": {
+    "monoagens/engine/tools/web_search.py": {
         "ddgs": "search dependency of the core web_search tool; no backend is named in config",
         "searx": "self-hosted SearXNG endpoint the operator may configure",
     }
@@ -44,7 +44,7 @@ def _rel(path: Path) -> str:
 
 def _scope() -> list[Path]:
     files = list(ENGINE.rglob("*.py")) + list(ADMIN.rglob("*.py"))
-    files.append(ROOT / "eidesoul" / "__main__.py")
+    files.append(ROOT / "monoagens" / "__main__.py")
     files.append(ROOT / "Dockerfile")
     return [path for path in files if path.is_file()]
 
@@ -109,7 +109,7 @@ def scan() -> list[Hit]:
     if re.search(r'raw\["plugins"\]\s*=\s*\{', templates) and not re.search(
         r'raw\["plugins"\]\s*=\s*\{\}\s*$', templates, re.MULTILINE
     ):
-        hits.append(Hit(7, "eidesoul/admin/templates.py", 0, "template ships a plugin map"))
+        hits.append(Hit(7, "monoagens/admin/templates.py", 0, "template ships a plugin map"))
     for handler in _handlers():
         missing = [name for name in ("target", "approval_class") if name not in handler]
         if missing:

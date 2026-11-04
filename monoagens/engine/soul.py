@@ -1,0 +1,501 @@
+"""The soul: identity, roles, locale, persona, and voice tuning loaded from `soul.yaml`.
+
+The engine owns the mechanisms (affect, style, character, humanize); the soul owns their
+settings. `soul.voice` is the one place where behavior is tuned, while `soul.yaml` prose and
+examples remain the only character source (ADR-0045).
+"""
+
+
+import logging
+import math
+from collections.abc import Mapping
+from dataclasses import dataclass, field
+from pathlib import Path
+from typing import Literal, overload
+
+import yaml
+
+from . import clock
+from .i18n import catalog, normalize_language, t
+
+log = logging.getLogger(__name__)
+
+PRONOUN_KEY = "soul.pronoun.default"
+PROFANITY = ("free", "avoid")
+SAFETY = ("inherit", "off")
+
+# Seed for `monoagens init` and the tracked root `soul.yaml`.
+DEFAULT_SOUL_YAML = """\
+# MonoAgens soul definition. One database = one soul.
+name: MonoAgens
+description: A persistent agent that can inhabit any body or role.
+language: {language}
+locale: {locale}
+timezone: {timezone}
+pronouns: ""
+role: assistant
+
+# background: |
+#   Born and raised in ...
+background: ""
+
+# persona: |
+#   ## Personality
+#   ...
+persona: ""
+
+# Voice tuning: behavior lives here, not in engine config. The master is off by default.
+voice:
+  enabled: {voice_enabled}
+  sampling:
+    daily_temperature: 0.9
+    professional_temperature: 0.3
+    top_p:
+    top_k:
+    min_p:
+  affect:
+    enabled: true
+  style:
+    enabled: true
+  character:
+    enabled: false
+  humanize:
+    enabled: true
+  profanity: avoid
+  safety: inherit
+
+# Behavior rules (ADR-0008 §4.3): a rule becomes `kind=rule` memory only from this document,
+# after it is restated on two separate days. One line each, no names and no secrets.
+rules: []
+"""
+
+
+@dataclass(frozen=True)
+class SamplingConfig:
+    """Behavior sampling; empty optional values mean the provider default (ADR-0044)."""
+
+    daily_temperature: float = 0.9
+    professional_temperature: float = 0.3
+    top_p: float | None = None
+    top_k: int | None = None
+    min_p: float | None = None
+
+
+@dataclass(frozen=True)
+class VibeConfig:
+    enabled: bool = True
+    attack: float = 0.35
+    baseline_influence: float = 0.05
+    hold_seconds: float = 1.2
+    tick_seconds: float = 1.0
+
+
+@dataclass(frozen=True)
+class AffectConfig:
+    enabled: bool = True
+    volatility: str = "expressive"
+    grudge_half_life_hours: float = 1.5
+    vibe: VibeConfig = field(default_factory=VibeConfig)
+
+
+@dataclass(frozen=True)
+class StyleConfig:
+    enabled: bool = True
+    max_chars: int = 800
+
+
+@dataclass(frozen=True)
+class CharacterConfig:
+    """Polish only: no level table, no gender target, no second rewrite (ADR-0045)."""
+
+    enabled: bool = False
+    max_chars: int = 400
+    max_tokens: int = 500
+    temperature: float = 0.7
+
+
+@dataclass(frozen=True)
+class HumanizeConfig:
+    enabled: bool = True
+    cpms: float = 25.0
+    min_delay: float = 0.5
+    max_delay: float = 5.0
+    between_delay: float = 0.7
+    max_bubbles: int = 3
+    reaction_stickers: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class VoiceConfig:
+    """One section and one master switch; sampling/profanity/safety are request-level."""
+
+    enabled: bool = False
+    sampling: SamplingConfig = field(default_factory=SamplingConfig)
+    affect: AffectConfig = field(default_factory=AffectConfig)
+    style: StyleConfig = field(default_factory=StyleConfig)
+    character: CharacterConfig = field(default_factory=CharacterConfig)
+    humanize: HumanizeConfig = field(default_factory=HumanizeConfig)
+    profanity: str = "avoid"
+    safety: str = "inherit"
+
+
+@dataclass(frozen=True)
+class Soul:
+    language: str
+    locale: str
+    timezone: str
+    name: str = "MonoAgens"
+    description: str = ""
+    pronouns: str = ""
+    role: str = "assistant"
+    roles: tuple[str, ...] = ("assistant",)
+    background: str = ""
+    persona: str = ""
+    voice: VoiceConfig = field(default_factory=VoiceConfig)
+    examples: tuple[dict[str, str], ...] = ()
+    # ADR-0008 §4.3: behavior rules live in the soul document, and only there.
+    rules: tuple[str, ...] = ()
+    source: Path | None = None
+
+    def __post_init__(self) -> None:
+        """Validate required values, then resolve an empty pronoun from the catalog."""
+        normalize_language(self.language)
+        if not self.locale.strip():
+            raise ValueError("soul locale is required; `monoagens init` writes it")
+        clock.zone(self.timezone)
+        if not self.pronouns:
+            object.__setattr__(self, "pronouns", default_pronoun(self.language))
+
+
+def default_pronoun(language: str) -> str:
+    """`soul.pronoun.default` for one catalog; missing means boot fails."""
+    code = normalize_language(language)
+    if PRONOUN_KEY not in catalog(code):
+        raise ValueError(f"language catalog '{code}' is missing the required key '{PRONOUN_KEY}'")
+    return t(PRONOUN_KEY, code)
+
+
+def language_line(soul: Soul) -> str:
+    """Model-facing instruction from the soul catalog; no language branch lives in code."""
+    return t("soul.reply_language", normalize_language(soul.language))
+
+
+def _text(value: object) -> str:
+    return str(value or "").strip()
+
+
+def _bool(value: object, default: bool) -> bool:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        text = value.strip().lower()
+        if text in ("true", "yes", "on", "1"):
+            return True
+        if text in ("false", "no", "off", "0"):
+            return False
+    return default
+
+
+def _choice(value: object, default: str, allowed: tuple[str, ...], key: str) -> str:
+    if isinstance(value, bool):
+        text = "on" if value else "off"
+    else:
+        text = _text(value).lower() or default
+    if text not in allowed:
+        raise ValueError(f"soul {key} must be one of {', '.join(allowed)}")
+    return text
+
+
+@overload
+def _number(
+    value: object,
+    default: float,
+    key: str,
+    *,
+    low: float,
+    high: float,
+    optional: Literal[False] = False,
+) -> float: ...
+
+
+@overload
+def _number(
+    value: object,
+    default: float,
+    key: str,
+    *,
+    low: float,
+    high: float,
+    optional: Literal[True],
+) -> float | None: ...
+
+
+def _number(
+    value: object,
+    default: float,
+    key: str,
+    *,
+    low: float,
+    high: float,
+    optional: bool = False,
+) -> float | None:
+    if value in (None, "", "null", "none", "None"):
+        return None if optional else float(default)
+    if isinstance(value, bool):
+        raise ValueError(f"soul {key} must be a number")
+    try:
+        number = float(str(value))
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"soul {key} must be a number") from exc
+    if not math.isfinite(number) or number < low or number > high:
+        raise ValueError(f"soul {key} must be between {low:g} and {high:g}")
+    return number
+
+
+def _integer(value: object, default: int, key: str, *, low: int, high: int) -> int:
+    if value in (None, "", "null", "none", "None"):
+        return int(default)
+    if isinstance(value, bool):
+        raise ValueError(f"soul {key} must be an integer")
+    try:
+        number = int(float(str(value)))
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"soul {key} must be an integer") from exc
+    if number < low or number > high:
+        raise ValueError(f"soul {key} must be between {low} and {high}")
+    return number
+
+
+def _optional_integer(value: object, key: str, *, low: int, high: int) -> int | None:
+    if value in (None, "", "null", "none", "None"):
+        return None
+    return _integer(value, 0, key, low=low, high=high)
+
+
+def _section(raw: object) -> Mapping[str, object]:
+    return raw if isinstance(raw, Mapping) else {}
+
+
+def _sampling(raw: object) -> SamplingConfig:
+    body = _section(raw)
+    return SamplingConfig(
+        daily_temperature=_number(
+            body.get("daily_temperature"), 0.9, "voice.sampling.daily_temperature",
+            low=0.0, high=2.0,
+        ),
+        professional_temperature=_number(
+            body.get("professional_temperature"), 0.3, "voice.sampling.professional_temperature",
+            low=0.0, high=2.0,
+        ),
+        top_p=_number(body.get("top_p"), 0.0, "voice.sampling.top_p", low=0.0, high=1.0, optional=True),
+        top_k=_optional_integer(body.get("top_k"), "voice.sampling.top_k", low=1, high=1000),
+        min_p=_number(body.get("min_p"), 0.0, "voice.sampling.min_p", low=0.0, high=1.0, optional=True),
+    )
+
+
+def _affect(raw: object) -> AffectConfig:
+    body = _section(raw)
+    vibe = _section(body.get("vibe"))
+    return AffectConfig(
+        enabled=_bool(body.get("enabled"), True),
+        volatility=_text(body.get("volatility")) or "expressive",
+        grudge_half_life_hours=_number(
+            body.get("grudge_half_life_hours"), 1.5,
+            "voice.affect.grudge_half_life_hours", low=0.0, high=8760.0,
+        ),
+        vibe=VibeConfig(
+            enabled=_bool(vibe.get("enabled"), True),
+            attack=_number(vibe.get("attack"), 0.35, "voice.affect.vibe.attack", low=0.0, high=1.0),
+            baseline_influence=_number(
+                vibe.get("baseline_influence"), 0.05,
+                "voice.affect.vibe.baseline_influence", low=0.0, high=1.0,
+            ),
+            hold_seconds=_number(
+                vibe.get("hold_seconds"), 1.2, "voice.affect.vibe.hold_seconds",
+                low=0.0, high=3600.0,
+            ),
+            tick_seconds=_number(
+                vibe.get("tick_seconds"), 1.0, "voice.affect.vibe.tick_seconds",
+                low=0.1, high=3600.0,
+            ),
+        ),
+    )
+
+
+def _style(raw: object) -> StyleConfig:
+    body = _section(raw)
+    return StyleConfig(
+        enabled=_bool(body.get("enabled"), True),
+        max_chars=_integer(body.get("max_chars"), 800, "voice.style.max_chars", low=0, high=100_000),
+    )
+
+
+def _character(raw: object) -> CharacterConfig:
+    body = _section(raw)
+    return CharacterConfig(
+        enabled=_bool(body.get("enabled"), False),
+        max_chars=_integer(body.get("max_chars"), 400, "voice.character.max_chars", low=80, high=100_000),
+        max_tokens=_integer(body.get("max_tokens"), 500, "voice.character.max_tokens", low=1, high=100_000),
+        temperature=_number(
+            body.get("temperature"), 0.7, "voice.character.temperature", low=0.0, high=2.0
+        ),
+    )
+
+
+def _humanize(raw: object) -> HumanizeConfig:
+    body = _section(raw)
+    stickers = body.get("reaction_stickers")
+    if stickers is None:
+        sticker_values: tuple[str, ...] = ()
+    elif isinstance(stickers, (list, tuple)):
+        sticker_values = tuple(_text(item) for item in stickers if _text(item))
+    else:
+        raise ValueError("soul voice.humanize.reaction_stickers must be a list")
+    min_delay = _number(body.get("min_delay"), 0.5, "voice.humanize.min_delay", low=0.0, high=3600.0)
+    max_delay = _number(body.get("max_delay"), 5.0, "voice.humanize.max_delay", low=0.0, high=3600.0)
+    if max_delay < min_delay:
+        raise ValueError("soul voice.humanize.max_delay must be >= min_delay")
+    return HumanizeConfig(
+        enabled=_bool(body.get("enabled"), True),
+        cpms=_number(body.get("cpms"), 25.0, "voice.humanize.cpms", low=0.1, high=10_000.0),
+        min_delay=min_delay,
+        max_delay=max_delay,
+        between_delay=_number(
+            body.get("between_delay"), 0.7, "voice.humanize.between_delay", low=0.0, high=3600.0
+        ),
+        max_bubbles=_integer(body.get("max_bubbles"), 3, "voice.humanize.max_bubbles", low=1, high=20),
+        reaction_stickers=sticker_values,
+    )
+
+
+def _voice(raw: object) -> VoiceConfig:
+    body = _section(raw)
+    return VoiceConfig(
+        enabled=_bool(body.get("enabled"), False),
+        sampling=_sampling(body.get("sampling")),
+        affect=_affect(body.get("affect")),
+        style=_style(body.get("style")),
+        character=_character(body.get("character")),
+        humanize=_humanize(body.get("humanize")),
+        profanity=_choice(body.get("profanity"), "avoid", PROFANITY, "voice.profanity"),
+        safety=_choice(body.get("safety"), "inherit", SAFETY, "voice.safety"),
+    )
+
+
+def _examples(value: object) -> tuple[dict[str, str], ...]:
+    if value is None:
+        return ()
+    if not isinstance(value, (list, tuple)):
+        return ()
+    found: list[dict[str, str]] = []
+    for item in value:
+        if not isinstance(item, Mapping):
+            continue
+        user = _text(item.get("user"))
+        soul = _text(item.get("soul"))
+        if user or soul:
+            found.append({"user": user, "soul": soul})
+    return tuple(found)
+
+
+def _rules(value: object) -> tuple[str, ...]:
+    """`rules` is a list of one-line behavior rules; an empty entry is dropped, order kept."""
+    if value is None:
+        return ()
+    if not isinstance(value, (list, tuple)):
+        log.warning("soul rules must be a list; ignoring %s", type(value).__name__)
+        return ()
+    return tuple(_text(item) for item in value if _text(item))
+
+
+def render_persona(soul: Soul) -> str:
+    """Render the persona block in one fixed order, dropping every empty section."""
+    lines = [f"# {soul.name}"]
+    if soul.description:
+        lines.append(soul.description)
+    lines.append(f"Active role: {soul.role}")
+    if len(soul.roles) > 1:
+        lines.append(f"Available roles: {', '.join(soul.roles)}")
+    if soul.locale:
+        lines.append(f"Locale: {soul.locale}")
+    if soul.background:
+        lines.extend(["## Background", soul.background])
+    if soul.persona:
+        lines.append(soul.persona)
+    if soul.examples:
+        lines.append("## Dialogue examples")
+        for example in soul.examples:
+            if example.get("user"):
+                lines.append(f"user: {example['user']}")
+            if example.get("soul"):
+                lines.append(f"{soul.name}: {example['soul']}")
+    return "\n\n".join(lines).strip()
+
+
+def _mapping(source: Path | str | Mapping[str, object]) -> dict:
+    if isinstance(source, Mapping):
+        return dict(source)
+    path = Path(source).expanduser()
+    try:
+        body = yaml.safe_load(path.read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        log.warning("soul file not found: %s; using the default soul", path)
+        return {}
+    except (OSError, yaml.YAMLError) as exc:
+        raise ValueError(f"soul file is invalid: {exc}") from exc
+    if body is None:
+        return {}
+    if not isinstance(body, dict):
+        raise ValueError(f"soul file must be a mapping: {path}")
+    return body
+
+
+def load_soul(
+    source: Path | str | Mapping[str, object],
+    *,
+    source_path: Path | None = None,
+) -> Soul:
+    """Load and validate one soul definition; unknown keys are ignored."""
+    raw = _mapping(source)
+    name = _text(raw.get("name")) or "MonoAgens"
+    role = _text(raw.get("role")) or "assistant"
+    roles = tuple(_text(item) for item in raw.get("roles") or () if _text(item))
+    if not roles:
+        roles = (role,)
+    if role not in roles:
+        roles = (role, *roles)
+    for key in ("language", "locale", "timezone"):
+        if not _text(raw.get(key)):
+            raise ValueError(f"soul {key} is required; `monoagens init` writes it")
+    soul = Soul(
+        name=name,
+        description=_text(raw.get("description")),
+        language=normalize_language(raw.get("language")),
+        pronouns=_text(raw.get("pronouns")),
+        role=role,
+        roles=roles,
+        locale=_text(raw.get("locale")),
+        timezone=_text(raw.get("timezone")),
+        background=_text(raw.get("background")),
+        persona=_text(raw.get("persona")),
+        voice=_voice(raw.get("voice")),
+        examples=_examples(raw.get("examples")),
+        rules=_rules(raw.get("rules")),
+        source=source_path,
+    )
+    return Soul(
+        name=soul.name,
+        description=soul.description,
+        language=soul.language,
+        pronouns=soul.pronouns,
+        role=soul.role,
+        roles=soul.roles,
+        locale=soul.locale,
+        timezone=soul.timezone,
+        background=soul.background,
+        persona=render_persona(soul),
+        voice=soul.voice,
+        examples=soul.examples,
+        rules=soul.rules,
+        source=soul.source,
+    )

@@ -1,10 +1,10 @@
-> Terjemahan turunan — jangan sunting; sumber: engine/0017-turn-isolation-timeout.md (sha256: 40b63131650e)
+> Terjemahan turunan — jangan sunting; sumber: engine/0017-turn-isolation-timeout.md (sha256: d6919e41bdc7)
 > Teks ini ditulis manusia; baris yang tidak bisa diterjemahkan mesin disalin apa adanya ke sumber English, jadi sumber bercampur dua bahasa.
 
 # ADR-0017: Isolasi Turn, Batas Waktu, dan Gerbang Primary
 
 - **Status:** accepted
-- **Implementasi:** implemented — bukti: lock LRU per thread di `agent.py`, deadline turn + `min_call_seconds`, executor `eidesoul/engine/io.py`, `_send_gate` (mode + generation), `tests/test_turn_lifecycle.py`, aturan async-DB di `tests/test_architecture.py`; hasil gate: `pytest -q` 604 lulus setelah wave ini
+- **Implementasi:** implemented — bukti: lock LRU per thread di `agent.py`, deadline turn + `min_call_seconds`, executor `monoagens/engine/io.py`, `_send_gate` (mode + generation), `tests/test_turn_lifecycle.py`, aturan async-DB di `tests/test_architecture.py`; hasil gate: `pytest -q` 604 lulus setelah wave ini
 - **Tanggal:** 2026-11-03
 - **Deciders:** Muqsith (owner), omp (reviewer)
 - **Konteks:** review (`Eidesoul-Review-Arsitektur-2026-11-01.md`) §15 P0-4 — `turn_lock` global, DB/embedder sinkron memblokir event loop yang sama dengan heartbeat lease, dan `agent.mode` tidak pernah dibaca sehingga instance standby masih bisa mengirim
@@ -22,7 +22,7 @@ Empat fakta kode, semuanya saling memperkuat:
 | Fakta | Bukti |
 |---|---|
 | Satu lock untuk semua chat | `agent.py:143` `self.turn_lock = asyncio.Lock()`, dipakai `:448` untuk setiap turn non-command |
-| DB sinkron di dalam `async def` | `db.py:53` `create_engine(...)`, `db.py:95` `connect()` sinkron; satu `to_thread` pun tidak ada di `eidesoul/engine/` |
+| DB sinkron di dalam `async def` | `db.py:53` `create_engine(...)`, `db.py:95` `connect()` sinkron; satu `to_thread` pun tidak ada di `monoagens/engine/` |
 | Embedder sinkron | `embed.py:53-62` `SentenceTransformer.encode`, dipanggil `knowledge.py:147`, `patterns.py:235`, dan jalur mem0 |
 | Standby tidak digerbang | `supervisor.py:62,111` menulis `agent.mode`; tidak ada satu pun pembacaan `self.mode` sebelum `send_text`/`send_file` (`agent.py:311,335`) |
 | Batas waktu LLM **restart per panggilan** | `llm.py:126` `timeout=120` per request; `llm.py:165-169` `run_budget_seconds: 240` dihitung dari `start` **di dalam** `run()`; `max_retries` tidak diset (default library 2) |
@@ -57,7 +57,7 @@ Konsekuensinya bukan teoretis:
 ### 4.1 Offload di seam, bukan di setiap handler
 
 - Satu executor berbatas (`engine.io.workers`, default 8) dipakai bersama oleh `Database.connect` (seluruh blok query dalam satu panggilan kerja), `embed.encode`, dan panggilan mem0 yang sinkron.
-- **Aturan keras:** `with db.connect()` tidak boleh muncul di dalam `async def` di `eidesoul/engine/`; hanya boleh di dalam helper yang di-offload. Ditegakkan test AST (ADR-0019 menyediakan infrastruktur check yang sama dengan `topology`).
+- **Aturan keras:** `with db.connect()` tidak boleh muncul di dalam `async def` di `monoagens/engine/`; hanya boleh di dalam helper yang di-offload. Ditegakkan test AST (ADR-0019 menyediakan infrastruktur check yang sama dengan `topology`).
 - Handler yang sudah async (LLM, sandbox, MCP) tidak diubah.
 
 ### 4.2 Lock per chat, bukan per proses
@@ -101,7 +101,7 @@ Konsekuensinya bukan teoretis:
 | Run otomasi | ikut ADR-0014 §4.7 | Tidak diduplikasi di sini — aturan retry milik otomasi |
 
 - Tidak ada retry untuk 4xx selain 429. Pengecualian lama "buang gambar lalu ulang sekali" tetap ada
-  dan **bukan** retry umum (`eidesoul/engine/llm.py:195-198`).
+  dan **bukan** retry umum (`monoagens/engine/llm.py:195-198`).
 - Setiap percobaan menulis baris `llm_calls` sendiri (ADR-0019), jadi retry tidak pernah tersembunyi
   dari hitungan biaya.
 - Retry tidak pernah melewati `turn.timeout_seconds`: percobaan yang tidak muat tidak dimulai.
@@ -180,14 +180,14 @@ Tidak ada kunci baru untuk shutdown: `grace_seconds`/`drain_seconds`/`notice_sec
 
 ## 10. Referensi kode
 
-- `eidesoul/engine/agent.py:143,413,448,1066` — lock global, `handle()`, titik tunggu lock, gather shutdown.
-- `eidesoul/engine/db.py:53,95` — `create_engine` dan `connect()` sinkron (seam offload).
-- `eidesoul/engine/embed.py:53-62` — `encode` sinkron.
-- `eidesoul/engine/jobs/supervisor.py:62,111` — penulisan `mode` primary/standby.
-- `eidesoul/engine/jobs/lease.py:56-101` — `acquire`/`renew` (pemilik `generation`).
-- `eidesoul/engine/guard/sandbox.py:168` — preseden `asyncio.wait_for` untuk pekerjaan berbatas.
-- `eidesoul/engine/llm.py:122-128` — client `AsyncOpenAI(timeout=...)`; `:165-169` — `run_budget_seconds` dihitung per `run()` (dasar pemisahan dua lapis).
-- `eidesoul/gateways/cli/gateway.py:81`, `eidesoul/gateways/whatsapp/gateway.py:124` — dua pemanggil `handle()`.
+- `monoagens/engine/agent.py:143,413,448,1066` — lock global, `handle()`, titik tunggu lock, gather shutdown.
+- `monoagens/engine/db.py:53,95` — `create_engine` dan `connect()` sinkron (seam offload).
+- `monoagens/engine/embed.py:53-62` — `encode` sinkron.
+- `monoagens/engine/jobs/supervisor.py:62,111` — penulisan `mode` primary/standby.
+- `monoagens/engine/jobs/lease.py:56-101` — `acquire`/`renew` (pemilik `generation`).
+- `monoagens/engine/guard/sandbox.py:168` — preseden `asyncio.wait_for` untuk pekerjaan berbatas.
+- `monoagens/engine/llm.py:122-128` — client `AsyncOpenAI(timeout=...)`; `:165-169` — `run_budget_seconds` dihitung per `run()` (dasar pemisahan dua lapis).
+- `monoagens/gateways/cli/gateway.py:81`, `monoagens/gateways/whatsapp/gateway.py:124` — dua pemanggil `handle()`.
 
 ---
 

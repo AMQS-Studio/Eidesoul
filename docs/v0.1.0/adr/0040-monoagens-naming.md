@@ -6,7 +6,7 @@
 - **Context:** follows ADR-0009 (ADR home), ADR-0027 (distribution), ADR-0031 (engine structure), ADR-0033 (neutral core), and ADR-0039 (setup terminal); replaces the product name Eidesoul.
 - **Supersedes:** —
 - **Related:** ADR-0000 (initial invariants), ADR-0027 (distribution), ADR-0031 (module structure), ADR-0033 (neutral core), ADR-0039 (setup terminal)
-- **Implementation:** draft — the decision is recorded; the rename of code, repository, and documentation is not executed in this ADR.
+- **Implementation:** implemented — package, CLI, environment, state directory, docs, and repository URL use MonoAgens; no alias remains.
 - **Location note:** naming is cross-cutting, so this ADR sits at the root of the ADR home. The Indonesian copy is `docs/v0.1.0/adr/id/0040-monoagens-naming.md`.
 
 ---
@@ -92,18 +92,18 @@ The rename is a clean cutover. This ADR records the scope; it does not execute i
 
 | Surface | From | To |
 | --- | --- | --- |
-| Python package | `eidesoul/` | `monoagens/` |
-| Import root | `eidesoul.*` | `monoagens.*` |
-| Distribution name | `eidesoul` | `monoagens` |
-| CLI | `eidesoul` | `monoagens` |
-| Repository | `github.com/inimuqsith/Eidesoul` | `github.com/inimuqsith/MonoAgens` |
-| State directory | `.eidesoul/` | `.monoagens/` |
-| Environment prefix | `EIDESOUL_*` | `MONOAGENS_*` |
-| Wordmark | `EIDESOUL` | `MONOAGENS` |
+| Python package | `monoagens/` | `monoagens/` |
+| Import root | `monoagens.*` | `monoagens.*` |
+| Distribution name | `monoagens` | `monoagens` |
+| CLI | `monoagens` | `monoagens` |
+| Repository | `github.com/inimuqsith/Eidesoul` | `github.com/AMQS-Studio/MonoAgens` |
+| State directory | `.monoagens/` | `.monoagens/` |
+| Environment prefix | `MONOAGENS_*` | `MONOAGENS_*` |
+| Wordmark | `MONOAGENS` | `MONOAGENS` |
 | README and README.id | Eidesoul | MonoAgens |
 | AGENTS, TASK, LOG | Eidesoul | MonoAgens |
-| ADR code references | `eidesoul/...` | `monoagens/...` |
-| Docker image and file | `eidesoul` | `monoagens` |
+| ADR code references | `monoagens/...` | `monoagens/...` |
+| Docker image and file | `monoagens` | `monoagens` |
 | Lockfile | current | regenerated after `pyproject.toml` |
 
 What does **not** change:
@@ -117,9 +117,9 @@ What does **not** change:
 Cutover order:
 
 1. `pyproject.toml`: `name`, `[project.scripts]`, `[tool.setuptools.packages.find]`, project URLs.
-2. `git mv eidesoul monoagens`; rewrite imports in engine, gateways, admin, providers, tests,
+2. `git mv monoagens monoagens`; rewrite imports in engine, gateways, admin, providers, tests,
    scripts, and `migrations/env.py`.
-3. Runtime paths: `.eidesoul/` to `.monoagens/`, environment prefix, gateway defaults.
+3. Runtime paths: `.monoagens/` to `.monoagens/`, environment prefix, gateway defaults.
 4. Branding: `admin/brand.py`, `admin/logo_art.py`, `assets/logo.png` alt text, and the lockup
    assertions in `tests/test_init.py`.
 5. Docs: `README.md`, `README.id.md`, `AGENTS.md`, `TASK.md`, `LOG.md`, and ADR code references.
@@ -150,7 +150,7 @@ The `soul.yaml` key, the `soul` document, and the `engine` section keep their na
 
 | Metric | Target |
 | --- | ---: |
-| `eidesoul` occurrences after the cutover | 0 outside historical ADR prose |
+| `monoagens` occurrences after the cutover | 0 outside historical ADR prose |
 | Broken imports in engine, gateways, admin, providers, tests, scripts, migrations | 0 |
 | `pytest -q` | pass |
 | `ruff check` | pass |
@@ -164,27 +164,27 @@ The `soul.yaml` key, the `soul` document, and the `engine` section keep their na
 
 ## 8. Acceptance criteria
 
-- [ ] `monoagens` imports and `pytest -q` passes.
-- [ ] `monoagens selftest` runs on the real store.
-- [ ] `README.md` and `README.id.md` use MonoAgens, the tagline, and the naming note.
-- [ ] `AGENTS.md`, `TASK.md`, and `LOG.md` use MonoAgens.
-- [ ] ADR code references resolve to `monoagens/...` paths.
-- [ ] The wordmark and `tests/test_init.py` assertions use MONOAGENS.
-- [ ] `uv.lock` is regenerated and `uv sync --locked` passes.
-- [ ] `grep -R eidesoul` returns only historical ADR prose.
-- [ ] The repository, badges, and project URLs point at MonoAgens.
-- [ ] No alias package, shim, or dual CLI exists.
+- [x] `monoagens` imports and `pytest -q` passes.
+- [x] `monoagens selftest` runs on the real store.
+- [x] `README.md` and `README.id.md` use MonoAgens, the tagline, and the naming note.
+- [x] `AGENTS.md`, `TASK.md`, and `LOG.md` use MonoAgens.
+- [x] ADR code references resolve to `monoagens/...` paths.
+- [x] The wordmark and `tests/test_init.py` assertions use MONOAGENS.
+- [x] `uv.lock` is regenerated and `uv sync --locked` passes.
+- [x] `grep -R monoagens` returns only historical ADR prose.
+- [x] The repository, badges, and project URLs point at MonoAgens.
+- [x] No alias package, shim, or dual CLI exists.
 
 ## 9. Risks and mitigations
 
 | Risk | Mitigation |
 | --- | --- |
 | A partial rename breaks imports | One cutover branch; tests run before the repository is renamed |
-| A stale reference survives in docs or scripts | The `grep -R eidesoul` gate and the ADR checks |
+| A stale reference survives in docs or scripts | The `grep -R monoagens` gate and the ADR checks |
 | The PyPI or GitHub name is taken | Verify both before the cutover; fall back to an owner-scoped repository if needed |
 | The ANSI wordmark is regenerated incorrectly | Update `admin/logo_art.py` with the new rows and assert them in `tests/test_init.py` |
 | Historical ADRs point at old paths | Update code references only; keep the decision prose unchanged |
-| `.eidesoul/` state is orphaned | Document a one-time `mv .eidesoul .monoagens` in the cutover note; no runtime fallback |
+| `.monoagens/` state is orphaned | Document a one-time `mv .monoagens .monoagens` in the cutover note; no runtime fallback |
 | Installed CLI users break | Pre-release; the break is allowed and is listed in `LOG.md` |
 
 ## 10. Interaction with other ADRs
@@ -200,11 +200,11 @@ The `soul.yaml` key, the `soul` document, and the `engine` section keep their na
 ## 11. Code references
 
 - `pyproject.toml` — distribution name, scripts, package discovery, and project URLs.
-- `eidesoul/__main__.py` — CLI dispatch and the renamed entry point.
-- `eidesoul/config.py` — host paths and the state directory.
-- `eidesoul/admin/brand.py` — wordmark and tagline.
-- `eidesoul/admin/logo_art.py` — generated half-block rows.
-- `eidesoul/admin/init.py` — defaults that mention the state directory.
+- `monoagens/__main__.py` — CLI dispatch and the renamed entry point.
+- `monoagens/config.py` — host paths and the state directory.
+- `monoagens/admin/brand.py` — wordmark and tagline.
+- `monoagens/admin/logo_art.py` — generated half-block rows.
+- `monoagens/admin/init.py` — defaults that mention the state directory.
 - `migrations/env.py` — package import in the Alembic environment.
 - `tests/` — imports and wordmark assertions.
 - `scripts/` — imports and path constants.

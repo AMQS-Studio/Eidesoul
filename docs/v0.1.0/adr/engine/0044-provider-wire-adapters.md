@@ -6,7 +6,7 @@
 - **Context:** follows ADR-0027 (clean by default), ADR-0031 (module structure), ADR-0033 (neutral core), and ADR-0041 (voice configuration); replaces the assumption that every provider must speak the OpenAI wire with a protocol adapter boundary.
 - **Supersedes:** —
 - **Related:** ADR-0027 (distribution), ADR-0031 (module structure), ADR-0033 (neutral core), ADR-0041 (voice configuration), ADR-0045 (mode sampling)
-- **Implementation:** draft — the adapter boundary, the native Gemini client, and the generic sampling fields are recorded; no runtime adapter is implemented in this ADR.
+- **Implementation:** implemented — native Gemini `generateContent`, normalized responses, capability-gated sampling/safety, and fixture tests are live; native Anthropic stays deferred by this ADR.
 - **Location note:** the provider seam binds the engine LLM loop, so this ADR sits under `adr/engine/`. The Indonesian copy is `docs/v0.1.0/adr/engine/id/0044-provider-wire-adapters.md`.
 
 ---
@@ -238,16 +238,16 @@ the config is loaded.
 
 ## 7. Acceptance criteria
 
-- [ ] `ProviderDefaults` carries a wire and `llm.py` selects an adapter without a provider-name branch.
-- [ ] One normalized response type carries text, tool calls, usage, finish reason, and blocked state.
-- [ ] Gemini can send `safetySettings` when `soul.voice.safety: off` and `topK` when configured.
-- [ ] Gemini block reasons and empty candidates are visible to the turn, not reported as an answer.
-- [ ] OpenAI-compatible providers keep the existing request and tool behaviour.
-- [ ] Anthropic stays on the compatibility layer until a native adapter is accepted.
-- [ ] `top_p`, `top_k`, and `min_p` are sent only when supported; unsupported values fail at load.
-- [ ] Adapter tests use fixture requests and responses and never call a live endpoint.
-- [ ] A native provider error still records one `llm_calls` row with the correct purpose.
-- [ ] Daily, professional, sampling, and utility temperatures are operator-configurable.
+- [x] `ProviderDefaults` carries a wire and `llm.py` selects an adapter without a provider-name branch.
+- [x] One normalized response type carries text, tool calls, usage, finish reason, and blocked state.
+- [x] Gemini can send `safetySettings` when `soul.voice.safety: off` and `topK` when configured.
+- [x] Gemini block reasons and empty candidates are visible to the turn, not reported as an answer.
+- [x] OpenAI-compatible providers keep the existing request and tool behaviour.
+- [x] Anthropic stays on the compatibility layer until a native adapter is accepted.
+- [x] `top_p`, `top_k`, and `min_p` are sent only when supported; unsupported values fail at load.
+- [x] Adapter tests use fixture requests and responses and never call a live endpoint.
+- [x] A native provider error still records one `llm_calls` row with the correct purpose.
+- [x] Daily, professional, sampling, and utility temperatures are operator-configurable.
 
 ## 8. Risks and mitigations
 
@@ -276,16 +276,16 @@ the config is loaded.
 
 ## 10. Code references
 
-- `eidesoul/providers/base.py:12-18` — `ProviderDefaults` and the future `wire` field.
-- `eidesoul/providers/__init__.py:19-54` — provider registry and `resolve`.
-- `eidesoul/providers/gemini.py:1-13` — the current OpenAI compatibility entry.
-- `eidesoul/providers/anthropic.py:1-15` — the current compatibility layer and its caveats.
-- `eidesoul/engine/llm.py:173-183` — `AsyncOpenAI` construction.
-- `eidesoul/engine/llm.py:287-323` — the single provider call and its recording.
-- `eidesoul/engine/llm.py:368-379` — OpenAI request kwargs and `temperature`.
-- `eidesoul/engine/llm.py:590-625` — the tool-free `complete` call and its temperature.
-- `eidesoul/engine/config.py:147-160` — `LLMConfig`.
-- `eidesoul/admin/templates.py:100` — the generated engine temperature.
+- `monoagens/providers/base.py:12-18` — `ProviderDefaults` and the future `wire` field.
+- `monoagens/providers/__init__.py:19-54` — provider registry and `resolve`.
+- `monoagens/providers/gemini.py:1-13` — the current OpenAI compatibility entry.
+- `monoagens/providers/anthropic.py:1-15` — the current compatibility layer and its caveats.
+- `monoagens/engine/llm.py:173-183` — `AsyncOpenAI` construction.
+- `monoagens/engine/llm.py:287-323` — the single provider call and its recording.
+- `monoagens/engine/llm.py:368-379` — OpenAI request kwargs and `temperature`.
+- `monoagens/engine/llm.py:590-625` — the tool-free `complete` call and its temperature.
+- `monoagens/engine/config.py:147-160` — `LLMConfig`.
+- `monoagens/admin/templates.py:100` — the generated engine temperature.
 - `pyproject.toml:9-28` — the dependency set.
 - `tests/test_providers.py` — provider registry coverage.
 - `tests/test_llm.py` — the existing LLM loop coverage.

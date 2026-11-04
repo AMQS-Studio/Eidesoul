@@ -1,4 +1,4 @@
-> Terjemahan turunan — jangan sunting; sumber: 0028-plugin-model.md (sha256: 6182c2d926cb)
+> Terjemahan turunan — jangan sunting; sumber: 0028-plugin-model.md (sha256: 02183799984b)
 > Ditulis tangan (bukan mesin), mengikuti sumber English baris demi baris.
 
 # ADR-0028: Model Plugin — Satu Unit Terinstall untuk Kapabilitas Terunduh
@@ -9,9 +9,9 @@
 - **Konteks:** lanjutan ADR-0027 (distribusi dan kapabilitas clean by default), ADR-0001 (permukaan), ADR-0015 (manifest kapabilitas), ADR-0007 (kelas izin), ADR-0022 (`administrator`)
 - **Supersedes:** —
 - **Terkait:** ADR-0018 (kontrak gateway), ADR-0019 (ledger), ADR-0021 (kontrak tool), ADR-0026 (tool core yang tetap di core)
-- **Implementasi:** implemented — bukti: `eidesoul/engine/plugins.py` (manifest, digest tree, fetch-by-digest, satu import `entry`, siklus/status), `plugins/google/` (manifest + kredit + tool), extra `google` dihapus, CLI `eidesoul plugins`, `tests/test_plugins.py`, `tests/test_google_plugin.py`; hasil gate: `pytest -q` 798 lulus, `uv lock --check` bersih
+- **Implementasi:** implemented — bukti: `monoagens/engine/plugins.py` (manifest, digest tree, fetch-by-digest, satu import `entry`, siklus/status), `plugins/google/` (manifest + kredit + tool), extra `google` dihapus, CLI `monoagens plugins`, `tests/test_plugins.py`, `tests/test_google_plugin.py`; hasil gate: `pytest -q` 798 lulus, `uv lock --check` bersih
 - **Catatan lokasi:** ADR ini lintas-potong (mendefinisikan unit distribusi yang dipakai setiap permukaan), jadi ia duduk di akar rumah ADR. Salinan Indonesia di `docs/v0.1.0/adr/id/0028-plugin-model.md`.
-- **Amandemen:** 2026-11-03 — versi pertama. 2026-11-03 — unit ini disebut `plugin` di semua tempat: loader-nya `eidesoul/engine/plugins.py` (`PluginLoader`, `Plugin`, `PluginError`), seksi config `plugin.{root,fetch,source}`, dan verb CLI `eidesoul plugins list|install|enable|disable|remove`. Nama berkas manifest `plugin.yaml`, peta `plugins.<name>.enabled|digest`, dan pohon sumber `plugins/google/` tetap; tanpa alias dan tanpa shim.
+- **Amandemen:** 2026-11-03 — versi pertama. 2026-11-03 — unit ini disebut `plugin` di semua tempat: loader-nya `monoagens/engine/plugins.py` (`PluginLoader`, `Plugin`, `PluginError`), seksi config `plugin.{root,fetch,source}`, dan verb CLI `monoagens plugins list|install|enable|disable|remove`. Nama berkas manifest `plugin.yaml`, peta `plugins.<name>.enabled|digest`, dan pohon sumber `plugins/google/` tetap; tanpa alias dan tanpa shim.
 
 ---
 
@@ -19,12 +19,12 @@
 
 | Fakta | Bukti |
 |---|---|
-| `google` hari ini tool core | `eidesoul/engine/tools/google.py` berdampingan dengan `read.py`, `shell.py`, … |
+| `google` hari ini tool core | `monoagens/engine/tools/google.py` berdampingan dengan `read.py`, `shell.py`, … |
 | `google` juga extra build-time | `pyproject.toml` `google = ["google-api-python-client…", "google-auth…", "httpx…"]` |
-| Tool adalah modul dengan satu kontrak | aturan repo: modul di `eidesoul/engine/tools/` dengan `TOOL = Handler(...)`, nama berkas = `name` |
+| Tool adalah modul dengan satu kontrak | aturan repo: modul di `monoagens/engine/tools/` dengan `TOOL = Handler(...)`, nama berkas = `name` |
 | Izin tidak pernah datang dari handler | aturan repo: hanya role yang memberi `tools`/`commands`; entri hilang menolak |
-| Gateway sudah paket yang terpisah | `eidesoul/gateways/<name>/` dengan `tools|commands` sendiri, transport saja (ADR-0018) |
-| Permukaan data untuk konten opsional sudah ada | paket `eidesoul/library/**`, dipilih oleh `soul.style` |
+| Gateway sudah paket yang terpisah | `monoagens/gateways/<name>/` dengan `tools|commands` sendiri, transport saja (ADR-0018) |
+| Permukaan data untuk konten opsional sudah ada | paket `monoagens/library/**`, dipilih oleh `soul.style` |
 
 Keputusan pemilik: kapabilitas yang bukan spine adalah **plugin**, dan Google yang pertama — bukan tool
 core, dan bukan extra build-time. Kode plugin diunduh saat plugin diaktifkan, jadi ia unit packaging
@@ -125,7 +125,7 @@ credits:                      # baris kredit README yang harus dibayar plugin in
 
 ### 4.4 Pemuatan, isolasi, dependency
 
-- Satu modul engine (`eidesoul/engine/plugins.py`) memegang manifest, verifikasi digest,
+- Satu modul engine (`monoagens/engine/plugins.py`) memegang manifest, verifikasi digest,
   langkah unduh, dan satu impor `entry`. Tidak ada bagian lain engine yang mengimpor kode plugin.
 - Loader menyerahkan `provides` ke registry yang sudah ada: tool sebagai modul `TOOL = Handler(...)`,
   command sebagai modul `COMMAND = Handler(...)`, gateway lewat registry gateway (ADR-0018). Loader
@@ -137,7 +137,7 @@ credits:                      # baris kredit README yang harus dibayar plugin in
 
 ### 4.5 Google adalah plugin pertama
 
-- `eidesoul/engine/tools/google.py` keluar dari core dan menjadi plugin `google` yang menyediakan tool
+- `monoagens/engine/tools/google.py` keluar dari core dan menjadi plugin `google` yang menyediakan tool
   mail dan calendar (plus command digest bila perlu).
 - **Extra** `google` dihapus dari `pyproject.toml` (commit yang sama meregenerasi `uv.lock`); baris
   kredit README-nya pindah ke `credits` di manifest plugin.
@@ -176,7 +176,7 @@ bukan rusak.
 
 | Metrik | Target awal |
 |---|---|
-| Kode plugin diimpor `eidesoul/engine` saat import modul | 0 |
+| Kode plugin diimpor `monoagens/engine` saat import modul | 0 |
 | Dependency plugin di dalam set terkunci image | 0 |
 | Install tanpa digest terverifikasi | 0 (fail closed) |
 | Kapabilitas yang tidak diberikan role tapi bisa dijangkau plugin | 0 |
@@ -191,11 +191,11 @@ bukan rusak.
 - [ ] Mengaktifkan plugin dengan entri `secrets` yang belum terpenuhi melaporkan `unavailable` beserta nama env yang hilang, tanpa mematahkan engine dan tanpa mencatat nilainya.
 - [ ] Plugin yang menutupi nama tool core ditolak saat pemuatan dengan tabrakan itu disebut.
 - [ ] Plugin yang melempar exception saat registrasi dinonaktifkan dengan satu warning dan engine tetap jalan.
-- [ ] `google` tidak lagi bisa diimpor dari `eidesoul/engine/tools/`; extra `google` hilang dari `pyproject.toml` dan `uv.lock` cocok.
+- [ ] `google` tidak lagi bisa diimpor dari `monoagens/engine/tools/`; extra `google` hilang dari `pyproject.toml` dan `uv.lock` cocok.
 - [ ] Tanpa plugin `google`, permintaan mail menghasilkan penolakan jujur dari model, bukan data karangan dan bukan traceback plugin.
 - [ ] Disable menyimpan berkas dan menghentikan kapabilitas; remove menghapus berkas dan status; keduanya meninggalkan baris ledger.
 - [ ] Non-operator tidak bisa install, enable, disable, atau remove plugin (test guard).
-- [ ] `eidesoul selftest` mencantumkan setiap plugin dengan `absent | installed | enabled`.
+- [ ] `monoagens selftest` mencantumkan setiap plugin dengan `absent | installed | enabled`.
 
 ## 8. Risiko dan mitigasi
 
@@ -219,13 +219,13 @@ bukan rusak.
 
 ## 10. Referensi kode
 
-- `plugins/google/` — plugin yang menggantikan `eidesoul/engine/tools/google.py`.
+- `plugins/google/` — plugin yang menggantikan `monoagens/engine/tools/google.py`.
 - `pyproject.toml` `[project.optional-dependencies] google` — extra yang akan dihapus (beserta `uv.lock`).
-- `eidesoul/engine/tools/__init__.py` — registry yang diberi makan loader; `execute` tetap satu-satunya cek izin.
-- `eidesoul/engine/commands/__init__.py` — registry command.
-- `eidesoul/gateways/` — paket gateway yang bisa diekspos loader.
-- `eidesoul/library/**` — aturan id paket (`^[a-z0-9][a-z0-9-]{0,63}$`) yang dipakai ulang untuk nama plugin.
-- `eidesoul/engine/plugins.py` — manifest, digest, unduh, satu impor, siklus hidup.
+- `monoagens/engine/tools/__init__.py` — registry yang diberi makan loader; `execute` tetap satu-satunya cek izin.
+- `monoagens/engine/commands/__init__.py` — registry command.
+- `monoagens/gateways/` — paket gateway yang bisa diekspos loader.
+- `monoagens/library/**` — aturan id paket (`^[a-z0-9][a-z0-9-]{0,63}$`) yang dipakai ulang untuk nama plugin.
+- `monoagens/engine/plugins.py` — manifest, digest, unduh, satu impor, siklus hidup.
 
 ---
 

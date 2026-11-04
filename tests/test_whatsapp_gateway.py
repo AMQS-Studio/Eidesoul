@@ -10,12 +10,12 @@ import pytest
 from neonize.proto.Neonize_pb2 import Message as ProtoMessage
 from support import build_config, database
 
-from eidesoul.engine.config import GatewaySettings
-from eidesoul.engine.inbound import GatewayError, Percept
-from eidesoul.engine.stores.history import HistoryStore
-from eidesoul.engine.turn.context import Message, WorkingMemory
-from eidesoul.gateways.whatsapp import directory, ingress
-from eidesoul.gateways.whatsapp.gateway import SENT_TTL, WhatsAppGateway
+from monoagens.engine.config import GatewaySettings
+from monoagens.engine.inbound import GatewayError, Percept
+from monoagens.engine.stores.history import HistoryStore
+from monoagens.engine.turn.context import Message, WorkingMemory
+from monoagens.gateways.whatsapp import directory, ingress
+from monoagens.gateways.whatsapp.gateway import SENT_TTL, WhatsAppGateway
 
 BOT = "628567770837"
 
@@ -104,7 +104,7 @@ def test_event_to_inbound_dm_and_person(tmp_path) -> None:
 def test_mention_and_reply_flags_come_from_payload(tmp_path) -> None:
     gateway = make_gateway(tmp_path)
 
-    plain = ingress.event_to_inbound(group_event("@eidesoul tolong"), gateway)
+    plain = ingress.event_to_inbound(group_event("@monoagens tolong"), gateway)
     asserted = ingress.event_to_inbound(
         group_event("pagi", mentioned=(f"{BOT}@s.whatsapp.net",)), gateway
     )
@@ -147,11 +147,11 @@ def test_quote_is_read_from_context_info(tmp_path) -> None:
 
 
 def test_command_body_strips_only_bot_mentions() -> None:
-    from eidesoul.engine.turn.commands import command_body
+    from monoagens.engine.turn.commands import command_body
 
-    assert command_body(f"@{BOT} /ping", "eidesoul", {BOT}) == "/ping"
-    assert command_body("@Budi /ping", "eidesoul", {BOT}) == "@Budi /ping"
-    assert command_body("@Eidesoul /status", "eidesoul", set()) == "/status"
+    assert command_body(f"@{BOT} /ping", "monoagens", {BOT}) == "/ping"
+    assert command_body("@Budi /ping", "monoagens", {BOT}) == "@Budi /ping"
+    assert command_body("@MonoAgens /status", "monoagens", set()) == "/status"
 
 
 def test_render_converts_markdown_but_keeps_fence(tmp_path) -> None:
@@ -433,7 +433,7 @@ class StubClient:
 
 
 def drive_run(tmp_path, monkeypatch):
-    from eidesoul.gateways.whatsapp import gateway as gateway_module
+    from monoagens.gateways.whatsapp import gateway as gateway_module
 
     gateway = make_gateway(tmp_path)
     monkeypatch.setattr(gateway_module, "NewAClient", StubClient)
@@ -468,7 +468,7 @@ def test_gateway_marks_revoked_rows_and_stays_silent(tmp_path, monkeypatch) -> N
 
 
 def test_unreadable_stanza_becomes_a_placeholder_row(tmp_path, monkeypatch) -> None:
-    from eidesoul.gateways.whatsapp.gateway import UndecryptableMessageEv
+    from monoagens.gateways.whatsapp.gateway import UndecryptableMessageEv
 
     gateway, client, handled = drive_run(tmp_path, monkeypatch)
     ev = UndecryptableMessageEv()
@@ -493,7 +493,7 @@ def test_unreadable_stanza_becomes_a_placeholder_row(tmp_path, monkeypatch) -> N
 
 
 def test_unreadable_stanza_ignores_available_and_broadcast(tmp_path) -> None:
-    from eidesoul.gateways.whatsapp.gateway import UndecryptableMessageEv
+    from monoagens.gateways.whatsapp.gateway import UndecryptableMessageEv
 
     gateway = make_gateway(tmp_path)
     ev = UndecryptableMessageEv()
@@ -506,7 +506,7 @@ def test_unreadable_stanza_ignores_available_and_broadcast(tmp_path) -> None:
 
 
 def test_the_whatsapp_gateway_is_core_rich_and_directory(tmp_path) -> None:
-    from eidesoul.engine.inbound import Directory, GatewayCore, Rich
+    from monoagens.engine.inbound import Directory, GatewayCore, Rich
 
     gateway = make_gateway(tmp_path)
 
@@ -516,7 +516,7 @@ def test_the_whatsapp_gateway_is_core_rich_and_directory(tmp_path) -> None:
 
 
 def test_participants_proves_a_linked_dm_and_refuses_a_group(tmp_path) -> None:
-    from eidesoul.engine.access.identity import IdentityStore
+    from monoagens.engine.access.identity import IdentityStore
 
     gateway = make_gateway(tmp_path)
     person = IdentityStore(gateway.db).resolve("whatsapp", "628999999999")

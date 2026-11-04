@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Affect prototype tool: validation and statistics.
 
-Each file under `eidesoul/library/affect/` holds the prototype sentences for one language;
+Each file under `monoagens/library/affect/` holds the prototype sentences for one language;
 the vibe runner scores a message against every label's prototypes on the shared embedder.
 A prototype is a short casual sentence, never a name, a URL, or a phone number. Exactly the
 eight labels in `EMOTION_VAD` are allowed, and each label needs at least `MIN_PROTOTYPES`.
@@ -17,9 +17,9 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from eidesoul.engine.stores.vibe import EMOTION_VAD
+from monoagens.engine.stores.vibe import EMOTION_VAD
 
-LIBRARY = ROOT / "eidesoul" / "library" / "affect"
+LIBRARY = ROOT / "monoagens" / "library" / "affect"
 MIN_PROTOTYPES = 6
 MAX_WORDS = 8
 URL = re.compile(r"(https?://|www\.|\b[\w-]+\.(?:com|id|net|org|io)\b)", re.IGNORECASE)
@@ -96,7 +96,7 @@ def _stats(body: dict) -> list[str]:
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="Eidesoul affect prototypes")
+    parser = argparse.ArgumentParser(description="MonoAgens affect prototypes")
     group = parser.add_mutually_exclusive_group(required=True)
     group.add_argument("--check", action="store_true", help="validate every language file")
     group.add_argument("--stats", action="store_true", help="prototype counts per language")

@@ -1,4 +1,4 @@
-> Terjemahan turunan — jangan sunting; sumber: 0029-test-store.md (sha256: e4d36eb13c40)
+> Terjemahan turunan — jangan sunting; sumber: 0029-test-store.md (sha256: 25c8b1904925)
 > Ditulis tangan (bukan mesin), mengikuti sumber English baris demi baris.
 
 # ADR-0029: Store Tes Adalah Store Nyata — Postgres+pgvector, Satu Database Tes, Truncate per Tes
@@ -9,7 +9,7 @@
 - **Konteks:** lanjutan ADR-0016 (skema kanonik & migrasi), ADR-0001 (memori sumber kebenaran), ADR-0011 (crash safety), ADR-0012 (lease safety), ADR-0026 (search), ADR-0027 (distribusi & kapabilitas clean by default)
 - **Supersedes:** —
 - **Terkait:** ADR-0009 (gate yang dijalankan tes ini), ADR-0019 (observability), ADR-0021 / ADR-0024 (kontrak tool)
-- **Implementasi:** implemented — bukti: `tests/conftest.py`, `tests/support.py`, `tests/test_pgvector.py`, `eidesoul/engine/db.py`, `eidesoul/engine/schema.py`, `compose.yaml`; hasil gate: `pytest -q` 561 lulus dalam 31 dtk di Postgres+pgvector, kegagalan saat variabel kosong terverifikasi
+- **Implementasi:** implemented — bukti: `tests/conftest.py`, `tests/support.py`, `tests/test_pgvector.py`, `monoagens/engine/db.py`, `monoagens/engine/schema.py`, `compose.yaml`; hasil gate: `pytest -q` 561 lulus dalam 31 dtk di Postgres+pgvector, kegagalan saat variabel kosong terverifikasi
 - **Catatan lokasi:** ADR ini mengikat semua permukaan (ia menentukan arti "terverifikasi"), jadi ia duduk di akar rumah ADR. Salinan Indonesia di `docs/v0.1.0/adr/id/0029-test-store.md`.
 - **Amandemen:** 2026-11-03 — versi pertama.
 
@@ -21,12 +21,12 @@ Suite hari ini jalan di SQLite, artinya beberapa mekanisme yang dikirim ke produ
 
 | Mekanisme | Kenapa SQLite tak bisa mewakilinya | Bukti |
 |---|---|---|
-pgvector dan Mem0 | memori semantik dilewati sepenuhnya saat URL-nya SQLite | `eidesoul/engine/memory/__init__.py:178` |
-Semantik upsert | kode memilih insert per dialek, jadi hanya satu cabang yang teruji | `eidesoul/engine/db.py:12-13,123-124` |
+pgvector dan Mem0 | memori semantik dilewati sepenuhnya saat URL-nya SQLite | `monoagens/engine/memory/__init__.py:178` |
+Semantik upsert | kode memilih insert per dialek, jadi hanya satu cabang yang teruji | `monoagens/engine/db.py:12-13,123-124` |
 DDL & migrasi nyata | tes membuat tabel lewat `ensure()`/`ensure_schemas()`, tidak pernah lewat jalur `db upgrade` produksi | `tests/support.py:88,539` |
-Perilaku `JSONB` | turun jadi JSON biasa; operator containment dan path tak pernah diuji | `eidesoul/engine/schema.py:22` |
-Pemeliharaan vektor | `ensure_vector()` best-effort dan tanpa extension ia tidak melakukan apa pun | `eidesoul/engine/db.py:76-90` |
-`timestamptz`, row lock, balapan klaim | semantik Postgres tanpa padanan di SQLite (ADR-0011/0012) | `eidesoul/engine/db.py:46-49` |
+Perilaku `JSONB` | turun jadi JSON biasa; operator containment dan path tak pernah diuji | `monoagens/engine/schema.py:22` |
+Pemeliharaan vektor | `ensure_vector()` best-effort dan tanpa extension ia tidak melakukan apa pun | `monoagens/engine/db.py:76-90` |
+`timestamptz`, row lock, balapan klaim | semantik Postgres tanpa padanan di SQLite (ADR-0011/0012) | `monoagens/engine/db.py:46-49` |
 
 Biaya peralihannya terbatas karena ketergantungannya terpusat: 522 tes di 56 berkas, hanya lima berkas menyebut SQLite, dan harness membangun store di satu tempat (`tests/support.py:71,88,515,539`). Memperbaiki harness memindahkan seluruh suite; mempertahankan SQLite mempertahankan jalur kode kedua yang dikirim tapi tak diuji.
 
@@ -57,7 +57,7 @@ Biaya peralihannya terbatas karena ketergantungannya terpusat: 522 tes di 56 ber
 
 Suite jalan melawan **Postgres dengan `pgvector`**, store yang sama dengan yang dikirim engine.
 
-- DSN-nya datang dari `EIDESOL_TEST_DATABASE_URL`.
+- DSN-nya datang dari `MONOAGENS_TEST_DATABASE_URL`.
 - Saat variabel itu kosong, suite **gagal dengan menyebut nama variabelnya dan perintah tepat untuk menyalakan database tes** — ia tidak pernah jatuh ke SQLite dan tidak pernah melewati tes yang memakai store.
 - Database tes itu sekali pakai: isinya tidak ada yang operator pedulikan, dan ia tidak pernah database dev atau produksi (nama beda, port beda, project compose terpisah).
 
@@ -79,7 +79,7 @@ Suite jalan melawan **Postgres dengan `pgvector`**, store yang sama dengan yang 
 ### 4.4 SQLite dicabut, bukan disimpan sebagai cadangan
 
 - `tests/support.py` berhenti menawarkan URL SQLite dan berhenti membangun config sementara di sekitarnya.
-- Cabang dialek ikut pergi: pemilihan dialek insert di `eidesoul/engine/db.py`, lewatan SQLite di `eidesoul/engine/memory/__init__.py`, primary key varian integer di `eidesoul/engine/schema.py`, dan penyebutan `"sqlite"` di aturan penyimpanan `AGENTS.md`.
+- Cabang dialek ikut pergi: pemilihan dialek insert di `monoagens/engine/db.py`, lewatan SQLite di `monoagens/engine/memory/__init__.py`, primary key varian integer di `monoagens/engine/schema.py`, dan penyebutan `"sqlite"` di aturan penyimpanan `AGENTS.md`.
 - `JSONB` tetap tipe Postgres; tidak ada lagi yang berpura-pura portabel.
 
 ### 4.5 Anggaran kecepatan
@@ -88,16 +88,16 @@ DDL sesi terjadi sekali dan isolasi per tes hanyalah truncate, jadi targetnya **
 
 ### 4.6 Yang tetap menjadi gate sebuah perubahan
 
-`pytest -q` (kini berbasis store), `python -m eidesoul selftest`, dan `python scripts/adr.py --check` tetap tiga gate-nya. Sebuah perubahan tidak terverifikasi karena SQLite bilang begitu, dan tidak terverifikasi oleh subset yang hijau.
+`pytest -q` (kini berbasis store), `python -m monoagens selftest`, dan `python scripts/adr.py --check` tetap tiga gate-nya. Sebuah perubahan tidak terverifikasi karena SQLite bilang begitu, dan tidak terverifikasi oleh subset yang hijau.
 
 ## 5. Konfigurasi
 
 | Kunci | Default | Arti |
 |---|---|---|
-| `EIDESOL_TEST_DATABASE_URL` | kosong → suite gagal dengan instruksi | DSN database tes sekali pakai |
-| `POSTGRES_DB` (compose) | `eidesoul` | diparameter agar stack tes memakai `eidesoul_test` |
+| `MONOAGENS_TEST_DATABASE_URL` | kosong → suite gagal dengan instruksi | DSN database tes sekali pakai |
+| `POSTGRES_DB` (compose) | `monoagens` | diparameter agar stack tes memakai `monoagens_test` |
 | `POSTGRES_PORT` (compose) | `5432` | diparameter agar stack tes bisa jalan di samping dev pada `5433` |
-| project compose | `eidesoul-test` untuk stack tes | volume, jaringan, dan database terpisah |
+| project compose | `monoagens-test` untuk stack tes | volume, jaringan, dan database terpisah |
 
 Stack dev mempertahankan nilainya sendiri; tidak ada di sini yang mengubah cara operator menjalankan engine.
 
@@ -105,7 +105,7 @@ Stack dev mempertahankan nilainya sendiri; tidak ada di sini yang mengubah cara 
 
 | Metrik | Target awal |
 |---|---|
-| Cabang dialek untuk store kedua di `eidesoul/engine` | 0 |
+| Cabang dialek untuk store kedua di `monoagens/engine` | 0 |
 | Tes berbasis store yang bisa diam-diam jatuh ke SQLite | 0 |
 | Mekanisme dari §1 yang tak punya tes di store nyata | 0 (pgvector, upsert, `db upgrade`, JSONB, lock) |
 | Waktu suite penuh | ≤ 180 s |
@@ -115,16 +115,16 @@ Stack dev mempertahankan nilainya sendiri; tidak ada di sini yang mengubah cara 
 
 ## 7. Acceptance criteria
 
-- [ ] `pytest -q` dengan `EIDESOL_TEST_DATABASE_URL` terisi menjalankan seluruh suite di Postgres+pgvector, dan hijau berarti hijau di store yang dikirim.
+- [ ] `pytest -q` dengan `MONOAGENS_TEST_DATABASE_URL` terisi menjalankan seluruh suite di Postgres+pgvector, dan hijau berarti hijau di store yang dikirim.
 - [ ] `pytest -q` tanpanya gagal dengan satu pesan yang menyebut variabelnya dan perintah compose untuk menyalakan database tes; tidak ada tes yang lewat diam-diam.
 - [ ] Sesi menjalankan `db upgrade` (jalur produksi) dan `CREATE EXTENSION vector`; skema yang dihasilkan cocok dengan `SCHEMA_VERSION`.
 - [ ] Minimal satu tes memastikan hasil tetangga terdekat pgvector lewat jalur memori (bukan lewat string SQL yang ditulis di tes).
 - [ ] Minimal satu tes memastikan `memory/__init__.py` tidak lagi melewati apa pun: jalur semantik benar-benar jalan di store tes.
 - [ ] Tidak ada tes yang mengunduh model: embedder adalah stub 384 dimensi dan suite lulus saat offline.
 - [ ] Dua kali berturut-turut berkas tes yang sama menghasilkan hasil identik (truncate, tanpa ketergantungan urutan).
-- [ ] Grep tidak menemukan `sqlite` di `eidesoul/engine/**` maupun di `tests/**`; `AGENTS.md` tidak lagi menyebut SQLite sebagai store yang sah untuk tes.
+- [ ] Grep tidak menemukan `sqlite` di `monoagens/engine/**` maupun di `tests/**`; `AGENTS.md` tidak lagi menyebut SQLite sebagai store yang sah untuk tes.
 - [ ] Waktu suite penuh di atau di bawah anggaran §6 di workstation ini, diukur sekali dan laporannya ditempel di perubahan.
-- [ ] `python -m eidesoul selftest` dan `python scripts/adr.py --check` tetap lulus.
+- [ ] `python -m monoagens selftest` dan `python scripts/adr.py --check` tetap lulus.
 
 ## 8. Risiko dan mitigasi
 
@@ -150,10 +150,10 @@ Stack dev mempertahankan nilainya sendiri; tidak ada di sini yang mengubah cara 
 ## 10. Referensi kode
 
 - `tests/support.py:71,88,515-539` — DSN SQLite, config sementara, dan helper yang akan diganti.
-- `eidesoul/engine/db.py:12-13,46-49,76-90,123-124` — cabang dialek, `ensure_vector()`, pemilihan dialek insert.
-- `eidesoul/engine/memory/__init__.py:178` — lewatan SQLite yang hilang bersama ADR ini.
-- `eidesoul/engine/schema.py:22-24` — `JSONB` dan primary key varian integer.
-- `compose.yaml` — parameterisasi `POSTGRES_DB` / `POSTGRES_PORT` dan project `eidesoul-test`.
+- `monoagens/engine/db.py:12-13,46-49,76-90,123-124` — cabang dialek, `ensure_vector()`, pemilihan dialek insert.
+- `monoagens/engine/memory/__init__.py:178` — lewatan SQLite yang hilang bersama ADR ini.
+- `monoagens/engine/schema.py:22-24` — `JSONB` dan primary key varian integer.
+- `compose.yaml` — parameterisasi `POSTGRES_DB` / `POSTGRES_PORT` dan project `monoagens-test`.
 - `AGENTS.md` §Storage, §Verify — teks aturan yang diamandemen ADR ini saat implementasi.
 - `pyproject.toml` — tanpa dependency baru: `pytest` sudah runner-nya dan tidak ada pustaka container yang diperkenalkan.
 

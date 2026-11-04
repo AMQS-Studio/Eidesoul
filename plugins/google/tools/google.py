@@ -9,8 +9,8 @@ plugin dependencies keeps the module importable and inert instead of failing at 
 import logging
 import weakref
 
-from eidesoul.engine.registry import Handler
-from eidesoul.engine.tools import ToolContext
+from monoagens.engine.registry import Handler
+from monoagens.engine.tools import ToolContext
 
 log = logging.getLogger(__name__)
 
@@ -118,7 +118,7 @@ TOOL = Handler(
     name="google",
     family="mcp",
     description=(
-        "Google Workspace through Eidesoul's one service account; identity-linked per sender."
+        "Google Workspace through MonoAgens's one service account; identity-linked per sender."
     ),
     fn=_google,
     aliases=("gworkspace",),

@@ -9,10 +9,10 @@ from pathlib import Path
 
 import yaml
 
-from eidesoul.admin import templates
+from monoagens.admin import templates
 
 ROOT = Path(__file__).resolve().parents[1]
-SHIPPED = (ROOT, ROOT / "docs", ROOT / "scripts", ROOT / "tests", ROOT / "eidesoul")
+SHIPPED = (ROOT, ROOT / "docs", ROOT / "scripts", ROOT / "tests", ROOT / "monoagens")
 
 
 def test_no_example_file_is_shipped():
@@ -40,6 +40,6 @@ def test_compose_is_a_working_default():
     assert "CHANGE_ME" not in text
     assert "${POSTGRES_PASSWORD:?" in text
     parsed = yaml.safe_load(text)
-    assert set(parsed["services"]) == {"postgres", "eidesoul", "sandbox-proxy"}
+    assert set(parsed["services"]) == {"postgres", "monoagens", "sandbox-proxy"}
     assert parsed["services"]["sandbox-proxy"]["profiles"] == ["sandbox"]
-    assert parsed["services"]["eidesoul"]["build"]["args"]["EXTRAS"] == ""
+    assert parsed["services"]["monoagens"]["build"]["args"]["EXTRAS"] == ""

@@ -1,7 +1,7 @@
 # ADR-0020: Derivative Procedure — Skill as Soul Growth, Not a Tool
 
 - **Status:** accepted
-- **Implementation:** implemented — evidence: `episodes` + six closure signals, `distill` (one revision per episode), `skill_revisions`, scope-aware retrieval ordered by priority, the failed-step status through `llm.run` → `turn_steps`, the `signature`/`evidence`/`eligible` comparison (`eidesoul/engine/memory/efficiency.py`), the ladder actions with a proposal cooldown and an approval-only automation proposal, `tests/test_episodes.py`, `tests/test_efficiency.py`; gate: `pytest -q` 831 passed, `scripts/adr.py --check`
+- **Implementation:** implemented — evidence: `episodes` + six closure signals, `distill` (one revision per episode), `skill_revisions`, scope-aware retrieval ordered by priority, the failed-step status through `llm.run` → `turn_steps`, the `signature`/`evidence`/`eligible` comparison (`monoagens/engine/memory/efficiency.py`), the ladder actions with a proposal cooldown and an approval-only automation proposal, `tests/test_episodes.py`, `tests/test_efficiency.py`; gate: `pytest -q` 831 passed, `scripts/adr.py --check`
 - **Date:** 2026-11-03
 - **Deciders:** Muqsith (owner), omp (reviewer)
 - **Context:** the tool `skill` is explicitly unused, yet it charges an index of ±3000 characters on every prompt for every role that holds it; the `skills` schema without scope/provenance/version turns it into a global instruction channel that the model can write — the path ADR-0008 closes for memory
@@ -247,15 +247,15 @@ The old `max_index_chars` key is removed along with the index.
 
 ## 10. Code references
 
-- `eidesoul/engine/stores/skills.py:88` — `index()` (the index to be removed from the prompt); `:144-149` — `view()` and the only `_record_use`.
-- `eidesoul/engine/commands/skill.py` — the owner command; the model-facing `eidesoul/engine/tools/skill.py` is deleted.
-- `eidesoul/engine/agent.py:637-640` — where the skill index is assembled (the cutover point).
-- `eidesoul/engine/config.py:156-157` — `SkillsConfig.max_index_chars` (replaced, §5).
-- `eidesoul/engine/turn/prompts.py:300,318` — the prompt rule that tells the model to manage its own skills (removed).
-- `eidesoul/engine/schema.py` — tables `skills`, `skill_files`, `skill_usage` (new form in ADR-0016 §4.7); `turns`/`turn_steps` as the source of step counts.
-- `eidesoul/engine/llm.py:206-255` — the tool loop: the source of each episode's tool-chain signature (material for §4.8).
-- `eidesoul/engine/embed.py:53-62` — the embedder used by procedure retrieval.
-- `eidesoul/engine/access/approvals.py` — the approval path used by §4.9 automation proposals.
+- `monoagens/engine/stores/skills.py:88` — `index()` (the index to be removed from the prompt); `:144-149` — `view()` and the only `_record_use`.
+- `monoagens/engine/commands/skill.py` — the owner command; the model-facing `monoagens/engine/tools/skill.py` is deleted.
+- `monoagens/engine/agent.py:637-640` — where the skill index is assembled (the cutover point).
+- `monoagens/engine/config.py:156-157` — `SkillsConfig.max_index_chars` (replaced, §5).
+- `monoagens/engine/turn/prompts.py:300,318` — the prompt rule that tells the model to manage its own skills (removed).
+- `monoagens/engine/schema.py` — tables `skills`, `skill_files`, `skill_usage` (new form in ADR-0016 §4.7); `turns`/`turn_steps` as the source of step counts.
+- `monoagens/engine/llm.py:206-255` — the tool loop: the source of each episode's tool-chain signature (material for §4.8).
+- `monoagens/engine/embed.py:53-62` — the embedder used by procedure retrieval.
+- `monoagens/engine/access/approvals.py` — the approval path used by §4.9 automation proposals.
 - `roles.yaml:8-14` — the `member` role holding the tool `skill` (revoked).
 
 ---
