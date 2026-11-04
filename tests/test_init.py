@@ -66,6 +66,21 @@ def test_non_interactive_writes_the_four_files_with_modes(tmp_path):
     assert (tmp_path / ".monoagens" / "workspace").is_dir()
 
 
+def test_model_discovery_uses_the_key_entered_in_the_wizard(monkeypatch):
+    from monoagens.admin import models as admin_models
+
+    seen: dict[str, str] = {}
+
+    def fake_list(config, *, timeout):
+        seen["key"] = config.api_key()
+        return ["model-a"]
+
+    monkeypatch.setattr(admin_models, "list_models", fake_list)
+
+    assert admin_init.model_ids("openai", "wizard-key") == ["model-a"]
+    assert seen["key"] == "wizard-key"
+
+
 def test_piped_init_fails_closed_and_names_the_flags(tmp_path, monkeypatch, capsys):
     monkeypatch.setattr(sys, "stdin", Pipe())
 
@@ -137,7 +152,7 @@ def test_a_non_interactive_cli_run_writes_into_dir_with_every_flag(tmp_path, cap
 
 
 def test_the_wizard_shows_the_rail_and_the_review_then_writes(tmp_path, monkeypatch):
-    monkeypatch.setattr(admin_init, "model_ids", lambda provider: [])
+    monkeypatch.setattr(admin_init, "model_ids", lambda provider, api_key="": [])
     answer = "\n".join(
         [
             "",  # 1/7 location: keep the passed directory
@@ -181,7 +196,7 @@ def test_the_wizard_shows_the_rail_and_the_review_then_writes(tmp_path, monkeypa
 
 
 def test_no_location_uses_the_installer_owned_directory(tmp_path, monkeypatch, capsys):
-    monkeypatch.setattr(admin_init, "model_ids", lambda provider: [])
+    monkeypatch.setattr(admin_init, "model_ids", lambda provider, api_key="": [])
     answer = "\n".join(["groq", "", "llama-operator", "", "", "off", "1"]) + "\n"
     monkeypatch.setattr(sys, "stdin", Tty(answer))
     output = io.StringIO()
@@ -199,7 +214,7 @@ def test_no_location_uses_the_installer_owned_directory(tmp_path, monkeypatch, c
 
 
 def test_a_piped_wizard_run_through_the_command_writes_the_host(tmp_path, monkeypatch):
-    monkeypatch.setattr(admin_init, "model_ids", lambda provider: [])
+    monkeypatch.setattr(admin_init, "model_ids", lambda provider, api_key="": [])
     monkeypatch.setattr(admin_init, "DEFAULT_LOG", tmp_path / "install.log")
     answer = "\n".join(["", "groq", "", "", "", "", "on", "1"]) + "\n"
     monkeypatch.setattr(sys, "stdin", Tty(answer))
@@ -364,7 +379,7 @@ def test_the_header_uses_the_existing_wordmark_and_not_a_placeholder() -> None:
 def test_the_location_step_writes_to_the_chosen_directory(tmp_path):
     target = tmp_path / "nested" / "soul"
     monkeypatch = pytest.MonkeyPatch()
-    monkeypatch.setattr(admin_init, "model_ids", lambda provider: [])
+    monkeypatch.setattr(admin_init, "model_ids", lambda provider, api_key="": [])
     answer = "\n".join(
         [str(target), "groq", "", "", "", "", "on", "1"]
     )
@@ -383,7 +398,7 @@ def test_the_location_step_writes_to_the_chosen_directory(tmp_path):
 
 def test_the_credential_is_written_to_env_but_never_echoed(tmp_path):
     monkeypatch = pytest.MonkeyPatch()
-    monkeypatch.setattr(admin_init, "model_ids", lambda provider: [])
+    monkeypatch.setattr(admin_init, "model_ids", lambda provider, api_key="": [])
     answer = "\n".join(["", "groq", "sk-MARKER", "", "", "", "on", "1"])
     stdout = io.StringIO()
     try:
@@ -462,7 +477,7 @@ def test_a_location_that_is_a_file_is_rejected_and_reprompted(tmp_path):
     file_path.write_text("x", encoding="utf-8")
     target = tmp_path / "soul"
     monkeypatch = pytest.MonkeyPatch()
-    monkeypatch.setattr(admin_init, "model_ids", lambda provider: [])
+    monkeypatch.setattr(admin_init, "model_ids", lambda provider, api_key="": [])
     answer = "\n".join(
         [str(file_path), str(target), "groq", "", "", "", "", "on", "1"]
     )
@@ -490,7 +505,7 @@ def test_line_menu_q_cancels_without_a_choice():
 
 def test_line_fallback_never_emits_ansi(tmp_path):
     monkeypatch = pytest.MonkeyPatch()
-    monkeypatch.setattr(admin_init, "model_ids", lambda provider: [])
+    monkeypatch.setattr(admin_init, "model_ids", lambda provider, api_key="": [])
     answer = "\n".join(["", "groq", "", "", "", "", "on", "1"])
     stdout = io.StringIO()
     try:

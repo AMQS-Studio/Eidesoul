@@ -175,7 +175,7 @@ def _ask_credential(state: Answers, stdin: TextIO, stdout: TextIO, color: bool =
 
 def _ask_model(state: Answers, stdin: TextIO, stdout: TextIO, color: bool = False) -> None:
     try:
-        served = model_ids(state.provider)
+        served = model_ids(state.provider, state.api_key)
     except (ConfigError, KeyError, ValueError, OSError):
         served = []
     if served:
@@ -211,7 +211,7 @@ def _ask_model(state: Answers, stdin: TextIO, stdout: TextIO, color: bool = Fals
             color=color,
             plain=not color,
         )
-        error = validate_model(state.provider, answer)
+        error = validate_model(state.provider, answer, state.api_key)
         if error is None:
             state.model = answer
             return

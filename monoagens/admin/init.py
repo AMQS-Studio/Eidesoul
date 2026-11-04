@@ -111,7 +111,7 @@ def validate_database_url(url: str) -> str | None:
     return None
 
 
-def _probe(provider: str) -> Config:
+def _probe(provider: str, entered_key: str = "") -> Config:
     """A read-only stand-in for `Config` so `admin/models.py` stays the only list fetcher."""
     defaults = PROVIDERS[provider]
     llm = SimpleNamespace(
@@ -125,6 +125,8 @@ def _probe(provider: str) -> Config:
     )
 
     def api_key() -> str:
+        if entered_key.strip():
+            return entered_key.strip()
         found = os.environ.get(llm.api_key_env)
         if found:
             return found
@@ -136,19 +138,19 @@ def _probe(provider: str) -> Config:
     return cast(Config, SimpleNamespace(llm=llm, api_key=api_key))
 
 
-def model_ids(provider: str) -> list[str]:
-    """The provider's served model ids; raises when the list cannot be reached."""
+def model_ids(provider: str, api_key: str = "") -> list[str]:
+    """The provider's served model ids; the wizard's entered key wins over the environment."""
     from . import models as admin_models
 
-    return admin_models.list_models(_probe(provider), timeout=5.0)
+    return admin_models.list_models(_probe(provider, api_key), timeout=5.0)
 
 
-def validate_model(provider: str, model: str) -> str | None:
+def validate_model(provider: str, model: str, api_key: str = "") -> str | None:
     """A model outside the provider's reachable list; an unreachable list is not an error."""
     if not model.strip() or provider not in PROVIDERS:
         return None
     try:
-        served = model_ids(provider)
+        served = model_ids(provider, api_key)
     except (ConfigError, KeyError, ValueError, OSError):
         return None
     if not served or model in served:
