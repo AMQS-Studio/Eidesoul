@@ -1,4 +1,4 @@
-> Terjemahan turunan — jangan sunting; sumber: 0030-install-and-init.md (sha256: 26c6d4d0f187)
+> Terjemahan turunan — jangan sunting; sumber: 0030-install-and-init.md (sha256: 1aa77c70a9f4)
 > Ditulis tangan (bukan mesin), mengikuti sumber English baris demi baris.
 
 # ADR-0030: Install On-Machine dan Init Interaktif — Wizard Kita Sendiri, Satu Installer, Dua Runtime
@@ -9,9 +9,9 @@
 - **Konteks:** lanjutan ADR-0027 (distribusi & konfigurasi web-first), ADR-0007 (kelas approval), ADR-0016 (migrasi), ADR-0022 (role `administrator` yang dilindungi), ADR-0029 (store tes)
 - **Supersedes:** —
 - **Terkait:** ADR-0009 (rumah dokumen), ADR-0015 (manifest kapabilitas), ADR-0019 (observability), ADR-0028 (plugin)
-- **Implementasi:** partial — ada: `install.sh` (runtime opt-in, digest uv dipin, `--dry-run`, log, signal, dua runtime), `monoagens init` interaktif/fail-closed dengan review/receipt, `--label`/`--stack`/`--voice-layer`, `tests/test_init.py`, `tests/test_install.py`; sisa: cabang panel di layar akhir menunggu `panel/` (ADR-0027)
+- **Implementasi:** partial — ada: `install.sh` (runtime opt-in, digest uv dipin, `--dry-run`, log, signal, dua runtime), menu curses yang sama dengan `monoagens init`, `--label`/`--stack`/`--engine`/`--database`/`--voice-layer`, kredensial database yang dibuat, administrator `cli local` otomatis, `tests/test_init.py`, `tests/test_install.py`; sisa: cabang panel di layar akhir menunggu `panel/` (ADR-0027)
 - **Catatan lokasi:** ADR ini mengikat semua permukaan (ia menentukan bagaimana sebuah host lahir), jadi ia duduk di akar rumah ADR. Salinan Indonesia di `docs/v0.1.0/adr/id/0030-install-and-init.md`.
-- **Amandemen:** 2026-11-05 — installer menanyakan native versus compose, kedua stack memakai container Postgres secara default, dan pemasangan runtime yang hilang bersifat opt-in dengan `sudo`. 2026-11-03 — versi pertama. 2026-11-03 — wizard menanyakan lapisan suara sekali (jawaban default tetap nyala) dan membawa `--voice-layer on|off` untuk paritas headless (ADR-0027 §4.3). 2026-11-03 — `--label` (alamat administrator) dan `--stack native|compose` masuk tabel flag: aturan §6 "langkah tanpa padanan flag = 0" menuntutnya.
+- **Amandemen:** 2026-11-05 — installer memakai lapisan curses yang sama dengan `init`, menanyakan native/compose, container/external, dan Podman/Docker dengan deteksi langsung, meminta sudo lewat terminal, menyiapkan database sebelum `init`, dan mendaftarkan administrator lokal. 2026-11-05 — installer menanyakan native versus compose, kedua stack memakai container Postgres secara default, dan pemasangan runtime yang hilang bersifat opt-in dengan `sudo`. 2026-11-03 — versi pertama. 2026-11-03 — wizard menanyakan lapisan suara sekali (jawaban default tetap nyala) dan membawa `--voice-layer on|off` untuk paritas headless (ADR-0027 §4.3). 2026-11-03 — `--label` (alamat administrator) dan `--stack native|compose` masuk tabel flag: aturan §6 "langkah tanpa padanan flag = 0" menuntutnya.
 
 ---
 
@@ -58,13 +58,15 @@ Satu skrip Bash, dipanggil dari klon (`bash install.sh`) atau dari jaringan
 | Aspek | Aturan |
 |---|---|
 | Pilihan runtime | `--stack native` menjalankan engine di host dengan Postgres di container; `--stack compose` menjalankan keduanya di container. Installer bertanya kalau `--stack` tidak diberikan. |
-| Izin menyentuh host | **tidak pernah** menjalankan `sudo` tanpa persetujuan eksplisit. Runtime Podman/Docker compose yang hilang mencetak perintah tepatnya dan menghentikan stage; `--install-runtime` atau prompt `y/N` hanya memasang runtime dan compose provider-nya. Tidak ada paket sistem lain yang dipasang. |
+| Pilihan container | `--engine podman\|docker` memilih runtime Postgres; menu menampilkan **terpasang dan berjalan**, **terpasang**, atau **belum terpasang** untuk keduanya, dan menawarkan pemasangan yang hilang. |
+| Pilihan database | `--database container\|external` (native saja). URL eksternal ditanyakan di langkah itu dan diteruskan ke `init`; compose memakai Postgres-nya sendiri. |
+| Izin menyentuh host | **tidak pernah** menjalankan `sudo` tanpa persetujuan eksplisit. Runtime yang hilang ditawarkan untuk dipasang; `sudo -v` meminta password di terminal dan tidak menyimpannya. `--install-runtime` adalah padanan headless. Tidak ada paket sistem lain yang dipasang. |
 | `uv` | kalau absen: unduh rilis yang dipin untuk arsitektur yang berjalan dan verifikasi SHA-256 sebelum dipakai; pin hidup di satu blok berkomentar dengan baris "cara menaikkannya" |
 | Python | menuntut 3.14+ dan melaporkan interpreter yang ia temukan; image container mempertahankan floor 3.14 yang sama — perbedaannya dinyatakan, tidak disembunyikan |
 | Dependency | `uv sync --locked` di dalam direktori instalasi (`--dir`, default `~/.monoagens/app`); tak ada dependency yang dipasang di luarnya |
-| Setup | menanyakan runtime dan direktori instalasi (default, direktori saat ini, atau custom), lalu menyerahkan ke `monoagens init` dengan lokasi terkunci (§4.3): interaktif di terminal, digerakkan flag kalau bukan |
-| Database | kedua stack memakai Postgres Podman/Docker secara default. Installer membuat `POSTGRES_PASSWORD` dan `MONOAGENS_DATABASE_URL` saat kosong; `--database-url` eksternal yang eksplisit melewati container di mode native |
-| Lanjutan | nyalakan Postgres (atau seluruh stack compose), `monoagens db upgrade`, lalu `monoagens selftest` |
+| Setup | memakai menu curses yang sama dengan `init` untuk runtime, lokasi, database, dan engine, lalu menyerahkan ke `monoagens init` dengan lokasi terkunci (§4.3): interaktif di terminal, digerakkan flag kalau bukan |
+| Database | kedua stack memakai Postgres Podman/Docker secara default. Installer membuat `POSTGRES_PASSWORD` dan `MONOAGENS_DATABASE_URL` **sebelum** `init` supaya review menampilkannya; `--database-url` eksternal yang eksplisit melewati container di mode native |
+| Lanjutan | nyalakan Postgres (atau seluruh stack compose), `monoagens db upgrade`, daftarkan `cli local` sebagai administrator, lalu `monoagens selftest` |
 | Penutup | menawarkan pilihan (§4.5): buka panel, atau tetap di command line |
 | Pengamatan | satu baris status selama child berjalan; keluaran child non-interaktif ditambahkan ke `~/.monoagens/logs/install.log`, sedangkan wizard interaktif tetap di terminal (tidak ada rahasia di log); kegagalan mencetak baris terakhir plus path log |
 | Sinyal | `INT`/`TERM`/`HUP` menandai jalannya `interrupted` dan di-raise ulang, jadi exit status tetap milik sinyalnya |
@@ -78,7 +80,7 @@ Setup interaktif dirancang di sini, bukan dipinjam. Yang dipinjam dari referensi
 
 | Elemen | Desain kita |
 |---|---|
-| Header | blok berlebar tetap dengan **slot logo** (`[logo]`) dan satu baris peran; saat mark-nya datang ia menggantikan slot itu, dan terminal sempit atau `NO_COLOR` jatuh ke baris polos |
+| Header | logo dan wordmark hasil generate yang sama dengan `init`, penghitung langkah, dan satu baris peran; terminal sempit atau `NO_COLOR` jatuh ke baris polos |
 | Langkah | rail langkah bernama dengan penghitung (`1/5 provider`, `2/5 model`, …) di mana langkah aktif ditandai, langkah selesai tetap bertanda, dan satu langkah bisa diulang tanpa memulai dari awal |
 | Prompt | pilihan bernomor secara default supaya numpad berguna; mengetik nilai selalu boleh di tempat nilai yang diharapkan; `Ctrl-C` membatalkan seluruh jalannya dan tak meninggalkan apa pun |
 | Review | sebelum menulis, satu layar menampilkan setiap berkas yang akan dibuat dan setiap nilai yang akan disimpannya (rahasia ditampilkan **hanya sebagai nama env**) dengan `apply`/`change`/`cancel` |
@@ -107,7 +109,7 @@ direktori `.monoagens/workspace` | apa pun di luar `--dir`; tanpa `sudo` tanpa p
 
 Installer berakhir dengan menawarkan: **buka panel** (begitu panel ada dan `web.enabled` bernilai true — ADR-0027 §4.4) atau **tetap di command line** (cetak perintah headless-nya). Ia tidak pernah memutuskan untuk operator, dan selama panel belum ada, opsi kedua satu-satunya dan diberi label begitu.
 
-Jalur compose mempertahankan bentuk yang sama: `init` menulis berkas host, installer menyiapkan kredensial database, lalu menyalakan stack dan menjalankan `init` yang sama di dalam container (`docker compose exec monoagens monoagens init ...`). Tidak ada installer kedua untuk container.
+Jalur compose mempertahankan bentuk yang sama: installer menyiapkan kredensial database, `init` menulis berkas host, lalu menyalakan stack dan menjalankan `db upgrade` plus `people add` di dalam container (`docker compose exec monoagens monoagens ...`). Tidak ada installer kedua untuk container.
 
 ### 4.6 Logo menyusul, slot-nya tidak berpindah
 
@@ -121,10 +123,12 @@ Banner memesan area logo sekarang supaya mark-nya bisa ditaruh tanpa menyentuh t
 | `--dry-run` | cetak setiap aksi, tak menulis apa pun |
 | `--non-interactive` | tak pernah bertanya; gagal kalau nilai wajib tidak ada |
 | `--provider NAME` / `--model ID` | diteruskan ke `init` |
+| `--engine podman\|docker` | runtime container untuk Postgres; menu menampilkan status deteksi |
+| `--database container\|external` | pilihan database native; external butuh `--database-url` |
 | `--install-runtime` | izinkan pemasangan Podman/Docker dan compose provider dengan `sudo` saat hilang |
 | `--database-url URL` | URL Postgres eksternal; melewati container database di mode native |
 | `--skip-selftest` | lewati self-test penutup (untuk otomasi yang menjalankannya terpisah) |
-| `--voice-layer on\|off` | tetap nyalakan emosi, humanize, dan karakter (default `on`) atau matikan ketiganya |
+| `--voice-layer on\|off` | tetap nyalakan emosi, humanize, dan karakter (default `off`, ADR-0041) atau matikan ketiganya |
 | `--no-color` | keluaran polos (juga dihormati lewat `NO_COLOR`) |
 
 Tidak ada kunci yang ditambahkan ke `config.yaml` oleh ADR ini: perilaku installer adalah flag, dan konfigurasi host tetap seperti yang ditulis `init`.
@@ -191,7 +195,8 @@ Tidak ada kunci yang ditambahkan ke `config.yaml` oleh ADR ini: perilaku install
 - `monoagens/providers/__init__.py` — nama provider dan variabel kuncinya, dipakai untuk validasi.
 - `README.md:88-105`, `README.id.md:96-112` — quickstart yang jalur native ADR ini duduk di sampingnya.
 - `compose.yaml` — jalur container yang mempertahankan `init` yang sama.
-- `install.sh` — pilihan runtime, pemasangan runtime opt-in, kredensial database yang dibuat, dan bootstrap curl.
+- `monoagens/admin/install_ui.py` — menu installer di lapisan terminal bersama.
+- `install.sh` — pilihan runtime, database, dan engine; pemasangan runtime opt-in; kredensial database yang dibuat; bootstrap curl.
 - `pyproject.toml` — tidak berubah: installer tak menambah dependency, dan `uv` yang dipin diunduh, bukan di-vendor.
 
 ---

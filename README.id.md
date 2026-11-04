@@ -227,16 +227,21 @@ satu giliran, dan kemampuan yang dipegang saat itu.
 Kebutuhan: Python 3.14, Postgres 14+ dengan `pgvector`, dan endpoint LLM yang kompatibel dengan
 OpenAI. Image container memakai Python 3.14; menjalankan dari source butuh 3.14 atau lebih baru.
 
-Jalur terpendek adalah installer. Ia menanyakan di mana engine berjalan dan di mana berkas
-disimpan (`~/.monoagens/app` yang disarankan, direktori saat ini, atau path custom), memakai Postgres
-Podman/Docker untuk kedua pilihan, dan bertanya sebelum memasang runtime container yang hilang dengan
-`sudo`:
+Jalur terpendek adalah installer. Ia memakai menu curses yang sama dengan `monoagens init` dan
+menanyakan di mana engine berjalan, di mana berkas disimpan (`~/.monoagens/app` yang disarankan,
+direktori saat ini, atau path custom), apakah Postgres berupa container atau server eksternal, dan
+apakah container berjalan di Podman atau Docker. Setiap runtime ditampilkan sebagai terpasang atau
+hilang; installer bertanya sebelum memasang yang hilang, dan `sudo` meminta password di terminal.
+`config.yaml`, `roles.yaml`, dan `soul.yaml` yang dibuat sudah berisi default yang bisa dipakai, dan
+installer mendaftarkan `cli local` sebagai administrator pertama.
 
 ```bash
-bash install.sh                 # pilihan runtime interaktif
-bash install.sh --stack native  # engine di host, Postgres di container
-bash install.sh --stack compose # engine dan Postgres di container
-bash install.sh --dry-run       # cetak setiap aksi, tulis apa pun
+bash install.sh                   # menu interaktif
+bash install.sh --stack native    # engine di host, Postgres di container
+bash install.sh --stack compose   # engine dan Postgres di container
+bash install.sh --engine docker   # Docker, bukan Podman
+bash install.sh --database external --database-url URL
+bash install.sh --dry-run         # cetak setiap aksi, tulis apa pun
 ```
 
 Dari jaringan, unduh skripnya dulu supaya wizard tetap punya terminal:

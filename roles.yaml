@@ -1,7 +1,7 @@
 roles:
   administrator:
     name: administrator
-    label: ''
+    label: local
     protected: true
     description: Administrator of MonoAgens
     priority: 100

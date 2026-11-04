@@ -320,7 +320,10 @@ def write_files(
                 skipped.append(path)
                 continue
             text = contents[name]
-            if decision == "change" and path.exists():
+            if name == ".env" and decision == "replace" and path.exists():
+                # Replacing the host files must not drop generated container credentials.
+                text = _merge(name, path.read_text(encoding="utf-8"), text)
+            elif decision == "change" and path.exists():
                 text = _merge(name, path.read_text(encoding="utf-8"), text)
             existed = path.exists()
             _atomic_write(path, text, mode_of(name))

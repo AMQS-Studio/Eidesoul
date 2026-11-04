@@ -300,6 +300,25 @@ def test_force_replaces_an_existing_file(tmp_path):
     assert config["engine"]["llm"]["provider"] == "groq"
 
 
+def test_replacing_env_keeps_generated_database_credentials(tmp_path):
+    admin_init.init(tmp_path, provider="openai")
+    (tmp_path / ".env").write_text(
+        "POSTGRES_PASSWORD=generated\nMONOAGENS_DB_CONTAINER=1\n", encoding="utf-8"
+    )
+    contents = admin_init.build(
+        provider="openai",
+        database_url="postgresql+psycopg://monoagens:generated@127.0.0.1:5432/monoagens",
+    )
+    admin_init.write_files(
+        tmp_path,
+        contents,
+        {name: "replace" for name in admin_init.HOST_FILES},
+    )
+    env = (tmp_path / ".env").read_text(encoding="utf-8")
+    assert "POSTGRES_PASSWORD=generated" in env
+    assert "MONOAGENS_DB_CONTAINER=1" in env
+
+
 def test_existing_files_offer_keep_change_replace(tmp_path):
     admin_init.init(tmp_path, provider="openai")
     before_config = yaml.safe_load((tmp_path / "config.yaml").read_text(encoding="utf-8"))

@@ -6,9 +6,9 @@
 - **Context:** follows ADR-0027 (distribution and web-first configuration), ADR-0007 (approval classes), ADR-0016 (migration), ADR-0022 (the protected `administrator` role), ADR-0029 (the test store)
 - **Supersedes:** —
 - **Related:** ADR-0009 (the document home), ADR-0015 (capability manifest), ADR-0019 (observability), ADR-0028 (plugins)
-- **Implementation:** partial — present: `install.sh` (opt-in runtime install, pinned uv digest, `--dry-run`, log, signals, both runtimes), interactive/fail-closed `monoagens init` with review/receipt, `--label`/`--stack`/`--voice-layer`, `tests/test_init.py`, `tests/test_install.py`; remaining: the panel branch of the finish screen waits for `panel/` (ADR-0027)
+- **Implementation:** partial — present: `install.sh` (opt-in runtime install, pinned uv digest, `--dry-run`, log, signals, both runtimes), curses menus shared with `monoagens init`, `--label`/`--stack`/`--engine`/`--database`/`--voice-layer`, generated database credentials, automatic `cli local` administrator, `tests/test_init.py`, `tests/test_install.py`; remaining: the panel branch of the finish screen waits for `panel/` (ADR-0027)
 - **Location note:** this ADR binds every surface (it decides how a host is born), so it sits at the root of the ADR home. The Indonesian copy is `docs/v0.1.0/adr/id/0030-install-and-init.md`.
-- **Amendments:** 2026-11-05 — the installer asks native versus compose, both stacks use a Postgres container by default, and installing a missing runtime is opt-in with `sudo`. 2026-11-03 — first version. 2026-11-03 — the wizard asks the voice layer once (keep-on is the default answer) and carries `--voice-layer on|off` for headless parity (ADR-0027 §4.3). 2026-11-03 — `--label` (administrator address) and `--stack native|compose` join the flag table: §6's "steps without a flag equivalent = 0" requires them.
+- **Amendments:** 2026-11-05 — the installer uses the same curses layer as `init`, asks native/compose, container/external, and Podman/Docker with live detection, asks for sudo through the terminal, prepares the database before `init`, and registers the local administrator. 2026-11-05 — the installer asks native versus compose, both stacks use a Postgres container by default, and installing a missing runtime is opt-in with `sudo`. 2026-11-03 — first version. 2026-11-03 — the wizard asks the voice layer once (keep-on is the default answer) and carries `--voice-layer on|off` for headless parity (ADR-0027 §4.3). 2026-11-03 — `--label` (administrator address) and `--stack native|compose` join the flag table: §6's "steps without a flag equivalent = 0" requires them.
 
 ---
 
@@ -57,13 +57,15 @@ form downloads the script first or uses process substitution; `curl | bash` stay
 | Aspect | Rule |
 |---|---|
 | Runtime choice | `--stack native` runs the engine on the host with Postgres in a container; `--stack compose` runs both in containers. The installer asks when `--stack` is omitted. |
-| License to touch the host | **never** runs `sudo` without explicit consent. A missing Podman/Docker compose runtime prints the exact command and stops that stage; `--install-runtime` or a `y/N` prompt installs only the runtime and its compose provider. No other system package is installed. |
+| Container choice | `--engine podman\|docker` selects the Postgres runtime; the menu shows **installed and running**, **installed**, or **not installed** for both, and offers the missing one for install. |
+| Database choice | `--database container\|external` (native only). An external URL is asked at the step and forwarded to `init`; compose keeps its own Postgres. |
+| License to touch the host | **never** runs `sudo` without explicit consent. A missing runtime is offered for install; `sudo -v` asks for the password in the terminal and does not store it. `--install-runtime` is the headless equivalent. No other system package is installed. |
 | `uv` | if absent, download the pinned release for the running architecture and verify its SHA-256 before use; the pin lives in one commented block with a "how to bump" line |
 | Python | requires 3.14+ and reports the interpreter it found; the container image keeps the same 3.14 floor — the difference is stated, not hidden |
 | Dependencies | `uv sync --locked` inside the install directory (`--dir`, default `~/.monoagens/app`); no dependency is installed outside it |
-| Setup | asks the runtime and install directory (default, current directory, or custom), then hands over to `monoagens init` with the location locked (§4.3): interactive on a terminal, flag-driven otherwise |
-| Database | both stacks use a Podman/Docker Postgres by default. The installer generates `POSTGRES_PASSWORD` and `MONOAGENS_DATABASE_URL` when they are empty; an explicit external `--database-url` skips the container in native mode |
-| Continue | start Postgres (or the full compose stack), `monoagens db upgrade`, then `monoagens selftest` |
+| Setup | uses the same curses menus as `init` for runtime, location, database, and engine, then hands over to `monoagens init` with the location locked (§4.3): interactive on a terminal, flag-driven otherwise |
+| Database | both stacks use a Podman/Docker Postgres by default. The installer generates `POSTGRES_PASSWORD` and `MONOAGENS_DATABASE_URL` **before** `init` so the review shows them; an explicit external `--database-url` skips the container in native mode |
+| Continue | start Postgres (or the full compose stack), `monoagens db upgrade`, register `cli local` as administrator, then `monoagens selftest` |
 | Finish | offers a choice (§4.5): open the panel, or stay on the command line |
 | Observation | one status line while a child runs; non-interactive child output is appended to `~/.monoagens/logs/install.log`, while the interactive wizard stays on the terminal (no secret in the log); a failure prints the last lines plus the log path |
 | Signals | `INT`/`TERM`/`HUP` mark the run `interrupted` and are re-raised, so the exit status stays the signal's |
@@ -78,7 +80,7 @@ The interactive setup is designed here, not borrowed. What it borrows from the r
 
 | Element | Our design |
 |---|---|
-| Header | a fixed-width block with a **logo slot** (`[logo]`) and a one-line role statement; when the mark lands it replaces the slot, and a narrow terminal or `NO_COLOR` falls back to plain lines |
+| Header | the generated logo and wordmark shared with `init`, a step counter, and a one-line role statement; a narrow terminal or `NO_COLOR` falls back to plain lines |
 | Steps | a rail of named steps with a counter (`1/5 provider`, `2/5 model`, …) where the current step is marked, finished steps stay marked, and a step can be retried without restarting the run |
 | Prompting | numbered choices by default so a numpad works; typing a value is always allowed where a value is expected; `Ctrl-C` cancels the whole run and leaves nothing behind |
 | Review | before writing, one screen shows every file that will be created and every value it will hold (secrets shown as their **env names only**) with `apply`/`change`/`cancel` |
@@ -90,8 +92,9 @@ The interactive setup is designed here, not borrowed. What it borrows from the r
 
 - On a TTY, `init` asks the same questions the flags carry: location (unless the installer already
   asked and passes `--no-location`), provider, model (optional), database URL, the first
-  administrator's label, and the **voice layer** — keep emotion, humanize, and character on
-  (the default answer) or turn any of them off. Existing files are offered as `keep` / `change` / `replace`.
+  administrator's label, and the **voice layer** — off by default (ADR-0041), with `on` available.
+  Existing files are offered as `keep` / `change` / `replace`; replacing `.env` still keeps generated
+  database credentials.
 - Off a terminal (piped, CI, `--non-interactive`), it **fails closed**: it names the flags it needs
   instead of waiting for input that cannot arrive.
 - Secrets never reach YAML: the wizard writes env **names** and puts values in `.env` (`0600`), exactly
@@ -118,9 +121,9 @@ The installer finishes by offering: **open the panel** (once the panel exists an
 ADR-0027 §4.4) or **stay on the command line** (print the headless commands). It never decides for the
 operator, and until the panel exists the second option is the only one and is labelled as such.
 
-The compose path keeps the same shape: `init` writes the host files, the installer prepares the
-database credentials, then brings the stack up and runs the same `init` inside the container
-(`docker compose exec monoagens monoagens init ...`). No second installer is written for containers.
+The compose path keeps the same shape: the installer prepares the database credentials, `init` writes
+the host files, then it brings the stack up and runs `db upgrade` plus `people add` inside the
+container (`docker compose exec monoagens monoagens ...`). No second installer is written for containers.
 
 ### 4.6 The logo lands later, the slot does not move
 
@@ -133,13 +136,15 @@ layout, and it is never a config key: the installer's appearance is code, not co
 |---|---|
 | `--dir PATH` | install directory (default `~/.monoagens/app`) |
 | `--stack native\|compose` | runtime choice; both use a Postgres container unless `--database-url` is external |
+| `--engine podman\|docker` | container runtime for Postgres; the menu shows detection status |
+| `--database container\|external` | native database choice; external needs `--database-url` |
 | `--install-runtime` | allow installing Podman/Docker and its compose provider with `sudo` when missing |
 | `--dry-run` | print every action, write nothing |
 | `--non-interactive` | never prompt; fail if a required value is missing |
 | `--provider NAME` / `--model ID` | forwarded to `init` |
 | `--database-url URL` | forwarded to `init` and written to `.env` as a value, never into YAML |
 | `--skip-selftest` | skip the closing self-test (for automation that runs it separately) |
-| `--voice-layer on\|off` | keep emotion, humanize, and character on (default `on`) or turn all three off |
+| `--voice-layer on\|off` | keep emotion, humanize, and character on (default `off`, ADR-0041) or turn all three off |
 | `--no-color` | plain output (also honoured via `NO_COLOR`) |
 
 No key is added to `config.yaml` by this ADR: the installer's behaviour is flags, and the host
@@ -212,7 +217,8 @@ configuration stays what `init` writes.
 - `monoagens/providers/__init__.py` — provider names and their key variables, used for validation.
 - `README.md:88-105`, `README.id.md:96-112` — the quickstart this ADR's native path sits beside.
 - `compose.yaml` — the container path that keeps the same `init`.
-- `install.sh` — runtime choice, opt-in runtime install, generated database credentials, and the curl bootstrap.
+- `monoagens/admin/install_ui.py` — installer menus on the shared terminal layer.
+- `install.sh` — runtime, database, and engine choices; opt-in runtime install; generated database credentials; the curl bootstrap.
 - `pyproject.toml` — unchanged: the installer adds no dependency, and the pinned `uv` is fetched, not vendored.
 
 ---

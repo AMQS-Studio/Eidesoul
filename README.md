@@ -211,16 +211,21 @@ and never hardcodes an agent loop: no planner to configure, no task graph to lau
 Requirements: Python 3.14, Postgres 14+ with `pgvector`, and a reachable OpenAI-compatible LLM
 endpoint. The container image pins Python 3.14; running from source needs 3.14 or newer.
 
-The shortest path is the installer. It asks where the engine should run and where the files should
-live (the recommended `~/.monoagens/app`, the current directory, or a custom path), uses a
-Podman/Docker Postgres for both choices, and asks before installing a missing container runtime with
-`sudo`:
+The shortest path is the installer. It uses the same curses menus as `monoagens init` and asks
+where the engine should run, where the files should live (the recommended `~/.monoagens/app`, the
+current directory, or a custom path), whether Postgres is a container or an external server, and
+whether the container runs on Podman or Docker. It shows each runtime as installed or missing, asks
+before installing a missing one, and lets `sudo` ask for the password in the terminal. The generated
+`config.yaml`, `roles.yaml`, and `soul.yaml` carry usable defaults, and the installer registers
+`cli local` as the first administrator.
 
 ```bash
-bash install.sh                 # interactive runtime choice
-bash install.sh --stack native  # engine on this host, Postgres in a container
-bash install.sh --stack compose # engine and Postgres in containers
-bash install.sh --dry-run       # print every action, write nothing
+bash install.sh                   # interactive menus
+bash install.sh --stack native    # engine on this host, Postgres in a container
+bash install.sh --stack compose   # engine and Postgres in containers
+bash install.sh --engine docker   # Docker instead of Podman
+bash install.sh --database external --database-url URL
+bash install.sh --dry-run         # print every action, write nothing
 ```
 
 From the network, download the script first so the wizard keeps a terminal:

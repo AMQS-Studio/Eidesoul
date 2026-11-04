@@ -36,6 +36,10 @@ dir="$default_dir"
 dir_set=0
 stack="native"
 stack_set=0
+container_engine=""
+engine_set=0
+database_mode="container"
+database_mode_set=0
 install_runtime=0
 dry_run=0
 non_interactive=0
@@ -51,6 +55,7 @@ uv=""
 python_bin=""
 source_root=""
 arch=""
+ui_root=""
 COMPOSE=()
 TMP_DIRS=()
 
@@ -99,12 +104,15 @@ Usage: bash install.sh [options]
   --dir PATH             install directory (default: ~/.monoagens/app)
   --stack STACK          native (engine on host, Postgres in a container) or compose
                          (engine and Postgres in containers); asks when omitted
+  --engine ENGINE        podman or docker for the Postgres container; asks when omitted
+  --database MODE        container (Podman/Docker Postgres) or external (use --database-url);
+                         asks when omitted in native mode
   --install-runtime      allow installing Podman/Docker and compose with sudo when missing
   --dry-run              print every action and write nothing
   --non-interactive      never prompt; fail when a required value is missing
   --provider NAME        provider for `monoagens init`
   --model ID             model id for `monoagens init` (optional)
-  --database-url URL     external Postgres URL; skips the container database in native mode
+  --database-url URL     external Postgres URL; implies --database external in native mode
   --label TEXT           label for the first administrator (roles.yaml)
   --voice-layer on|off   keep emotion, humanize, character (default on) or turn them off
   --skip-selftest        skip the closing `monoagens selftest`
@@ -112,8 +120,8 @@ Usage: bash install.sh [options]
   -h, --help             this text
 
 Both stacks use Podman/Docker for Postgres unless --database-url names an external server.
-The script never runs sudo without explicit consent: a missing runtime prints the exact
-command and stops that stage, or is installed after a yes or --install-runtime. Log:
+A missing runtime is detected by name, offered for install, and sudo asks for your password
+in the terminal. The script never runs sudo without that consent. Log:
 ~/.monoagens/logs/install.log
 EOF
     exit "$code"
@@ -215,6 +223,20 @@ parse_args() {
                 ;;
             --dir=*) dir="${1#*=}"; dir_set=1; shift ;;
             --stack=*) stack="${1#*=}"; stack_set=1; shift ;;
+            --engine)
+                [[ $# -ge 2 ]] || usage 2 "missing value for --engine"
+                container_engine="$2"
+                engine_set=1
+                shift 2
+                ;;
+            --engine=*) container_engine="${1#*=}"; engine_set=1; shift ;;
+            --database)
+                [[ $# -ge 2 ]] || usage 2 "missing value for --database"
+                database_mode="$2"
+                database_mode_set=1
+                shift 2
+                ;;
+            --database=*) database_mode="${1#*=}"; database_mode_set=1; shift ;;
             --install-runtime) install_runtime=1; shift ;;
             --provider=*) provider="${1#*=}"; shift ;;
             --model=*) model="${1#*=}"; shift ;;
@@ -231,6 +253,8 @@ parse_args() {
     done
     case "$voice_layer" in "" | on | off) ;; *) usage 2 "--voice-layer must be on or off" ;; esac
     case "$stack" in native | compose) ;; *) usage 2 "--stack must be native or compose" ;; esac
+    case "$container_engine" in "" | podman | docker) ;; *) usage 2 "--engine must be podman or docker" ;; esac
+    case "$database_mode" in container | external) ;; *) usage 2 "--database must be container or external" ;; esac
     [[ -n "$dir" ]] || usage 2 "--dir must not be empty"
     dir="${dir/#\~/$HOME}"
     [[ "$dir" = /* ]] || dir="${PWD}/${dir}"
@@ -242,11 +266,61 @@ parse_args() {
     fi
 }
 
+# --- installer menus ------------------------------------------------------------------
+#
+# The shell owns detection and stages; `monoagens.admin.install_ui` owns the screen and
+# reuses the same curses layer as `monoagens init`. The answer goes to a temp file so the
+# menu's stdout can stay a terminal.
+
+bootstrap_ui() {
+    (( non_interactive || dry_run )) && return 0
+    [[ -t 0 && -t 1 ]] || return 0
+    if [[ -n "$source_root" && -f "$source_root/monoagens/admin/install_ui.py" ]]; then
+        ui_root="$source_root"
+        return 0
+    fi
+    if [[ -f "$dir/monoagens/admin/install_ui.py" ]]; then
+        ui_root="$dir"
+        return 0
+    fi
+    local tmp
+    if ! command -v curl >/dev/null 2>&1 || ! command -v tar >/dev/null 2>&1; then
+        return 0
+    fi
+    tmp="$(mktemp -d)"
+    TMP_DIRS+=("$tmp")
+    local archive_url="${REPO_URL}/archive/refs/heads/${REVISION}.tar.gz"
+    if curl -fsSL --retry 3 --proto '=https' --proto-redir '=https' "$archive_url" \
+        | tar -xz --strip-components=1 -C "$tmp" 2>/dev/null; then
+        ui_root="$tmp"
+    fi
+    return 0
+}
+
+ui_choice() {
+    local command="$1" answer_file
+    shift
+    [[ -n "$ui_root" ]] || return 1
+    answer_file="$(mktemp)"
+    TMP_DIRS+=("$answer_file")
+    if ! PYTHONPATH="$ui_root" "$python_bin" -m monoagens.admin.install_ui "$command" \
+        --out "$answer_file" "$@" >/dev/tty; then
+        return 1
+    fi
+    [[ -s "$answer_file" ]] || return 1
+    cat "$answer_file"
+}
+
 ask_runtime() {
-    local answer=""
+    local answer="" picked=""
     (( stack_set )) && return 0
     (( non_interactive || dry_run )) && return 0
     [[ -t 0 ]] || return 0
+    if picked="$(ui_choice stack --default "$stack")"; then
+        case "$picked" in
+            native | compose) stack="$picked"; stack_set=1; return 0 ;;
+        esac
+    fi
     say ""
     say "Where should the engine run? Postgres always uses Podman/Docker unless --database-url names an external server."
     say "  1) native  - engine on this host, Postgres in a container"
@@ -277,9 +351,17 @@ normalize_directory() {
 }
 
 ask_directory() {
-    local answer="" choice=""
+    local answer="" choice="" picked=""
     (( dir_set || non_interactive || dry_run )) && return 0
     [[ -t 0 ]] || return 0
+    if picked="$(ui_choice location --default "$default_dir" --here "$PWD")"; then
+        dir="$picked"
+        dir="$(normalize_directory "$dir")"
+        [[ -n "$dir" ]] || usage 2 "install directory must not be empty"
+        [[ "$dir" != "/" ]] || usage 2 "refusing to install directly at /"
+        dir_set=1
+        return 0
+    fi
     say ""
     say "Where should MonoAgens live?"
     say "  config.yaml, roles.yaml, soul.yaml, .env, and the runtime state are written there."
@@ -302,6 +384,76 @@ ask_directory() {
     [[ -n "$dir" ]] || usage 2 "install directory must not be empty"
     [[ "$dir" != "/" ]] || usage 2 "refusing to install directly at /"
     dir_set=1
+}
+
+ask_database() {
+    local picked=""
+    (( database_mode_set )) && return 0
+    [[ -n "$database_url" ]] && { database_mode="external"; database_mode_set=1; return 0; }
+    (( non_interactive || dry_run )) && return 0
+    [[ -t 0 ]] || return 0
+    if [[ "$stack" == "compose" ]]; then
+        database_mode="container"
+        database_mode_set=1
+        return 0
+    fi
+    if picked="$(ui_choice database --default "$database_mode" --external-allowed)"; then
+        case "$picked" in
+            container | external) database_mode="$picked"; database_mode_set=1 ;;
+        esac
+    fi
+    if [[ "$database_mode" == "external" && -z "$database_url" ]]; then
+        if ! database_url="$(ui_choice text --title "Postgres URL" \
+            --detail "postgresql+psycopg://user:password@host:5432/db" --detail "leave blank to fill .env later")"; then
+            database_url=""
+        fi
+    fi
+}
+
+engine_installed() {
+    command -v "$1" >/dev/null 2>&1
+}
+
+ask_engine() {
+    local picked="" status_podman="not installed" status_docker="not installed" default="podman"
+    [[ "$database_mode" == "external" ]] && return 0
+    (( engine_set )) && return 0
+    if engine_installed podman; then
+        status_podman="installed"
+        engine_running podman && status_podman="installed and running"
+    fi
+    if engine_installed docker; then
+        status_docker="installed"
+        engine_running docker && status_docker="installed and running"
+    fi
+    if [[ "$status_podman" != "not installed" && "$status_docker" == "not installed" ]]; then
+        default="podman"
+    elif [[ "$status_docker" != "not installed" && "$status_podman" == "not installed" ]]; then
+        default="docker"
+    fi
+    (( non_interactive || dry_run )) && { container_engine="$default"; engine_set=1; return 0; }
+    [[ -t 0 ]] || { container_engine="$default"; engine_set=1; return 0; }
+    if picked="$(ui_choice engine --default "$default" --podman "$status_podman" --docker "$status_docker")"; then
+        container_engine="$picked"
+    else
+        container_engine="$default"
+    fi
+    engine_set=1
+    if ! engine_installed "$container_engine"; then
+        if (( install_runtime )); then
+            return 0
+        fi
+        local answer="no"
+        if ! answer="$(ui_choice confirm --title "Install $container_engine now?" \
+            --detail "sudo will ask for your password in this terminal" --default no)"; then
+            answer="no"
+        fi
+        if [[ "$answer" != "yes" ]]; then
+            runtime_hint
+            die "$container_engine is required for the database; pass --install-runtime or install it yourself"
+        fi
+        install_runtime=1
+    fi
 }
 
 # --- platform and preflight -----------------------------------------------------------
@@ -770,6 +922,43 @@ PY
     printf '%s' "$result"
 }
 
+env_value() {
+    local name="$1"
+    [[ -f "$dir/.env" ]] || return 0
+    awk -F= -v key="$name" '$1 == key { sub(/^[^=]*=/, ""); print; exit }' "$dir/.env"
+}
+
+prepare_database_before_init() {
+    [[ "$database_mode" == "external" ]] && return 0
+    if [[ -z "$database_url" ]]; then
+        stage "prepare the database credentials"
+        prepare_database_env "$stack" >/dev/null
+        database_url="$(env_value MONOAGENS_DATABASE_URL)"
+        detail "Postgres URL and password prepared in .env"
+    fi
+}
+
+prepare_database_after_init() {
+    (( dry_run )) && return 0
+    [[ "$database_mode" == "external" ]] && return 0
+    # A `replace` decision for .env must not drop the generated container password.
+    prepare_database_env "$stack" >/dev/null
+}
+
+bootstrap_identity() {
+    (( dry_run )) || database_configured || return 0
+    run_logged "register the local administrator" \
+        "monoagens people add cli local --role administrator" \
+        uv_run_in_dir people add cli local --role administrator
+}
+
+compose_bootstrap_identity() {
+    (( dry_run )) || database_configured || return 0
+    run_logged "register the local administrator" \
+        "${COMPOSE[*]:-podman compose} exec monoagens monoagens people add cli local --role administrator" \
+        compose_run people add cli local --role administrator
+}
+
 stage_database() {
     if ! database_configured; then
         stage "schema: waiting for .env"
@@ -800,57 +989,117 @@ stage_selftest() {
 # --- compose stack --------------------------------------------------------------------
 
 
+selected_engine() {
+    if [[ -n "$container_engine" ]]; then
+        printf '%s' "$container_engine"
+        return 0
+    fi
+    if command -v podman >/dev/null 2>&1; then
+        container_engine="podman"
+    elif command -v docker >/dev/null 2>&1; then
+        container_engine="docker"
+    fi
+    printf '%s' "$container_engine"
+}
+
+podman_socket() {
+    local runtime="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
+    if [[ ! -S "$runtime/podman/podman.sock" ]] && command -v systemctl >/dev/null 2>&1; then
+        systemctl --user start podman.socket >/dev/null 2>&1 || true
+    fi
+    if [[ -S "$runtime/podman/podman.sock" ]]; then
+        export DOCKER_HOST="unix://$runtime/podman/podman.sock"
+    fi
+}
+
+compose_command() {
+    local engine="$1"
+    COMPOSE=()
+    case "$engine" in
+        podman)
+            if command -v podman-compose >/dev/null 2>&1; then
+                COMPOSE=(podman-compose)
+            elif command -v podman >/dev/null 2>&1 && podman compose version >/dev/null 2>&1; then
+                COMPOSE=(podman compose)
+                podman_socket
+            else
+                return 1
+            fi
+            ;;
+        docker)
+            if command -v docker >/dev/null 2>&1 && docker compose version >/dev/null 2>&1; then
+                COMPOSE=(docker compose)
+            elif command -v docker-compose >/dev/null 2>&1; then
+                COMPOSE=(docker-compose)
+            else
+                return 1
+            fi
+            ;;
+        *) return 1 ;;
+    esac
+    return 0
+}
+
 detect_compose() {
-    if command -v podman >/dev/null 2>&1 && podman compose version >/dev/null 2>&1; then
-        COMPOSE=(podman compose)
-        return 0
-    fi
-    if command -v docker >/dev/null 2>&1 && docker compose version >/dev/null 2>&1; then
-        COMPOSE=(docker compose)
-        return 0
-    fi
-    if command -v podman-compose >/dev/null 2>&1; then
-        COMPOSE=(podman-compose)
-        return 0
-    fi
-    return 1
+    local engine
+    engine="$(selected_engine)"
+    [[ -n "$engine" ]] || return 1
+    compose_command "$engine"
+}
+
+engine_running() {
+    case "$1" in
+        podman) podman info >/dev/null 2>&1 ;;
+        docker) docker info >/dev/null 2>&1 ;;
+        *) return 1 ;;
+    esac
 }
 
 runtime_hint() {
-    local runtime="podman" compose="podman-compose"
-    if command -v docker >/dev/null 2>&1 && ! command -v podman >/dev/null 2>&1; then
-        runtime="docker"
-        compose="docker-compose"
-    fi
-    warn "Podman or Docker with compose is required for the database container."
-    if command -v pacman >/dev/null 2>&1; then
-        warn "  sudo pacman -S --needed $runtime $compose"
-    elif command -v dnf >/dev/null 2>&1; then
-        warn "  sudo dnf install -y $runtime $compose"
-    elif command -v apt-get >/dev/null 2>&1; then
-        warn "  sudo apt-get update && sudo apt-get install -y $runtime $compose"
-    elif command -v zypper >/dev/null 2>&1; then
-        warn "  sudo zypper install -y $runtime $compose"
+    local engine="${container_engine:-$(selected_engine)}"
+    local packages
+    if [[ "$engine" == "docker" ]]; then
+        packages="docker docker-compose"
     else
-        warn "  install $runtime and $compose, then re-run"
+        engine="podman"
+        packages="podman podman-compose"
+    fi
+    warn "$engine with compose is required for the database container."
+    if command -v pacman >/dev/null 2>&1; then
+        warn "  sudo pacman -S --needed $packages"
+    elif command -v dnf >/dev/null 2>&1; then
+        warn "  sudo dnf install -y $packages"
+    elif command -v apt-get >/dev/null 2>&1; then
+        warn "  sudo apt-get update && sudo apt-get install -y $packages"
+    elif command -v zypper >/dev/null 2>&1; then
+        warn "  sudo zypper install -y $packages"
+    else
+        warn "  install $packages, then re-run"
     fi
     warn "or re-run with --install-runtime to install it now"
 }
 
 install_runtime() {
-    local packages=()
-    if ! command -v podman >/dev/null 2>&1 && ! command -v docker >/dev/null 2>&1; then
-        packages+=(podman)
-    fi
-    if ! detect_compose; then
-        if command -v docker >/dev/null 2>&1; then
-            packages+=(docker-compose)
-        else
-            packages+=(podman-compose)
-        fi
+    local engine="${container_engine:-$(selected_engine)}" packages=()
+    [[ -n "$engine" ]] || engine="podman"
+    container_engine="$engine"
+    if [[ "$engine" == "docker" ]]; then
+        command -v docker >/dev/null 2>&1 || packages+=(docker)
+        command -v docker-compose >/dev/null 2>&1 || packages+=(docker-compose)
+    else
+        command -v podman >/dev/null 2>&1 || packages+=(podman)
+        command -v podman-compose >/dev/null 2>&1 || packages+=(podman-compose)
     fi
     if ((${#packages[@]} == 0)); then
         return 0
+    fi
+    say ""
+    if [[ ! -t 0 ]]; then
+        die "sudo needs a terminal; install $engine yourself or run interactively"
+    fi
+    say "sudo will ask for your password now; it is not stored by the installer."
+    if ! sudo -v; then
+        die "sudo authentication failed; install $engine yourself and re-run"
     fi
     if command -v pacman >/dev/null 2>&1; then
         run_logged "install the container runtime" \
@@ -875,27 +1124,52 @@ install_runtime() {
 }
 
 ensure_compose() {
-    detect_compose && return 0
+    local engine
+    engine="$(selected_engine)"
+    [[ -n "$engine" ]] || engine="podman"
+    container_engine="$engine"
+    if detect_compose; then
+        if engine_running "$engine"; then
+            return 0
+        fi
+        if [[ "$engine" == "podman" ]]; then
+            podman_socket
+            engine_running "$engine" && return 0
+        fi
+        if [[ "$engine" == "docker" ]]; then
+            die "Docker is installed but the daemon is not running; run: sudo systemctl start docker"
+        fi
+        die "$engine is installed but not working; start it and re-run"
+    fi
     if (( dry_run )); then
-        detail "would install Podman/Docker compose if missing"
+        detail "would install $engine with compose if missing"
         return 0
     fi
     if (( install_runtime )); then
         install_runtime
     elif [[ -t 0 ]] && (( ! non_interactive )); then
-        local answer=""
-        say ""
-        say "Podman/Docker with compose is not available."
-        read -r -p "  install Podman now with sudo? [y/N]: " answer || answer=""
-        case "$answer" in
-            y | Y | yes | YES) install_runtime ;;
-            *) runtime_hint; die "container runtime is required for the database" ;;
-        esac
+        local answer="no"
+        if ! answer="$(ui_choice confirm --title "Install $engine with compose now?" \
+            --detail "sudo will ask for your password in this terminal" --default yes)"; then
+            answer="no"
+        fi
+        if [[ "$answer" == "yes" ]]; then
+            install_runtime
+        else
+            runtime_hint
+            die "container runtime is required for the database"
+        fi
     else
         runtime_hint
         die "container runtime is required; pass --install-runtime or install it yourself"
     fi
-    detect_compose || die "the runtime installed but compose is still unavailable"
+    detect_compose || die "$engine with compose is still unavailable after install"
+    if ! engine_running "$engine"; then
+        if [[ "$engine" == "podman" ]]; then
+            podman_socket
+        fi
+        engine_running "$engine" || die "$engine is installed but not running; start it and re-run"
+    fi
 }
 
 postgres_password_set() {
@@ -911,10 +1185,14 @@ compose_run() {
     ( cd -- "$dir" && exec "${COMPOSE[@]}" exec -T monoagens monoagens "$@" )
 }
 
+compose_exec() {
+    ( cd -- "$dir" && exec "${COMPOSE[@]}" exec -T "$@" )
+}
+
 wait_for_postgres() {
     local attempt
     for attempt in {1..30}; do
-        if "${COMPOSE[@]}" exec -T postgres pg_isready -U monoagens >/dev/null 2>&1; then
+        if compose_exec postgres pg_isready -U monoagens >/dev/null 2>&1; then
             return 0
         fi
         sleep 1
@@ -931,11 +1209,18 @@ stage_postgres() {
 
 stage_native_database() {
     local mode
+    if [[ "$database_mode" == "external" ]]; then
+        stage_database
+        bootstrap_identity
+        stage_selftest
+        return 0
+    fi
     mode="$(prepare_database_env native)"
     if [[ "$mode" == "container" ]]; then
         stage_postgres
     fi
     stage_database
+    bootstrap_identity
     stage_selftest
 }
 
@@ -946,6 +1231,7 @@ stage_compose() {
     run_logged "wait for Postgres" "compose exec postgres pg_isready" wait_for_postgres
     run_logged "publish the schema (compose exec)" \
         "${COMPOSE[*]:-podman compose} exec monoagens monoagens db upgrade" compose_run db upgrade
+    compose_bootstrap_identity
     if (( skip_selftest )); then
         detail "self-check skipped (--skip-selftest)"
     else
@@ -1040,18 +1326,35 @@ finish() {
 main() {
     parse_args "$@"
     setup_colors
-    ask_runtime
-    ask_directory
     detect_arch
     say "MonoAgens installer - $REPO_URL ($(revision_label))"
-    say "stack: $stack | uv pin: $UV_VERSION | arch: $arch | dry-run: $([[ $dry_run == 1 ]] && echo yes || echo no)"
+    say "uv pin: $UV_VERSION | arch: $arch | dry-run: $([[ $dry_run == 1 ]] && echo yes || echo no)"
     log_init
     install_traps
     stage_preflight
     stage_uv
+    bootstrap_ui
+    ask_runtime
+    ask_directory
+    ask_database
+    ask_engine
+    if [[ "$stack" == "compose" && "$database_mode" == "external" ]]; then
+        die "compose uses its own Postgres; omit --database-url or choose --stack native"
+    fi
+    if [[ "$database_mode" == "external" && -z "$database_url" ]]; then
+        die "--database external needs --database-url URL (or leave the default container database)"
+    fi
+    say ""
+    say "MonoAgens installer plan"
+    detail "engine:     $stack"
+    detail "database:   $database_mode${container_engine:+ ($container_engine)}"
+    detail "directory:  $dir"
+    log "choices: stack=$stack engine=${container_engine:-<external>} database=$database_mode dir=$dir"
     prepare_dir
     run_logged "install the locked dependencies (uv sync --locked)" "uv sync --locked" uv_sync
+    prepare_database_before_init
     run_init
+    prepare_database_after_init
     if [[ "$stack" == "compose" ]]; then
         stage_compose
     else

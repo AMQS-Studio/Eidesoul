@@ -1,5 +1,21 @@
 # LOG
 
+## 2026-11-05 — Installer menus, engine choice, and usable defaults
+
+`install.sh` now uses the same curses layer as `monoagens init` for every installer decision:
+native/compose, install directory (default/here/custom), container versus external Postgres, and
+Podman/Docker. Each engine shows **installed and running**, **installed**, or **not installed**;
+a missing engine is offered for install, `sudo -v` asks for the password in the terminal, and
+`--install-runtime` remains the headless equivalent. `--engine` and `--database` carry the same
+answers for automation. The Podman path starts the user `podman.socket` and exports `DOCKER_HOST`
+before invoking the external compose provider; `wait_for_postgres` now runs inside the install
+directory, which fixes the false readiness failure. Database credentials are generated before
+`init`, so the review shows the URL instead of "left for you"; replacing `.env` preserves the
+generated password. `config.yaml`, `roles.yaml`, and `soul.yaml` ship usable defaults (including a
+default persona and `administrator.label: local`), and the installer registers `cli local` as the
+first administrator. A native container install was exercised end to end through `db upgrade` and
+`people add`.
+
 ## 2026-11-05 — Installer runtime choice and container database
 
 `install.sh` now asks native versus compose when `--stack` is omitted and asks for the install

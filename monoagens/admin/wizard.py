@@ -303,19 +303,36 @@ def review_lines(
                     f"      engine.llm.api_key_env  {llm['api_key_env']}",
                     f"      engine.llm.model        {llm['model'] or '(not set)'}",
                     f"      database.url_env        {config['database']['url_env']}",
+                    f"      engine.default_role     {config['engine']['default_role']}",
+                    "      defaults                guard on, research auto, memory privacy on",
                 ]
             )
         elif name == "roles.yaml":
-            label = (roles.get("roles") or {}).get("administrator", {}).get("label") or "(empty)"
+            role_map = roles.get("roles") or {}
+            label = (role_map.get("administrator") or {}).get("label") or "(empty)"
+            lines.append(f"      roles                   {', '.join(sorted(role_map))}")
             lines.append(f"      administrator.label     {label}")
+            lines.append("      administrator.tools     *")
         elif name == "soul.yaml":
             soul = yaml.safe_load(contents["soul.yaml"]) or {}
             enabled = bool((soul.get("voice") or {}).get("enabled"))
-            lines.append(f"      soul.voice.enabled     {'on' if enabled else 'off'}")
+            name = soul.get("name")
+            language = soul.get("language")
+            lines.append(f"      name / language         {name} / {language}")
+            lines.append(f"      soul.voice.enabled      {'on' if enabled else 'off'}")
+            persona = "set" if soul.get("persona") else "empty"
+            lines.append(f"      persona                 {persona}")
         else:
+            shown: set[str] = set()
             for env_name, value in _env_names(contents[".env"]):
+                shown.add(env_name)
                 state = "written, never printed" if value else "left for you"
                 lines.append(f"      {env_name:<24} ({state})")
+            existing_env = base / ".env"
+            if existing_env.exists():
+                for env_name, _value in _env_names(existing_env.read_text(encoding="utf-8")):
+                    if env_name not in shown:
+                        lines.append(f"      {env_name:<24} (kept, never printed)")
     return lines
 
 

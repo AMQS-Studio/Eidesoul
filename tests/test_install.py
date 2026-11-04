@@ -252,8 +252,64 @@ def test_sudo_is_confined_to_the_explicit_runtime_installer():
     assert sudo_lines, "the opt-in runtime installer should carry the sudo commands"
     assert all(start < i < end for i in sudo_lines)
     source = "\n".join(lines)
-    assert "install Podman now with sudo?" in source
+    assert "sudo will ask for your password" in source
     assert "--install-runtime" in source
+
+
+def test_installer_menus_return_the_selected_values(tmp_path):
+    def run(args, answer):
+        out = tmp_path / f"{args[0]}.txt"
+        result = subprocess.run(
+            [sys.executable, "-m", "monoagens.admin.install_ui", *args, "--out", str(out)],
+            input=answer,
+            cwd=ROOT,
+            env=clean_env(PYTHONPATH=str(ROOT)),
+            capture_output=True,
+            text=True,
+            timeout=60,
+            check=False,
+        )
+        assert result.returncode == 0, result.stderr
+        return out.read_text(encoding="utf-8").strip()
+
+    assert run(["stack"], "2\n") == "compose"
+    location = run(["location", "--default", "/tmp/default", "--here", "/tmp/here"], "2\n")
+    assert location == "/tmp/here"
+    assert run(["database", "--external-allowed"], "2\n") == "external"
+    assert run(
+        ["engine", "--podman", "installed", "--docker", "not installed"], "2\n"
+    ) == "docker"
+
+
+def test_wait_for_postgres_runs_inside_the_install_directory(tmp_path):
+    app = tmp_path / "app"
+    app.mkdir()
+    marker = tmp_path / "cwd"
+    fake = tmp_path / "bin"
+    fake.mkdir()
+    podman = fake / "podman"
+    podman.write_text(
+        '#!/usr/bin/env bash\nprintf "%s\\n" "$PWD" >> "$CWD_MARKER"\nexit 0\n',
+        encoding="utf-8",
+    )
+    podman.chmod(0o755)
+    code = """
+MONOAGENS_INSTALL_SOURCED=1
+source "$1/install.sh"
+dir="$2"
+COMPOSE=(podman)
+wait_for_postgres
+"""
+    result = subprocess.run(
+        ["bash", "-c", code, "_", str(ROOT), str(app)],
+        env=clean_env(PATH=f"{fake}:/usr/bin:/bin", CWD_MARKER=str(marker)),
+        capture_output=True,
+        text=True,
+        timeout=60,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr
+    assert marker.read_text(encoding="utf-8").strip() == str(app)
 
 
 def test_an_existing_archive_checkout_is_refreshed(tmp_path):

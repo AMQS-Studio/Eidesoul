@@ -277,7 +277,7 @@ CONFIG: dict = {
 ROLES: dict[str, dict] = {
     "administrator": {
         "name": "administrator",
-        "label": "",
+        "label": "local",
         "protected": True,
         "description": "Administrator of MonoAgens",
         "priority": 100,

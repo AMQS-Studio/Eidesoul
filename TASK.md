@@ -113,9 +113,10 @@ MonoAgens checklist. Every item is done when the listed surface exists and works
       input/coroutine validation, `max_calls_per_turn` and cost rows, FTS/trigram search.
 - [x] ADR-0016/0029: one Alembic chain (head 13), primary-only `db upgrade`, Postgres+pgvector test
       store with a deterministic stub embedder.
-- [x] ADR-0028/0030: plugin model with digest fetch, installer with native/compose runtime choice,
-      container Postgres, opt-in runtime install, curl bootstrap, and interactive `init`; the unit,
-      its loader, its config section, and its CLI verb are `plugin`/`plugins` everywhere.
+- [x] ADR-0028/0030: plugin model with digest fetch, installer with curses menus for
+      native/compose, location, container/external Postgres, and Podman/Docker; opt-in runtime
+      install with a terminal sudo prompt, curl bootstrap, and interactive `init`; the unit, its
+      loader, its config section, and its CLI verb are `plugin`/`plugins` everywhere.
 - [x] ADR-0001/0005/0008/0010/0020: the recall/precision eval, MiniLM remember/forget intent
       prototypes with the scheduled purge, `kind=rule` born only from the soul document, the
       per-subject dispute-question cap, and the efficiency ladder.
