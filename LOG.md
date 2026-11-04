@@ -1,5 +1,20 @@
 # LOG
 
+## 2026-11-04 — ADR-0035 decides app-scoped skills
+
+Skills carry an audience (`global|thread|person`) but no corpus, so "procedure for app A" can only
+be approximated by a fixed thread, a plugin pack with its own tool, or the incidental
+tool-mention filter. One body may host several apps and one app may span bodies, so body is the
+wrong axis.
+
+ADR-0035 (draft) adds a nullable `app` namespace on `turns`, `episodes`, and `skills`, fed by
+`Inbound.hints["app"]`. Visibility filters app first, then the unchanged scope rule; a missing hint
+hides app-scoped skills and keeps shared ones (fail closed). The episode signature includes the
+app, reflection copies it, promote/merge preserve it, and `ToolContext` gains `app` so a plugin
+tool filters with an explicit fact. Shared skills stay `app=''`; no app literal lives in code.
+
+Next: migration 0017, the visibility matrix test, and the intake/signature changes.
+
 ## 2026-11-04 — ADR-0034 decides a prompt-part registry
 
 The prompt is assembled correctly but described three times: sixteen block names in

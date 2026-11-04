@@ -62,6 +62,7 @@ re-stamp the hash. No machine translator ships with the repo.
 | [0026](adr/engine/0026-search.md) | Full-Text Search of Messages, Trigrams, and Scope | engine | implemented |
 | [0032](adr/engine/0032-address-and-command.md) | One Address, One Command — Embodiment-Neutral Output, Refusal over Guessing | engine | implemented |
 | [0034](adr/engine/0034-prompt-parts.md) | Prompt Parts — One Registry for Block Metadata, Not a Second Tool Contract | engine | draft |
+| [0035](adr/engine/0035-app-scoped-skills.md) | App-Scoped Skills — A Namespace Above `scope`, Not a Fourth Audience | engine | draft |
 | [0033](adr/0033-neutral-core.md) | Neutral Core, Specialized Edges — No Culture, Transport, or Vendor in Mechanism | root | implemented |
 
 ADRs are grouped by folder: cross-cutting decisions at the `adr/` root, engine decisions under
