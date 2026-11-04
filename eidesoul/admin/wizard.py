@@ -45,7 +45,7 @@ def _rail(step: int, color: bool = False) -> list[str]:
     lines = [f"  [{step + 1}/{len(STEPS)}] {STEPS[step]}"]
     row = "    "
     for item in marks:
-        if row.strip() and len(row) + len(item) > 64:
+        if row.strip() and len(row) + len(item) > 50:
             lines.append(row.rstrip())
             row = "    "
         row += f"{item}  "
@@ -397,7 +397,7 @@ def _interactive(  # noqa: C901
     use_curses = terminal.interactive(stdin, stdout, plain=not color)
     color = color and use_curses
     if not use_curses:
-        _say_lines(stdout, brand.banner(color))
+        _say_lines(stdout, brand.lockup(color))
     if not answers.location:
         answers.location = str(Path(folder).expanduser().resolve())
     step = 0

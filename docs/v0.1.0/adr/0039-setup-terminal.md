@@ -6,7 +6,7 @@
 - **Context:** removes the placeholder from the interaction layer left by ADR-0030; follows ADR-0009 (ADR home), ADR-0019 (observability), ADR-0022 (protected administrator), ADR-0027 (distribution), ADR-0033 (neutral core)
 - **Supersedes:** —
 - **Related:** ADR-0030 (install and init), ADR-0031 (module structure)
-- **Implementation:** implemented — `admin/terminal.py` (curses plus numbered fallback), `admin/wizard.py` (step machine, location, credential, provider/model pickers, review), `admin/brand.py` (wordmark only), `admin/provider_catalog.py` (operator labels), the `--api-key-file` flag, `tests/test_init.py`.
+- **Implementation:** implemented — `admin/terminal.py` (curses plus numbered fallback), `admin/wizard.py` (step machine, location, credential, provider/model pickers, review), `admin/brand.py` (wordmark and logo cells), `admin/logo_art.py` (generated ANSI half-block rows), `admin/provider_catalog.py` (operator labels), the `--api-key-file` flag, `tests/test_init.py`.
 - **Location note:** setup is a host-wide surface, so this ADR sits at the root of the ADR home. The Indonesian copy is `docs/v0.1.0/adr/id/0039-setup-terminal.md`.
 
 ---
@@ -106,10 +106,12 @@ ADR-0030. `.env` remains `0600`.
 
 ### 4.5 The existing logo
 
-The product logo remains `assets/logo.png`; this ADR does not redraw it. The terminal cannot mount
-a PNG or SVG in GNOME Terminal without an image protocol, so the setup prints only the existing
-`EIDESOUL` wordmark and the tagline. `--no-color`, `TERM=dumb`, and non-TTY output use the plain
-form. The logo is never a config key and never changes layout width.
+The product logo remains `assets/logo.png`; this ADR does not redraw it. The setup prints a
+generated ANSI half-block rendering of that asset: 18 columns by 14 rows of `▀`/`▄` cells, with
+truecolor rows in line mode and the same cells parsed into curses color pairs. This is a rendering,
+not a new mark, and it needs no image protocol; GNOME Terminal cannot mount a PNG directly.
+`--no-color`, `TERM=dumb`, and non-TTY output use the plain shade-block form. The logo is never a
+config key and never changes layout width.
 
 ### 4.6 Module boundaries
 
@@ -187,7 +189,8 @@ No key is added to `config.yaml`. The API key value lives only in `.env`.
 - `eidesoul/admin/wizard.py` — location, provider, credential, model, database, identity, voice,
   review, navigation, and the numbered fallback.
 - `eidesoul/admin/terminal.py` — curses radiolist, `/` filter, Back/Cancel, masked secret.
-- `eidesoul/admin/brand.py` — the wordmark and tagline; no replacement mark.
+- `eidesoul/admin/brand.py` — the wordmark, tagline, and ANSI cell parser; no replacement mark.
+- `eidesoul/admin/logo_art.py` — generated half-block rows from `assets/logo.png`.
 - `eidesoul/admin/provider_catalog.py` — operator labels and key-variable detail.
 - `eidesoul/__main__.py` — `--api-key-file` and the `init` dispatch.
 - `tests/test_init.py` — location, credential, lockup, filter, review, cancel, and fallback coverage.

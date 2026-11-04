@@ -10,6 +10,16 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import TextIO
 
+from . import brand
+
+LOGO_LEFT = 2
+LOGO_TOP = 1
+LOGO_GAP = 3
+LOGO_MIN_WIDTH = 76
+LOGO_MIN_HEIGHT = 20
+_LOGO_PAIRS: dict[tuple[int, int], int] = {}
+_NEXT_PAIR = 10
+
 
 class Cancelled(Exception):
     """The operator pressed Escape, q, or Ctrl-C in a menu."""
@@ -72,6 +82,82 @@ def choose(
     )
 
 
+def _init_colors(color: bool) -> None:
+    """Initialize the menu pairs and the logo's grayscale pairs once per curses screen."""
+    import curses
+
+    global _NEXT_PAIR
+    if not color or not curses.has_colors():
+        return
+    curses.start_color()
+    with contextlib.suppress(curses.error):
+        curses.use_default_colors()
+    for pair, foreground in ((1, curses.COLOR_CYAN), (2, curses.COLOR_YELLOW)):
+        with contextlib.suppress(curses.error):
+            curses.init_pair(pair, foreground, -1)
+    _LOGO_PAIRS.clear()
+    _NEXT_PAIR = 10
+
+
+def _logo_column(width: int, height: int) -> int:
+    """Where the right-hand UI starts, or zero when the logo would crowd a small screen."""
+    if width < LOGO_MIN_WIDTH or height < LOGO_MIN_HEIGHT:
+        return 0
+    return LOGO_LEFT + brand.LOGO_WIDTH + LOGO_GAP
+
+
+def _color_index(rgb: tuple[int, int, int] | None) -> int:
+    import curses
+
+    if rgb is None:
+        return -1
+    if curses.COLORS < 256:
+        return curses.COLOR_WHITE if sum(rgb) / 3 >= 110 else curses.COLOR_BLACK
+    if max(rgb) - min(rgb) <= 8:
+        return 232 + round(sum(rgb) / 3 / 255 * 23)
+
+    def cube(value: int) -> int:
+        if value < 48:
+            return 0
+        if value < 115:
+            return 1
+        if value < 155:
+            return 2
+        if value < 195:
+            return 3
+        if value < 235:
+            return 4
+        return 5
+
+    return 16 + 36 * cube(rgb[0]) + 6 * cube(rgb[1]) + cube(rgb[2])
+
+
+def _draw_logo(stdscr, top: int, left: int, color: bool) -> None:
+    """Draw the generated half-block cells with curses pairs; never pass ANSI to curses."""
+    import curses
+
+    global _NEXT_PAIR
+    for row_index, row in enumerate(brand.logo_cells()):
+        for column, cell in enumerate(row):
+            if cell.char == " ":
+                continue
+            attr = 0
+            if color and curses.has_colors():
+                foreground = _color_index(cell.fg)
+                background = _color_index(cell.bg)
+                key = (foreground, background)
+                pair = _LOGO_PAIRS.get(key)
+                if pair is None and _NEXT_PAIR < curses.COLOR_PAIRS:
+                    pair = _NEXT_PAIR
+                    _NEXT_PAIR += 1
+                    with contextlib.suppress(curses.error):
+                        curses.init_pair(pair, max(0, foreground), background)
+                    _LOGO_PAIRS[key] = pair
+                attr = curses.color_pair(pair) if pair else 0
+            with contextlib.suppress(curses.error):
+                stdscr.addnstr(top + row_index, left + column, cell.char, 1, attr)
+
+
 def _line_choose(
     stdin: TextIO,
     stdout: TextIO,
@@ -106,7 +192,7 @@ def _line_choose(
         stdout.flush()
 
 
-def _curses_choose(  # noqa: C901, PLR0915 — the key loop is the menu state machine
+def _curses_choose(  # noqa: C901 — the key loop is the menu state machine
     *,
     title: str,
     choices: Sequence[Choice],
@@ -118,13 +204,8 @@ def _curses_choose(  # noqa: C901, PLR0915 — the key loop is the menu state ma
 ) -> int:
     import curses
 
-    def run(stdscr) -> int:  # noqa: C901, PLR0912, PLR0915
-        if color and curses.has_colors():
-            curses.start_color()
-            with contextlib.suppress(curses.error):
-                curses.use_default_colors()
-            curses.init_pair(1, curses.COLOR_CYAN, -1)
-            curses.init_pair(2, curses.COLOR_YELLOW, -1)
+    def run(stdscr) -> int:  # noqa: C901, PLR0912
+        _init_colors(color)
         with contextlib.suppress(curses.error):
             curses.curs_set(0)
         stdscr.keypad(True)
@@ -218,13 +299,16 @@ def _draw(
 
     stdscr.erase()
     height, width = stdscr.getmaxyx()
+    x = _logo_column(width, height)
+    if x:
+        _draw_logo(stdscr, LOGO_TOP, LOGO_LEFT, color)
     row = 0
 
-    def put(text: str, *, attr: int = 0, y: int | None = None) -> None:
+    def put(text: str, *, attr: int = 0, y: int | None = None, x: int = x) -> None:
         line = y if y is not None else row
         if 0 <= line < height:
             with contextlib.suppress(curses.error):
-                stdscr.addnstr(line, 0, text, max(0, width - 1), attr)
+                stdscr.addnstr(line, x, text, max(0, width - x - 1), attr)
 
     for line in header:
         put(line)
@@ -261,7 +345,7 @@ def _draw(
     )
     if not allow_back:
         footer = footer.replace("← back   ", "")
-    put(footer, attr=curses.A_DIM, y=max(0, height - 2))
+    put(footer, attr=curses.A_DIM, y=max(0, height - 2), x=0)
     stdscr.refresh()
 
 
@@ -305,13 +389,13 @@ def text(
 
 
 
-def _put_line(stdscr, row: int, text: str, width: int, attr: int = 0) -> None:
+def _put_line(stdscr, row: int, text: str, width: int, attr: int = 0, x: int = 0) -> None:
     import curses
 
     if row < 0:
         return
     with contextlib.suppress(curses.error):
-        stdscr.addnstr(row, 0, text, max(0, width - 1), attr)
+        stdscr.addnstr(row, x, text, max(0, width - x - 1), attr)
 
 
 def _curses_text(  # noqa: C901
@@ -327,6 +411,7 @@ def _curses_text(  # noqa: C901
     import curses
 
     def run(stdscr) -> str:  # noqa: C901, PLR0912
+        _init_colors(color)
         with contextlib.suppress(curses.error):
             curses.curs_set(1)
         stdscr.keypad(True)
@@ -334,23 +419,26 @@ def _curses_text(  # noqa: C901
         while True:
             stdscr.erase()
             height, width = stdscr.getmaxyx()
+            x = _logo_column(width, height)
+            if x:
+                _draw_logo(stdscr, LOGO_TOP, LOGO_LEFT, color)
             row = 0
 
             for line in header:
-                _put_line(stdscr, row, line, width)
+                _put_line(stdscr, row, line, width, x=x)
                 row += 1
             if row and row < height:
                 row += 1
-            _put_line(stdscr, row, f"  {title}", width, curses.A_BOLD)
+            _put_line(stdscr, row, f"  {title}", width, curses.A_BOLD, x=x)
             row += 1
             for line in detail:
-                _put_line(stdscr, row, f"  {line}", width, curses.A_DIM)
+                _put_line(stdscr, row, f"  {line}", width, curses.A_DIM, x=x)
                 row += 1
             row += 1
             shown = "•" * len(value) if secret else "".join(value)
-            _put_line(stdscr, row, f"  > {shown}", width)
+            _put_line(stdscr, row, f"  > {shown}", width, x=x)
             with contextlib.suppress(curses.error):
-                stdscr.move(min(row, height - 2), min(width - 1, 4 + len(shown)))
+                stdscr.move(min(row, height - 2), min(width - 2, x + 4 + len(shown)))
             stdscr.refresh()
             key = stdscr.getch()
             if key in (curses.KEY_ENTER, 10, 13):

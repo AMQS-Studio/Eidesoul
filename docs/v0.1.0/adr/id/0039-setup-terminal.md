@@ -1,4 +1,4 @@
-> Terjemahan turunan — jangan sunting; sumber: 0039-setup-terminal.md (sha256: 57c080eb0c2d)
+> Terjemahan turunan — jangan sunting; sumber: 0039-setup-terminal.md (sha256: eda4034c59fd)
 
 # ADR-0039: Init sebagai Antarmuka Terminal Kelas Satu
 
@@ -8,7 +8,7 @@
 - **Konteks:** menghapus placeholder pada lapisan interaksi dari ADR-0030; mengikuti ADR-0009 (ADR home), ADR-0019 (observability), ADR-0022 (administrator terlindungi), ADR-0027 (distribusi), ADR-0033 (core netral)
 - **Supersedes:** —
 - **Terkait:** ADR-0030 (install dan init), ADR-0031 (struktur modul)
-- **Implementasi:** implemented — `admin/terminal.py` (curses plus fallback bernomor), `admin/wizard.py` (mesin langkah, location, credential, picker provider/model, review), `admin/brand.py` (wordmark saja), `admin/provider_catalog.py` (label operator), flag `--api-key-file`, `tests/test_init.py`.
+- **Implementasi:** implemented — `admin/terminal.py` (curses plus fallback bernomor), `admin/wizard.py` (mesin langkah, location, credential, picker provider/model, review), `admin/brand.py` (wordmark dan sel logo), `admin/logo_art.py` (baris half-block ANSI yang dihasilkan), `admin/provider_catalog.py` (label operator), flag `--api-key-file`, `tests/test_init.py`.
 - **Catatan lokasi:** setup adalah permukaan host-wide, jadi ADR ini duduk di root ADR home. Salinan Indonesia di `docs/v0.1.0/adr/id/0039-setup-terminal.md`.
 
 ---
@@ -89,7 +89,7 @@ Review menampilkan location, setiap file dan mode, provider, base URL, variabel 
 
 ### 4.5 Logo yang ada
 
-Logo produk tetap `assets/logo.png`; ADR ini tidak menggambarnya ulang. Terminal tidak bisa memasang PNG atau SVG di GNOME Terminal tanpa protokol gambar, jadi setup hanya mencetak wordmark `EIDESOUL` dan tagline. `--no-color`, `TERM=dumb`, dan output non-TTY memakai bentuk polos. Logo tidak pernah menjadi config key dan tidak mengubah lebar layout.
+Logo produk tetap `assets/logo.png`; ADR ini tidak menggambarnya ulang. Setup mencetak rendering half-block ANSI dari aset itu: 18 kolom x 14 baris sel `▀`/`▄`, dengan baris truecolor di line mode dan sel yang sama diurai menjadi color pair curses. Ini rendering, bukan mark baru, dan tidak butuh protokol gambar; GNOME Terminal tidak bisa memasang PNG langsung. `--no-color`, `TERM=dumb`, dan output non-TTY memakai bentuk shade-block polos. Logo tidak pernah menjadi config key dan tidak mengubah lebar layout.
 
 ### 4.6 Batas modul
 
@@ -161,7 +161,8 @@ Tidak ada key yang ditambahkan ke `config.yaml`. Nilai API key hanya hidup di `.
 - `eidesoul/admin/init.py` — `Answers`, validasi, `build()`, `write_files()` atomik, `banner()`.
 - `eidesoul/admin/wizard.py` — location, provider, credential, model, database, identity, voice, review, navigasi, dan fallback bernomor.
 - `eidesoul/admin/terminal.py` — radiolist curses, filter `/`, Back/Cancel, secret termask.
-- `eidesoul/admin/brand.py` — wordmark dan tagline; tanpa mark pengganti.
+- `eidesoul/admin/brand.py` — wordmark, tagline, dan parser sel ANSI; tanpa mark pengganti.
+- `eidesoul/admin/logo_art.py` — baris half-block yang dihasilkan dari `assets/logo.png`.
 - `eidesoul/admin/provider_catalog.py` — label operator dan detail variabel key.
 - `eidesoul/__main__.py` — `--api-key-file` dan dispatch `init`.
 - `tests/test_init.py` — location, credential, lockup, filter, review, cancel, dan fallback.

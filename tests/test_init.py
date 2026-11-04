@@ -14,8 +14,8 @@ import pytest
 import yaml
 
 from eidesoul.__main__ import main
+from eidesoul.admin import brand, templates, terminal
 from eidesoul.admin import init as admin_init
-from eidesoul.admin import templates, terminal
 
 
 def modes(folder) -> dict[str, int]:
@@ -491,3 +491,42 @@ def test_curses_header_never_contains_ansi():
     from eidesoul.admin.wizard import _menu_header
 
     assert "\x1b" not in "\n".join(_menu_header(0, True))
+
+
+def test_logo_art_keeps_the_asset_shape_and_separates_ansi_from_plain():
+    rows = brand.logo_cells()
+    assert len(rows) == brand.LOGO_HEIGHT
+    assert all(len(row) == brand.LOGO_WIDTH for row in rows)
+    assert any(cell.fg and cell.bg for row in rows for cell in row)
+    assert all("\x1b" not in cell.char for row in rows for cell in row)
+    assert "\x1b" in "\n".join(brand.logo_lines(True))
+    assert "\x1b" not in "\n".join(brand.logo_lines(False))
+
+
+def test_logo_layout_skips_a_crowded_screen():
+    assert terminal._logo_column(80, 24) == 23
+    assert terminal._logo_column(60, 24) == 0
+    assert terminal._logo_column(80, 18) == 0
+
+
+def test_curses_logo_draws_cells_without_ansi(monkeypatch):
+    import curses
+
+    calls: list[tuple[int, int, str, int]] = []
+
+    class Screen:
+        def addnstr(self, y, x, text, limit, attr):
+            calls.append((y, x, text, attr))
+
+    monkeypatch.setattr(curses, "start_color", lambda: None)
+    monkeypatch.setattr(curses, "use_default_colors", lambda: None)
+    monkeypatch.setattr(curses, "init_pair", lambda pair, fg, bg: None)
+    monkeypatch.setattr(curses, "color_pair", lambda pair: pair)
+    monkeypatch.setattr(curses, "has_colors", lambda: True)
+    monkeypatch.setattr(curses, "COLORS", 256, raising=False)
+    monkeypatch.setattr(curses, "COLOR_PAIRS", 65536, raising=False)
+    terminal._init_colors(True)
+    terminal._draw_logo(Screen(), 1, 2, True)
+
+    assert calls
+    assert all("\x1b" not in text for _, _, text, _ in calls)
