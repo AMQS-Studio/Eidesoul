@@ -383,7 +383,7 @@ def _choose_step(stdin: TextIO, stdout: TextIO) -> int:
         _say(stdout, f"  enter 1-{len(STEPS)}")
 
 
-def _interactive(
+def _interactive(  # noqa: C901
     folder: str | Path,
     *,
     stdin: TextIO,
@@ -394,8 +394,10 @@ def _interactive(
     force: bool,
 ) -> tuple[list[Path], list[Path]]:
     # A line fallback must never print ANSI: if curses cannot run, drop colour too.
-    color = color and terminal.interactive(stdin, stdout, plain=not color)
-    _say_lines(stdout, brand.banner(color))
+    use_curses = terminal.interactive(stdin, stdout, plain=not color)
+    color = color and use_curses
+    if not use_curses:
+        _say_lines(stdout, brand.banner(color))
     if not answers.location:
         answers.location = str(Path(folder).expanduser().resolve())
     step = 0
@@ -404,8 +406,9 @@ def _interactive(
         while True:
             while step < len(ASKERS):
                 if step not in locked:
-                    _say(stdout, "")
-                    _say_lines(stdout, _rail(step, color))
+                    if not use_curses:
+                        _say(stdout, "")
+                        _say_lines(stdout, _rail(step, color))
                     try:
                         ASKERS[step](answers, stdin, stdout, color)
                     except terminal.Back:

@@ -1,22 +1,26 @@
 """The Eidos mark and the setup lockup; no asset, font, or image dependency.
 
-The terminal gets a compact glyph plus a wordmark. The full mark lives in
+The terminal gets a block-art mark plus a wordmark. The full mark lives in
 `docs/brand/eidesoul-mark.svg`; the ASCII fallback keeps `--no-color`, `TERM=dumb`, and a
-non-Unicode terminal readable (ADR-0039 §4.6).
+non-Unicode terminal readable (ADR-0039 §4.5).
 """
 
 MARK = "◈"
-ASCII_MARK = "(*) "
+ASCII_MARK = "(*)"
 WORDMARK = "EIDESOUL"
 TAGLINE = "a soul engine you run on your own machine"
 
 
 def banner(color: bool = False, *, ascii_only: bool = False) -> list[str]:
-    """The setup header: mark, wordmark, tagline, then a hairline."""
-    mark = ASCII_MARK if ascii_only else f" {MARK} "
+    """The setup header: an open-ring mark, wordmark, tagline, then a hairline."""
+    if ascii_only:
+        art = ["  +-----+", "  | (*) |", "  +-----+"]
+    else:
+        art = ["   ▄▄▄▄▄", "  █  ◈  █", "  █     ▀", "   ▀▀▀▀"]
     lines = [
-        f"  {mark} {WORDMARK}",
-        f"      {TAGLINE}",
+        f"{art[0]}   {WORDMARK}",
+        f"{art[1]}   {TAGLINE}",
+        *art[2:],
         "",
     ]
     if color:
