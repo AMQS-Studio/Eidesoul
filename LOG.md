@@ -8,10 +8,10 @@ return evidence with spans and scores; a versioned policy writes the final level
 goes to a human. A semantic taxonomy covers sensitivity that PII detection cannot see
 (`crime_admission`, `health`, `relationship_conflict`, `third_party_personal`, ...), with a worked
 mapping for "aku tadi nyuri" and third-party opinions. Local is the default; L4 and credentials
-never leave raw; an external residual model is off by default and sees only redacted text. The
+never leave raw; no external residual model is part of the decision. The
 decision record carries detector/model versions, policy hash, approver, and expiry, and maps to EU
 AI Act 12/19 and ISO 42001. `memories.privacy_evidence` becomes the persisted array; `MemoryStore`
-stays the single port. Evaluation per label/language and a 30-day detection mode gate enforcement. Amended: §5.1 caps the default privacy add-on at 300 MB incremental RSS, reuses the existing MiniLM, and makes GLiNER2, Privacy Filter, and SLM optional lazy-loaded extras.
+stays the single port. Evaluation per label/language and a 30-day detection mode gate enforcement. Amended: §5.1 caps the default privacy add-on at 300 MB incremental RSS, reuses the existing MiniLM, and removes the optional GLiNER2/Privacy Filter/SLM paths; adding a model now requires a new ADR.
 ## 2026-11-04 — ADR-0037 plans the module split before the cap
 
 `agent.py` is at its 1,800-line cap, `memory/store.py` has 24 lines of headroom, and

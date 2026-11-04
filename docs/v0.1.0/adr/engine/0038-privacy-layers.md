@@ -46,11 +46,11 @@ record, one deterministic policy, and a human path for the highest levels.
    disclosure action.
 2. **Evidence over scores.** Every label carries its detector, version, span, and score.
    A bare `L4` is not reproducible.
-3. **Local by default.** PII and secrets are classified before any external call; L4 and
+3. **Local by default.** PII and secrets are classified before any model call; L4 and
    credentials never leave the host raw.
 4. **Fail closed and abstain.** A low score becomes `needs_review`, never `allow`.
 5. **Smallest model that closes a measured gap.** Regex and NER first; encoders or token
-   classifiers next; a generative SLM only when evaluation proves the gap.
+   classifiers next. No generative SLM is part of this decision; adding one is a new ADR.
 6. **One policy, one version.** Disclosure rules live in code/policy-as-code, not in a prompt.
 7. **Replaceable layers.** Each detector is an interface with a digest; a layer that adds no
    measured recall is removed.
@@ -60,9 +60,9 @@ record, one deterministic policy, and a human path for the highest levels.
 **A. Keep the LLM as the classifier and authority.** Rejected: non-deterministic, uncalibrated
 across tasks, injectable, and impossible to audit.
 
-**B. One local generative SLM for everything.** Rejected as the default: heavy for every turn,
-still uncalibrated, and no better than a token classifier for spans. Accepted only as an optional
-residual detector behind the same evidence contract.
+**B. One local generative SLM for everything.** Rejected: heavy for every turn, still
+uncalibrated, and no better than a token classifier for spans. Deferred entirely; this ADR does not
+pre-authorize an SLM, and adding one requires its own decision.
 
 **C. Deterministic rules only.** Rejected: regex matches identifiers, not meaning; it cannot detect
 a self-incriminating admission, a health disclosure, or an interpersonal conflict.
@@ -79,11 +79,14 @@ turn's provenance, veto, or subject. Accepted as an integration target.
 | Layer | Examples | Authority |
 | --- | --- | --- |
 | **Deterministic** | regex, checksum, dictionary, credential patterns | sets a floor; can raise, never lower |
-| **Entity/span** | Presidio/spaCy NER, GLiNER2, OpenAI Privacy Filter | evidence with spans; no verdict |
-| **Semantic** | MiniLM + trained head, GLiNER2 classification, optional local SLM | evidence with labels; may abstain |
+| **Entity/span** | Presidio + spaCy NER | evidence with spans; no verdict |
+| **Semantic** | MiniLM + trained head | evidence with labels; may abstain |
 | **Policy** | `memory/privacy.py` and a versioned policy module | final level and action |
 | **Human** | approvals for L4, confirmation for L3 in a group, review queue | required for the highest risk |
-| **Residual LLM** (optional) | external or local LLM after redaction | evidence only; never final |
+
+No other detector is part of this decision. GLiNER2, OpenAI Privacy Filter, and a generative SLM
+were evaluated and deferred; adding any of them requires a new ADR with its own evaluation,
+license/digest record, data-flow review, and memory budget.
 
 The order is a routing order, not a pipeline that every text must traverse. Cheap layers resolve
 most cases; only unresolved text climbs. A layer may return `abstain`; it may not return `allow`
@@ -100,7 +103,7 @@ Each detector returns:
 
 ```text
 Evidence:
-  detector:   regex | checksum | ner | encoder | token_classifier | slm | llm
+  detector:   regex | checksum | ner | encoder
   version:    detector or model version
   digest:     sha256 of weights/config when a model is used
   label:      taxonomy label
@@ -152,14 +155,12 @@ Coreference to a third person (“dia”) defaults to `third_party_personal`, no
 
 ### 4.5 Data movement
 
-- Deterministic, entity, and semantic layers run locally by default.
-- L4 and credentials are never sent raw to an external model. Redaction or tokenization happens
-  before the call; rehydration happens only in the trusted process.
-- An external residual LLM is off by default. When enabled, it receives redacted text, no tools, a
-  schema-constrained output, and a provider with a DPA, region pinning, no-training terms, and an
-  auditable retention setting.
-- A fully local deployment (regex + NER + encoder + optional local SLM) must remain possible; no
-  feature may require an external model.
+- All three layers run locally. No external model is part of this decision; no L4 or credential
+  text leaves the host.
+- There is no external residual LLM and no local SLM. A future external model requires a new ADR
+  with redaction/tokenization, DPA, region pinning, no-training terms, auditable retention, and a
+  fake-provider test; a future local model requires the same evidence and budget review.
+- A fully local deployment (regex + NER + encoder + head) is the only supported shape here.
 - Model weights, thresholds, and policy versions are data with digests; loading an unverified
   model is a boot failure.
 
@@ -171,7 +172,7 @@ Every disclosure and every level change records:
 - content hash, labels, spans, scores, detector versions and digests;
 - policy version and hash;
 - action, approver, expiry, and retention class;
-- model/provider identity when an external model was used.
+- model identity, version, and digest for every local model that contributed evidence.
 
 The record is append-only (action ledger or an equivalent tamper-evident series), exportable to
 SIEM, and mapped to EU AI Act Article 12/19, ISO/IEC 42001, and the NIST AI RMF. The record must be
@@ -191,7 +192,9 @@ A privacy golden set covers, per language and per label:
 
 Metrics: precision, recall, FPR per label, calibration error, abstention rate, and review-queue
 volume. A 30-day detection-only mode is allowed before enforcement. A model update requires a new
-evaluation; a policy update requires a new policy version and a re-run of the gate.
+evaluation; a policy update requires a new policy version and a re-run of the gate. A label that
+cannot meet its recall target routes to `needs_review` or `drop`; it is never "fixed" by adding a
+model. Accuracy is a gate, not a model choice.
 
 ### 4.8 What does not change
 
@@ -207,8 +210,8 @@ evaluation; a policy update requires a new policy version and a re-run of the ga
 Detector enablement and thresholds are configuration data under `privacy`, with these defaults:
 
 - deterministic + local entity + local semantic: on;
-- external residual LLM: off;
-- generative SLM: not in the spine; an optional extra/plugin;
+- external model: absent; no switch exists in this ADR;
+- generative SLM: absent; adding one is a new ADR, not an extra toggle;
 - thresholds are per label and per language, never one global number;
 - model paths, digests, and policy versions are checked at boot; a missing digest is a failure.
 
@@ -227,8 +230,8 @@ Privacy must fit the spine's memory budget; it does not turn the engine into a m
   by default.
 - **Default semantic:** the MiniLM already loaded by `embed.py` plus a linear head (at most 5 MB);
   not a second encoder.
-- **Optional detectors** (GLiNER2, OpenAI Privacy Filter, a local SLM) are extras or plugins, off by
-  default, lazy-loaded, and unloaded after ten minutes idle.
+- **No optional detector is pre-authorized.** Adding a model is a new ADR; it is not a config
+  toggle and it does not get a row in this budget until then.
 - **Text caps:** 4,000 characters per classification, 512 tokens per segment, batch at most 8; never
   classify a whole thread in one call.
 - If the default stack exceeds 300 MB incremental, the response is int8/ONNX or fewer detectors,
@@ -239,9 +242,6 @@ Privacy must fit the spine's memory budget; it does not turn the engine into a m
 | Presidio + small spaCy | yes | 200 MB | 80 MB |
 | MiniLM (reused) | yes | 0 MB warm / 400 MB cold | 120 MB |
 | Linear head | yes | 5 MB | 5 MB |
-| GLiNER2 | optional | 500 MB | 600 MB |
-| OpenAI Privacy Filter | optional | 2 GB | 2 GB |
-| Local SLM | optional | not default | — |
 
 ## 6. Metrics and gates
 
@@ -252,7 +252,7 @@ Counts to drive to zero, measured 2026-11-04:
 | LLM writes `level` without evidence | 1 path | `memory/store.py` labeling path |
 | decision records without policy version | all disclosures | `access/privacy.py`, `approvals.py` |
 | semantic labels for sensitivity | 0 | no taxonomy today |
-| external-model calls without redaction | 0 allowed | new gate |
+| external-model calls | 0 allowed | no external model in this decision |
 | derived-level downgrades | 0 allowed | memory reflection/merge |
 
 The gate:
@@ -260,7 +260,7 @@ The gate:
 1. A detector result cannot set `level`; only the policy does.
 2. The deterministic floor cannot be lowered by a model; a human downgrade requires an approver and
    a reason in the record.
-3. L4/credential text never reaches an external provider; a fake provider records zero raw calls.
+3. No external provider is called; a fake provider records zero calls for L4/credential text.
 4. A low score yields `needs_review`; no path defaults to `allow`.
 5. Derived memories never have a lower level than their highest source.
 6. A prompt injection fixture cannot change the policy, the level, or the disclosure action.
@@ -268,8 +268,8 @@ The gate:
 8. The golden set reports per-label precision/recall/FPR and calibration; a regression is a gate.
 9. A fresh install runs with no external LLM and no SLM.
 10. `pytest -q`, `ruff`, `pyright`, `selfcheck`, and the ADR gates stay green.
-11. The default privacy smoke stays inside the §5.1 budget; optional models are absent from the
-    process until explicitly enabled.
+11. The default privacy smoke stays inside the §5.1 budget; no model beyond the default stack is
+    present in the process.
 
 ## 7. Acceptance criteria
 
@@ -278,7 +278,8 @@ The gate:
 - A credential is dropped; an L4 decision requires approval; an L3 group disclosure requires
   confirmation; veto wins.
 - The semantic taxonomy covers the labels in §4.4 and is versioned with the policy.
-- An external residual model is off by default and cannot receive raw L4/credential text.
+- No external model or SLM is part of this ADR; adding one requires a new ADR and its own
+  redaction, data-flow, and budget review.
 - The audit record can reconstruct a decision without calling the model again.
 - The golden set and its per-label metrics are part of the repository.
 - The fully local deployment passes the smoke test without any network model and within the §5.1
@@ -292,8 +293,8 @@ The gate:
   encoder/SetFit head, abstention, conservative default for third-party and criminal labels.
 - **A model update silently changes behavior.** Mitigation: digest/version pin, evaluation gate,
   policy version, and a rollback path.
-- **External residual model leaks data.** Mitigation: off by default, redaction before call, no raw
-  L4, DPA/region/no-training, and a fake-provider test.
+- **A future model is added without evidence.** Mitigation: a new ADR, a new golden-set result, a
+  digest/license record, and a new budget line; no silent extra.
 - **Audit volume becomes unmanageable.** Mitigation: hash content, store spans and versions, not
   raw text; retention policy for the record itself.
 - **Legal overreach (criminal/health data).** Mitigation: policy defaults, legal review, retention
@@ -330,8 +331,7 @@ The gate:
   https://artificialintelligenceact.eu/article/19/); ISO/IEC 42001:2026
   (https://www.iso.org/en/home/insights-news/resources/iso-42001-explained-what-it-is.html);
   Gartner AI TRiSM (https://www.gartner.com/en/articles/ai-governance-trism); Microsoft Purview AI
-  controls (https://learn.microsoft.com/en-us/purview/ai-m365-copilot); OpenAI Privacy Filter
-  (https://github.com/openai/privacy-filter); GLiNER2 (https://arxiv.org/html/2507.18546).
+  controls (https://learn.microsoft.com/en-us/purview/ai-m365-copilot).
 
 ---
 

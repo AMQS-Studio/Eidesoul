@@ -1,4 +1,4 @@
-> Terjemahan turunan — jangan sunting; sumber: engine/0038-privacy-layers.md (sha256: 45c2cd52d1a6)
+> Terjemahan turunan — jangan sunting; sumber: engine/0038-privacy-layers.md (sha256: 2de0bdb58f24)
 
 - **Status:** accepted
 - **Tanggal:** 2026-11-04
@@ -46,11 +46,11 @@ record evidence, satu policy deterministik, dan jalur manusia untuk level tertin
    dan aksi disclosure.
 2. **Evidence di atas skor.** Setiap label membawa detektor, versi, span, dan skor.
    `L4` telanjang tidak reproducible.
-3. **Lokal secara default.** PII dan secret diklasifikasi sebelum panggilan eksternal; L4 dan
+3. **Lokal secara default.** PII dan secret diklasifikasi sebelum panggilan model apa pun; L4 dan
    kredensial tidak pernah keluar mentah.
 4. **Gagal tertutup dan abstain.** Confidence rendah menjadi `needs_review`, tidak pernah `allow`.
 5. **Model terkecil yang menutup gap terukur.** Regex dan NER dulu; encoder atau token classifier
-   berikutnya; SLM generatif hanya jika evaluasi membuktikan gap-nya.
+   berikutnya. Tidak ada SLM generatif dalam keputusan ini; menambahkannya adalah ADR baru.
 6. **Satu policy, satu versi.** Aturan disclosure tinggal di kode/policy-as-code, bukan di prompt.
 7. **Lapisan yang bisa dilepas.** Setiap detektor adalah interface dengan digest; lapisan yang
    tidak menambah recall terukur dihapus.
@@ -60,9 +60,9 @@ record evidence, satu policy deterministik, dan jalur manusia untuk level tertin
 **A. Biarkan LLM menjadi classifier dan otoritas.** Ditolak: non-deterministik, tidak terkalibrasi
 lintas tugas, bisa diinjeksi, dan tidak bisa diaudit.
 
-**B. Satu SLM generatif lokal untuk semuanya.** Ditolak sebagai default: berat untuk setiap turn,
-tetap tidak terkalibrasi, dan tidak lebih baik daripada token classifier untuk span. Diterima hanya
-sebagai detektor residual opsional di balik kontrak evidence yang sama.
+**B. Satu SLM generatif lokal untuk semuanya.** Ditolak: berat untuk setiap turn, tetap tidak
+terkalibrasi, dan tidak lebih baik daripada token classifier untuk span. Ditunda sepenuhnya; ADR ini
+tidak mengizinkan SLM lebih dulu, dan menambahkannya membutuhkan keputusan sendiri.
 
 **C. Aturan deterministik saja.** Ditolak: regex mencocokkan identifier, bukan makna; ia tidak bisa
 mendeteksi pengakuan pidana, disclosure kesehatan, atau konflik interpersonal.
@@ -79,11 +79,14 @@ melihat provenance turn, veto, atau subjek. Diterima sebagai target integrasi.
 | Lapisan | Contoh | Otoritas |
 | --- | --- | --- |
 | **Deterministik** | regex, checksum, dictionary, pola kredensial | menetapkan floor; boleh menaikkan, tidak pernah menurunkan |
-| **Entitas/span** | NER Presidio/spaCy, GLiNER2, OpenAI Privacy Filter | evidence dengan span; tanpa verdict |
-| **Semantik** | MiniLM + head terlatih, klasifikasi GLiNER2, SLM lokal opsional | evidence dengan label; boleh abstain |
+| **Entitas/span** | Presidio + NER spaCy | evidence dengan span; tanpa verdict |
+| **Semantik** | MiniLM + head terlatih | evidence dengan label; boleh abstain |
 | **Policy** | `memory/privacy.py` dan modul policy berversi | level dan aksi final |
 | **Manusia** | approval L4, konfirmasi L3 di grup, review queue | wajib untuk risiko tertinggi |
-| **LLM residual** (opsional) | LLM eksternal atau lokal setelah redaksi | evidence saja; tidak pernah final |
+
+Tidak ada detektor lain dalam keputusan ini. GLiNER2, OpenAI Privacy Filter, dan SLM generatif
+dievaluasi lalu ditunda; menambahkan salah satunya membutuhkan ADR baru dengan evaluasi, catatan
+lisensi/digest, tinjauan alur data, dan anggaran memori sendiri.
 
 Urutannya adalah urutan routing, bukan pipeline yang harus dilalui setiap teks. Lapisan murah
 menyelesaikan mayoritas; hanya teks yang belum jelas yang naik. Sebuah lapisan boleh
@@ -100,7 +103,7 @@ Setiap detektor mengembalikan:
 
 ```text
 Evidence:
-  detector:   regex | checksum | ner | encoder | token_classifier | slm | llm
+  detector:   regex | checksum | ner | encoder
   version:    versi detektor atau model
   digest:     sha256 bobot/config saat model dipakai
   label:      label taxonomy
@@ -153,14 +156,14 @@ ke orang ketiga (“dia”) default ke `third_party_personal`, bukan ke fakta pu
 
 ### 4.5 Perpindahan data
 
-- Lapisan deterministik, entitas, dan semantik berjalan lokal secara default.
-- L4 dan kredensial tidak pernah dikirim mentah ke model eksternal. Redaksi atau tokenisasi
-  dilakukan sebelum panggilan; rehidrasi hanya di proses tepercaya.
-- LLM residual eksternal mati secara default. Saat diaktifkan, ia menerima teks teredaksi, tanpa
-  tool, output berskema, dan provider dengan DPA, region pinning, no-training, serta retensi yang
-  dapat diaudit.
-- Deployment sepenuhnya lokal (regex + NER + encoder + SLM lokal opsional) harus tetap mungkin;
-  tidak ada fitur yang mewajibkan model eksternal.
+- Ketiga lapisan berjalan lokal. Tidak ada model eksternal dalam keputusan ini; tidak ada teks L4
+  atau kredensial yang keluar dari host.
+- Tidak ada LLM residual eksternal dan tidak ada SLM lokal. Model eksternal di masa depan
+  membutuhkan ADR baru dengan redaksi/tokenisasi, DPA, region pinning, no-training, retensi yang
+  dapat diaudit, dan tes provider palsu; model lokal di masa depan membutuhkan evidence dan
+  tinjauan anggaran yang sama.
+- Deployment sepenuhnya lokal (regex + NER + encoder + head) adalah satu-satunya bentuk yang
+  didukung di sini.
 - Bobot model, threshold, dan versi policy adalah data dengan digest; memuat model yang tidak
   terverifikasi adalah kegagalan boot.
 
@@ -172,7 +175,7 @@ Setiap disclosure dan setiap perubahan level mencatat:
 - hash konten, label, span, skor, versi dan digest detektor;
 - versi dan hash policy;
 - aksi, approver, expiry, dan kelas retensi;
-- identitas model/provider saat model eksternal dipakai.
+- identitas, versi, dan digest model lokal yang menyumbang evidence.
 
 Record bersifat append-only (action ledger atau serial tamper-evident yang setara), dapat diekspor
 ke SIEM, dan dipetakan ke EU AI Act Article 12/19, ISO/IEC 42001, dan NIST AI RMF. Record harus
@@ -192,7 +195,9 @@ Golden set privasi mencakup, per bahasa dan per label:
 
 Metrik: precision, recall, FPR per label, calibration error, abstention rate, dan volume review
 queue. Mode detection-only 30 hari diperbolehkan sebelum enforcement. Update model membutuhkan
-evaluasi baru; update policy membutuhkan versi policy baru dan menjalankan ulang gate.
+evaluasi baru; update policy membutuhkan versi policy baru dan menjalankan ulang gate. Label yang
+tidak memenuhi target recall diarahkan ke `needs_review` atau `drop`; ia tidak pernah "diperbaiki"
+dengan menambah model. Akurasi adalah gate, bukan pilihan model.
 
 ### 4.8 Yang tidak berubah
 
@@ -208,8 +213,8 @@ evaluasi baru; update policy membutuhkan versi policy baru dan menjalankan ulang
 Aktivasi detektor dan threshold adalah data konfigurasi di bawah `privacy`, dengan default:
 
 - deterministik + entitas lokal + semantik lokal: aktif;
-- LLM residual eksternal: mati;
-- SLM generatif: bukan bagian spine; extra/plugin opsional;
+- model eksternal: tidak ada; tidak ada switch di ADR ini;
+- SLM generatif: tidak ada; menambahkannya adalah ADR baru, bukan toggle extra;
 - threshold per label dan per bahasa, tidak pernah satu angka global;
 - path model, digest, dan versi policy diperiksa saat boot; digest yang hilang adalah kegagalan.
 
@@ -228,8 +233,8 @@ Privasi harus muat dalam anggaran memori spine; ia tidak mengubah engine menjadi
   transformer NER secara default.
 - **Semantik default:** MiniLM yang sudah dimuat `embed.py` plus head linear (paling banyak 5 MB);
   bukan encoder kedua.
-- **Detektor opsional** (GLiNER2, OpenAI Privacy Filter, SLM lokal) adalah extra atau plugin, mati
-  secara default, lazy-load, dan di-unload setelah sepuluh menit idle.
+- **Tidak ada detektor opsional yang diizinkan lebih dulu.** Menambah model adalah ADR baru; ia
+  bukan toggle config dan tidak mendapat baris anggaran sampai saat itu.
 - **Batas teks:** 4.000 karakter per klasifikasi, 512 token per segmen, batch paling banyak 8; tidak
   pernah mengklasifikasi seluruh thread dalam satu panggilan.
 - Jika stack default melewati 300 MB inkremental, responsnya adalah int8/ONNX atau lebih sedikit
@@ -240,9 +245,6 @@ Privasi harus muat dalam anggaran memori spine; ia tidak mengubah engine menjadi
 | Presidio + spaCy kecil | ya | 200 MB | 80 MB |
 | MiniLM (dipakai ulang) | ya | 0 MB hangat / 400 MB dingin | 120 MB |
 | Head linear | ya | 5 MB | 5 MB |
-| GLiNER2 | opsional | 500 MB | 600 MB |
-| OpenAI Privacy Filter | opsional | 2 GB | 2 GB |
-| SLM lokal | opsional | bukan default | — |
 
 ## 6. Metrik dan gate
 
@@ -253,7 +255,7 @@ Hitungan yang harus didorong ke nol, diukur 2026-11-04:
 | LLM menulis `level` tanpa evidence | 1 jalur | jalur labeling `memory/store.py` |
 | record keputusan tanpa versi policy | semua disclosure | `access/privacy.py`, `approvals.py` |
 | label semantik untuk sensitivitas | 0 | belum ada taxonomy |
-| panggilan model eksternal tanpa redaksi | 0 diizinkan | gate baru |
+| panggilan model eksternal | 0 diizinkan | tidak ada model eksternal dalam keputusan ini |
 | downgrade level turunan | 0 diizinkan | refleksi/merge memori |
 
 Gate-nya:
@@ -261,8 +263,8 @@ Gate-nya:
 1. Hasil detektor tidak dapat menetapkan `level`; hanya policy yang melakukannya.
 2. Floor deterministik tidak dapat diturunkan model; downgrade manusia membutuhkan approver dan
    alasan di record.
-3. Teks L4/kredensial tidak pernah mencapai provider eksternal; provider palsu mencatat nol
-   panggilan mentah.
+3. Tidak ada provider eksternal yang dipanggil; provider palsu mencatat nol panggilan untuk teks
+   L4/kredensial.
 4. Confidence rendah menghasilkan `needs_review`; tidak ada jalur yang default ke `allow`.
 5. Memori turunan tidak pernah memiliki level lebih rendah daripada sumber tertingginya.
 6. Fixture prompt injection tidak dapat mengubah policy, level, atau aksi disclosure.
@@ -270,8 +272,8 @@ Gate-nya:
 8. Golden set melaporkan precision/recall/FPR per label dan kalibrasi; regresi adalah gate.
 9. Instalasi baru berjalan tanpa LLM eksternal dan tanpa SLM.
 10. `pytest -q`, `ruff`, `pyright`, `selfcheck`, dan gate ADR tetap hijau.
-11. Smoke privasi default tetap di dalam anggaran §5.1; model opsional tidak ada di proses sampai
-    diaktifkan secara eksplisit.
+11. Smoke privasi default tetap di dalam anggaran §5.1; tidak ada model di luar stack default di
+    dalam proses.
 
 ## 7. Kriteria penerimaan
 
@@ -280,7 +282,8 @@ Gate-nya:
 - Kredensial di-drop; keputusan L4 membutuhkan approval; disclosure L3 di grup membutuhkan
   konfirmasi; veto menang.
 - Taxonomy semantik mencakup label di §4.4 dan berversi bersama policy.
-- Model residual eksternal mati secara default dan tidak dapat menerima teks L4/kredensial mentah.
+- Tidak ada model eksternal atau SLM dalam ADR ini; menambahkannya membutuhkan ADR baru beserta
+  tinjauan redaksi, alur data, dan anggarannya.
 - Record audit dapat merekonstruksi keputusan tanpa memanggil model lagi.
 - Golden set dan metrik per label menjadi bagian repositori.
 - Deployment sepenuhnya lokal lolos smoke test tanpa model jaringan dan di dalam anggaran memori
@@ -294,8 +297,8 @@ Gate-nya:
   few-shot/SetFit head, abstention, default konservatif untuk label pihak ketiga dan pidana.
 - **Update model diam-diam mengubah perilaku.** Mitigasi: pin digest/versi, gate evaluasi, versi
   policy, dan jalur rollback.
-- **Model residual eksternal membocorkan data.** Mitigasi: mati default, redaksi sebelum panggilan,
-  tanpa L4 mentah, DPA/region/no-training, dan tes provider palsu.
+- **Model masa depan ditambahkan tanpa evidence.** Mitigasi: ADR baru, hasil golden set baru,
+  catatan digest/lisensi, dan baris anggaran baru; tidak ada tambahan diam-diam.
 - **Volume audit tak terkendali.** Mitigasi: hash konten, simpan span dan versi, bukan teks mentah;
   policy retensi untuk record itu sendiri.
 - **Terlalu jauh secara hukum (data pidana/kesehatan).** Mitigasi: default policy, legal review,
@@ -330,5 +333,4 @@ Gate-nya:
   https://artificialintelligenceact.eu/article/19/); ISO/IEC 42001:2026
   (https://www.iso.org/en/home/insights-news/resources/iso-42001-explained-what-it-is.html);
   Gartner AI TRiSM (https://www.gartner.com/en/articles/ai-governance-trism); Microsoft Purview AI
-  controls (https://learn.microsoft.com/en-us/purview/ai-m365-copilot); OpenAI Privacy Filter
-  (https://github.com/openai/privacy-filter); GLiNER2 (https://arxiv.org/html/2507.18546).
+  controls (https://learn.microsoft.com/en-us/purview/ai-m365-copilot).
