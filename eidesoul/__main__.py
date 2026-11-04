@@ -621,18 +621,27 @@ def _init(args: argparse.Namespace) -> int:
             "eidesoul: no terminal for the interactive setup and no --provider given.\n"
             "  pass: --provider <name>  (required)\n"
             "        --model <id> --database-url <url> --label <text> --voice-layer on|off\n"
+            "        --api-key-file <path>   (optional; never pass the key itself)\n"
         "        --language <code> --locale <tag> --timezone <IANA>   (default: the host)\n"
             "  or run `eidesoul init` on a terminal.",
             file=sys.stderr,
             flush=True,
         )
         return 2
+    api_key: str | None = None
+    if args.api_key_file:
+        try:
+            api_key = Path(args.api_key_file).expanduser().read_text(encoding="utf-8").strip()
+        except OSError as exc:
+            print(f"eidesoul: cannot read --api-key-file: {exc}", file=sys.stderr, flush=True)
+            return 2
     color = bool(sys.stdout.isatty() and not args.no_color and not os.environ.get("NO_COLOR"))
     try:
         if interactive:
             written, skipped = admin_init.wizard(
                 args.dir,
                 provider=args.provider,
+                api_key=api_key,
                 model=args.model,
                 database_url=args.database_url,
                 label=args.label,
@@ -648,6 +657,7 @@ def _init(args: argparse.Namespace) -> int:
                 args.dir,
                 force=args.force,
                 provider=args.provider,
+                api_key=api_key or "",
                 model=args.model or "",
                 database_url=args.database_url or "",
                 label=args.label or "",
@@ -876,6 +886,11 @@ def build_parser() -> argparse.ArgumentParser:
     )
     init.add_argument(
         "--model", default=None, help="model id to write; omitted leaves it for the operator"
+    )
+    init.add_argument(
+        "--api-key-file",
+        default=None,
+        help="read the provider key from a file; never pass a key on the command line",
     )
     init.add_argument(
         "--database-url",

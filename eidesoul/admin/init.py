@@ -1,19 +1,17 @@
-"""`eidesoul init`: write the four host files, interactively on a terminal.
+"""`eidesoul init` data layer: defaults, validation, build, and atomic host-file writes.
 
-The defaults come from `templates.py` only (ADR-0030 §4.3); this module adds the operator's
-answers, the review screen, and write-then-rename so an interrupted run leaves nothing behind.
-Secrets never reach YAML: `.env` holds the names, and the database URL is the one value written
-there, at `0600`.
+The interactive step machine lives in `admin/wizard.py` (ADR-0039 §4.6); this module owns only
+the four files, their modes, and the one source of defaults (`templates.py`). Secrets never reach
+YAML: `.env` holds the values, at `0600`.
 """
 
 
 import contextlib
 import os
-import sys
 from dataclasses import dataclass
 from pathlib import Path
 from types import SimpleNamespace
-from typing import TextIO, cast
+from typing import cast
 
 import yaml
 from sqlalchemy.engine import make_url
@@ -23,17 +21,15 @@ from ..engine import clock
 from ..engine.config import Config, ConfigError
 from ..engine.i18n import host_language, normalize_language
 from ..providers import PROVIDERS
-from . import templates
+from . import brand, templates
 
 PRIVATE_FILES = (".env", "roles.yaml")
 HOST_FILES = ("config.yaml", "roles.yaml", "soul.yaml", ".env")
-STEPS = ("provider", "model", "database", "administrator", "voice layer")
 # The voice layer (ADR-0027 §4.3): the operator's name for a part, then its config section.
 VOICE_PARTS = ("emotion", "humanize", "character")
 VOICE_KEYS = {"emotion": "affect", "humanize": "humanize", "character": "character"}
 LLM_KEYS = ("provider", "base_url", "api_key_env", "model")
 DEFAULT_LOG = Path.home() / ".eidesoul" / "logs" / "install.log"
-LOGO_SLOT = "[logo]"
 
 
 class InitCancelled(Exception):
@@ -44,7 +40,9 @@ class InitCancelled(Exception):
 class Answers:
     """What the operator answered; every field lands in exactly one place."""
 
+    location: str = ""
     provider: str = ""
+    api_key: str = ""
     model: str = ""
     database_url: str = ""
     label: str = ""
@@ -194,6 +192,7 @@ def _set_env(text: str, name: str, value: str) -> str:
 def build(
     *,
     provider: str,
+    api_key: str = "",
     model: str = "",
     database_url: str = "",
     label: str = "",
@@ -230,6 +229,13 @@ def build(
         contents["roles.yaml"] = templates.dump(roles)
     if database_url.strip():
         contents[".env"] = _set_env(contents[".env"], "EIDESOUL_DATABASE_URL", database_url.strip())
+    if api_key.strip():
+        if "\n" in api_key or "\r" in api_key:
+            raise ValueError("the API key must be one line")
+        key_env = PROVIDERS[provider].api_key_env
+        if not key_env:
+            raise ValueError(f"provider '{provider}' has no API key variable")
+        contents[".env"] = _set_env(contents[".env"], key_env, api_key.strip())
     return contents
 
 
@@ -349,6 +355,7 @@ def init(
     *,
     force: bool = False,
     provider: str,
+    api_key: str = "",
     model: str = "",
     database_url: str = "",
     label: str = "",
@@ -363,6 +370,7 @@ def init(
         raise ValueError(error)
     contents = build(
         provider=provider,
+        api_key=api_key,
         model=model,
         database_url=database_url,
         label=label,
@@ -420,359 +428,15 @@ def report(
 # --- the wizard ---------------------------------------------------------------------------
 
 
-def banner(color: bool = False) -> list[str]:
-    """The fixed-width header with the logo slot: the mark lands later, the slot does not move."""
-    title = "EIDESOUL  a soul engine you run on your own machine"
-    slot = f"{LOGO_SLOT}    reserved for the mark; text-only until it lands"
-    if color:
-        title = f"\033[1m{title}\033[0m"
-    return ["-" * 56, f"  {title}", f"  {slot}", "-" * 56]
+def banner(color: bool = False, *, ascii_only: bool = False) -> list[str]:
+    """The Eidos lockup; the mark is code, not a logo slot or a config key."""
+    return brand.banner(color, ascii_only=ascii_only)
 
 
-def _rail(step: int, color: bool = False) -> list[str]:
-    """`1/5 provider` with finished steps `+`, the current one `*`, the rest `-`."""
-    marks = [
-        f"{'*' if index == step else ('+' if index < step else '-')} {name}"
-        for index, name in enumerate(STEPS)
-    ]
-    lines = [f"  [{step + 1}/{len(STEPS)}] {STEPS[step]}"]
-    row = "    "
-    for item in marks:
-        if row.strip() and len(row) + len(item) > 56:
-            lines.append(row.rstrip())
-            row = "    "
-        row += f"{item}  "
-    lines.append(row.rstrip())
-    if color:
-        lines[0] = f"\033[36m{lines[0]}\033[0m"
-    return lines
+def __getattr__(name: str):
+    # Keep `admin_init.wizard` working without importing the terminal layer on every host read.
+    if name == "wizard":
+        from .wizard import wizard
 
-
-def _say(stdout: TextIO, text: str = "") -> None:
-    stdout.write(text + "\n")
-    stdout.flush()
-
-
-def _say_lines(stdout: TextIO, lines: list[str]) -> None:
-    for line in lines:
-        _say(stdout, line)
-
-
-def _ask(
-    stdin: TextIO,
-    stdout: TextIO,
-    label: str,
-    default: str = "",
-    *,
-    show_default: bool = True,
-) -> str:
-    hint = f" [{default}]" if default and show_default else (" [kept]" if default else "")
-    stdout.write(f"{label}{hint}: ")
-    stdout.flush()
-    line = stdin.readline()
-    if line == "":
-        raise InitCancelled("input closed before the wizard finished; nothing was written")
-    value = line.strip()
-    return value if value else default
-
-
-def _ask_provider(state: Answers, stdin: TextIO, stdout: TextIO) -> None:
-    names = sorted(PROVIDERS)
-    default = "opencode" if "opencode" in PROVIDERS else names[0]
-    _say(stdout, "  which provider serves your model?")
-    width = max(len(name) for name in names) + 6
-    for start in range(0, len(names), 3):
-        row = names[start : start + 3]
-        offered = "".join(
-            f"{index}) {name:<{width}}" for index, name in enumerate(row, start + 1)
-        )
-        _say(stdout, f"  {offered}")
-    while True:
-        answer = _ask(stdin, stdout, f"  provider [1-{len(names)} or name]", default)
-        picked = answer.lower()
-        if answer.isdigit() and 1 <= int(answer) <= len(names):
-            picked = names[int(answer) - 1]
-        error = validate_provider(picked)
-        if error is None:
-            state.provider = picked
-            return
-        _say(stdout, f"  {error}; try again")
-
-
-def _ask_model(state: Answers, stdin: TextIO, stdout: TextIO) -> None:
-    _say(stdout, "  model id (blank leaves it for later; `eidesoul models` lists them)")
-    while True:
-        answer = _ask(stdin, stdout, "  model", state.model)
-        error = validate_model(state.provider, answer)
-        if error is None:
-            state.model = answer
-            return
-        _say(stdout, f"  {error}; try again or leave it blank")
-
-
-def _ask_database(state: Answers, stdin: TextIO, stdout: TextIO) -> None:
-    _say(stdout, "  Postgres URL for EIDESOUL_DATABASE_URL (blank fills .env later)")
-    while True:
-        answer = _ask(
-            stdin, stdout, "  database URL", state.database_url, show_default=False
-        )
-        error = validate_database_url(answer)
-        if error is None:
-            state.database_url = answer
-            return
-        _say(stdout, f"  {error}; try again or leave it blank")
-
-
-def _ask_label(state: Answers, stdin: TextIO, stdout: TextIO) -> None:
-    _say(stdout, "  label for the first administrator (roles.yaml; blank keeps it empty)")
-    state.label = _ask(stdin, stdout, "  administrator label", state.label)
-
-
-def _ask_voice(state: Answers, stdin: TextIO, stdout: TextIO) -> None:
-    _say(stdout, "  keep emotion, humanize, and character on?")
-    _say(stdout, "  (`on`, `off`, or the parts to turn off, e.g. `character`)")
-    default = "on" if not state.voice_off else ",".join(state.voice_off)
-    while True:
-        answer = _ask(stdin, stdout, "  voice layer", default)
-        try:
-            state.voice_off = voice_off(answer)
-            return
-        except ValueError as exc:
-            _say(stdout, f"  {exc}; try again")
-
-
-ASKERS = (_ask_provider, _ask_model, _ask_database, _ask_label, _ask_voice)
-
-
-def review_lines(
-    base: Path,
-    contents: dict[str, str],
-    decisions: dict[str, str],
-) -> list[str]:
-    """Every file and every answer on one screen; `.env` values are never printed."""
-    config = yaml.safe_load(contents["config.yaml"])
-    roles = yaml.safe_load(contents["roles.yaml"])
-    llm = config["engine"]["llm"]
-    lines = ["", "  Review", f"    directory  {base}"]
-    for name in HOST_FILES:
-        status = decisions.get(name, "new")
-        lines.append(f"    {name:<12} {status:<8} {mode_of(name):04o}")
-        if name == "config.yaml":
-            lines.extend(
-                [
-                    f"      engine.llm.provider     {llm['provider']}",
-                    f"      engine.llm.base_url     {llm['base_url']}",
-                    f"      engine.llm.api_key_env  {llm['api_key_env']}",
-                    f"      engine.llm.model        {llm['model'] or '(not set)'}",
-                    f"      database.url_env        {config['database']['url_env']}",
-                ]
-            )
-            for part in VOICE_PARTS:
-                enabled = config["engine"][VOICE_KEYS[part]]["enabled"]
-                lines.append(f"      voice.{part:<17} {'on' if enabled else 'off'}")
-        elif name == "roles.yaml":
-            label = (roles.get("roles") or {}).get("administrator", {}).get("label") or "(empty)"
-            lines.append(f"      administrator.label     {label}")
-        elif name == "soul.yaml":
-            lines.append("      the seed soul from templates.py; no answer of its own")
-        else:
-            for env_name, value in _env_names(contents[".env"]):
-                state = "written, never printed" if value else "left for you"
-                lines.append(f"      {env_name:<24} ({state})")
-    return lines
-
-
-def _decide(
-    base: Path,
-    force: bool,
-    stdin: TextIO,
-    stdout: TextIO,
-) -> dict[str, str]:
-    """Existing files are `keep` / `change` / `replace`; nothing is overwritten silently."""
-    decisions: dict[str, str] = {}
-    for name in HOST_FILES:
-        if not (base / name).exists():
-            decisions[name] = "new"
-            continue
-        if force:
-            decisions[name] = "replace"
-            continue
-        _say(stdout, "")
-        _say(stdout, f"  {name} already exists: keep it, change the values, or replace it?")
-        _say(stdout, "    1) keep   2) change   3) replace")
-        while True:
-            answer = _ask(stdin, stdout, "  choice", "1")
-            picked = {
-                "1": "keep",
-                "keep": "keep",
-                "2": "change",
-                "change": "change",
-                "3": "replace",
-                "replace": "replace",
-            }.get(answer)
-            if picked:
-                decisions[name] = picked
-                break
-            _say(stdout, "  enter 1, 2, or 3")
-    return decisions
-
-
-def _choose_review(stdin: TextIO, stdout: TextIO) -> str:
-    _say(stdout, "")
-    _say(stdout, "  apply, change a step, or cancel?")
-    _say(stdout, "    1) apply   2) change   3) cancel")
-    while True:
-        answer = _ask(stdin, stdout, "  choice", "1")
-        if answer in ("1", "apply", "a"):
-            return "apply"
-        if answer in ("2", "change", "c"):
-            return "change"
-        if answer in ("3", "cancel", "x", "q"):
-            return "cancel"
-        _say(stdout, "  enter 1, 2, or 3")
-
-
-def _choose_step(stdin: TextIO, stdout: TextIO) -> int:
-    _say(stdout, "  which step?")
-    for index, name in enumerate(STEPS, start=1):
-        _say(stdout, f"    {index}) {name}")
-    while True:
-        answer = _ask(stdin, stdout, "  step", "1")
-        if answer.isdigit() and 1 <= int(answer) <= len(STEPS):
-            return int(answer) - 1
-        _say(stdout, f"  enter 1-{len(STEPS)}")
-
-
-def _interactive(
-    folder: str | Path,
-    *,
-    stdin: TextIO,
-    stdout: TextIO,
-    color: bool,
-    answers: Answers,
-    locked: set[int],
-    force: bool,
-) -> tuple[list[Path], list[Path]]:
-    _say_lines(stdout, banner(color))
-    base = Path(folder).expanduser().resolve()
-    step = 0
-    decisions: dict[str, str] | None = None
-    while True:
-        while step < len(ASKERS):
-            if step not in locked:
-                _say(stdout, "")
-                _say_lines(stdout, _rail(step, color))
-                ASKERS[step](answers, stdin, stdout)
-            step += 1
-        contents = build(
-            provider=answers.provider,
-            model=answers.model,
-            database_url=answers.database_url,
-            label=answers.label,
-            voice=answers.voice_off,
-            language=answers.language,
-            locale=answers.locale,
-            timezone=answers.timezone,
-        )
-        if decisions is None:
-            decisions = _decide(base, force, stdin, stdout)
-        _say_lines(stdout, review_lines(base, contents, decisions))
-        action = _choose_review(stdin, stdout)
-        if action == "apply":
-            break
-        if action == "cancel":
-            _say(stdout, "cancelled; nothing was written")
-            raise InitCancelled("cancelled by the operator; nothing was written")
-        step = _choose_step(stdin, stdout)
-        locked.discard(step)
-    return write_files(base, contents, decisions)
-
-
-def wizard(
-    folder: str | Path,
-    *,
-    stdin: TextIO | None = None,
-    stdout: TextIO | None = None,
-    color: bool = False,
-    provider: str | None = None,
-    model: str | None = None,
-    database_url: str | None = None,
-    label: str | None = None,
-    voice_layer: str | None = None,
-    language: str | None = None,
-    locale: str | None = None,
-    timezone: str | None = None,
-    force: bool = False,
-) -> tuple[list[Path], list[Path]]:
-    """The interactive setup (ADR-0030 §4.2): five steps, a review, then the files.
-
-    A flag pre-answers its step; a step the operator changes is asked again before the next
-    review. `Ctrl-C` cancels the run and leaves nothing behind.
-    """
-    stream_in = stdin or sys.stdin
-    stream_out = stdout or sys.stdout
-    answers = Answers(
-        provider=provider or "",
-        model=model or "",
-        database_url=database_url or "",
-        label=label or "",
-        language=language or "",
-        locale=locale or "",
-        timezone=timezone or "",
-    )
-    locked: set[int] = set()
-    if provider is not None:
-        locked.add(0)
-    if model is not None:
-        locked.add(1)
-    if database_url is not None:
-        locked.add(2)
-    if label is not None:
-        locked.add(3)
-    if voice_layer is not None:
-        answers.voice_off = voice_off(voice_layer)
-        locked.add(4)
-    try:
-        written, skipped = _interactive(
-            folder,
-            stdin=stream_in,
-            stdout=stream_out,
-            color=color,
-            answers=answers,
-            locked=locked,
-            force=force,
-        )
-    except KeyboardInterrupt:
-        _say(stream_out, "")
-        _say(stream_out, "cancelled; nothing was written")
-        raise InitCancelled("cancelled by the operator; nothing was written") from None
-    _say(stream_out, "")
-    _say(stream_out, "Receipt")
-    _say(
-        stream_out,
-        report(base=folder, written=written, skipped=skipped, provider=answers.provider,
-               model=answers.model),
-    )
-    return written, skipped
-
-
-__all__ = [
-    "HOST_FILES",
-    "PRIVATE_FILES",
-    "STEPS",
-    "Answers",
-    "InitCancelled",
-    "banner",
-    "build",
-    "init",
-    "mode_of",
-    "model_ids",
-    "report",
-    "review_lines",
-    "validate_database_url",
-    "validate_model",
-    "validate_provider",
-    "voice_off",
-    "wizard",
-    "write_files",
-]
+        return wizard
+    raise AttributeError(name)

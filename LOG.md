@@ -1,5 +1,21 @@
 # LOG
 
+## 2026-11-04 — ADR-0039 init terminal interface and the Eidos mark
+
+`eidesoul init` now starts at **Location**, shows the resolved directory before any write, and
+navigates with `↑`/`↓`, `j`/`k`, `/` filter, Enter, `←` back, and Escape/Ctrl-C cancel. The
+provider picker uses operator labels while IDs and key variables stay in `providers`; the model
+picker reads the provider's served ids when reachable; the credential is masked and written only
+to `.env` at `0600`; `--api-key-file` is the headless equivalent. Review keeps secrets redacted.
+The Eidos lockup replaces the `[logo]` placeholder: an open ring with a center dot, the `◈`
+terminal glyph, and SVG assets under `docs/brand/`. The writer and interaction are split:
+`admin/init.py` 443 lines, `admin/wizard.py` 472, `admin/terminal.py` 281. Tests cover the
+location step, credential masking, `--api-key-file`, lockup, filter, cancel, and line fallback.
+
+Gates: `pytest -q` 878 passed; `ruff` clean; `pyright` 0 errors; `selfcheck` ok; ADR check 40/40 and
+translation clean.
+
+
 ## 2026-11-04 — ADR-0034..0038 implemented
 
 The module caps are real: `agent.py` is 787 lines behind `turn/loop.py`, `intake.py`, `delivery.py`,

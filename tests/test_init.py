@@ -1,7 +1,8 @@
-"""Interactive init contract: the four files, their modes, the review screen, and its exits.
+"""Interactive init contract: location, provider, credential, model, database, identity, voice.
 
-ADR-0030 §4.3/§4.4/§7: on a terminal the wizard asks, reviews, then writes; piped input fails
-closed naming the flags; a secret stays in `.env` and never reaches the review or the log.
+ADR-0039 §4.2/§4.3: the wizard shows the Eidos lockup, navigates menus with the line fallback in
+tests, reviews, then writes atomically. Piped stdin fails closed; a secret stays in `.env` and
+never reaches the review, the screen, or the log.
 """
 
 
@@ -14,7 +15,7 @@ import yaml
 
 from eidesoul.__main__ import main
 from eidesoul.admin import init as admin_init
-from eidesoul.admin import templates
+from eidesoul.admin import templates, terminal
 
 
 def modes(folder) -> dict[str, int]:
@@ -138,11 +139,13 @@ def test_the_wizard_shows_the_rail_and_the_review_then_writes(tmp_path, monkeypa
     monkeypatch.setattr(admin_init, "model_ids", lambda provider: [])
     answer = "\n".join(
         [
-            "groq",  # 1/5 provider
-            "llama-operator",  # 2/5 model
+            "",  # 1/7 location: keep the passed directory
+            "groq",  # 2/7 provider
+            "",  # 3/7 credential: fill .env later
+            "llama-operator",  # 4/7 model
             "postgresql+psycopg://eidesoul:MARKER-PASSWORD@127.0.0.1:5433/eidesoul",
-            "Muqsith",  # 4/5 administrator label
-            "off",  # 5/5 voice layer
+            "Muqsith",  # 6/7 administrator label
+            "off",  # 7/7 voice layer
             "1",  # review: apply
         ]
     )
@@ -152,8 +155,9 @@ def test_the_wizard_shows_the_rail_and_the_review_then_writes(tmp_path, monkeypa
     written, skipped = admin_init.wizard(tmp_path, stdin=stdin, stdout=stdout)
 
     screen = stdout.getvalue()
-    assert "[1/5] provider" in screen
-    assert "[5/5] voice layer" in screen
+    assert "[1/7] location" in screen
+    assert "[7/7] voice layer" in screen
+    assert "EIDESOUL" in screen
     assert "Review" in screen
     assert "Receipt" in screen
     assert "MARKER-PASSWORD" not in screen
@@ -179,7 +183,7 @@ def test_the_wizard_shows_the_rail_and_the_review_then_writes(tmp_path, monkeypa
 def test_a_piped_wizard_run_through_the_command_writes_the_host(tmp_path, monkeypatch):
     monkeypatch.setattr(admin_init, "model_ids", lambda provider: [])
     monkeypatch.setattr(admin_init, "DEFAULT_LOG", tmp_path / "install.log")
-    answer = "\n".join(["groq", "", "", "", "on", "1"]) + "\n"
+    answer = "\n".join(["", "groq", "", "", "", "", "on", "1"]) + "\n"
     monkeypatch.setattr(sys, "stdin", Tty(answer))
     monkeypatch.setattr(sys, "stdout", io.StringIO())
 
@@ -195,7 +199,7 @@ def test_a_piped_wizard_run_through_the_command_writes_the_host(tmp_path, monkey
 
 
 def test_cancel_writes_nothing(tmp_path):
-    stdin = Tty("\n".join(["groq", "", "", "", "on", "3"]) + "\n")
+    stdin = Tty("\n".join(["", "groq", "", "", "", "", "on", "3"]) + "\n")
 
     with pytest.raises(admin_init.InitCancelled):
         admin_init.wizard(tmp_path, stdin=stdin, stdout=io.StringIO())
@@ -271,7 +275,7 @@ def test_existing_files_offer_keep_change_replace(tmp_path):
         yaml.safe_dump(before_config, sort_keys=False), encoding="utf-8"
     )
     before_roles = (tmp_path / "roles.yaml").read_text(encoding="utf-8")
-    stdin = Tty("2\n\n\n\n\n")  # config: change; roles/soul/.env: keep; review: apply
+    stdin = Tty("\n\n2\n\n\n\n\n")  # location/credential blank; config change; keep the rest
     stdout = io.StringIO()
 
     admin_init.wizard(
@@ -333,3 +337,139 @@ def test_the_review_comes_from_the_templates_plus_answers():
     assert config["engine"]["affect"]["enabled"] is True
     assert "postgresql+psycopg://u:secret@h/db" not in contents["config.yaml"]
     assert "EIDESOUL_DATABASE_URL=postgresql+psycopg://u:secret@h/db" in contents[".env"]
+
+
+def test_the_lockup_replaces_the_logo_placeholder() -> None:
+    screen = "\n".join(admin_init.banner())
+
+    assert "◈" in screen
+    assert "EIDESOUL" in screen
+    assert "a soul engine you run on your own machine" in screen
+    assert "[logo]" not in screen
+
+
+def test_the_location_step_writes_to_the_chosen_directory(tmp_path):
+    target = tmp_path / "nested" / "soul"
+    monkeypatch = pytest.MonkeyPatch()
+    monkeypatch.setattr(admin_init, "model_ids", lambda provider: [])
+    answer = "\n".join(
+        [str(target), "groq", "", "", "", "", "on", "1"]
+    )
+    try:
+        written, _ = admin_init.wizard(
+            tmp_path, stdin=Tty(answer + "\n"), stdout=io.StringIO()
+        )
+    finally:
+        monkeypatch.undo()
+
+    assert len(written) == 4
+    assert (target / "config.yaml").is_file()
+    assert (target / ".eidesoul" / "workspace").is_dir()
+    assert not (tmp_path / "config.yaml").exists()
+
+
+def test_the_credential_is_written_to_env_but_never_echoed(tmp_path):
+    monkeypatch = pytest.MonkeyPatch()
+    monkeypatch.setattr(admin_init, "model_ids", lambda provider: [])
+    answer = "\n".join(["", "groq", "sk-MARKER", "", "", "", "on", "1"])
+    stdout = io.StringIO()
+    try:
+        admin_init.wizard(tmp_path, stdin=Tty(answer + "\n"), stdout=stdout)
+    finally:
+        monkeypatch.undo()
+
+    assert "sk-MARKER" not in stdout.getvalue()
+    env = (tmp_path / ".env").read_text(encoding="utf-8")
+    assert "GROQ_API_KEY=sk-MARKER" in env
+
+
+def test_line_menu_accepts_a_name_and_blank_keeps_the_default():
+    choices = [
+        terminal.Choice("OpenCode Go", "opencode", "opencode"),
+        terminal.Choice("OpenAI", "openai", "openai"),
+    ]
+    stdout = io.StringIO()
+    assert terminal.choose(
+        stdin=Tty("openai\n"), stdout=stdout, title="provider", choices=choices
+    ) == 1
+    assert terminal.choose(
+        stdin=Tty("\n"), stdout=io.StringIO(), title="provider", choices=choices
+    ) == 0
+
+
+def test_menu_filter_is_case_insensitive():
+    choices = [
+        terminal.Choice("OpenCode Go", "opencode", "opencode"),
+        terminal.Choice("OpenAI", "openai", "openai"),
+    ]
+
+    assert terminal._filtered(choices, "CODE") == [0]
+    assert terminal._filtered(choices, "open") == [0, 1]
+
+
+def test_api_key_file_is_written_without_echo(tmp_path):
+    key_file = tmp_path / "key.txt"
+    key_file.write_text("sk-FILE-MARKER\n", encoding="utf-8")
+    target = tmp_path / "soul"
+
+    code = main(
+        [
+            "--env",
+            "absent.env",
+            "init",
+            "--dir",
+            str(target),
+            "--provider",
+            "groq",
+            "--model",
+            "operator-model",
+            "--api-key-file",
+            str(key_file),
+            "--non-interactive",
+        ]
+    )
+
+    assert code == 0
+    env = (target / ".env").read_text(encoding="utf-8")
+    assert "GROQ_API_KEY=sk-FILE-MARKER" in env
+    assert (target / ".env").stat().st_mode & 0o777 == 0o600
+
+
+def test_api_key_file_is_the_headless_equivalent_of_the_masked_step(tmp_path):
+    written, _ = admin_init.init(
+        tmp_path, provider="groq", model="operator-model", api_key="sk-DIRECT"
+    )
+
+    assert len(written) == 4
+    assert "GROQ_API_KEY=sk-DIRECT" in (tmp_path / ".env").read_text(encoding="utf-8")
+
+
+def test_a_location_that_is_a_file_is_rejected_and_reprompted(tmp_path):
+    file_path = tmp_path / "not-a-directory"
+    file_path.write_text("x", encoding="utf-8")
+    target = tmp_path / "soul"
+    monkeypatch = pytest.MonkeyPatch()
+    monkeypatch.setattr(admin_init, "model_ids", lambda provider: [])
+    answer = "\n".join(
+        [str(file_path), str(target), "groq", "", "", "", "", "on", "1"]
+    )
+    stdout = io.StringIO()
+    try:
+        written, _ = admin_init.wizard(
+            tmp_path, stdin=Tty(answer + "\n"), stdout=stdout
+        )
+    finally:
+        monkeypatch.undo()
+
+    assert "not a directory" in stdout.getvalue()
+    assert len(written) == 4
+    assert (target / "config.yaml").is_file()
+
+
+def test_line_menu_q_cancels_without_a_choice():
+    choices = [terminal.Choice("OpenCode Go", "opencode", "opencode")]
+
+    with pytest.raises(terminal.Cancelled):
+        terminal.choose(
+            stdin=Tty("q\n"), stdout=io.StringIO(), title="provider", choices=choices
+        )
