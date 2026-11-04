@@ -1,4 +1,4 @@
-> Terjemahan turunan — jangan sunting; sumber: engine/0038-privacy-layers.md (sha256: f5c6a36a9145)
+> Terjemahan turunan — jangan sunting; sumber: engine/0038-privacy-layers.md (sha256: 1cb898c7582b)
 
 - **Status:** accepted
 - **Tanggal:** 2026-11-04
@@ -222,6 +222,40 @@ evidence, audit, primitif retensi dan erasure, serta default aman (tanpa telemet
 eksternal kecuali dikonfigurasi, tanpa kredensial bawaan). Engine tidak boleh menumbuhkan control
 plane untuk layanan yang tidak ia operasikan.
 
+### 4.10 Rasa bukan level
+
+Sentimen dan afek adalah konteks, bukan kerahasiaan. Kalimat sedih tidak otomatis sensitif, dan
+kalimat datar tidak otomatis publik. Level menjawab "siapa yang boleh melihat ini", bukan
+"seberapa kuat pembicara merasakannya".
+
+- **Tidak ada jalur afek-ke-level.** Prototipe afek di `eidesoul/library/affect/` boleh membentuk
+  nada balasan, salience, atau jalur krisis; skornya tidak pernah masuk ke `level` atau verdict
+  disclosure. Perubahan sentimen saja harus membuat level tetap.
+- **Proposisi, bukan kata sifat.** Detektor melaporkan label, span, dan skor untuk apa yang
+  dinyatakan: peristiwa kesehatan, paksaan, kejahatan, pihak ketiga, kredensial. "Terpaksa" saja
+  ambigu; ia tidak mengidentifikasi pelaku, objek, atau korban.
+- **Ambigu adalah hasil.** Model boleh mengembalikan `ambiguous`; policy boleh mengembalikan
+  `abstain`, `staged`, atau `needs_review`. Ia tidak boleh menebak L4 dari distress. Satu pertanyaan
+  klarifikasi netral diperbolehkan, tanpa mengulang detail sensitif; jika tidak selesai, memori
+  tetap unconfirmed dan tidak masuk disclosure.
+- **Tidak ada kategori khusus yang diinferensi.** Kata emosional tidak boleh menciptakan label
+  kesehatan, seksual, atau pidana dengan sendirinya. Inferensi juga data pribadi; jangan simpan
+  lebih dari yang didukung proposisi.
+- **Jalur keselamatan terpisah.** Sinyal krisis atau self-harm masuk jalur keselamatan dan bahasanya
+  sendiri; ia tidak menjadi level privasi.
+
+Contoh:
+
+| Ucapan | Evidence | Level |
+| --- | --- | --- |
+| "aku sedih banget" | afek saja; tidak ada proposisi sensitif | tidak dinaikkan oleh skor afek |
+| "aku tadi jatuh" | kemungkinan peristiwa kesehatan/fisik, ambigu | tanpa level otomatis; klarifikasi atau review |
+| "aku tadi nyuri" | `crime_admission` | L4, human review |
+| "aku dipaksa ambil barang di toko" | paksaan plus kejahatan, pelaku/target tidak jelas | staged/review, bukan tebakan L4 |
+
+Golden set memuat kontras ini: emosional-tapi-wajar, datar-tapi-rahasia, sarkasme, kutipan,
+hipotetis, dan emosi pihak ketiga yang dilaporkan pembicara.
+
 ## 5. Konfigurasi
 
 Aktivasi detektor dan threshold adalah data konfigurasi di bawah `privacy`, dengan default:
@@ -279,7 +313,7 @@ Gate-nya:
    alasan di record.
 3. Tidak ada provider eksternal yang dipanggil; provider palsu mencatat nol panggilan untuk teks
    L4/kredensial.
-4. Confidence rendah menghasilkan `needs_review`; tidak ada jalur yang default ke `allow`.
+4. Skor rendah menghasilkan `needs_review`; tidak ada jalur yang default ke `allow`.
 5. Memori turunan tidak pernah memiliki level lebih rendah daripada sumber tertingginya.
 6. Fixture prompt injection tidak dapat mengubah policy, level, atau aksi disclosure.
 7. Setiap disclosure memiliki field audit wajib dan versi/hash policy.
@@ -288,6 +322,8 @@ Gate-nya:
 10. `pytest -q`, `ruff`, `pyright`, `selfcheck`, dan gate ADR tetap hijau.
 11. Smoke privasi default tetap di dalam anggaran §5.1; tidak ada model di luar stack default di
     dalam proses.
+12. Perubahan sentimen saja membuat `level` tetap; ucapan afektif yang ambigu diarahkan ke
+    `staged`/`needs_review`, bukan tebakan L4.
 
 ## 7. Kriteria penerimaan
 
@@ -302,6 +338,8 @@ Gate-nya:
 - Golden set dan metrik per label menjadi bagian repositori.
 - Deployment sepenuhnya lokal lolos smoke test tanpa model jaringan dan di dalam anggaran memori
   §5.1.
+- Afek tidak pernah menentukan level: skor afek dan policy privasi punya input terpisah, dan
+  perubahan sentimen saja adalah no-op untuk `level`.
 
 ## 8. Risiko dan mitigasi
 
@@ -317,6 +355,8 @@ Gate-nya:
   policy retensi untuk record itu sendiri.
 - **Terlalu jauh secara hukum (data pidana/kesehatan).** Mitigasi: default policy, legal review,
   retention override, dan aksi `drop` untuk data yang tidak boleh disimpan operator.
+- **Afek disalahartikan sebagai kerahasiaan.** Mitigasi: §4.10 menjauhkan afek dari jalur level;
+  fixture emosional-tapi-wajar dan datar-tapi-rahasia masuk golden set.
 
 ## 9. Interaksi dengan ADR lain
 
@@ -327,6 +367,7 @@ Gate-nya:
 - ADR-0010: sengketa dan veto tetap menang atas setiap detektor.
 - ADR-0001: port memori tetap tunggal; evidence adalah kolom, bukan store kedua.
 - ADR-0033: detektor dan label adalah data; tidak ada default bahasa, vendor, atau transport di core.
+  Prototipe afek tetap data untuk nada; §4.10 menjauhkannya dari level privasi.
 - ADR-0035/0036: scope app dan role ortogonal; role boleh membaca level, tetapi level bukan role.
 - ADR-0034: teks prompt tidak pernah membawa policy; policy adalah kode.
 

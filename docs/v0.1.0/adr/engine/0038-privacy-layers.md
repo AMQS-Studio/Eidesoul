@@ -219,6 +219,40 @@ evidence, audit, retention and erasure primitives, and secure defaults (no telem
 call unless configured, no bundled credentials). It must not grow a control plane for a service it
 does not operate.
 
+### 4.10 Emotion is not a level
+
+Sentiment and affect are context, not confidentiality. A sad sentence is not automatically
+sensitive, and a flat sentence is not automatically public. The level answers "who may see this",
+not "how strongly does the speaker feel".
+
+- **No affect-to-level path.** The affect prototypes under `eidesoul/library/affect/` may shape
+  reply tone, salience, or a crisis route; their score never enters `level` or the disclosure
+  verdict. A sentiment-only change must leave the level unchanged.
+- **Propositions, not adjectives.** The detectors report labels, spans, and scores for what is
+  asserted: a health event, coercion, a crime, a third party, a credential. "Terpaksa" alone is
+  ambiguous; it does not identify an actor, an object, or a victim.
+- **Ambiguity is a result.** A model may return `ambiguous`; the policy may return `abstain`,
+  `staged`, or `needs_review`. It must not guess L4 from distress. One neutral clarifying question
+  is allowed, without repeating the sensitive detail; if it does not resolve the case, the memory
+  stays unconfirmed and out of disclosure.
+- **No inferred special category.** Emotional wording must not create a health, sexual, or criminal
+  label by itself. Inferences are personal data too; do not store more than the proposition
+  supports.
+- **The safety route is separate.** A crisis or self-harm signal goes to the safety path and its
+  own language; it does not become a privacy level.
+
+Examples:
+
+| Utterance | Evidence | Level |
+| --- | --- | --- |
+| "aku sedih banget" | affect only; no sensitive proposition | not raised by the affect score |
+| "aku tadi jatuh" | possible health/physical event, ambiguous | no automatic level; clarify or review |
+| "aku tadi nyuri" | `crime_admission` | L4, human review |
+| "aku dipaksa ambil barang di toko" | coercion plus crime, actor/target unclear | staged/review, not a guessed L4 |
+
+The golden set includes these contrasts: emotional-but-benign, flat-but-secret, sarcasm, quoted
+speech, hypotheticals, and a third party's emotion reported by the speaker.
+
 ## 5. Configuration
 
 Detector enablement and thresholds are configuration data under `privacy`, with these defaults:
@@ -284,6 +318,8 @@ The gate:
 10. `pytest -q`, `ruff`, `pyright`, `selfcheck`, and the ADR gates stay green.
 11. The default privacy smoke stays inside the §5.1 budget; no model beyond the default stack is
     present in the process.
+12. A sentiment-only change leaves `level` unchanged; an ambiguous affective utterance routes to
+    `staged`/`needs_review`, never to a guessed L4.
 
 ## 7. Acceptance criteria
 
@@ -298,6 +334,8 @@ The gate:
 - The golden set and its per-label metrics are part of the repository.
 - The fully local deployment passes the smoke test without any network model and within the §5.1
   memory budget.
+- Affect never determines a level: the affect score and the privacy policy have separate inputs,
+  and a sentiment-only change is a no-op for `level`.
 
 ## 8. Risks and mitigations
 
@@ -313,6 +351,8 @@ The gate:
   raw text; retention policy for the record itself.
 - **Legal overreach (criminal/health data).** Mitigation: policy defaults, legal review, retention
   override, and a `drop` action for data the operator must not keep.
+- **Affect is mistaken for confidentiality.** Mitigation: §4.10 keeps affect out of the level path;
+  emotional-but-benign and flat-but-secret fixtures are part of the golden set.
 
 ## 9. Interaction with other ADRs
 
@@ -323,7 +363,7 @@ The gate:
 - ADR-0010: disputes and veto keep precedence over every detector.
 - ADR-0001: the memory port stays single; evidence is a column, not a second store.
 - ADR-0033: detectors and labels are data; no language, vendor, or transport default enters the
-  core.
+  core. Affect prototypes stay data for tone; §4.10 keeps them out of the privacy level.
 - ADR-0035/0036: app scope and roles are orthogonal; a role may read a level, but the level is not
   a role.
 - ADR-0034: prompt text never carries the policy; the policy is code.
