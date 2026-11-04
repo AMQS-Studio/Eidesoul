@@ -486,3 +486,9 @@ def test_line_fallback_never_emits_ansi(tmp_path):
         monkeypatch.undo()
 
     assert "\x1b" not in stdout.getvalue()
+
+
+def test_curses_header_never_contains_ansi():
+    from eidesoul.admin.wizard import _menu_header
+
+    assert "\x1b" not in "\n".join(_menu_header(0, True))

@@ -56,7 +56,8 @@ def _rail(step: int, color: bool = False) -> list[str]:
 
 
 def _menu_header(step: int, color: bool) -> list[str]:
-    return [*banner(color), *_rail(step, color)]
+    # Curses draws text, not ANSI: a colorized header would render as literal `^[[...m`.
+    return [*banner(False), *_rail(step, False)]
 
 
 def _say(stdout: TextIO, text: str = "") -> None:
