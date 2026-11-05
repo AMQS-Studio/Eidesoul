@@ -116,6 +116,12 @@ gateways emit identical message IDs.
   PostgreSQL are derived caches and never override host files on conflict.
 - Active host configuration files (`config.yaml`, `roles.yaml`, `soul.yaml`, `.env`) are untracked in Git;
   the repository ships clean templates materialized by `monoagens init`.
+- **Admin & Web Control Panel Seam:** Future operator control panels (Web UI / Desktop) run as separate
+  surfaces without Core ever importing a web framework: they inspect and manage state through the same
+  PostgreSQL stores (`MemoryStore`, `IdentityStore`, `JobStore`, `ApprovalStore`), mutate and validate host
+  YAML files through the shared dataclass schema layer + `reload` IPC trigger (`ADR-0007`), and stream live
+  chat, thinking/step progress, approvals, or voice via the standard `Percept` $\leftrightarrow$ `Action`
+  (`stream_id`, `replace_id`, `meta`) contract.
 
 ## 5. Configuration
 
