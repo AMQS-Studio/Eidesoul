@@ -225,6 +225,7 @@ bash install.sh --stack native    # engine on this host, Postgres in a container
 bash install.sh --stack compose   # engine and Postgres in containers
 bash install.sh --engine docker   # Docker instead of Podman
 bash install.sh --database external --database-url URL
+bash install.sh --language en      # override a C/POSIX host locale
 bash install.sh --dry-run         # print every action, write nothing
 ```
 

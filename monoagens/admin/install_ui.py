@@ -223,6 +223,9 @@ def main(argv: list[str] | None = None) -> int:
     except terminal.Cancelled as exc:
         print(f"\n{exc}", file=sys.stderr)
         return 130
+    except KeyboardInterrupt:
+        print("\ncancelled by the operator", file=sys.stderr)
+        return 130
     return 0
 
 if __name__ == "__main__":

@@ -57,6 +57,9 @@ model=""
 database_url=""
 label=""
 voice_layer=""
+language=""
+locale=""
+timezone=""
 uv=""
 python_bin=""
 source_root=""
@@ -120,6 +123,9 @@ Usage: bash install.sh [options]
   --model ID             model id for `monoagens init` (optional)
   --database-url URL     external Postgres URL; implies --database external in native mode
   --label TEXT           label for the first administrator (roles.yaml)
+  --language CODE        language catalog for the soul (default: the host locale)
+  --locale TAG           locale for the soul (default: the host locale)
+  --timezone IANA        IANA timezone for the soul (default: the host zone)
   --voice-layer on|off   keep emotion, humanize, character (default on) or turn them off
   --skip-selftest        skip the closing `monoagens selftest`
   --no-color             plain output (also honoured via NO_COLOR)
@@ -222,6 +228,9 @@ parse_args() {
                 shift 2
                 ;;
             --label) [[ $# -ge 2 ]] || usage 2 "missing value for --label"; label="$2"; shift 2 ;;
+            --language) [[ $# -ge 2 ]] || usage 2 "missing value for --language"; language="$2"; shift 2 ;;
+            --locale) [[ $# -ge 2 ]] || usage 2 "missing value for --locale"; locale="$2"; shift 2 ;;
+            --timezone) [[ $# -ge 2 ]] || usage 2 "missing value for --timezone"; timezone="$2"; shift 2 ;;
             --voice-layer)
                 [[ $# -ge 2 ]] || usage 2 "missing value for --voice-layer"
                 voice_layer="$2"
@@ -248,6 +257,9 @@ parse_args() {
             --model=*) model="${1#*=}"; shift ;;
             --database-url=*) database_url="${1#*=}"; shift ;;
             --label=*) label="${1#*=}"; shift ;;
+            --language=*) language="${1#*=}"; shift ;;
+            --locale=*) locale="${1#*=}"; shift ;;
+            --timezone=*) timezone="${1#*=}"; shift ;;
             --voice-layer=*) voice_layer="${1#*=}"; shift ;;
             --dry-run) dry_run=1; shift ;;
             --non-interactive) non_interactive=1; shift ;;
@@ -304,21 +316,66 @@ bootstrap_ui() {
 }
 
 ui_choice() {
-    local command="$1" answer_file
+    local command="$1" answer_file code=0
     shift
     [[ -n "$ui_root" ]] || return 1
     answer_file="$(mktemp)"
     TMP_DIRS+=("$answer_file")
-    if ! PYTHONPATH="$ui_root" "$python_bin" -m monoagens.admin.install_ui "$command" \
-        --out "$answer_file" "$@" >/dev/tty; then
-        return 1
-    fi
+    PYTHONPATH="$ui_root" "$python_bin" -m monoagens.admin.install_ui "$command" \
+        --out "$answer_file" "$@" >/dev/tty || code=$?
+    (( code == 0 )) || return "$code"
     [[ -s "$answer_file" ]] || return 1
     cat "$answer_file"
 }
 
+ui_cancelled() {
+    (( $1 == 130 )) || return 0
+    say ""
+    say "cancelled; nothing else was started"
+    exit 130
+}
+
+host_language_code() {
+    local raw lowered
+    raw="${LC_ALL:-${LC_MESSAGES:-${LANGUAGE:-${LANG:-}}}}"
+    raw="${raw%%:*}"
+    raw="${raw%%.*}"
+    raw="${raw%%@*}"
+    raw="${raw%%_*}"
+    raw="${raw%%-*}"
+    lowered="${raw,,}"
+    case "$lowered" in
+        "" | c | posix) return 0 ;;
+    esac
+    printf '%s' "$lowered"
+}
+
+ask_language() {
+    local code=0 picked="" host_code=""
+    [[ -n "$language" || -n "$locale" ]] && return 0
+    host_code="$(host_language_code)"
+    [[ -n "$host_code" ]] && return 0
+    if (( dry_run )); then
+        detail "would ask for a language code (the host locale is C/POSIX)"
+        return 0
+    fi
+    if (( non_interactive )); then
+        die "the host locale does not name a language; pass --language <code> (for example --language en)"
+    fi
+    [[ -n "$ui_root" ]] || die "the host locale does not name a language; pass --language <code>"
+    if picked="$(ui_choice text --title "language code for the soul" \
+        --detail "catalog code such as en or id; no language is guessed" --default "")"; then
+        language="$picked"
+    else
+        code=$?
+        ui_cancelled "$code"
+    fi
+    [[ -n "$language" ]] || die "a language is required; pass --language <code>"
+    return 0
+}
+
 ask_runtime() {
-    local answer="" picked=""
+    local answer="" picked="" code=0
     (( stack_set )) && return 0
     (( non_interactive || dry_run )) && return 0
     [[ -t 0 ]] || return 0
@@ -326,6 +383,9 @@ ask_runtime() {
         case "$picked" in
             native | compose) stack="$picked"; stack_set=1; return 0 ;;
         esac
+    else
+        code=$?
+        ui_cancelled "$code"
     fi
     say ""
     say "Where should the engine run? Postgres always uses Podman/Docker unless --database-url names an external server."
@@ -357,7 +417,7 @@ normalize_directory() {
 }
 
 ask_directory() {
-    local answer="" choice="" picked=""
+    local answer="" choice="" picked="" code=0
     (( dir_set || non_interactive || dry_run )) && return 0
     [[ -t 0 ]] || return 0
     if picked="$(ui_choice location --default "$default_dir" --here "$here_dir")"; then
@@ -368,6 +428,9 @@ ask_directory() {
         [[ "$dir" != "/" ]] || usage 2 "refusing to install directly at /"
         dir_set=1
         return 0
+    else
+        code=$?
+        ui_cancelled "$code"
     fi
     say ""
     say "Where should MonoAgens live?"
@@ -407,7 +470,7 @@ ask_directory() {
 }
 
 ask_database() {
-    local picked=""
+    local picked="" code=0
     (( database_mode_set )) && return 0
     [[ -n "$database_url" ]] && { database_mode="external"; database_mode_set=1; return 0; }
     (( non_interactive || dry_run )) && return 0
@@ -421,10 +484,17 @@ ask_database() {
         case "$picked" in
             container | external) database_mode="$picked"; database_mode_set=1 ;;
         esac
+    else
+        code=$?
+        ui_cancelled "$code"
     fi
     if [[ "$database_mode" == "external" && -z "$database_url" ]]; then
-        if ! database_url="$(ui_choice text --title "Postgres URL" \
+        if database_url="$(ui_choice text --title "Postgres URL" \
             --detail "postgresql+psycopg://user:password@host:5432/db" --detail "leave blank to fill .env later")"; then
+            :
+        else
+            code=$?
+            ui_cancelled "$code"
             database_url=""
         fi
     fi
@@ -435,7 +505,7 @@ engine_installed() {
 }
 
 ask_engine() {
-    local picked="" status_podman="not installed" status_docker="not installed" default="podman"
+    local picked="" status_podman="not installed" status_docker="not installed" default="podman" code=0
     [[ "$database_mode" == "external" ]] && return 0
     (( engine_set )) && return 0
     if engine_installed podman; then
@@ -456,6 +526,8 @@ ask_engine() {
     if picked="$(ui_choice engine --default "$default" --podman "$status_podman" --docker "$status_docker")"; then
         container_engine="$picked"
     else
+        code=$?
+        ui_cancelled "$code"
         container_engine="$default"
     fi
     engine_set=1
@@ -464,8 +536,12 @@ ask_engine() {
             return 0
         fi
         local answer="no"
-        if ! answer="$(ui_choice confirm --title "Install $container_engine now?" \
+        if answer="$(ui_choice confirm --title "Install $container_engine now?" \
             --detail "sudo will ask for your password in this terminal" --default no)"; then
+            :
+        else
+            code=$?
+            ui_cancelled "$code"
             answer="no"
         fi
         if [[ "$answer" != "yes" ]]; then
@@ -787,6 +863,9 @@ build_init_args() {
     if [[ -n "$model" ]]; then INIT_ARGS+=(--model "$model"); fi
     if [[ -n "$database_url" ]]; then INIT_ARGS+=(--database-url "$database_url"); fi
     if [[ -n "$label" ]]; then INIT_ARGS+=(--label "$label"); fi
+    if [[ -n "$language" ]]; then INIT_ARGS+=(--language "$language"); fi
+    if [[ -n "$locale" ]]; then INIT_ARGS+=(--locale "$locale"); fi
+    if [[ -n "$timezone" ]]; then INIT_ARGS+=(--timezone "$timezone"); fi
     return 0
 }
 
@@ -806,7 +885,7 @@ run_init() {
             detail "would stop here: no terminal and no --provider; the flag list is printed instead"
             return 0
         fi
-        die "no terminal and no --provider. Pass --provider <name> (optionally --model, --database-url, --label, --voice-layer), or run with a terminal"
+        die "no terminal and no --provider. Pass --provider <name> (optionally --model, --database-url, --label, --language, --locale, --timezone, --voice-layer), or run with a terminal"
     fi
     if (( dry_run )); then
         detail "would run: uv run monoagens init --dir $dir (the database URL stays out of this output)"
@@ -1189,9 +1268,13 @@ ensure_compose() {
     if (( install_runtime )); then
         install_runtime
     elif [[ -t 0 ]] && (( ! non_interactive )); then
-        local answer="no"
-        if ! answer="$(ui_choice confirm --title "Install $engine with compose now?" \
+        local answer="no" code=0
+        if answer="$(ui_choice confirm --title "Install $engine with compose now?" \
             --detail "sudo will ask for your password in this terminal" --default yes)"; then
+            :
+        else
+            code=$?
+            ui_cancelled "$code"
             answer="no"
         fi
         if [[ "$answer" == "yes" ]]; then
@@ -1380,9 +1463,10 @@ main() {
     bootstrap_ui
     ask_runtime
     ask_directory
+    guard_install_dir
     ask_database
     ask_engine
-    guard_install_dir
+    ask_language
     if [[ "$stack" == "compose" && "$database_mode" == "external" ]]; then
         die "compose uses its own Postgres; omit --database-url or choose --stack native"
     fi

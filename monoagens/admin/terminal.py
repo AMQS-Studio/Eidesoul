@@ -398,7 +398,7 @@ def _put_line(stdscr, row: int, text: str, width: int, attr: int = 0, x: int = 0
         stdscr.addnstr(row, x, text, max(0, width - x - 1), attr)
 
 
-def _curses_text(  # noqa: C901
+def _curses_text(  # noqa: C901, PLR0915
     *,
     title: str,
     default: str,
@@ -410,7 +410,7 @@ def _curses_text(  # noqa: C901
 ) -> str:
     import curses
 
-    def run(stdscr) -> str:  # noqa: C901, PLR0912
+    def run(stdscr) -> str:  # noqa: C901, PLR0912, PLR0915
         _init_colors(color)
         with contextlib.suppress(curses.error):
             curses.curs_set(1)
@@ -455,6 +455,15 @@ def _curses_text(  # noqa: C901
                 raise Cancelled("cancelled by the operator")
             if key in (curses.KEY_BACKSPACE, 127, 8):
                 if value:
+                    value.pop()
+                continue
+            if key == 21:  # Ctrl-U: clear the field
+                value.clear()
+                continue
+            if key == 23:  # Ctrl-W: delete the trailing word
+                while value and value[-1] == " ":
+                    value.pop()
+                while value and value[-1] != " ":
                     value.pop()
                 continue
             if 32 <= key < 127 and len(value) < 4096:

@@ -1,5 +1,14 @@
 # LOG
 
+## 2026-11-05 — Terminal stress pass on the installer
+
+Ran `install.sh` under a fake HOME in tmux at 120x42 and 60x15. Fixed Ctrl-C in the
+installer menus leaking a Python traceback, Escape/`q` falling through to the line
+fallback where an arrow key became an invalid option, and curses text fields ignoring
+Ctrl-U/Ctrl-W. A `C`/`POSIX` host locale now asks for one language instead of failing
+inside `init`; `--language`, `--locale`, and `--timezone` are forwarded to `init`.
+Tests: `tests/test_install.py` (23) and `tests/test_init.py` (41) pass.
+
 ## 2026-11-05 — Installer deletion paths removed
 
 The installer no longer recursively removes a target directory. A non-empty directory without a

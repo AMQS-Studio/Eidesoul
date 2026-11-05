@@ -241,6 +241,7 @@ bash install.sh --stack native    # engine di host, Postgres di container
 bash install.sh --stack compose   # engine dan Postgres di container
 bash install.sh --engine docker   # Docker, bukan Podman
 bash install.sh --database external --database-url URL
+bash install.sh --language id      # override locale host C/POSIX
 bash install.sh --dry-run         # cetak setiap aksi, tulis apa pun
 ```
 

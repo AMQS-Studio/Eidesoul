@@ -103,6 +103,7 @@ def test_a_stubbed_run_keeps_the_secret_out_of_the_log_and_never_calls_sudo(tmp_
     app = tmp_path / "app"
     app.mkdir()
     (app / "pyproject.toml").write_text("[project]\nname = 'fake'\n", encoding="utf-8")
+    (app / "install.sh").write_text("#!/bin/sh\n", encoding="utf-8")
     env = clean_env(
         HOME=str(tmp_path / "home"),
         PATH=f"{folder}:/usr/bin:/bin",
@@ -118,6 +119,8 @@ def test_a_stubbed_run_keeps_the_secret_out_of_the_log_and_never_calls_sudo(tmp_
             str(app),
             "--provider",
             "openai",
+            "--language",
+            "en",
             "--database-url",
             url,
             "--skip-selftest",
@@ -151,11 +154,87 @@ def test_a_stubbed_run_keeps_the_secret_out_of_the_log_and_never_calls_sudo(tmp_
     assert MARKER in (app / ".env").read_text(encoding="utf-8")
 
 
+def test_host_locale_without_a_language_requires_the_flag(tmp_path):
+    code = """
+MONOAGENS_INSTALL_SOURCED=1
+source "$1/install.sh"
+non_interactive=1
+ask_language
+"""
+    result = subprocess.run(
+        ["bash", "-c", code, "_", str(ROOT)],
+        env=clean_env(LC_ALL="", LC_MESSAGES="", LANGUAGE="", LANG="C.UTF-8"),
+        capture_output=True,
+        text=True,
+        timeout=60,
+        check=False,
+    )
+
+    assert result.returncode != 0
+    assert "--language" in result.stderr
+
+
+def test_language_fields_are_forwarded_to_init(tmp_path):
+    code = """
+MONOAGENS_INSTALL_SOURCED=1
+source "$1/install.sh"
+dir="$2"
+language=en
+locale=en-US
+timezone=Asia/Jakarta
+build_init_args
+printf '%s\n' "${INIT_ARGS[@]}"
+"""
+    result = subprocess.run(
+        ["bash", "-c", code, "_", str(ROOT), str(tmp_path / "app")],
+        env=clean_env(),
+        capture_output=True,
+        text=True,
+        timeout=60,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr
+    args = result.stdout.splitlines()
+    assert args[args.index("--language") + 1] == "en"
+    assert args[args.index("--locale") + 1] == "en-US"
+    assert args[args.index("--timezone") + 1] == "Asia/Jakarta"
+
+
+def test_install_ui_turns_ctrl_c_into_a_clean_cancel(monkeypatch, tmp_path):
+    from monoagens.admin import install_ui
+
+    def interrupted(**_kwargs):
+        raise KeyboardInterrupt
+
+    monkeypatch.setattr(install_ui.terminal, "choose", interrupted)
+    assert install_ui.main(["stack", "--out", str(tmp_path / "answer")]) == 130
+
+
+def test_a_line_menu_reprompts_on_an_invalid_choice(tmp_path):
+    out = tmp_path / "stack.txt"
+    result = subprocess.run(
+        [sys.executable, "-m", "monoagens.admin.install_ui", "stack", "--out", str(out)],
+        input="x\n2\n",
+        cwd=ROOT,
+        env=clean_env(PYTHONPATH=str(ROOT)),
+        capture_output=True,
+        text=True,
+        timeout=60,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "choose 1-2" in result.stdout
+    assert out.read_text(encoding="utf-8").strip() == "compose"
+
+
 def test_the_non_interactive_run_without_provider_prints_the_flag_list(tmp_path):
     folder, _ = stub_bin(tmp_path)
     app = tmp_path / "app"
     app.mkdir()
     (app / "pyproject.toml").write_text("[project]\nname = 'fake'\n", encoding="utf-8")
+    (app / "install.sh").write_text("#!/bin/sh\n", encoding="utf-8")
     env = clean_env(
         HOME=str(tmp_path / "home"), PATH=f"{folder}:/usr/bin:/bin"
     )
