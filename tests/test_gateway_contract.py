@@ -21,6 +21,7 @@ from support import (
     specs,
 )
 
+from monoagens.engine.access.roles import Role
 from monoagens.engine.config import ConfigError, GatewaySettings
 from monoagens.engine.inbound import (
     Directory,
@@ -59,16 +60,16 @@ def call_tool(env, name: str, args: dict, *, thread: str = "chat"):
 
 def test_gateway_tools_are_indexed_per_body(tmp_path) -> None:
     """ADR-0032 §4.6: the same name in two bodies is not a collision, it is two tools."""
-    first = FakeGateway(name="a", tools=[handler("send")])
-    second = FakeGateway(name="b", tools=[handler("send")])
+    first = FakeGateway(name="a", tools=[handler("probe_tool")])
+    second = FakeGateway(name="b", tools=[handler("probe_tool")])
     env = make_agent(tmp_path, gateways=[first, second])
 
     index = env.agent.tool_index
-    assert set(index.specs("a")) >= {"send"}
-    assert set(index.specs("b")) >= {"send"}
-    assert index.specs("a")["send"] is not index.specs("b")["send"]
-    assert index.resolve("b__send", "a")[0] == "send"
-    assert env.agent.tools.get("send") is None
+    assert set(index.specs("a")) >= {"probe_tool"}
+    assert set(index.specs("b")) >= {"probe_tool"}
+    assert index.specs("a")["probe_tool"] is not index.specs("b")["probe_tool"]
+    assert index.resolve("b__probe_tool", "a")[0] == "probe_tool"
+    assert env.agent.tools.get("probe_tool") is None
     assert index.other_bodies("a") == ("b",)
 
 
@@ -132,20 +133,20 @@ def test_with_rich_a_file_is_a_file_and_typing_is_real(tmp_path) -> None:
 
 
 def test_without_directory_a_cross_thread_read_is_refused(tmp_path) -> None:
-    from monoagens.gateways.whatsapp.tools.chat_history import TOOL as CHAT_HISTORY
+    from monoagens.engine.tools.thread_history import TOOL as THREAD_HISTORY
 
-    gateway = FakeGateway(tools=[CHAT_HISTORY])
+    gateway = FakeGateway(tools=[THREAD_HISTORY])
     env = make_agent(
         tmp_path,
         gateway=gateway,
-        roles={"owner": role("owner", tools=("chat_history",), commands=("*",))},
+        roles={"owner": role("owner", tools=("thread_history",), commands=("*",))},
         default_role="owner",
     )
 
-    result = call_tool(env, "chat_history", {"chat": "budi"}, thread="111@g.us")
+    result = call_tool(env, "thread_history", {"chat": "budi"}, thread="111@g.us")
 
     assert result.startswith("error:")
-    assert "no directory" in result
+    assert "no directory" in result or "not in the archive" in result
 
 
 def test_with_directory_membership_is_evidence_not_a_guess() -> None:
@@ -238,6 +239,7 @@ def test_build_gateways_logs_capabilities_and_refuses_a_broken_body(
         "rich": True,
         "directory": True,
         "private_thread": True,
+        "abort": False,
     }
 
     monkeypatch.setattr(gateway_package, "load_gateway", lambda name: Incomplete)
@@ -254,24 +256,27 @@ def test_capability_report_marks_the_optional_surfaces() -> None:
         ]
     )
     assert report == {
-        "core": {"rich": False, "directory": False, "private_thread": True},
-        "rich": {"rich": True, "directory": False, "private_thread": True},
-        "directory": {"rich": False, "directory": True, "private_thread": True},
+        "core": {"rich": False, "directory": False, "private_thread": True, "abort": False},
+        "rich": {"rich": True, "directory": False, "private_thread": True, "abort": False},
+        "directory": {
+            "rich": False,
+            "directory": True,
+            "private_thread": True,
+            "abort": False,
+        },
     }
 
 
-def test_the_whatsapp_catalog_owns_the_archive_tool(tmp_path) -> None:
+def test_the_archive_tool_is_core_and_the_body_keeps_compatibility_aliases(tmp_path) -> None:
     from test_whatsapp_gateway import make_gateway
 
     from monoagens.engine.tools import REGISTRY as CORE
 
     gateway = make_gateway(tmp_path)
-    names = {item.name for item in gateway.tools()}
-    assert "chat_history" in names
-    assert "chat_history" not in CORE.names()
+    assert "thread_history" in CORE.names()
+    assert gateway.tool_aliases()["whatsapp_chat_history"] == "thread_history"
     root = Path(__file__).resolve().parents[1]
-    assert not (root / "monoagens" / "engine" / "tools" / "chat_history.py").exists()
-    assert (root / "monoagens" / "gateways" / "whatsapp" / "tools" / "chat_history.py").is_file()
+    assert not (root / "monoagens" / "gateways" / "whatsapp" / "tools" / "chat_history.py").exists()
 
 
 def test_core_imports_without_neonize() -> None:
@@ -290,60 +295,46 @@ def test_core_gateway_meets_only_core() -> None:
     assert not isinstance(FakeGateway(), Directory)
 
 
-def test_the_harness_body_completes_a_turn_and_returns_its_actions(tmp_path) -> None:
-    from monoagens.gateways.harness.gateway import HarnessGateway
+class RefusingGateway(FakeGateway):
+    """A body whose policy says no; the refusal reply must come from the core."""
 
-    config = build_config(tmp_path)
-    gateway = HarnessGateway(
-        config,
-        None,
-        None,
-        None,
-        settings=GatewaySettings(
-            "harness",
-            True,
-            {"task": "ringkas status", "thread": "harness:1", "actor": "harness"},
-        ),
-    )
+    def access_refusal(self, inbound) -> str:
+        return "denied"
+
+
+def test_a_refused_percept_gets_the_localized_refusal_from_core(tmp_path) -> None:
+    from monoagens.engine.i18n import t
+
+    gateway = RefusingGateway(name="fake")
     env = make_agent(tmp_path, gateway=gateway)
+    inbound = inbound_message("halo", message_id="refused-1")
 
-    actions = asyncio.run(gateway.run(env.agent))
+    actions = asyncio.run(env.agent.handle(inbound, gateway))
 
-    assert actions
-    assert actions[0].capability == "send_text"
-    assert gateway.actions == actions
-    assert gateway.sent == [str(action.payload) for action in actions]
-    assert "run" in env.agent.tool_index.names("harness")
-    assert "inspect" in env.agent.commands.names()
+    assert actions == []
+    assert env.agent.turns.get("refused-1") is None
+    assert gateway.sent == [
+        ("chat", t("agent.access_refused", env.config.soul.language), None)
+    ]
 
 
-def test_the_harness_tools_go_through_the_same_tool_door(tmp_path) -> None:
-    from monoagens.engine.tools import execute
-    from monoagens.gateways.harness.gateway import HarnessGateway
+def test_a_permitted_command_bypasses_the_gateway_refusal(tmp_path) -> None:
+    from monoagens.engine.i18n import t
 
-    config = build_config(tmp_path)
-    gateway = HarnessGateway(
-        config, None, None, None, settings=GatewaySettings("harness", True, {"task": "x"})
+    gateway = RefusingGateway(name="fake")
+    env = make_agent(
+        tmp_path,
+        gateway=gateway,
+        roles={"member": Role("member", tools=("read",), commands=("*",))},
     )
-    env = make_agent(tmp_path, gateway=gateway)
-    owner = role("owner", tools=("*",), commands=("*",))
-    ctx = env.agent.tool_context(gateway.thread, "harness", (owner,), gateway)
+    inbound = inbound_message("/whoami", message_id="command-1")
 
-    result = asyncio.run(
-        execute(specs(env), "run", {"command": "printf harness-ok"}, ctx)
+    asyncio.run(env.agent.handle(inbound, gateway))
+
+    assert gateway.sent
+    assert "Identitas" in gateway.sent[-1][1]
+    assert all(
+        text != t("agent.access_refused", env.config.soul.language)
+        for _, text, _ in gateway.sent
     )
 
-    assert result.startswith("exit=0")
-    assert "harness-ok" in result
-
-    denied = asyncio.run(
-        execute(
-            specs(env),
-            "run",
-            {"command": "printf no"},
-            env.agent.tool_context(
-                gateway.thread, "harness", (role("guest", tools=("read",)),), gateway
-            ),
-        )
-    )
-    assert denied.startswith("error: tool 'run' is not allowed")

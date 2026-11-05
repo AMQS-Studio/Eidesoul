@@ -4,7 +4,7 @@
 
 import re
 from collections.abc import Callable, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 
 from .. import clock
 from ..access.roles import Role, privileged
@@ -426,13 +426,13 @@ CORE_PARTS: tuple[PromptPart, ...] = (
     PromptPart("body", True, 1, pinned=True, produce=_context_text("body_section")),
     PromptPart("roles", True, 2, produce=_roles_part),
     PromptPart("voice", False, 9, produce=_voice_part),
-    PromptPart("safety", False, 10, produce=_context_text("safety")),
+    PromptPart("safety", False, 10, pinned=True, produce=_context_text("safety")),
     PromptPart("person_style", False, 11, produce=_context_text("person_style")),
     PromptPart("frame", False, 12, pinned=True, produce=_frame_block),
     PromptPart("self", False, 13, pinned=True, produce=_self_part),
     PromptPart("capabilities", False, 14, pinned=True, produce=_capabilities_part),
     PromptPart("away", False, 15, pinned=True, produce=_context_text("away")),
-    PromptPart("research", False, 16, produce=_research_part),
+    PromptPart("research", False, 16, pinned=True, produce=_research_part),
     PromptPart("topic", False, 17, produce=_context_text("topic")),
     PromptPart("emotion", False, 18, produce=_context_text("emotion")),
     PromptPart("vibe", False, 19, produce=_context_text("vibe")),
@@ -476,6 +476,11 @@ def system_prompt(
 ) -> Prompt:
     """Assemble the stable prefix and the selected volatile blocks from one registry."""
     context = context or PromptContext(config=config, roles=roles)
+    pinned = set(config.prompt.pinned_blocks)
+    parts = tuple(
+        part if part.pinned or part.name not in pinned else replace(part, pinned=True)
+        for part in parts
+    )
     validate_parts(parts)
     rendered: list[tuple[PromptPart, str]] = []
     for part in parts:

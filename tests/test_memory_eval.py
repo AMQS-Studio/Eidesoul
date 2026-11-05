@@ -1,7 +1,7 @@
 """ADR-0001/0002 §7 recall and precision over the canonical lexical path.
 
 The retrieval measured here is `MemoryStore._rows`: ILIKE over the `memories_readable` view with
-scope isolation and veto/dispute exclusion. It is *not* a Mem0 semantic benchmark; a semantic
+scope isolation and veto/dispute exclusion. It is *not* a semantic benchmark; a semantic
 eval belongs beside the extractor, not over canonical search.
 """
 

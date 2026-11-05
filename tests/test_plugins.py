@@ -3,6 +3,7 @@
 
 import asyncio
 import importlib
+import inspect
 import sys
 from pathlib import Path
 
@@ -13,7 +14,7 @@ from support import build_config
 from monoagens.engine import plugins
 from monoagens.engine.access.roles import Role
 from monoagens.engine.config import PluginSettings
-from monoagens.engine.registry import Registry
+from monoagens.engine.registry import Handler, Registry
 from monoagens.engine.tools import REGISTRY as CORE_TOOLS
 from monoagens.engine.tools import ToolContext, execute
 
@@ -354,7 +355,7 @@ def test_google_is_a_plugin_and_not_a_core_tool() -> None:
         "https://github.com/googleapis/google-auth-library-python",
     ]
     assert {row.license for row in manifest.credits} == {"Apache-2.0"}
-    assert plugins.tree_digest(ROOT / "plugins" / "google") == manifest.digest
+    assert plugins.code_digest(ROOT / "plugins" / "google") == manifest.digest
 
 
 def test_manifest_requires_credits(tmp_path: Path) -> None:
@@ -383,3 +384,177 @@ def test_a_plugin_prompt_reaches_the_assembled_prompt(tmp_path: Path) -> None:
     )
 
     assert "Plugin instruction 0." in prompt
+
+
+def test_tree_digest_covers_installed_dependencies(tmp_path: Path) -> None:
+    root = tmp_path / "plugins"
+    folder = write_plugin(root)
+    before = plugins.tree_digest(folder)
+    code_before = plugins.code_digest(folder)
+    deps = folder / "deps"
+    deps.mkdir()
+    (deps / "dependency.py").write_text("VALUE = 1\n", encoding="utf-8")
+
+    assert plugins.tree_digest(folder) != before
+    assert plugins.code_digest(folder) == code_before
+    assert plugins.load(settings(root, demo={"enabled": True})).state("demo") == "enabled"
+
+
+def test_remove_refuses_parent_paths_without_deleting(tmp_path: Path) -> None:
+    root = tmp_path / "plugins"
+    root.mkdir()
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    victim = outside / "keep.txt"
+    victim.write_text("keep", encoding="utf-8")
+    settings_obj = settings(root, write_config(tmp_path))
+
+    for name in ("../outside", "a/b"):
+        with pytest.raises(plugins.PluginError, match="invalid plugin name"):
+            plugins.remove(settings_obj, name)
+    assert victim.is_file()
+
+
+def test_remove_refuses_an_escaping_symlink(tmp_path: Path) -> None:
+    root = tmp_path / "plugins"
+    root.mkdir()
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    victim = outside / "keep.txt"
+    victim.write_text("keep", encoding="utf-8")
+    (root / "evil").symlink_to(outside, target_is_directory=True)
+    settings_obj = settings(root, write_config(tmp_path))
+
+    with pytest.raises(plugins.PluginError, match="outside the plugin root"):
+        plugins.remove(settings_obj, "evil")
+    assert victim.is_file()
+    assert (root / "evil").is_symlink()
+
+
+
+def test_a_plugin_tool_derives_its_schema_and_runs() -> None:
+    @plugins.tool
+    async def search(query: str, limit: int = 5) -> str:
+        """Search the archive.
+
+        Args:
+            query: Words to look for.
+            limit: Maximum hits.
+        """
+        return f"{query}:{limit}"
+
+    assert isinstance(search, Handler)
+    assert search.name == "search"
+    assert search.description == "Search the archive."
+    assert search.fn is not None
+    assert inspect.iscoroutinefunction(search.fn)
+    assert search.parameters == {
+        "type": "object",
+        "properties": {
+            "query": {"type": "string", "description": "Words to look for."},
+            "limit": {"type": "integer", "description": "Maximum hits."},
+        },
+        "required": ["query"],
+        "additionalProperties": False,
+    }
+    assert asyncio.run(search.fn({"query": "memo"}, None)) == "memo:5"
+    assert asyncio.run(search.fn({"query": "memo", "limit": 2}, None)) == "memo:2"
+
+
+def test_a_plugin_tool_with_a_malformed_annotation_is_a_clear_error() -> None:
+    with pytest.raises(plugins.PluginError, match="annotation"):
+        @plugins.tool
+        async def broken(value: object) -> str:
+            """Broken tool."""
+
+    with pytest.raises(plugins.PluginError, match="type annotation"):
+        @plugins.tool
+        async def untyped(value) -> str:
+            """Untyped tool."""
+
+
+DECORATED_ENTRY = '''"""Plugin entry that builds its tool with the decorator."""
+
+from monoagens.engine.plugins import tool
+
+
+def register():
+    @tool(family="read")
+    async def echo(text: str = "hi") -> str:
+        """Echo the text back.
+
+        Args:
+            text: Words to return.
+        """
+        return text
+
+    return {"tools": [echo], "commands": []}
+'''
+
+
+def write_decorated_plugin(root: Path, name: str = "decorated") -> Path:
+    folder = root / name
+    (folder / "tools").mkdir(parents=True)
+    (folder / "tools" / "__init__.py").write_text("", encoding="utf-8")
+    (folder / "tools" / "echo.py").write_text(
+        '"""The entry owns the handler; the module keeps the declared layout."""\n',
+        encoding="utf-8",
+    )
+    (folder / "plugin.py").write_text(DECORATED_ENTRY, encoding="utf-8")
+    actual = plugins.tree_digest(folder)
+    manifest = {
+        "name": name,
+        "version": "1.0.0",
+        "engine": ">=0.0.0,<1.0",
+        "entry": "plugin.py:register",
+        "digest": actual,
+        "provides": {"tools": ["echo"], "commands": [], "gateways": [], "prompt": []},
+        "credits": CREDITS,
+    }
+    (folder / "plugin.yaml").write_text(yaml.safe_dump(manifest), encoding="utf-8")
+    return folder
+
+
+def test_a_decorated_tool_registers_through_the_loader(tmp_path: Path) -> None:
+    root = tmp_path / "plugins"
+    write_decorated_plugin(root)
+
+    loaded = plugins.load(settings(root, decorated={"enabled": True}))
+
+    assert loaded.state("decorated") == "enabled"
+    handler = loaded.tools[0]
+    assert handler.name == "echo"
+    assert handler.family == "read"
+    assert handler.parameters["properties"]["text"] == {
+        "type": "string",
+        "description": "Words to return.",
+    }
+    assert asyncio.run(handler.fn({"text": "hello"}, None)) == "hello"
+
+
+def test_a_local_plugin_loads_without_a_digest_or_pin(tmp_path: Path) -> None:
+    root = tmp_path / "plugins"
+    folder = write_plugin(root, digest=BAD_DIGEST)
+    body = yaml.safe_load((folder / "plugin.yaml").read_text(encoding="utf-8"))
+    body["local"] = True
+    body.pop("digest")
+    (folder / "plugin.yaml").write_text(yaml.safe_dump(body), encoding="utf-8")
+
+    manifest = plugins.read_manifest(folder / "plugin.yaml")
+
+    assert manifest.local is True
+    assert manifest.digest == ""
+    loaded = plugins.load(settings(root, demo={"enabled": True, "digest": BAD_DIGEST}))
+    assert loaded.state("demo") == "enabled"
+    assert [handler.name for handler in loaded.tools] == ["echo"]
+
+
+def test_a_published_plugin_still_requires_a_digest(tmp_path: Path) -> None:
+    root = tmp_path / "plugins"
+    folder = write_plugin(root)
+    body = yaml.safe_load((folder / "plugin.yaml").read_text(encoding="utf-8"))
+    body.pop("digest")
+    (folder / "plugin.yaml").write_text(yaml.safe_dump(body), encoding="utf-8")
+
+    with pytest.raises(plugins.PluginError, match="digest"):
+        plugins.read_manifest(folder / "plugin.yaml")

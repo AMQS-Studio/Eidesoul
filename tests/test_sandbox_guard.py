@@ -10,7 +10,7 @@ from monoagens.engine.config import DEFAULT_SENSITIVE_COMMANDS, GuardConfig
 from monoagens.engine.guard import GUARD_SYSTEM, SandboxGuard, screen
 from monoagens.engine.tools import execute
 
-CHAT = "cli:local"
+CHAT = "console:local"
 SENSITIVE = DEFAULT_SENSITIVE_COMMANDS
 MEMBER = (role("member", tools=("sandbox",), commands=("help",)),)
 APPROVER = (role("owner", tools=("*",), commands=("*",)),)

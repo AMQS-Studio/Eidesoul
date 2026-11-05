@@ -1,9 +1,8 @@
 """`MemoryStore`: the one canonical write port and the readable port of ADR-0001/0004/0005/0008.
 
 Canonical rows live in Postgres (`memories`). Reads for prompts, recall, tools, and `/memori`
-go through the `memories_readable` view only; the worker/admin uses the base table. Mem0 is an
-extractor and an index behind this port: it may fail without losing a fact, and the index can
-be rebuilt from canonical.
+go through the `memories_readable` view only; the worker/admin uses the base table. Retrieval
+is native: cosine over `embedding` and lexical `search_tsv`, fused by RRF (ADR-0051).
 
 The port stays one class; each behavior group lives in its own module and takes the facade as
 its first argument (ADR-0037 §4.4).
@@ -14,25 +13,30 @@ from collections.abc import Awaitable, Callable, Mapping, Sequence
 
 from sqlalchemy import text
 
+from ..access.identity import ID_PREFIX
+from ..config import ConfigError
 from ..db import Database
-from ..jobs.lease import Superseded
+from ..embed import DIM as EMBED_DIM
+from ..jobs.lease import FencedStore, Superseded
 from . import (
     MemoryContext,
     MemoryHit,
     candidates,
     disputes,
     maintenance,
+    queries,
     reads,
     records,
     writes,
 )
 from .integrity import WriteQuota
+from .queries import MEMORY_DIM
 from .records import AUDIENCES, SCOPES, MemoryCandidate, PurgeReport
 from .retention import RetentionPolicy
 
 
-class MemoryStore:
-    """The canonical memory port (ADR-0001); Mem0 is attached as extractor + index."""
+class MemoryStore(FencedStore):
+    """The canonical memory port (ADR-0001); an optional index/extractor may be attached."""
 
     def __init__(
         self,
@@ -57,6 +61,11 @@ class MemoryStore:
         self.available = db is not None
         self.reason = "" if db is not None else "no database"
         self.label = "postgres"
+        # ADR-0051 §4.3: the column is fixed at 384, so another embedder is refused at load.
+        if int(EMBED_DIM or 0) != MEMORY_DIM:
+            raise ConfigError(
+                f"memory embedding dimension must be {MEMORY_DIM}, got {EMBED_DIM}"
+            )
 
     # ---------------------------------------------------------------- wiring
 
@@ -66,6 +75,11 @@ class MemoryStore:
     def bind_guard(self, guard) -> None:
         """ADR-0012 §4.3: the lease guard fences every canonical mutation once bound."""
         self._guard = guard
+        self.bind_lease(getattr(guard, "lease", None))
+
+    def _fence_clause(self):
+        """The one predicate a canonical write carries; `None` when no generation is bound."""
+        return self.fence_clause()
 
     def _fence(self, conn, operation: str) -> None:
         """Refuse the write when the live lease generation moved on (ADR-0012 §4.3).
@@ -118,6 +132,15 @@ class MemoryStore:
         if audience in AUDIENCES:
             return audience
         return {"global": "shared", "person": "private", "thread": "group"}[scope]
+
+    def _canonical_subject(self, subject: str) -> str:
+        """ADR-0051 §4.4: the subject is the canonical `per_…`, never a gateway address."""
+        value = str(subject or "").strip()
+        if not value or value.startswith(ID_PREFIX) or self.db is None:
+            return value
+        with self.db.connect() as conn:
+            found = queries.person_for_address(conn, value)
+        return found or value
 
     # ------------------------------------------------------------- records
     def _base_row(self, memory_id: str) -> dict | None:
@@ -466,11 +489,6 @@ class MemoryStore:
     def backlog(self) -> dict[str, int]:
         return reads.backlog(self)
 
-    async def _search_scope(
-        self, scope: str, query: str, person_id: str, thread_id: str, limit: int
-    ) -> list[MemoryHit]:
-        return await reads._search_scope(self, scope, query, person_id, thread_id, limit)
-
     async def search(
         self,
         query: str,
@@ -479,6 +497,7 @@ class MemoryStore:
         thread_id: str = "",
         limit: int = 12,
         scopes: tuple[str, ...] = SCOPES,
+        max_level: int = 4,
     ) -> list[MemoryHit]:
         return await reads.search(
             self,
@@ -487,6 +506,7 @@ class MemoryStore:
             thread_id=thread_id,
             limit=limit,
             scopes=scopes,
+            max_level=max_level,
         )
 
     async def list(

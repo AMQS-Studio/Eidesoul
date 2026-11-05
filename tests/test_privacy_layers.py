@@ -146,3 +146,13 @@ def test_one_shared_entity_model_and_no_optional_detector_is_loaded() -> None:
     assert _entity_engine() is _entity_engine()
     for name in ("gliner", "onnxruntime"):
         assert name not in sys.modules
+
+
+def test_an_ambiguous_term_needs_its_context_words() -> None:
+    from monoagens.engine.memory.evidence import AMBIGUOUS, collect
+
+    figurative, _pack = collect("aku jatuh cinta sama dia", "id")
+    literal, _pack = collect("aku tadi jatuh dari motor", "id")
+
+    assert AMBIGUOUS not in {item.label for item in figurative if item.detector == "regex"}
+    assert AMBIGUOUS in {item.label for item in literal if item.detector == "regex"}

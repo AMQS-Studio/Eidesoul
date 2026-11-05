@@ -6,8 +6,9 @@ optional correlation fields (`turn_id`, `thread_id`, `job_id`, `run_id`, `gatewa
 function. The turn sets its ids once (ADR-0019 §4.2); background work sets `job_id`/`run_id`
 and clears them again, so one task never carries another task's turn.
 
-`event` is a stable key, not a sentence: the call site passes `extra={"event": "turn.diam"}`.
-A line without an explicit key reports `log.message` rather than inventing one from free text.
+`event` is a stable key, not a sentence: the call site may pass `extra={"event": "turn.diam"}`.
+A record without an explicit key reports its call site (`logger.function`) instead of one shared
+placeholder, so every line carries a distinct, parseable event name.
 No prompt, response, memory, or archive text belongs in a log line; the formatter additionally
 redacts credentials and DSN passwords as a second net. `text` stays the default format; `json`
 is one object per line and is what an external monitor is expected to parse.
@@ -97,12 +98,17 @@ def clear() -> None:
     GATEWAY.set("")
 
 
+def event_name(record: logging.LogRecord) -> str:
+    """The one stable `event` key: the caller's name, else the call site."""
+    explicit = str(getattr(record, "event", "") or "").strip()
+    return explicit or f"{record.name}.{record.funcName or 'log'}"
+
+
 class ContextFilter(logging.Filter):
     """Fill the mandatory `event` and the optional ids from the current context."""
 
     def filter(self, record: logging.LogRecord) -> bool:
-        if not getattr(record, "event", ""):
-            record.event = "log.message"
+        record.event = event_name(record)
         for name, value in (
             ("turn_id", TURN_ID.get()),
             ("thread_id", THREAD_ID.get()),
@@ -127,7 +133,7 @@ class JsonFormatter(logging.Formatter):
         body: dict[str, Any] = {
             "ts": _stamp(record),
             "level": record.levelname,
-            "event": str(getattr(record, "event", "log.message")),
+            "event": event_name(record),
             "logger": record.name,
             "message": redact(record.getMessage()),
         }
@@ -163,7 +169,7 @@ class TextFormatter(logging.Formatter):
         duration_ms = getattr(record, "duration_ms", None)
         if duration_ms is not None:
             parts.append(f"duration_ms={duration_ms}")
-        event = str(getattr(record, "event", "log.message"))
+        event = event_name(record)
         body = f"{' '.join(parts)} {event}: {redact(record.getMessage())}"
         if record.exc_info is not None and record.exc_info[0] is not None:
             body += f" [{record.exc_info[0].__name__}]"

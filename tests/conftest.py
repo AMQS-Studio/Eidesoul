@@ -6,7 +6,6 @@ Embedder: a deterministic 384-dimension stub, so no test loads or downloads a mo
 """
 
 
-import os
 import sys
 from collections.abc import Iterator
 from pathlib import Path
@@ -22,9 +21,6 @@ from monoagens.engine.db import SCHEMA_VERSION, Database
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
-
-# mem0 reads this at import time; a test run never phones home (ADR-0029 §4.3).
-os.environ["MEM0_TELEMETRY"] = "false"
 
 ENV = "MONOAGENS_TEST_DATABASE_URL"
 PODMAN = (
@@ -86,6 +82,16 @@ def test_store() -> Iterator[Database]:
         yield db
     finally:
         db.dispose()
+
+
+@pytest.fixture(autouse=True)
+def isolate_gateway_registry() -> Iterator[None]:
+    """A gateway registered by one test must not leak into another test's discovery."""
+    from monoagens.gateways.base import registered_gateways, restore_gateways
+
+    snapshot = registered_gateways()
+    yield
+    restore_gateways(snapshot)
 
 
 @pytest.fixture(autouse=True)

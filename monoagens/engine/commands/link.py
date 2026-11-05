@@ -4,7 +4,7 @@
 import re
 import time
 
-from ..access.identity import mask_address
+from ..access.identity import LINK_WINDOW, mask_address
 from ..i18n import t
 from ..registry import Handler
 from ..runtime import human_duration
@@ -59,7 +59,24 @@ async def link(ctx: CommandContext) -> str:
     args = ctx.args.strip()
     if not args:
         return _status(ctx)
+    # A six-letter gateway name ("signal", "google") is also a valid code shape: the gateway
+    # must be checked first, or `/link signal` would try to redeem "SIGNAL" as a code.
+    names = _enabled(ctx)
+    gateway = args.casefold()
+    if gateway in names:
+        code = identity.start_code(person, gateway)
+        return t(
+            "command.link.start",
+            lang,
+            gateway=gateway,
+            code=code,
+            minutes=CODE_MINUTES,
+            attempts=CODE_ATTEMPTS,
+        )
     if CODE.fullmatch(args):
+        throttle = identity.link_throttle
+        if throttle.blocked(person, ctx.thread_id):
+            return t("command.link.rate_limited", lang, minutes=int(LINK_WINDOW // 60))
         code = args.upper()
         target = identity.code_target(code)
         status, merged = identity.finish_code(
@@ -68,10 +85,12 @@ async def link(ctx: CommandContext) -> str:
             gateway=ctx.gateway.name,
             address=address,
         )
+        if status != "ok":
+            throttle.fail(person, ctx.thread_id)
+            return t(f"command.link.{status}", lang, gateway=ctx.gateway.name)
+        throttle.clear(person, ctx.thread_id)
         if merged and target and ctx.agent.style is not None:
             ctx.agent.style.merge_people(merged, target)
-        if status != "ok":
-            return t(f"command.link.{status}", lang, gateway=ctx.gateway.name)
         owner = target or person
         name = (identity.person(owner) or {}).get("name") or "-"
         return t(
@@ -82,20 +101,8 @@ async def link(ctx: CommandContext) -> str:
             name=name,
             id=owner,
         )
-    names = _enabled(ctx)
-    gateway = args.casefold()
-    if gateway not in names:
-        return t(
-            "command.link.unknown_gateway", lang, name=args, names=", ".join(names) or "-"
-        )
-    code = identity.start_code(person, gateway)
     return t(
-        "command.link.start",
-        lang,
-        gateway=gateway,
-        code=code,
-        minutes=CODE_MINUTES,
-        attempts=CODE_ATTEMPTS,
+        "command.link.unknown_gateway", lang, name=args, names=", ".join(names) or "-"
     )
 
 

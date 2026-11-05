@@ -14,7 +14,7 @@ import yaml
 
 from ..engine.config import ConfigError
 from ..providers import PROVIDERS
-from . import brand, provider_catalog, terminal
+from . import brand, provider_catalog, templates, terminal
 from .init import (
     HOST_FILES,
     Answers,
@@ -28,7 +28,7 @@ from .init import (
     validate_credential,
     validate_database_url,
     validate_model,
-    voice_enabled,
+    voice_selection,
     write_files,
 )
 
@@ -39,7 +39,10 @@ STEPS = (
     "model",
     "database",
     "identity",
-    "voice layer",
+    "web search",
+    "approval",
+    "voice",
+    "capabilities",
 )
 STEP_INDEX = {name: index for index, name in enumerate(STEPS)}
 
@@ -292,13 +295,151 @@ def _ask_label(state: Answers, stdin: TextIO, stdout: TextIO, color: bool = Fals
     )
 
 
+def _ask_websearch(state: Answers, stdin: TextIO, stdout: TextIO, color: bool = False) -> None:
+    """The search provider, then only the credentials that provider actually reads."""
+    from . import catalog
+
+    items = catalog.websearch_choices()
+    choices = [terminal.Choice(item.name, item.detail, item.name) for item in items]
+    default = next(
+        (index for index, item in enumerate(items) if item.name == state.websearch), 0
+    )
+    picked = terminal.choose(
+        stdin=stdin,
+        stdout=stdout,
+        title="which web search provider?",
+        choices=choices,
+        default=default,
+        header=_menu_header(STEP_INDEX["web search"], color),
+        searchable=True,
+        allow_back=True,
+        color=color,
+        plain=not color,
+    )
+    state.websearch = items[picked].name
+    if state.websearch == "searxng":
+        while not state.websearch_url.strip():
+            state.websearch_url = terminal.text(
+                stdin=stdin,
+                stdout=stdout,
+                title="SearXNG base URL",
+                default=state.websearch_url,
+                header=_menu_header(STEP_INDEX["web search"], color),
+                detail=["JSON endpoint, for example http://127.0.0.1:8888"],
+                allow_back=True,
+                color=color,
+                plain=not color,
+            )
+    else:
+        state.websearch_url = ""
+    key_env = templates.WEB_SEARCH_API_KEYS.get(state.websearch, "")
+    engine_env = templates.WEB_SEARCH_ENGINE_KEYS.get(state.websearch, "")
+    if not key_env:
+        state.websearch_key = ""
+    if not engine_env:
+        state.websearch_engine_id = ""
+    if key_env:
+        state.websearch_key = terminal.text(
+            stdin=stdin,
+            stdout=stdout,
+            title=f"{key_env} (optional)",
+            default=state.websearch_key,
+            header=_menu_header(STEP_INDEX["web search"], color),
+            detail=["stored in .env at 0600; never written to config.yaml"],
+            secret=True,
+            allow_back=True,
+            color=color,
+            plain=not color,
+        )
+    if engine_env:
+        state.websearch_engine_id = terminal.text(
+            stdin=stdin,
+            stdout=stdout,
+            title=f"{engine_env} (optional)",
+            default=state.websearch_engine_id,
+            header=_menu_header(STEP_INDEX["web search"], color),
+            detail=["the Programmable Search engine id; stored in .env"],
+            allow_back=True,
+            color=color,
+            plain=not color,
+        )
+
+
+def _ask_approval(state: Answers, stdin: TextIO, stdout: TextIO, color: bool = False) -> None:
+    modes = [
+        terminal.Choice("default", "pause state changes; ordinary tools run", "default"),
+        terminal.Choice("yolo", "trust ordinary tools; sensitive commands still pause", "yolo"),
+        terminal.Choice("strict", "pause every state-changing tool", "strict"),
+    ]
+    current = state.approval_mode or "default"
+    picked = terminal.choose(
+        stdin=stdin,
+        stdout=stdout,
+        title="which approval policy?",
+        choices=modes,
+        default=next(
+            (index for index, item in enumerate(modes) if item.value == current), 0
+        ),
+        header=_menu_header(STEP_INDEX["approval"], color),
+        searchable=False,
+        allow_back=True,
+        color=color,
+        plain=not color,
+    )
+    state.approval_mode = modes[picked].value
+    natural = terminal.choose(
+        stdin=stdin,
+        stdout=stdout,
+        title="accept a plain chat reply as the confirmation?",
+        choices=[
+            terminal.Choice("yes", "a natural yes/no stands in for /approve", "yes"),
+            terminal.Choice("no", "only /approve and /deny decide", "no"),
+        ],
+        default=0 if state.natural_confirm else 1,
+        header=_menu_header(STEP_INDEX["approval"], color),
+        searchable=False,
+        allow_back=True,
+        color=color,
+        plain=not color,
+    )
+    state.natural_confirm = natural == 0
+
+
+def _ask_voice(state: Answers, stdin: TextIO, stdout: TextIO, color: bool = False) -> None:
+    """Every part governs itself; the retired master switch never appears here."""
+    from . import catalog
+
+    items = catalog.voice_parts()
+    if not items:
+        state.voice_parts = ()
+        return
+    selected = (
+        state.voice_parts
+        if state.voice_parts is not None
+        else catalog.default_voice_parts()
+    )
+    picked = terminal.multi_choose(
+        stdin=stdin,
+        stdout=stdout,
+        title="which voice parts should be active?",
+        choices=[
+            terminal.Choice(item.name, item.detail, item.name) for item in items
+        ],
+        selected=selected,
+        header=_menu_header(STEP_INDEX["voice"], color),
+        color=color,
+        plain=not color,
+    )
+    state.voice_parts = tuple(picked)
+
+
 def _ask_capabilities(state: Answers, stdin: TextIO, stdout: TextIO, color: bool = False) -> None:
     from . import catalog
 
     header = [
         *banner(False),
         "  capabilities",
-        "  gateways  ·  web search  ·  tools  ·  voice",
+        "  gateways  ·  tools",
     ]
     if state.gateways is None:
         choices = [
@@ -316,38 +457,8 @@ def _ask_capabilities(state: Answers, stdin: TextIO, stdout: TextIO, color: bool
                 plain=not color,
             )
             state.gateways = tuple(picked)
-    if not state.websearch:
-        backends = catalog.websearch_backends()
-        choices = [
-            terminal.Choice(item.name, item.detail, item.name) for item in backends
-        ]
-        choices.append(terminal.Choice("off", "disable web search and research", "off"))
-        default = 0 if backends else len(choices) - 1
-        picked = terminal.choose(
-            stdin=stdin,
-            stdout=stdout,
-            title="which web search backend?",
-            choices=choices,
-            default=default,
-            header=header,
-            searchable=False,
-            allow_back=False,
-            color=color,
-            plain=not color,
-        )
-        state.websearch = choices[picked].value
-        if state.websearch == "searxng":
-            while not state.websearch_url:
-                state.websearch_url = terminal.text(
-                    stdin=stdin,
-                    stdout=stdout,
-                    title="SearXNG base URL",
-                    header=header,
-                    detail=["JSON endpoint, for example http://127.0.0.1:8888"],
-                    allow_back=False,
-                    color=color,
-                    plain=not color,
-                )
+        else:
+            state.gateways = ()
     if state.tools is None:
         choices = [
             terminal.Choice(item.name, item.detail, item.name) for item in catalog.tools()
@@ -364,42 +475,6 @@ def _ask_capabilities(state: Answers, stdin: TextIO, stdout: TextIO, color: bool
                 plain=not color,
             )
             state.tools = tuple(picked)
-    if state.voice_on and not state.voice_parts:
-        choices = [
-            terminal.Choice(item.name, item.detail, item.name) for item in catalog.voice_parts()
-        ]
-        if choices:
-            picked = terminal.multi_choose(
-                stdin=stdin,
-                stdout=stdout,
-                title="which voice layers should be active?",
-                choices=choices,
-                selected=catalog.default_voice_parts(),
-                header=header,
-                color=color,
-                plain=not color,
-            )
-            state.voice_parts = tuple(picked)
-
-
-def _ask_voice(state: Answers, stdin: TextIO, stdout: TextIO, color: bool = False) -> None:
-    default = 1 if state.voice_on else 0
-    picked = terminal.choose(
-        stdin=stdin,
-        stdout=stdout,
-        title="turn the voice layer on?",
-        choices=[
-            terminal.Choice("off", "emotion, style, character, and humanize stay inert", "off"),
-            terminal.Choice("on", "enable the tuned voice layer", "on"),
-        ],
-        default=default,
-        header=_menu_header(STEP_INDEX["voice layer"], color),
-        searchable=False,
-        allow_back=True,
-        color=color,
-        plain=not color,
-    )
-    state.voice_on = picked == 1
 
 
 ASKERS = (
@@ -409,7 +484,10 @@ ASKERS = (
     _ask_model,
     _ask_database,
     _ask_label,
+    _ask_websearch,
+    _ask_approval,
     _ask_voice,
+    _ask_capabilities,
 )
 
 
@@ -434,8 +512,12 @@ def review_lines(
                     f"      engine.llm.api_key_env  {llm['api_key_env']}",
                     f"      engine.llm.model        {llm['model'] or '(not set)'}",
                     f"      database.url_env        {config['database']['url_env']}",
-                    "      web_search.base_url     "
-                    f"{config['web_search']['base_url'] or 'ddgs (no URL)'}",
+                    f"      web_search.provider     {config['web_search']['provider']}",
+                    f"      web_search.api_key_env  "
+                    f"{config['web_search']['api_key_env'] or '(no key)'}",
+                    f"      engine.approval.mode    {config['engine']['approval']['mode']}",
+                    "      engine.approval.natural_confirm  "
+                    f"{config['engine']['approval']['natural_confirm']}",
                     f"      engine.research.mode    {config['engine']['research']['mode']}",
                     f"      gateways                {', '.join(config['gateways']) or '(none)'}",
                     f"      engine.default_role     {config['engine']['default_role']}",
@@ -450,7 +532,6 @@ def review_lines(
             lines.append("      administrator.tools     *")
         elif name == "soul.yaml":
             soul = yaml.safe_load(contents["soul.yaml"]) or {}
-            enabled = bool((soul.get("voice") or {}).get("enabled"))
             name = soul.get("name")
             language = soul.get("language")
             lines.append(f"      name / language         {name} / {language}")
@@ -459,7 +540,6 @@ def review_lines(
                 for name, value in (soul.get("voice") or {}).items()
                 if isinstance(value, dict) and value.get("enabled") is True
             ]
-            lines.append(f"      soul.voice.enabled      {'on' if enabled else 'off'}")
             lines.append(f"      soul.voice.parts        {', '.join(parts) or '(none)'}")
             persona = "set" if soul.get("persona") else "empty"
             lines.append(f"      persona                 {persona}")
@@ -547,7 +627,7 @@ def _choose_step(stdin: TextIO, stdout: TextIO) -> int:
         _say(stdout, f"  enter 1-{len(STEPS)}")
 
 
-def _interactive(  # noqa: C901, PLR0912
+def _interactive(  # noqa: C901
     folder: str | Path,
     *,
     stdin: TextIO,
@@ -556,7 +636,6 @@ def _interactive(  # noqa: C901, PLR0912
     answers: Answers,
     locked: set[int],
     force: bool,
-    ask_capabilities: bool = False,
 ) -> tuple[list[Path], list[Path]]:
     # A line fallback must never print ANSI: if curses cannot run, drop colour too.
     use_curses = terminal.interactive(stdin, stdout, plain=not color)
@@ -582,9 +661,6 @@ def _interactive(  # noqa: C901, PLR0912
                             step -= 1
                         continue
                 step += 1
-            if ask_capabilities:
-                _ask_capabilities(answers, stdin, stdout, color)
-                ask_capabilities = False
             base = Path(answers.location).expanduser().resolve()
             contents = build(
                 provider=answers.provider,
@@ -592,13 +668,16 @@ def _interactive(  # noqa: C901, PLR0912
                 model=answers.model,
                 database_url=answers.database_url,
                 label=answers.label,
-                voice=answers.voice_on,
                 voice_parts=answers.voice_parts,
                 language=answers.language,
                 locale=answers.locale,
                 timezone=answers.timezone,
                 websearch=answers.websearch,
                 websearch_url=answers.websearch_url,
+                websearch_key=answers.websearch_key,
+                websearch_engine_id=answers.websearch_engine_id,
+                approval_mode=answers.approval_mode,
+                natural_confirm=answers.natural_confirm,
                 tools=answers.tools,
                 gateways=answers.gateways,
             )
@@ -635,6 +714,10 @@ def wizard(
     timezone: str | None = None,
     websearch: str | None = None,
     websearch_url: str | None = None,
+    websearch_key: str | None = None,
+    websearch_engine_id: str | None = None,
+    approval_mode: str | None = None,
+    natural_confirm: bool | None = None,
     tools: tuple[str, ...] | None = None,
     gateways: tuple[str, ...] | None = None,
     voice_parts: tuple[str, ...] | None = None,
@@ -645,7 +728,8 @@ def wizard(
     """The interactive setup (ADR-0039 §4.2): location through review.
 
     A flag pre-answers its step; a step the operator changes is asked again before the next
-    review. `Ctrl-C` or Escape cancels the run and leaves nothing behind.
+    review. `Ctrl-C` or Escape cancels the run and leaves nothing behind. `ask_capabilities`
+    is accepted for the installer's old call site; gateways and tools are always asked.
     """
     stream_in = stdin or sys.stdin
     stream_out = stdout or sys.stdout
@@ -661,6 +745,10 @@ def wizard(
         timezone=timezone or "",
         websearch=websearch or "",
         websearch_url=websearch_url or "",
+        websearch_key=websearch_key or "",
+        websearch_engine_id=websearch_engine_id or "",
+        approval_mode=approval_mode or "",
+        natural_confirm=True if natural_confirm is None else natural_confirm,
         tools=tools,
         gateways=gateways,
         voice_parts=voice_parts,
@@ -678,9 +766,13 @@ def wizard(
         locked.add(STEP_INDEX["database"])
     if label is not None:
         locked.add(STEP_INDEX["identity"])
-    if voice_layer is not None:
-        answers.voice_on = voice_enabled(voice_layer)
-        locked.add(STEP_INDEX["voice layer"])
+    if websearch is not None:
+        locked.add(STEP_INDEX["web search"])
+    if approval_mode is not None or natural_confirm is not None:
+        locked.add(STEP_INDEX["approval"])
+    if voice_layer is not None or voice_parts is not None:
+        answers.voice_parts = voice_selection(voice_layer, voice_parts)
+        locked.add(STEP_INDEX["voice"])
     try:
         written, skipped = _interactive(
             folder,
@@ -690,7 +782,6 @@ def wizard(
             answers=answers,
             locked=locked,
             force=force,
-            ask_capabilities=ask_capabilities,
         )
     except (KeyboardInterrupt, terminal.Cancelled):
         _say(stream_out, "")

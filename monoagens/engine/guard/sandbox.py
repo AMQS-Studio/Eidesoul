@@ -12,9 +12,10 @@ import asyncio
 import json
 import logging
 import re
+from pathlib import Path
 
 from ..config import GuardConfig
-from .policy import SafetyDecision, scan_command
+from .policy import SafetyDecision, hidden_expansion, scan_command
 
 log = logging.getLogger(__name__)
 
@@ -64,11 +65,60 @@ SAFE_HEADS = frozenset(
         "printf",
         "true",
         "false",
+        "tar",
+        "git",
+        "base64",
+        "xxd",
+        "od",
     }
 )
 # Heads that can execute code even when they look like plain filters.
 CODE_HEADS = frozenset({"python", "python3", "node", "nodejs", "perl", "ruby", "php", "awk"})
-FIND_EXEC = frozenset({"-exec", "-execdir", "-delete", "-ok", "-okdir"})
+# Heads whose whole output is the command; their plain path arguments are file names, so a
+# read named `shutdown.log` is not a `shutdown` call (ADR-0049 §4.1.6).
+READ_ONLY_HEADS = frozenset({"cat", "head", "tail", "less", "wc", "stat", "file", "grep", "rg"})
+# Heads that need the write/exec and workspace checks below before they may run unattended.
+WORKSPACE_HEADS = frozenset({"find", "tar", "git", "base64", "xxd", "od", "sort", "uniq"})
+# Flags that turn a read-only head into a writer, an executor, or a directory escape.
+WRITE_FLAGS = frozenset(
+    {
+        "-exec",
+        "-execdir",
+        "-ok",
+        "-okdir",
+        "-delete",
+        "-fprint",
+        "-fprint0",
+        "-fprintf",
+        "-fls",
+        "-o",
+        "--output",
+        "--to-command",
+    }
+)
+CHDIR_FLAGS = frozenset({"-C", "--directory", "--chdir", "--git-dir", "--work-tree"})
+# `tar` modes that create, extract, append, or update an archive instead of listing one.
+TAR_WRITE_MODES = frozenset({"c", "x", "r", "u", "A"})
+GIT_READ_VERBS = frozenset(
+    {
+        "status",
+        "log",
+        "diff",
+        "show",
+        "rev-parse",
+        "ls-files",
+        "ls-tree",
+        "cat-file",
+        "blame",
+        "describe",
+        "shortlog",
+        "show-ref",
+        "for-each-ref",
+        "whatchanged",
+        "grep",
+    }
+)
+ONE_PATH_HEADS = frozenset({"base64", "xxd", "od", "uniq"})
 SHELL_CHARS = re.compile(r"[;&|><$()`{}]")
 GUARD_SYSTEM = (
     "You are a sandbox security classifier. Decide if this shell command, run inside a "
@@ -83,6 +133,103 @@ def _verdict(kind: str, reason: str = "") -> SafetyDecision:
     return SafetyDecision(kind, reason)
 
 
+def _inside_workspace(value: str) -> bool:
+    """A path argument that stays under the mounted workdir: relative, no `..` climb."""
+    text = value.strip("'\"")
+    if not text or text.startswith("-"):
+        return True
+    if text == "/work" or text.startswith("/work/"):
+        return True
+    if text.startswith(("/", "~")):
+        return False
+    return ".." not in Path(text).parts
+
+
+def _command_view(text: str) -> str:
+    """The text matched against BLOCKED: quotes neutralized, file arguments of reads dropped.
+
+    `cat docker-compose.yml` and `grep sudo notes.txt` are reads, so neither the file name nor the
+    search pattern may match a blocked word; `shutdown -h now` keeps its command position.
+    """
+    parts = re.split(r"(\|\||&&|[;|&])", text)
+    kept: list[str] = []
+    for part in parts:
+        if part in {"||", "&&", ";", "|", "&"}:
+            kept.append(part)
+            continue
+        words = part.split()
+        if not words:
+            continue
+        head = words[0].rsplit("/", 1)[-1]
+        if head in READ_ONLY_HEADS:
+            words = [words[0], *(word for word in words[1:] if word.startswith("-"))]
+        kept.append(" ".join(words))
+    return " ".join(kept).replace("'", " ").replace('"', " ")
+
+
+def _tar_read_only(words: list[str]) -> bool:
+    """`tar` may list (`t`) an archive; creating, extracting, or updating writes files."""
+    for word in words:
+        if word.startswith("--"):
+            if word.split("=", 1)[0] in {"--create", "--extract", "--append", "--update"}:
+                return False
+            continue
+        if word.startswith("-"):
+            letters = word[1:]
+        elif word[:1].isalpha():
+            letters = word  # old-style bundle: `tar tf archive`
+        else:
+            continue
+        if set(letters) & TAR_WRITE_MODES:
+            return False
+    return True
+
+
+def _git_read_only(words: list[str]) -> bool:
+    """Only a read-only git subcommand is auto-allowed; `push`, `reset`, and friends are not."""
+    index = 0
+    while index < len(words):
+        word = words[index]
+        flag = word.split("=", 1)[0]
+        if flag in CHDIR_FLAGS:
+            index += 1 if "=" in word else 2
+            continue
+        if flag.startswith("-"):
+            index += 1
+            continue
+        return flag in GIT_READ_VERBS
+    return False
+
+
+def _write_flag(words: list[str]) -> bool:
+    """A flag that writes, executes, or changes directory out of the mounted workspace."""
+    for index, word in enumerate(words):
+        flag = word.split("=", 1)[0]
+        if flag in WRITE_FLAGS:
+            return True
+        if flag in CHDIR_FLAGS:
+            if "=" in word:
+                target = word.split("=", 1)[1]
+            else:
+                target = words[index + 1] if index + 1 < len(words) else ""
+            if not _inside_workspace(target):
+                return True
+    return False
+
+
+def _read_only_violation(text: str) -> bool:
+    """A read-only head carrying a write/exec flag or changing directory out of the workspace."""
+    words = [word.strip("'\"") for word in text.split()]
+    if not words:
+        return False
+    head = words[0].rsplit("/", 1)[-1]
+    if head not in WORKSPACE_HEADS:
+        return False
+    if _write_flag(words[1:]):
+        return True
+    return head == "tar" and not _tar_read_only(words[1:])
+
+
 def _simple_safe(text: str) -> bool:
     """Read-only pipeline-free command whose head is on the safe allow-list."""
     if SHELL_CHARS.search(text) or "\n" in text or "`" in text:
@@ -93,8 +240,18 @@ def _simple_safe(text: str) -> bool:
     head = words[0].rsplit("/", 1)[-1]
     if head in CODE_HEADS or head not in SAFE_HEADS:
         return False
-    if head == "find" and any(word in FIND_EXEC for word in words[1:]):
+    operands = [word for word in words[1:] if not word.startswith("-")]
+    if any(not _inside_workspace(word) for word in operands):
         return False
+    if head in WORKSPACE_HEADS:
+        if _write_flag(words[1:]):
+            return False
+        if head == "tar" and not _tar_read_only(words[1:]):
+            return False
+        if head == "git" and not _git_read_only(words[1:]):
+            return False
+        if head in ONE_PATH_HEADS and len(operands) > 1:
+            return False  # the second operand is an output file
     return not (head == "sed" and any(word.startswith("-i") for word in words[1:]))
 
 
@@ -105,9 +262,14 @@ def screen(
     text = str(command or "").strip()
     if not text:
         return _verdict("allow")
+    if hidden_expansion(text):
+        return _verdict("deny", "sandbox command blocked: shell expansion hides the command")
+    view = _command_view(text)
     for pattern in BLOCKED_RE:
-        if pattern.search(text):
+        if pattern.search(view):
             return _verdict("deny", "sandbox command blocked: host escape/destructive pattern")
+    if _read_only_violation(text):
+        return _verdict("deny", "sandbox command blocked: read-only command with a write flag")
     if len(text) > max(1, int(max_chars)):
         return _verdict("pending", "sandbox command too long")
     if scan_command(text, tuple(sensitive_commands)):

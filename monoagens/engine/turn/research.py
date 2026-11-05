@@ -8,6 +8,7 @@ turn calls `trigger_reason` before generation and `verify` after it.
 import re
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
+from functools import lru_cache
 
 from .. import clock, embed
 from ..character import lexicon
@@ -28,6 +29,30 @@ EXACT = re.compile(
     r"|\b\d+\s?[-:]\s?\d+\b)",
     re.IGNORECASE,
 )
+
+
+@lru_cache(maxsize=32)
+def _matcher(language: str, folder: str, stamp: int, field: str) -> re.Pattern[str] | None:
+    """One whole-word trigger pattern per language and list.
+
+    `folder`/`stamp` are part of the key: a reconfigured or reloaded lexicon never serves a
+    pattern compiled from the previous pack. A trigger only fires as a whole word or phrase,
+    never as a fragment inside a longer ordinary word.
+    """
+    words = getattr(lexicon.load(language), field, frozenset())
+    if not words:
+        return None
+    body = "|".join(
+        rf"\b{re.escape(word)}\b" for word in sorted(words, key=len, reverse=True)
+    )
+    return re.compile(rf"(?:{body})", re.IGNORECASE)
+
+
+def _triggers(language: str, field: str, body: str) -> bool:
+    pattern = _matcher(
+        str(language or ""), str(lexicon.directory()), lexicon.generation(), field
+    )
+    return bool(pattern and pattern.search(body))
 
 
 @dataclass(frozen=True)
@@ -84,15 +109,14 @@ def trigger_reason(
     if mode == "always":
         return "mode:always"
     body = str(text or "").casefold()
-    pack = lexicon.load(language)
-    if challenged and any(word and word in body for word in pack.research_challenge):
+    if challenged and _triggers(language, "research_challenge", body):
         return "challenge"
-    for reason, words in (
-        ("time", pack.research_time),
-        ("source", pack.research_source),
-        ("high_stakes", pack.research_high_stakes),
+    for reason, field in (
+        ("time", "research_time"),
+        ("source", "research_source"),
+        ("high_stakes", "research_high_stakes"),
     ):
-        if any(word and word in body for word in words):
+        if _triggers(language, field, body):
             return reason
     if EXACT.search(body):
         return "exact"

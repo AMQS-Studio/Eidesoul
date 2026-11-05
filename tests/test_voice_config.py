@@ -32,7 +32,7 @@ def write_folder(
             "llm": {"provider": provider, "base_url": "http://x", "api_key_env": "K", "model": "m"},
             **engine,
         },
-        "gateways": {"cli": {"enabled": True}},
+        "gateways": {"whatsapp": {"enabled": True}},
     }
     (tmp_path / "config.yaml").write_text(yaml.safe_dump(body, sort_keys=False), encoding="utf-8")
     (tmp_path / "roles.yaml").write_text(
@@ -50,7 +50,6 @@ def _keys(monkeypatch):
 def test_missing_voice_uses_safe_defaults() -> None:
     soul = load_soul(yaml.safe_load(SOUL))
 
-    assert soul.voice.enabled is False
     assert soul.voice.character.enabled is False
     assert soul.voice.profanity == "avoid"
     assert soul.voice.safety == "inherit"
@@ -59,13 +58,12 @@ def test_missing_voice_uses_safe_defaults() -> None:
     assert soul.voice.sampling.min_p is None
 
 
-def test_voice_parses_tuning_and_is_inert_while_master_is_off() -> None:
+def test_voice_parses_tuning_per_block() -> None:
     soul = load_soul(
         yaml.safe_load(
             SOUL
             + """
 voice:
-  enabled: false
   sampling:
     daily_temperature: 1.1
     professional_temperature: 0.2
@@ -78,10 +76,14 @@ voice:
         )
     )
 
-    assert soul.voice.enabled is False
     assert soul.voice.sampling.daily_temperature == 1.1
     assert soul.voice.character.enabled is True
     assert soul.voice.profanity == "free"
+
+
+def test_removed_voice_master_switch_is_rejected() -> None:
+    with pytest.raises(ValueError, match=r"voice\.enabled"):
+        load_soul(yaml.safe_load(SOUL + "\nvoice:\n  enabled: true\n"))
 
 
 def test_invalid_voice_value_is_rejected() -> None:
@@ -143,3 +145,30 @@ def test_native_wire_accepts_top_k_and_safety_off(tmp_path, monkeypatch) -> None
     assert config.llm.native is True
     assert config.soul.voice.safety == "off"
     assert config.soul.voice.sampling.top_k == 40
+
+
+def test_voice_speech_selection_parses_and_unknown_keys_are_rejected() -> None:
+    soul = load_soul(
+        yaml.safe_load(
+            SOUL + "\nvoice:\n  speech:\n    enabled: true\n    stt: openai\n    tts: elevenlabs\n"
+        )
+    )
+
+    assert soul.voice.speech.enabled is True
+    assert soul.voice.speech.stt == "openai"
+    assert soul.voice.speech.tts == "elevenlabs"
+
+    with pytest.raises(ValueError, match=r"voice\.speech\.bogus"):
+        load_soul(yaml.safe_load(SOUL + "\nvoice:\n  speech:\n    enabled: true\n    bogus: x\n"))
+
+
+def test_soul_speech_selection_requires_a_configured_endpoint(tmp_path, monkeypatch) -> None:
+    monkeypatch.setenv("K", "x")
+    write_folder(
+        tmp_path,
+        engine={},
+        soul=SOUL + "\nvoice:\n  speech:\n    enabled: true\n    stt: openai\n",
+    )
+
+    with pytest.raises(ConfigError, match=r"soul\.voice\.speech\.stt"):
+        load_config(tmp_path / "config.yaml", require_key=False)

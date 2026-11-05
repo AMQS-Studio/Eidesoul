@@ -1,11 +1,8 @@
-"""MemoryBackend: semantic memory through Mem0, the action ledger, and the shared contract."""
+"""MemoryBackend: the canonical memory port, its result types, and the write-side contracts."""
 
 
-import logging
 from dataclasses import dataclass, field
 from typing import Protocol
-
-log = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -84,6 +81,7 @@ class MemoryBackend(Protocol):
         thread_id: str = "",
         limit: int = 12,
         scopes: tuple[str, ...] = ("global", "person", "thread"),
+        max_level: int = 4,
     ) -> list[MemoryHit]: ...
 
     async def list(
@@ -135,7 +133,7 @@ class MemoryBackend(Protocol):
 
 
 class MemoryExtractor(Protocol):
-    """Mem0 (or a replacement) turns a conversation into structured facts (ADR-0001)."""
+    """An optional extractor turns a conversation into structured facts (ADR-0001)."""
 
     available: bool
 
@@ -197,24 +195,7 @@ def memory_status(backend) -> str:
 
 
 async def build_memory(config, *, db=None) -> MemoryBackend:
-    """Build the canonical store; Mem0 is its extractor/index and may fail without losing facts."""
+    """Build the one PostgreSQL-backed memory store: native hybrid retrieval, no sidecar index."""
     from .store import MemoryStore
 
-    store = MemoryStore(db, config)
-    if db is None:
-        return store
-    try:
-        from .mem0 import Mem0Backend
-
-        backend = Mem0Backend(db, config)
-        await backend.ready()
-        store.bind(
-            backend,
-            backend,
-            label=f"postgres+mem0 ({config.memory.collection})",
-        )
-    except Exception as exc:  # missing deps/model/pgvector must not silence canonical memory
-        log.warning("Mem0 index is unavailable: %s: %s", type(exc).__name__, exc)
-        store.reason = f"index unavailable: {type(exc).__name__}: {exc}"
-        store.label = f"postgres (index unavailable: {type(exc).__name__})"
-    return store
+    return MemoryStore(db, config)

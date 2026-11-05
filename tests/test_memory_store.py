@@ -3,21 +3,20 @@
 
 import asyncio
 import hashlib
-import sqlite3
 import time
 import uuid
 from datetime import datetime, timedelta
 
 import pytest
-from sqlalchemy import text
+from sqlalchemy import insert, text
 from sqlalchemy.exc import IntegrityError
-from support import FakeMem0, build_config, database
+from support import build_config, database
 
 from monoagens.engine.jobs.lease import Lease, Superseded
 from monoagens.engine.memory import MemoryHit
 from monoagens.engine.memory.integrity import TRUST_INFERENCE, TRUST_OTHER, TRUST_SELF
-from monoagens.engine.memory.mem0 import Mem0Backend
 from monoagens.engine.memory.store import MemoryStore
+from monoagens.engine.schema import people, person_links
 from monoagens.engine.stores.history import HistoryStore
 from monoagens.engine.turn.context import Message
 
@@ -119,7 +118,7 @@ def test_level_five_and_credentials_are_never_stored(tmp_path) -> None:
         memory.write("api_key=abc123", scope="global", level=2, owner_id="a", subject_id="a")
     assert asyncio.run(
         memory.capture(
-            [{"role": "user", "content": "password hunter2"}],
+            [{"role": "user", "content": "password: hunter2"}],
             person_id="1",
             thread_id="t",
             audience="private",
@@ -361,53 +360,6 @@ def test_l4_is_not_renewed_without_pin_or_confirmation(tmp_path) -> None:
     assert found["expires_at"] == before
 
 
-def test_purge_removes_the_mem0_library_copy(tmp_path) -> None:
-    config = build_config(tmp_path)
-    backend = Mem0Backend(config=config, db=None)
-    backend._memory = FakeMem0()
-    memory = MemoryStore(database(), config, index=backend, extractor=backend)
-    memory_id = asyncio.run(
-        memory.add("kopi hitam", scope="global", level=0, owner_id="a", subject_id="a")
-    )[0]
-    mapping = memory.db.fetch_one(
-        text("SELECT external_id FROM memory_index WHERE memory_id=:id"), {"id": memory_id}
-    )
-    external = mapping["external_id"]
-
-    history_db = backend.history_path
-    with sqlite3.connect(history_db) as conn:
-        conn.execute(
-            "CREATE TABLE history (id TEXT PRIMARY KEY, memory_id TEXT, old_memory TEXT, "
-            "new_memory TEXT, event TEXT, created_at DATETIME, updated_at DATETIME, "
-            "is_deleted INTEGER, actor_id TEXT, role TEXT)"
-        )
-        conn.execute(
-            "CREATE TABLE messages (id TEXT PRIMARY KEY, session_scope TEXT, role TEXT, "
-            "content TEXT, name TEXT, created_at DATETIME)"
-        )
-        conn.execute(
-            "INSERT INTO history (id, memory_id, old_memory, new_memory) "
-            "VALUES ('h1', :id, 'kopi hitam', 'kopi hitam')",
-            {"id": external},
-        )
-        conn.execute(
-            "INSERT INTO messages (id, content) VALUES ('msg1', 'kopi hitam enak')"
-        )
-        conn.commit()
-
-    with memory.db.connect() as conn:
-        conn.execute(
-            text("UPDATE memories SET expires_at=:when WHERE id=:id"),
-            {"when": time.time() - 10 * 86400, "id": memory_id},
-        )
-    report = asyncio.run(memory.purge(grace_days=0))
-
-    assert report.purged == 1
-    with sqlite3.connect(history_db) as conn:
-        assert conn.execute("SELECT count(*) FROM history").fetchone()[0] == 0
-        assert conn.execute("SELECT count(*) FROM messages").fetchone()[0] == 0
-
-
 # ---------------------------------------------------------------- integrity
 
 
@@ -461,6 +413,62 @@ def test_supersede_is_reciprocal_and_needs_proof(tmp_path) -> None:
             "proyek pindah", scope="person", person_id="1", thread_id="t", level=2,
             owner_id="2", subject_id="1", kind="commitment", supersedes=new,
         )
+
+
+def test_supersede_candidates_consolidate_across_scopes(tmp_path) -> None:
+    """A global pass still sees a marked candidate born in another scope (ADR-0051 §4.4)."""
+    memory = store(tmp_path)
+    source = memory.write(
+        "suka kopi pahit", scope="global", level=2, owner_id="A", subject_id="A"
+    )
+    with memory.db.connect() as conn:
+        candidate = memory.intake(
+            conn,
+            thread_id="t",
+            person_id="A",
+            message_id="m1",
+            text="tidak suka kopi pahit lagi",
+            language="id",
+        )
+    assert candidate is not None
+    assert memory.mark_supersede_candidate(candidate.memory_id, source)
+
+    found = {str(found_row["id"]) for found_row in memory.supersede_candidates(scope="global")}
+    assert candidate.memory_id in found
+    assert memory.resolve_supersede_candidate(candidate.memory_id, source)
+
+    replacement = memory.db.fetch_one(
+        text("SELECT scope, subject_id FROM memories WHERE supersedes = :id"), {"id": source}
+    )
+    assert replacement["scope"] == "global"
+    assert replacement["subject_id"] == "A"
+    assert row(memory, source)["state"] == "superseded"
+
+
+def test_subject_is_normalized_to_the_canonical_person(tmp_path) -> None:
+    """A known gateway address becomes the `per_…` subject before the row is written."""
+    memory = store(tmp_path)
+    with memory.db.connect() as conn:
+        conn.execute(insert(people).values(person_id="per_abcdefghij", name="A"))
+        conn.execute(
+            insert(person_links).values(
+                gateway="cli",
+                address="628111@s.whatsapp.net",
+                person_id="per_abcdefghij",
+                created_at=time.time(),
+            )
+        )
+    memory_id = memory.write(
+        "suka kopi",
+        scope="person",
+        person_id="628111@s.whatsapp.net",
+        thread_id="t",
+        level=2,
+        owner_id="628111@s.whatsapp.net",
+        subject_id="628111@s.whatsapp.net",
+    )
+
+    assert row(memory, memory_id)["subject_id"] == "per_abcdefghij"
 
 
 def test_rule_quarantine_and_promotion_requirements(tmp_path) -> None:

@@ -9,13 +9,13 @@ from monoagens.admin import catalog, gateway, init, templates, terminal
 
 def test_core_and_gateway_tools_are_indexed_without_a_hand_list(tmp_path):
     names = {item.name for item in catalog.tools()}
-    assert {"read", "web_search", "chat_history"} <= names
+    assert {"read", "web_search", "thread_history", "send_message", "send_file"} <= names
     assert catalog.tool_names() == names
 
 
 def test_gateways_are_discovered_from_packages_and_pairing_is_indexed():
     names = {item.name for item in catalog.gateways()}
-    assert {"cli", "whatsapp"} <= names
+    assert names == {"whatsapp"}
     from monoagens.gateways import gateway_index
 
     info = gateway_index()["whatsapp"]
@@ -24,15 +24,16 @@ def test_gateways_are_discovered_from_packages_and_pairing_is_indexed():
     assert info.descriptor.onboarding == "pair"
     assert info.descriptor.schema == "monoagens.gateways.whatsapp.schema"
     assert info.descriptor.capabilities == ("send", "send_to", "chat_history")
-    assert gateway_index()["cli"].can_pair is False
 
 
-def test_gateway_tools_keep_their_real_description_and_parameters():
+def test_core_tools_keep_their_real_description_and_parameters():
+    from monoagens.engine.tools import REGISTRY
+
     items = {item.name: item for item in catalog.tools()}
-    for name in ("chat_history", "send", "send_to"):
+    for name in ("thread_history", "send_message", "send_file"):
         assert items[name].detail
         assert not items[name].detail.startswith("gateway:")
-        assert items[name].parameters["type"] == "object"
+        assert REGISTRY.by_name[name].parameters["type"] == "object"
 
 
 def test_voice_parts_come_from_the_voice_config():
@@ -50,7 +51,7 @@ def test_init_applies_capability_choices():
         websearch="searxng",
         websearch_url="http://127.0.0.1:8888",
         tools=("read", "web_search"),
-        gateways=("cli", "whatsapp"),
+        gateways=("whatsapp",),
         voice_parts=("affect", "style"),
     )
     config = yaml.safe_load(contents["config.yaml"])
@@ -58,19 +59,23 @@ def test_init_applies_capability_choices():
     soul = yaml.safe_load(contents["soul.yaml"])
 
     assert config["web_search"]["base_url"] == "http://127.0.0.1:8888"
-    assert config["gateways"] == {
-        "cli": {
-            "enabled": True,
-            "user": "local",
-            "thread_id": "cli:local",
-            "chat_name": "Terminal",
-        },
-        "whatsapp": {"enabled": True},
-    }
+    # Gateway keys come from the gateway's own settings dataclass plus the shared progress
+    # flags every body declares, not from a literal block.
+    from monoagens.gateways.base import BaseGateway
+    from monoagens.gateways.whatsapp.config import WhatsAppSettings
+
+    settings = WhatsAppSettings()
+    expected = dict(BaseGateway.default_settings())
+    expected.update(
+        {
+            "session_db": settings.session_db.as_posix(),
+            "backlog_seconds": settings.backlog_seconds,
+        }
+    )
+    assert config["gateways"]["whatsapp"] == expected
     assert roles["roles"]["member"]["tools"] == ["read", "web_search"]
     assert roles["roles"]["administrator"]["tools"] == ["*"]
     assert roles["roles"]["guest"]["gateways"] == {
-        "cli": {"dm": False, "groups": "none", "reply_to_bot": False},
         "whatsapp": {"dm": False, "groups": "none", "reply_to_bot": False},
     }
     assert roles["roles"]["administrator"]["gateways"]["whatsapp"] == {
@@ -102,7 +107,7 @@ def test_gateway_edit_preserves_comments_and_toggles(tmp_path):
     path.write_text(
         "gateways:\n"
         "  # keep this comment\n"
-        "  cli:\n"
+        "  telegram:\n"
         "    enabled: true\n"
         "engine:\n"
         "  llm:\n"
@@ -119,7 +124,7 @@ def test_gateway_edit_preserves_comments_and_toggles(tmp_path):
 
 def test_gateway_add_installs_a_declared_extra(monkeypatch, tmp_path):
     path = tmp_path / "config.yaml"
-    path.write_text("gateways:\n  cli:\n    enabled: true\n", encoding="utf-8")
+    path.write_text("gateways:\n  telegram:\n    enabled: true\n", encoding="utf-8")
     (tmp_path / "pyproject.toml").write_text(
         "[project]\nname='demo'\n[project.optional-dependencies]\nwhatsapp=['neonize']\n",
         encoding="utf-8",
@@ -144,7 +149,7 @@ def test_gateway_add_installs_a_declared_extra(monkeypatch, tmp_path):
 
 def test_gateway_add_seeds_missing_role_policies(tmp_path):
     path = tmp_path / "config.yaml"
-    path.write_text("gateways:\n  cli:\n    enabled: true\n", encoding="utf-8")
+    path.write_text("gateways:\n  telegram:\n    enabled: true\n", encoding="utf-8")
     (tmp_path / "roles.yaml").write_text(
         "roles:\n"
         "  administrator:\n    name: administrator\n    tools: ['*']\n"
@@ -189,7 +194,7 @@ def test_gateway_doctor_reports_and_fixes_missing_policies(tmp_path, capsys):
 
 def test_gateway_add_connect_calls_the_descriptor_onboarding(monkeypatch, tmp_path):
     path = tmp_path / "config.yaml"
-    path.write_text("gateways:\n  cli:\n    enabled: true\n", encoding="utf-8")
+    path.write_text("gateways:\n  telegram:\n    enabled: true\n", encoding="utf-8")
     (tmp_path / "roles.yaml").write_text(
         "roles:\n  guest:\n    name: guest\n", encoding="utf-8"
     )

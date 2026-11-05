@@ -66,13 +66,13 @@ def test_self_block_reports_runtime_facts(tmp_path) -> None:
     runtime = RuntimeFacts(
         mode="primary",
         db_label="postgresql://db:5432/monoagens",
-        memory_status="mem0 (monoagens_memories)",
+        memory_status="postgres (native hybrid)",
         pending_approvals=2,
-        gateways=("whatsapp", "cli"),
+        gateways=("whatsapp", "telegram"),
     )
     block = self_block(runtime, (Role("administrator", protected=True),), env.config)
     assert "Mode: primary" in block
-    assert "Surface: whatsapp, cli" in block
+    assert "Surface: whatsapp, telegram" in block
     assert "Pending approvals: 2" in block
     assert "postgresql://db:5432/monoagens" in block
 
@@ -93,7 +93,7 @@ def test_status_and_whoami(tmp_path, monkeypatch) -> None:
 
     status = asyncio.run(
         agent._command(
-            "status", "", "cli:local", "local", roles, env.gateway, inbound_message("/status")
+            "status", "", "console:local", "local", roles, env.gateway, inbound_message("/status")
         )
     )
     assert "Mode: standby" in status
@@ -109,7 +109,7 @@ def test_status_and_whoami(tmp_path, monkeypatch) -> None:
 
     who = asyncio.run(
         agent._command(
-            "whoami", "", "cli:local", "local", member, env.gateway, inbound_message("/whoami")
+            "whoami", "", "console:local", "local", member, env.gateway, inbound_message("/whoami")
         )
     )
     assert "Peran: Member" in who
@@ -148,7 +148,7 @@ def test_status_gives_a_non_administrator_only_rough_buckets(tmp_path, monkeypat
 
     text = asyncio.run(
         env.agent._command(
-            "status", "", "cli:local", "local", roles, env.gateway, inbound_message("/status")
+            "status", "", "console:local", "local", roles, env.gateway, inbound_message("/status")
         )
     )
 

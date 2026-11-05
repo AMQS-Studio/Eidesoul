@@ -6,7 +6,7 @@
 - **Context:** Re-baselined for v0.1.0; unifies automations, durable tasks, recipes, gateway base classes, plugins, and provider wire adapters (pre-rebaseline 0014, 0028, 0044, 0047, 0049, 0053, 0054).
 - **Supersedes:** pre-rebaseline 0014, 0028, 0044, 0047, 0054
 - **Related:** ADR-0001 (sovereign harness), ADR-0003 (lease fencing), ADR-0004 (core tools), ADR-0006 (access control)
-- **Implementation:** partial — automation worker and provider wire adapters are implemented; `propose` wiring fix, unified task execution, `BaseGateway`, and local plugin modes are scheduled in Phase P0/P1/P2.
+- **Implementation:** implemented — `AutomationStore.propose` wiring, the unified `task` capability, `BaseGateway`/`@register_gateway`, local plugin mode with `@plugin.tool`, the native Anthropic adapter, and the speech/realtime seam.
 
 ---
 

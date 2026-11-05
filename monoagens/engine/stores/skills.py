@@ -19,6 +19,7 @@ from sqlalchemy import delete, select, update
 from .. import embed
 from ..db import Database
 from ..guard import SENSITIVE, is_injection
+from ..jobs.lease import FencedStore, Superseded, fenced_insert
 from ..schema import episodes, skill_files, skill_revisions, skills
 
 log = logging.getLogger(__name__)
@@ -35,6 +36,19 @@ DAY = 86400.0
 def _clip(text: str, limit: int) -> str:
     flat = " ".join(str(text or "").split())
     return flat if len(flat) <= limit else flat[: limit - 1] + "…"
+
+
+def _key(app: str, name: str) -> str:
+    """The physical `skills.name`: the app namespace and the logical name, never one alone."""
+    namespace = str(app or "").strip().lower()
+    slug = str(name or "").strip().lower()
+    return f"{namespace}:{slug}" if namespace else slug
+
+
+def _logical(key: str) -> str:
+    """The owner-facing name behind a physical key; `app:deploy` reads back as `deploy`."""
+    text = str(key or "")
+    return text.split(":", 1)[1] if ":" in text else text
 
 
 def parse_frontmatter(text: str) -> tuple[dict, str]:
@@ -69,13 +83,34 @@ class Skill:
     app: str = ""
 
 
-class SkillStore:
+class SkillStore(FencedStore):
     def __init__(self, db: Database, config=None):
         self.db = db
         self.config = config
         self._vectors: dict[tuple[str, int], list[float]] = {}
 
+    def _fence(self):
+        """Every procedure mutation carries the live lease (ADR-0012 §4.3, ADR-0020)."""
+        return self.fence_clause()
+
     # ------------------------------------------------------------ query
+
+    def _stored_key(self, name: str, app: str | None = None) -> str:
+        """Resolve a logical name to the physical row key; the bare key wins when it exists."""
+        slug = str(name or "").strip().lower()
+        if app is not None:
+            return _key(app, slug)
+        rows = self.db.fetch_all(
+            select(skills.c.name, skills.c.archived).order_by(skills.c.name)
+        )
+        live = [str(row["name"]) for row in rows if not bool(row["archived"])]
+        keys = live or [str(row["name"]) for row in rows]
+        if slug in keys:
+            return slug
+        for key in keys:
+            if _logical(key) == slug:
+                return key
+        return slug
 
     def evidence_for_signature(self, signature: str, *, limit: int = 5) -> list[str]:
         """The skills distilled from the episodes of one signature, newest first."""
@@ -98,17 +133,20 @@ class SkillStore:
             .order_by(skills.c.updated_at.desc())
             .limit(max(1, int(limit)))
         )
-        return [str(row["name"]) for row in rows]
+        return [_logical(row["name"]) for row in rows]
 
-    def set_priority(self, name: str, priority: int) -> int:
+    def set_priority(self, name: str, priority: int, *, app: str | None = None) -> int:
         """Set the retrieval rank of one procedure (ADR-0020 §4.6); returns the new value."""
-        slug = str(name or "").strip().lower()
+        fence = self._fence()
+        statement = (
+            update(skills)
+            .where(skills.c.name == self._stored_key(name, app))
+            .values(priority=int(priority), updated_at=time.time())
+        )
+        if fence is not None:
+            statement = statement.where(fence)
         with self.db.connect() as conn:
-            conn.execute(
-                update(skills)
-                .where(skills.c.name == slug)
-                .values(priority=int(priority), updated_at=time.time())
-            )
+            conn.execute(statement)
         return int(priority)
 
     def record_notice(self, name: str, summary: str) -> int:
@@ -123,29 +161,18 @@ class SkillStore:
         rows = self.db.fetch_all(
             select(skills.c.name).where(skills.c.archived.is_(False)).order_by(skills.c.name)
         )
-        return [str(row["name"]) for row in rows]
+        return [_logical(row["name"]) for row in rows]
 
-    def get(self, name: str) -> Skill | None:
+    def get(self, name: str, *, app: str | None = None) -> Skill | None:
         slug = str(name or "").strip().lower()
         if not slug:
             return None
-        row = self.db.fetch_one(select(skills).where(skills.c.name == slug))
+        row = self.db.fetch_one(
+            select(skills).where(skills.c.name == self._stored_key(slug, app))
+        )
         if row is None or bool(row["archived"]):
             return None
-        return Skill(
-            name=str(row["name"]),
-            description=str(row["description"] or ""),
-            body=str(row["body"] or ""),
-            scope=str(row["scope"] or "thread"),
-            trust=str(row["trust"] or "T2"),
-            revision=int(row["revision"] or 1),
-            priority=int(row["priority"] or 0),
-            uses=int(row["uses"] or 0),
-            last_used=float(row["last_used"]) if row["last_used"] is not None else None,
-            stated_by=str(row["stated_by"] or ""),
-            source_episode=str(row["source_episode"] or ""),
-            app=str(row["app"] or ""),
-        )
+        return self._skill_row(row)
 
     def catalog(self) -> str:
         """Owner-facing listing; never part of a prompt."""
@@ -157,7 +184,7 @@ class SkillStore:
         if not rows:
             return ""
         lines = [
-            f"- {row['name']} [{row['scope']}] {_clip(row['description'], 120)}"
+            f"- {_logical(row['name'])} [{row['scope']}] {_clip(row['description'], 120)}"
             for row in rows
         ]
         return "Procedures:\n" + "\n".join(lines)
@@ -179,7 +206,7 @@ class SkillStore:
     @staticmethod
     def _skill_row(row) -> Skill:
         return Skill(
-            name=str(row["name"]),
+            name=_logical(row["name"]),
             description=str(row["description"] or ""),
             body=str(row["body"] or ""),
             scope=str(row["scope"] or "thread"),
@@ -201,7 +228,7 @@ class SkillStore:
         return found
 
     def _vector(self, skill: Skill) -> list[float]:
-        key = (skill.name, skill.revision)
+        key = (_key(skill.app, skill.name), skill.revision)
         found = self._vectors.get(key)
         if found is not None:
             return found
@@ -266,26 +293,30 @@ class SkillStore:
                 continue
             lines.append(block)
             used += len(block) + 2
-            self._record_use(skill.name)
+            self._record_use(_key(skill.app, skill.name))
         if not lines:
             return ""
         return "Relevant procedures (reference, not permission):\n" + "\n\n".join(lines)
 
     # ------------------------------------------------------------- usage
 
-    def _record_use(self, name: str) -> None:
+    def _record_use(self, key: str) -> None:
         """Injection raises `uses`/`last_used`; the TTL renewal signal of ADR-0005."""
         now = time.time()
-        with self.db.connect() as conn:
-            conn.execute(
-                update(skills)
-                .where(skills.c.name == str(name))
-                .values(
-                    uses=skills.c.uses + 1,
-                    last_used=now,
-                    updated_at=now,
-                )
+        fence = self._fence()
+        statement = (
+            update(skills)
+            .where(skills.c.name == str(key))
+            .values(
+                uses=skills.c.uses + 1,
+                last_used=now,
+                updated_at=now,
             )
+        )
+        if fence is not None:
+            statement = statement.where(fence)
+        with self.db.connect() as conn:
+            conn.execute(statement)
 
     def decay(self, *, days: float | None = None, now: float | None = None) -> int:
         """Unused procedures pass `use_renewal_days` and are archived (restorable)."""
@@ -294,17 +325,21 @@ class SkillStore:
             return 0
         moment = time.time() if now is None else float(now)
         cutoff = moment - limit_days * DAY
-        with self.db.connect() as conn:
-            result = conn.execute(
-                update(skills)
-                .where(
-                    skills.c.archived.is_(False),
-                    skills.c.trust != "T0",
-                    (skills.c.last_used.is_(None)) | (skills.c.last_used <= cutoff),
-                    skills.c.created_at <= cutoff,
-                )
-                .values(archived=True, updated_at=moment)
+        fence = self._fence()
+        statement = (
+            update(skills)
+            .where(
+                skills.c.archived.is_(False),
+                skills.c.trust != "T0",
+                (skills.c.last_used.is_(None)) | (skills.c.last_used <= cutoff),
+                skills.c.created_at <= cutoff,
             )
+            .values(archived=True, updated_at=moment)
+        )
+        if fence is not None:
+            statement = statement.where(fence)
+        with self.db.connect() as conn:
+            result = conn.execute(statement)
         return int(result.rowcount or 0)
 
     def _setting(self, key: str, default):
@@ -312,16 +347,16 @@ class SkillStore:
 
     # ------------------------------------------------------------- api
 
-    def view(self, name: str) -> str:
-        skill = self.get(name)
+    def view(self, name: str, *, app: str | None = None) -> str:
+        skill = self.get(name, app=app)
         if skill is None:
             available = ", ".join(self.names()) or "(none)"
             raise KeyError(f"skill not found: {name}; available: {available}")
-        self._record_use(skill.name)
+        self._record_use(_key(skill.app, skill.name))
         return f'Skill "{skill.name}": {skill.description}\n\n{skill.body}'
 
-    def read(self, name: str, file: str) -> str:
-        skill = self.get(name)
+    def read(self, name: str, file: str, *, app: str | None = None) -> str:
+        skill = self.get(name, app=app)
         if skill is None:
             raise KeyError(f"skill not found: {name}")
         relative = str(file or "").strip()
@@ -335,7 +370,8 @@ class SkillStore:
             raise ValueError("empty file")
         row = self.db.fetch_one(
             select(skill_files.c.content).where(
-                skill_files.c.skill == skill.name, skill_files.c.path == clean
+                skill_files.c.skill == _key(skill.app, skill.name),
+                skill_files.c.path == clean,
             )
         )
         if row is None:
@@ -344,6 +380,17 @@ class SkillStore:
         if len(content) > MAX_CONTENT:
             raise ValueError(f"file too large: {relative}")
         return f"{clean}:\n{content.decode('utf-8', errors='replace')}"
+
+    def declared_app(self, gateway: str, hint: object = "") -> str:
+        """ADR-0053 §4.1.4: a hint selects a corpus only when its gateway declares that app."""
+        wanted = str(hint or "").strip().lower()
+        if not wanted:
+            return ""
+        gateways = getattr(self.config, "gateways", None) or {}
+        settings = gateways.get(str(gateway or ""))
+        options = getattr(settings, "options", None) or {}
+        declared = str(options.get("app") or "").strip().lower()
+        return wanted if declared and declared == wanted else ""
 
     def _check(
         self,
@@ -357,6 +404,7 @@ class SkillStore:
         approved: bool,
         language: str,
         app: str = "",
+        gateway: str = "",
     ) -> tuple[str, str, str, str, str, str]:
         slug = str(name or "").strip().lower()
         if not NAME.fullmatch(slug):
@@ -378,6 +426,10 @@ class SkillStore:
         namespace = str(app or "").strip().lower()
         if namespace and not APP.fullmatch(namespace):
             raise ValueError(f"unknown app: {app}")
+        if gateway:
+            namespace = self.declared_app(gateway, namespace)
+        if len(_key(namespace, slug)) > 80:
+            raise ValueError("a skill name is too long for its app namespace")
         tier = str(trust or "T2").strip().upper()
         if tier not in TRUST:
             tier = "T2"
@@ -400,8 +452,13 @@ class SkillStore:
         approved: bool = False,
         language: str,
         app: str = "",
+        gateway: str = "",
     ) -> str:
-        """Owner/import write: one row plus one append-only revision, never a silent overwrite."""
+        """Owner/import write: one row plus one append-only revision, never a silent overwrite.
+
+        The row key is `(app, name)`; a gateway-supplied `app` is kept only when that gateway
+        declares it in its configuration (ADR-0053 §4.1.4).
+        """
         slug, desc, text, wanted, tier, namespace = self._check(
             name,
             description,
@@ -412,63 +469,71 @@ class SkillStore:
             approved=approved,
             language=language,
             app=app,
+            gateway=gateway,
         )
+        key = _key(namespace, slug)
         now = time.time()
+        fence = self._fence()
         with self.db.connect() as conn:
             existing = conn.execute(
-                select(skills.c.archived, skills.c.revision).where(skills.c.name == slug)
+                select(skills.c.archived, skills.c.revision).where(skills.c.name == key)
             ).mappings().first()
             if existing is not None and not existing["archived"] and not overwrite:
                 raise FileExistsError(f"skill already exists: {slug} (use overwrite=true)")
             revision = int(existing["revision"] or 0) + 1 if existing is not None else 1
-            self.db.upsert(
-                conn,
-                skills,
-                [
+            row = {
+                "name": key,
+                "description": desc,
+                "body": text,
+                "archived": False,
+                "created_at": now,
+                "updated_at": now,
+                "scope": wanted,
+                "app": namespace,
+                "via": str(via or "command"),
+                "stated_by": str(stated_by or "") or None,
+                "source_episode": str(source_episode or "") or None,
+                "uses": 0,
+                "last_used": None,
+                "revision": revision,
+                "trust": tier,
+            }
+            changes = {
+                "description": desc,
+                "body": text,
+                "archived": False,
+                "updated_at": now,
+                "scope": wanted,
+                "app": namespace,
+                "via": str(via or "command"),
+                "stated_by": str(stated_by or "") or None,
+                "source_episode": str(source_episode or "") or None,
+                "revision": revision,
+                "trust": tier,
+            }
+            statement = fenced_insert(skills, row, fence)
+            statement = statement.on_conflict_do_update(
+                index_elements=["name"], set_=changes
+            ).returning(skills.c.name)
+            if conn.execute(statement).first() is None and fence is not None:
+                raise Superseded("lease generation moved on: skill write refused")
+            added = conn.execute(
+                fenced_insert(
+                    skill_revisions,
                     {
-                        "name": slug,
+                        "skill": key,
+                        "revision": revision,
                         "description": desc,
                         "body": text,
-                        "archived": False,
                         "created_at": now,
-                        "updated_at": now,
-                        "scope": wanted,
-                        "app": namespace,
-                        "via": str(via or "command"),
-                        "stated_by": str(stated_by or "") or None,
                         "source_episode": str(source_episode or "") or None,
-                        "uses": 0,
-                        "last_used": None,
-                        "revision": revision,
-                        "trust": tier,
-                    }
-                ],
-                ["name"],
-                {
-                    "description": desc,
-                    "body": text,
-                    "archived": False,
-                    "updated_at": now,
-                    "scope": wanted,
-                    "app": namespace,
-                    "via": str(via or "command"),
-                    "stated_by": str(stated_by or "") or None,
-                    "source_episode": str(source_episode or "") or None,
-                    "revision": revision,
-                    "trust": tier,
-                },
-            )
-            conn.execute(
-                skill_revisions.insert().values(
-                    skill=slug,
-                    revision=revision,
-                    description=desc,
-                    body=text,
-                    created_at=now,
-                    source_episode=str(source_episode or "") or None,
-                )
-            )
-        self._vectors.pop((slug, revision - 1), None)
+                    },
+                    fence,
+                ).returning(skill_revisions.c.skill)
+            ).first()
+            if fence is not None and added is None:
+                raise Superseded("lease generation moved on: skill revision refused")
+        self._vectors.pop((key, revision - 1), None)
         return slug
 
     def revise(
@@ -502,26 +567,29 @@ class SkillStore:
             app=app,
         )
 
-    def revisions(self, name: str) -> list[dict]:
+    def revisions(self, name: str, *, app: str | None = None) -> list[dict]:
         rows = self.db.fetch_all(
             select(skill_revisions)
-            .where(skill_revisions.c.skill == str(name or "").strip().lower())
+            .where(skill_revisions.c.skill == self._stored_key(name, app))
             .order_by(skill_revisions.c.revision.desc())
         )
         return [dict(row) for row in rows]
 
-    def restore(self, name: str, revision: int, *, language: str) -> str:
+    def restore(
+        self, name: str, revision: int, *, language: str, app: str | None = None
+    ) -> str:
         """Roll back to a stored revision by appending it again (never a destructive update)."""
         slug = str(name or "").strip().lower()
+        key = self._stored_key(slug, app)
         row = self.db.fetch_one(
             select(skill_revisions).where(
-                skill_revisions.c.skill == slug,
+                skill_revisions.c.skill == key,
                 skill_revisions.c.revision == int(revision),
             )
         )
         if row is None:
             raise KeyError(f"revision not found: {slug}@{revision}")
-        current = self.get(slug)
+        current = self.get(slug, app=app)
         return self.save(
             slug,
             str(row["description"] or ""),
@@ -533,50 +601,71 @@ class SkillStore:
             app=current.app if current is not None else "",
         )
 
-    def archive(self, name: str) -> str:
+    def archive(self, name: str, *, app: str | None = None) -> str:
         """Retire a procedure (reversible); the owner can restore it."""
-        skill = self.get(name)
+        skill = self.get(name, app=app)
         if skill is None:
             raise KeyError(f"skill not found: {name}")
+        fence = self._fence()
+        statement = (
+            update(skills)
+            .where(skills.c.name == _key(skill.app, skill.name))
+            .values(archived=True, updated_at=time.time())
+        )
+        if fence is not None:
+            statement = statement.where(fence)
         with self.db.connect() as conn:
-            conn.execute(
-                update(skills)
-                .where(skills.c.name == skill.name)
-                .values(archived=True, updated_at=time.time())
-            )
+            conn.execute(statement)
         return skill.name
 
-    def restore_archived(self, name: str) -> str:
+    def restore_archived(self, name: str, *, app: str | None = None) -> str:
         slug = str(name or "").strip().lower()
+        key = self._stored_key(slug, app)
+        fence = self._fence()
+        statement = (
+            update(skills)
+            .where(skills.c.name == key)
+            .values(archived=False, updated_at=time.time())
+        )
+        if fence is not None:
+            statement = statement.where(fence)
         with self.db.connect() as conn:
-            result = conn.execute(
-                update(skills)
-                .where(skills.c.name == slug)
-                .values(archived=False, updated_at=time.time())
-            )
+            result = conn.execute(statement)
         if not int(result.rowcount or 0):
             raise KeyError(f"skill not found: {slug}")
         return slug
 
-    def pin(self, name: str) -> str:
+    def pin(self, name: str, *, app: str | None = None) -> str:
         """Only the owner pins: a T0 procedure stops decaying."""
         slug = str(name or "").strip().lower()
+        key = self._stored_key(slug, app)
+        fence = self._fence()
+        statement = (
+            update(skills)
+            .where(skills.c.name == key)
+            .values(trust="T0", updated_at=time.time())
+        )
+        if fence is not None:
+            statement = statement.where(fence)
         with self.db.connect() as conn:
-            result = conn.execute(
-                update(skills)
-                .where(skills.c.name == slug)
-                .values(trust="T0", updated_at=time.time())
-            )
+            result = conn.execute(statement)
         if not int(result.rowcount or 0):
             raise KeyError(f"skill not found: {slug}")
         return slug
 
-    def forget(self, name: str) -> str:
+    def forget(self, name: str, *, app: str | None = None) -> str:
         """Delete a procedure and its revisions; the files go with it."""
         slug = str(name or "").strip().lower()
+        key = self._stored_key(slug, app)
+        fence = self._fence()
+        files = delete(skill_files).where(skill_files.c.skill == key)
+        statement = delete(skills).where(skills.c.name == key)
+        if fence is not None:
+            files = files.where(fence)
+            statement = statement.where(fence)
         with self.db.connect() as conn:
-            conn.execute(delete(skill_files).where(skill_files.c.skill == slug))
-            result = conn.execute(delete(skills).where(skills.c.name == slug))
+            conn.execute(files)
+            result = conn.execute(statement)
         if not int(result.rowcount or 0):
             raise KeyError(f"skill not found: {slug}")
         return slug

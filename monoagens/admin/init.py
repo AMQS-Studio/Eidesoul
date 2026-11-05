@@ -8,6 +8,7 @@ YAML: `.env` holds the values, at `0600`.
 
 import contextlib
 import os
+import re
 from dataclasses import dataclass
 from pathlib import Path
 from types import SimpleNamespace
@@ -18,7 +19,7 @@ from sqlalchemy.engine import make_url
 from sqlalchemy.exc import ArgumentError
 
 from ..engine import clock
-from ..engine.config import Config, ConfigError
+from ..engine.config import APPROVAL_MODES, Config, ConfigError
 from ..engine.i18n import host_language, normalize_language
 from ..providers import PROVIDERS
 from . import brand, templates
@@ -27,6 +28,7 @@ PRIVATE_FILES = (".env", "roles.yaml")
 HOST_FILES = ("config.yaml", "roles.yaml", "soul.yaml", ".env")
 LLM_KEYS = ("provider", "base_url", "api_key_env", "model")
 DEFAULT_LOG = Path.home() / ".monoagens" / "logs" / "install.log"
+_ENV_NAME = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
 
 
 class InitCancelled(Exception):
@@ -43,13 +45,16 @@ class Answers:
     model: str = ""
     database_url: str = ""
     label: str = ""
-    voice_on: bool = False
     voice_parts: tuple[str, ...] | None = None
     language: str = ""
     locale: str = ""
     timezone: str = ""
     websearch: str = ""
     websearch_url: str = ""
+    websearch_key: str = ""
+    websearch_engine_id: str = ""
+    approval_mode: str = ""
+    natural_confirm: bool = True
     tools: tuple[str, ...] | None = None
     gateways: tuple[str, ...] | None = None
 
@@ -82,16 +87,72 @@ def host_timezone() -> str:
     return ""
 
 
-def voice_enabled(value: str | bool | None) -> bool:
-    """One master switch: `on` enables the layer, `off` (the default) disables it."""
-    if isinstance(value, bool):
-        return value
-    text = str(value or "").strip().lower()
-    if text in ("", "off", "false", "no", "0"):
-        return False
-    if text in ("on", "true", "yes", "1"):
-        return True
-    raise ValueError("voice layer must be 'on' or 'off'")
+def voice_selection(
+    voice_layer: str | None = None,
+    voice_parts: tuple[str, ...] | None = None,
+) -> tuple[str, ...]:
+    """Resolve the retired master switch plus the per-part list into one part tuple.
+
+    `--voice-layer` is gone: every part (`affect`, `style`, `character`, `humanize`) governs
+    itself. The old values stay readable only so an existing script gets a clear message.
+    """
+    parts = None if voice_parts is None else tuple(str(item).strip() for item in voice_parts)
+    wanted = str(voice_layer or "").strip().lower()
+    if not wanted:
+        return parts if parts is not None else _default_voice_parts()
+    if wanted in ("on", "true", "yes", "1"):
+        return parts if parts is not None else _default_voice_parts()
+    if wanted in ("off", "false", "no", "0"):
+        return parts if parts is not None else ()
+    raise ValueError(
+        "the voice layer switch was retired; pass --voice-parts with any of: "
+        f"{', '.join(part_names())}"
+    )
+
+
+def _default_voice_parts() -> tuple[str, ...]:
+    from . import catalog
+
+    return catalog.default_voice_parts()
+
+
+def part_names() -> list[str]:
+    """Voice parts that expose their own `enabled` switch, straight from `VoiceConfig`."""
+    from . import catalog
+
+    return [item.name for item in catalog.voice_parts()]
+
+
+def validate_voice_parts(parts: tuple[str, ...] | None) -> str | None:
+    if parts is None:
+        return None
+    unknown = set(parts).difference(part_names())
+    if not unknown:
+        return None
+    return (
+        f"unknown voice part(s): {', '.join(sorted(unknown))}; "
+        f"choose from: {', '.join(part_names())}"
+    )
+
+
+def validate_websearch(name: str) -> str | None:
+    """`None` when the loader would accept the provider name."""
+    if not name:
+        return None
+    from . import catalog
+
+    known = [item.name for item in catalog.websearch_choices()]
+    if name in known:
+        return None
+    return f"unknown web search provider '{name}'; choose one of: {', '.join(known)}"
+
+
+def validate_approval_mode(mode: str) -> str | None:
+    if not mode:
+        return None
+    if mode in APPROVAL_MODES:
+        return None
+    return f"unknown approval mode '{mode}'; choose one of: {', '.join(APPROVAL_MODES)}"
 
 
 def validate_provider(name: str) -> str | None:
@@ -208,22 +269,26 @@ def _set_env(text: str, name: str, value: str) -> str:
     return "\n".join(lines) + "\n"
 
 
-def build(  # noqa: C901, PLR0912
+def build(  # noqa: C901, PLR0912, PLR0915
     *,
     provider: str,
     api_key: str = "",
     model: str = "",
     database_url: str = "",
     label: str = "",
-    voice: str | bool = "off",
+    voice_parts: tuple[str, ...] | None = None,
     language: str = "",
     locale: str = "",
     timezone: str = "",
     websearch: str = "",
     websearch_url: str = "",
+    websearch_key: str = "",
+    websearch_engine_id: str = "",
+    websearch_key_env: str = "",
+    approval_mode: str = "",
+    natural_confirm: bool = True,
     tools: tuple[str, ...] | None = None,
     gateways: tuple[str, ...] | None = None,
-    voice_parts: tuple[str, ...] | None = None,
 ) -> dict[str, str]:
     """The four files: `templates.files()` plus the operator's answers, nothing else."""
     locale = locale or host_locale()
@@ -236,11 +301,15 @@ def build(  # noqa: C901, PLR0912
     clock.zone(timezone)
     from . import catalog
 
-    backend_names = {item.name for item in catalog.websearch_backends()} | {"off"}
-    if websearch and websearch not in backend_names:
-        raise ValueError(f"unknown websearch backend '{websearch}'")
+    websearch = str(websearch or "").strip().lower()
+    error = validate_websearch(websearch) or validate_voice_parts(voice_parts)
+    if error:
+        raise ValueError(error)
     if websearch == "searxng" and not websearch_url.strip():
         raise ValueError("searxng needs a URL")
+    error = validate_approval_mode(str(approval_mode or "").strip())
+    if error:
+        raise ValueError(error)
     if tools is not None:
         unknown = set(tools).difference(catalog.tool_names())
         if unknown:
@@ -249,23 +318,37 @@ def build(  # noqa: C901, PLR0912
         unknown = set(gateways).difference({item.name for item in catalog.gateways()})
         if unknown:
             raise ValueError(f"unknown gateway(s): {', '.join(sorted(unknown))}")
-    if voice_parts is not None:
-        unknown = set(voice_parts).difference(templates.VOICE_PARTS)
-        if unknown:
-            raise ValueError(f"unknown voice part(s): {', '.join(sorted(unknown))}")
+    parts = tuple(voice_parts) if voice_parts is not None else _default_voice_parts()
+    key_env, engine_env = _search_env_names(websearch, websearch_key_env)
+    search_key = _one_line(websearch_key, "the search API key")
+    engine_id = _one_line(websearch_engine_id, "the search engine id")
+    if search_key and not key_env:
+        raise ValueError(f"web search provider '{websearch}' takes no API key")
+    if engine_id and not engine_env:
+        raise ValueError(f"web search provider '{websearch}' takes no engine id")
     contents = templates.files(
         provider=provider,
         model=model,
         language=language,
         locale=locale,
         timezone=timezone,
-        voice_enabled=voice_enabled(voice),
-        voice_parts=voice_parts,
+        voice_enabled=False,
+        voice_parts=parts,
         websearch=websearch,
         websearch_url=websearch_url,
         tools=tools,
         gateways=gateways,
     )
+    config = yaml.safe_load(contents["config.yaml"])
+    approval = config.setdefault("engine", {}).setdefault("approval", {})
+    approval["mode"] = str(approval_mode or "").strip() or "default"
+    approval["natural_confirm"] = bool(natural_confirm)
+    search = config["web_search"]
+    if key_env:
+        search["api_key_env"] = key_env
+    if engine_env:
+        search["engine_id_env"] = engine_env
+    contents["config.yaml"] = templates.dump_config(config)
     if label.strip():
         roles = yaml.safe_load(contents["roles.yaml"])
         roles["roles"]["administrator"]["label"] = label.strip()
@@ -281,7 +364,27 @@ def build(  # noqa: C901, PLR0912
         if not key_env:
             raise ValueError(f"provider '{provider}' has no API key variable")
         contents[".env"] = _set_env(contents[".env"], key_env, api_key.strip())
+    if key_env and (search_key or websearch_key_env.strip()):
+        contents[".env"] = _set_env(contents[".env"], key_env, search_key)
+    if engine_env and engine_id:
+        contents[".env"] = _set_env(contents[".env"], engine_env, engine_id)
     return contents
+
+
+def _one_line(value: str, label: str) -> str:
+    text = str(value or "").strip()
+    if "\n" in text or "\r" in text:
+        raise ValueError(f"{label} must be one line")
+    return text
+
+
+def _search_env_names(websearch: str, override: str) -> tuple[str, str]:
+    """The env variable names the chosen provider reads; an override wins, never a value."""
+    key_env = str(override or "").strip() or templates.WEB_SEARCH_API_KEYS.get(websearch, "")
+    engine_env = templates.WEB_SEARCH_ENGINE_KEYS.get(websearch, "")
+    if override.strip() and not _ENV_NAME.fullmatch(override.strip()):
+        raise ValueError(f"'{override.strip()}' is not an environment variable name")
+    return key_env, engine_env
 
 
 def mode_of(name: str) -> int:
@@ -404,13 +507,18 @@ def init(
     model: str = "",
     database_url: str = "",
     label: str = "",
-    voice_layer: str = "off",
+    voice_layer: str | None = None,
     voice_parts: tuple[str, ...] | None = None,
     language: str = "",
     locale: str = "",
     timezone: str = "",
     websearch: str = "",
     websearch_url: str = "",
+    websearch_key: str = "",
+    websearch_engine_id: str = "",
+    websearch_key_env: str = "",
+    approval_mode: str = "",
+    natural_confirm: bool = True,
     tools: tuple[str, ...] | None = None,
     gateways: tuple[str, ...] | None = None,
 ) -> tuple[list[Path], list[Path]]:
@@ -424,13 +532,17 @@ def init(
         model=model,
         database_url=database_url,
         label=label,
-        voice=voice_layer,
-        voice_parts=voice_parts,
+        voice_parts=voice_selection(voice_layer, voice_parts),
         language=language,
         locale=locale,
         timezone=timezone,
         websearch=websearch,
         websearch_url=websearch_url,
+        websearch_key=websearch_key,
+        websearch_engine_id=websearch_engine_id,
+        websearch_key_env=websearch_key_env,
+        approval_mode=approval_mode,
+        natural_confirm=natural_confirm,
         tools=tools,
         gateways=gateways,
     )
@@ -470,7 +582,8 @@ def report(
     steps.extend(
         [
             "monoagens db upgrade",
-            "monoagens people add cli local --role administrator",
+            "monoagens people add console local --role administrator",
+            "monoagens console",
             "monoagens run",
         ]
     )

@@ -18,7 +18,7 @@ from pathlib import Path
 
 from sqlalchemy import select
 
-from .. import embed
+from .. import embed, io
 from ..db import Database
 from ..schema import state as state_table
 from ..soul import VibeConfig
@@ -43,6 +43,8 @@ EMOTION_VAD = {
 }
 
 STATE_KEY = "vibe"
+SAVE_ATTEMPTS = 3
+SAVE_BACKOFF_SECONDS = 0.1  # 0.1, 0.2, 0.4 on write contention; never a busy loop
 
 
 def load_bank(folder: Path = LIBRARY) -> dict[str, tuple[str, ...]]:
@@ -171,7 +173,8 @@ class VibeRunner:
         if self._running:
             return True
         if self._classifier is None:
-            ready = await asyncio.to_thread(self._source.scores, "ok")
+            # ADR-0017 §4.1: the embedder is a synchronous model call.
+            ready = await io.run(self._source.scores, "ok")
             if not ready:
                 log.warning("vibe: embedder unavailable; vibe disabled")
                 self._failed = True
@@ -187,7 +190,7 @@ class VibeRunner:
             with contextlib.suppress(asyncio.CancelledError):
                 await self._task
             self._task = None
-        self._save()
+        await io.run(self._save)
 
     async def _heartbeat(self) -> None:
         interval = max(0.2, float(self.config.tick_seconds))
@@ -231,7 +234,8 @@ class VibeRunner:
             if self._classifier is not None:
                 probs = self._classifier(text)
             else:
-                probs = await asyncio.to_thread(self._source.scores, text)
+                # ADR-0017 §4.1: prototype scoring embeds on a worker, never on the loop.
+                probs = await io.run(self._source.scores, text)
             target = self.vad(probs)
             if target is None:
                 return await self.describe(thread_id)
@@ -317,19 +321,26 @@ class VibeRunner:
             thread_id: {"current": state.current, "baseline": state.baseline}
             for thread_id, state in self._states.items()
         }
-        try:
-            with self._db.connect() as conn:
-                self._db.upsert(
-                    conn,
-                    state_table,
-                    [
-                        {
-                            "key": STATE_KEY,
-                            "value": json.dumps(body),
-                            "updated_at": time.time(),
-                        }
-                    ],
-                    ["key"],
+        row = {
+            "key": STATE_KEY,
+            "value": json.dumps(body),
+            "updated_at": time.time(),
+        }
+        for attempt in range(1, SAVE_ATTEMPTS + 1):
+            try:
+                with self._db.connect() as conn:
+                    self._db.upsert(conn, state_table, [row], ["key"])
+                return
+            except Exception:
+                if attempt >= SAVE_ATTEMPTS:
+                    log.warning("vibe: failed to save state to the database", exc_info=True)
+                    return
+                # Contention on the shared `state` row backs off exponentially, never spins.
+                delay = SAVE_BACKOFF_SECONDS * (2 ** (attempt - 1))
+                log.debug(
+                    "vibe: save contention, retrying in %.2fs (attempt %d/%d)",
+                    delay,
+                    attempt,
+                    SAVE_ATTEMPTS,
                 )
-        except Exception:
-            log.warning("vibe: failed to save state to the database", exc_info=True)
+                time.sleep(delay)

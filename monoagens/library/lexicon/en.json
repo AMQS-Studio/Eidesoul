@@ -40,6 +40,8 @@
     "should",
     "would",
     "will",
+    "please",
+    "forget",
     "they",
     "them",
     "there",
@@ -169,5 +171,40 @@
     "tax",
     "address",
     "contact"
+  ],
+  "confirm": [
+    "ya",
+    "yes",
+    "ok",
+    "okay",
+    "send",
+    "proceed",
+    "go",
+    "sure",
+    "continue",
+    "approve"
+  ],
+  "reject": [
+    "no",
+    "cancel",
+    "stop",
+    "nope",
+    "abort",
+    "deny"
+  ],
+  "modify": [
+    "change",
+    "edit",
+    "instead",
+    "revise",
+    "correct"
+  ],
+  "filler": [
+    "please",
+    "now",
+    "just",
+    "then",
+    "go",
+    "ahead"
   ]
 }

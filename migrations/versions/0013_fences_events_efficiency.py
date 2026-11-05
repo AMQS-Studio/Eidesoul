@@ -66,10 +66,9 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    op.execute(
-        "CREATE OR REPLACE VIEW memories_readable AS "
-        "SELECT * FROM memories WHERE state = 'ok' AND vetoed = false"
-    )
+    # `SELECT *` was expanded into a column list when the view was created, so the view depends
+    # on `dispute_asked_at`; drop it before the column and recreate it for revision 0012.
+    op.execute("DROP VIEW IF EXISTS memories_readable")
     op.execute("DROP INDEX IF EXISTS ix_automations_message")
     op.drop_column("automation_runs", "payload")
     op.drop_column("skills", "priority")
@@ -78,3 +77,7 @@ def downgrade() -> None:
     op.drop_index("ix_memories_subject_asked", table_name="memories")
     op.drop_column("memories", "dispute_asked_at")
     op.drop_column("cognition_jobs", "generation")
+    op.execute(
+        "CREATE VIEW memories_readable AS "
+        "SELECT * FROM memories WHERE state = 'ok' AND vetoed = false"
+    )

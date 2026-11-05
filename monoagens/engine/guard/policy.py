@@ -5,17 +5,28 @@ import fnmatch
 import os
 import re
 import shlex
+from contextvars import ContextVar
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Protocol
 
 from ..config import ApprovalConfig
-from ..registry import allows
 
 # ADR-0007 §4.7: the target, not the tool, decides who approves.
 CONSENT = "consent"
 AUTHORIZATION = "authorization"
 CLASSES = frozenset({CONSENT, AUTHORIZATION})
+# ADR-0006 §4.5: the tier matrix reads the declared class, the tool, and the target. A tool that
+# is not listed fails closed: `default` pauses it, `yolo` runs it, `strict` pauses everything.
+READ_TOOLS = frozenset(
+    {"read", "grep", "info", "chat_history", "thread_history", "web_search", "fetch"}
+)
+READ_ACTIONS = {
+    "memory": frozenset({"search", "list"}),
+    "recipe": frozenset({"list"}),
+}
+SEND_TOOLS = frozenset({"send", "send_to", "send_message", "send_file"})
+TASK_TOOLS = frozenset({"task", "tasks", "task_create", "delegate"})
 # ADR-0007 §4.8: reading a host secret is authorization, whatever the requester's role.
 CREDENTIAL_PATTERNS = (
     "env",
@@ -41,11 +52,18 @@ SECRET_FILE = re.compile(
 SHELL_WRAPPERS = frozenset(
     {
         "sudo",
+        "doas",
+        "pkexec",
         "env",
         "nohup",
         "nice",
         "ionice",
         "time",
+        "timeout",
+        "flock",
+        "setsid",
+        "script",
+        "watch",
         "command",
         "builtin",
         "exec",
@@ -75,6 +93,29 @@ WRAPPER_VALUES = {
     ),
     "env": frozenset({"-u", "--unset", "-C", "--chdir", "-S", "--split-string"}),
     "nice": frozenset({"-n", "--adjustment"}),
+    "timeout": frozenset({"-s", "--signal", "-k", "--kill-after"}),
+    "flock": frozenset({"-w", "--wait", "--timeout", "-E", "--conflict-exit-code", "-c"}),
+    "script": frozenset(
+        {
+            "-c",
+            "--command",
+            "-O",
+            "--log-out",
+            "-I",
+            "--log-in",
+            "-B",
+            "--log-io",
+            "-T",
+            "--log-timing",
+            "-m",
+            "--logging-format",
+            "-E",
+            "--echo",
+        }
+    ),
+    "watch": frozenset({"-n", "--interval"}),
+    "doas": frozenset({"-u", "-C"}),
+    "pkexec": frozenset({"--user"}),
     "ionice": frozenset({"-c", "-n", "-t", "-p", "--class", "--classdata", "--pid"}),
     "xargs": frozenset(
         {
@@ -99,11 +140,28 @@ WRAPPER_VALUES = {
     "exec": frozenset({"-a"}),
     "stdbuf": frozenset({"-i", "-o", "-e"}),
 }
+# Wrappers that take positional arguments (DURATION, LOCKFILE, TYPESCRIPT) before the command.
+WRAPPER_POSITIONAL = {
+    "timeout": 1,
+    "flock": 1,
+    "script": 1,
+    "doas": 1,
+}
+# Wrapper options whose value is itself a command line: scan it, never drop it (ADR-0006 §4.4).
+WRAPPER_COMMANDS = {
+    "env": frozenset({"-S", "--split-string"}),
+    "flock": frozenset({"-c"}),
+    "script": frozenset({"-c", "--command"}),
+}
 SHELL_INTERPRETERS = frozenset({"bash", "sh", "zsh", "dash", "ksh"})
 SHELL_OPERATORS = frozenset({";", "&&", "||", "|", "&", "(", ")"})
 MAX_DEPTH = 3
 _ASSIGNMENT = re.compile(r"[A-Za-z_][A-Za-z0-9_]*=.*")
 _SUBSTITUTION = re.compile(r"\$\(([^()]*)\)|`([^`]*)`")
+_IFS_EXPANSION = re.compile(r"\$(?:\{IFS\}|IFS)")
+_BRACE_EXPANSION = re.compile(r"\{[^{}\s]*,[^{}]*\}")
+_SINGLE_QUOTED = re.compile(r"'[^']*'")
+_DOUBLE_QUOTED = re.compile(r'"[^"]*"')
 
 
 @dataclass(frozen=True)
@@ -123,6 +181,7 @@ class ActionRequest:
     workspace: str = ""
     roots: tuple[str, ...] = ()
     paths: tuple[str, ...] = ()  # already resolved by the caller, never re-derived here
+    door: bool = False  # a delivery through `Agent.dispatch`, never a tool call
 
 
 @dataclass(frozen=True)
@@ -136,7 +195,7 @@ class SafetyPolicy(Protocol):
 
 
 class AllowAllSafety:
-    """approval.mode=off: every tool runs immediately (document the risk)."""
+    """The explicit escape hatch: every action runs. The config never builds this (ADR-0006)."""
 
     def check(self, request: ActionRequest) -> SafetyDecision:
         return SafetyDecision("allow")
@@ -164,6 +223,26 @@ def _segments(tokens: list[str]) -> list[list[str]]:
     return found
 
 
+def _wrapper_options(
+    head: str, tokens: list[str], patterns: tuple[str, ...], depth: int
+) -> bool:
+    """Strip one wrapper's options and values; True when a value is itself sensitive.
+
+    `env -S "git push --force"`, `flock -c "rm -rf /"`, and `script -c` carry a whole command in
+    an option value, so that value is scanned instead of being dropped (ADR-0006 §4.4).
+    """
+    values = WRAPPER_VALUES.get(head, frozenset())
+    commands = WRAPPER_COMMANDS.get(head, frozenset())
+    while tokens and tokens[0].startswith("-"):
+        option = tokens.pop(0)
+        if option not in values or not tokens:
+            continue
+        if option in commands and _scan(tokens[0], patterns, depth + 1):
+            return True
+        tokens.pop(0)
+    return False
+
+
 def _sensitive_segment(tokens: list[str], patterns: tuple[str, ...], depth: int) -> bool:
     tokens = list(tokens)
     while True:
@@ -174,12 +253,16 @@ def _sensitive_segment(tokens: list[str], patterns: tuple[str, ...], depth: int)
         head = os.path.basename(tokens[0])
         if head not in SHELL_WRAPPERS:
             break
-        values = WRAPPER_VALUES.get(head, frozenset())
         tokens.pop(0)
-        while tokens and tokens[0].startswith("-"):
-            option = tokens.pop(0)
-            if option in values and tokens:
-                tokens.pop(0)
+        if _wrapper_options(head, tokens, patterns, depth):
+            return True
+        # `timeout 5 cmd`, `flock /tmp/lock cmd`, `doas user cmd`: skip the positional operand,
+        # then peel the flags that follow it, so the inner command is the one judged.
+        positional = WRAPPER_POSITIONAL.get(head, 0)
+        if positional and len(tokens) > positional:
+            del tokens[:positional]
+            if _wrapper_options(head, tokens, patterns, depth):
+                return True
     head = os.path.basename(tokens[0])
     if head in SHELL_INTERPRETERS:
         for index, token in enumerate(tokens[1:], 1):
@@ -191,8 +274,22 @@ def _sensitive_segment(tokens: list[str], patterns: tuple[str, ...], depth: int)
     return any(fnmatch.fnmatchcase(text, pattern) for pattern in patterns)
 
 
+def hidden_expansion(text: str) -> bool:
+    """`${IFS}`/`$IFS` and `{a,b}` split a command into words the scanner never sees.
+
+    Single quotes make `${IFS}` literal, and brace expansion does not happen inside double
+    quotes either, so those quoted spans are dropped before the check (ADR-0006 §4.4).
+    """
+    unquoted = _SINGLE_QUOTED.sub(" ", str(text or ""))
+    if _IFS_EXPANSION.search(unquoted):
+        return True
+    return _BRACE_EXPANSION.search(_DOUBLE_QUOTED.sub(" ", unquoted)) is not None
+
+
 def _scan(text: str, patterns: tuple[str, ...], depth: int = 0) -> bool:
     if depth > MAX_DEPTH:
+        return True
+    if patterns and hidden_expansion(text):
         return True
     for line in text.splitlines() or [text]:
         remainder = line
@@ -408,14 +505,34 @@ class ApprovalPolicy:
         self.config = config
 
     def check(self, request: ActionRequest) -> SafetyDecision:
-        if self.config.mode == "off":
+        """ADR-0006 §4.5: `default` gates state changes, `yolo` trusts ordinary tools,
+        `strict` gates every tool call; an origin-room reply is always consent."""
+        mode = self.config.mode
+        if mode == "strict":
+            return self._strict(request)
+        if mode not in {"default", "yolo"}:
+            # The config rejects any other value; a policy built by hand still fails closed.
+            return SafetyDecision("pending", f"unknown approval mode '{mode}'; failing closed")
+        gated = self._shared_gate(request)
+        if gated is not None:
+            return gated
+        if mode == "yolo":
             return SafetyDecision("allow")
-        if self.config.mode == "strict" and request.declared_class != "none":
-            return SafetyDecision("pending", "strict mode: every action waits for /approve")
-        if allows(tuple(self.config.sensitive_tools), request.tool):
+        return self._default(request)
+
+    def _strict(self, request: ActionRequest) -> SafetyDecision:
+        if not request.door:
             return SafetyDecision(
-                "pending", f"{request.tool} is a sensitive tool; it needs /approve"
+                "pending", "strict mode: every tool call waits for /approve"
             )
+        if request.declared_class == CONSENT:
+            return SafetyDecision("allow")
+        return SafetyDecision(
+            "pending", "strict mode: a cross-room delivery waits for /approve"
+        )
+
+    def _shared_gate(self, request: ActionRequest) -> SafetyDecision | None:
+        """The gates both trusting tiers keep: secrets, settings, crossings, and tasks."""
         command = next(
             (
                 str(request.args.get(name) or "")
@@ -426,15 +543,96 @@ class ApprovalPolicy:
         )
         if command and scan_command(command, self.config.sensitive_commands):
             return SafetyDecision("pending", "the command is sensitive; needs /approve")
-        action = str(request.args.get("action") or "").strip().lower()
-        if action and action in request.destructive:
+        if request.tool == "settings" and self.config.settings:
+            return SafetyDecision("pending", "changing settings needs /approve")
+        crossing = (request.tool in SEND_TOOLS and crosses_scope(request)) or (
+            request.door and request.declared_class == AUTHORIZATION
+        )
+        if crossing and self.config.confirm_cross_gateway:
             return SafetyDecision(
-                "pending", f"{request.tool} {action} is destructive; it needs /approve"
+                "pending", "a cross-room or cross-gateway send needs /approve"
             )
-        return SafetyDecision("allow")
+        if request.tool in TASK_TOOLS and self.config.confirm_tasks:
+            return SafetyDecision("pending", "creating a task needs /approve")
+        return None
+
+    def _default(self, request: ActionRequest) -> SafetyDecision:
+        if request.door:
+            # A delivery names its origin: a reply in that room is consent, a crossing is not.
+            if request.declared_class == CONSENT or not self.config.confirm_cross_gateway:
+                return SafetyDecision("allow")
+            return SafetyDecision(
+                "pending", "a cross-room or cross-gateway send needs /approve"
+            )
+        if request.tool in SEND_TOOLS:
+            # A send inside the origin room is the requester's own scope (CONSENT);
+            # the crossing case above already paused when the switch is on.
+            return SafetyDecision("allow")
+        if read_only(request):
+            return SafetyDecision("allow")
+        return SafetyDecision(
+            "pending", f"{request.tool} changes state; it needs /approve"
+        )
+
+
+def read_only(request: ActionRequest) -> bool:
+    """A tool that observes and never changes state (ADR-0006 §4.5)."""
+    if request.declared_class == "none" or request.tool in READ_TOOLS:
+        return True
+    actions = READ_ACTIONS.get(request.tool)
+    if not actions:
+        return False
+    args = request.args if isinstance(request.args, dict) else {}
+    return str(args.get("action") or "").strip().lower() in actions
+
+
+def crosses_scope(request: ActionRequest) -> bool:
+    """True when the request names another room, or another body than its origin."""
+    origin_gateway = str(request.origin_gateway or "").strip()
+    if origin_gateway and origin_gateway != str(request.gateway or ""):
+        return True
+    for target in action_targets(request):
+        if target["kind"] == "room":
+            value = str(target["value"] or "")
+            return bool(value) and value != str(request.thread_id or "")
+    return False
 
 
 def build_safety(config: ApprovalConfig) -> SafetyPolicy:
-    if config.mode == "off":
-        return AllowAllSafety()
     return ApprovalPolicy(config)
+
+
+# ADR-0006 §4.5: an approval that a person just confirmed covers the door call its tool makes.
+# The grant names only the targets that were approved; `scope_granted` never widens them.
+APPROVED_SCOPE: ContextVar[tuple[tuple[str, str], ...]] = ContextVar(
+    "monoagens_approved_scope", default=()
+)
+SCOPE_TARGETS = frozenset({"room", "path", "url", "column", "host", "body"})
+
+
+def grant_scope(proof: object):
+    """Bind the approved targets for one execution; returns the token to reset."""
+    targets = proof.get("targets") if isinstance(proof, dict) else None
+    pairs = tuple(
+        (str(item["kind"]), str(item["value"]))
+        for item in (targets or [])
+        if isinstance(item, dict) and str(item.get("kind")) in SCOPE_TARGETS
+    )
+    return APPROVED_SCOPE.set(pairs)
+
+
+def reset_scope(token) -> None:
+    APPROVED_SCOPE.reset(token)
+
+
+def scope_granted(request: ActionRequest) -> bool:
+    """True when the target of this request is inside an approved scope."""
+    granted = set(APPROVED_SCOPE.get())
+    if not granted:
+        return False
+    current = {
+        (str(item["kind"]), str(item["value"]))
+        for item in action_targets(request)
+        if str(item["kind"]) in SCOPE_TARGETS
+    }
+    return bool(current) and current <= granted

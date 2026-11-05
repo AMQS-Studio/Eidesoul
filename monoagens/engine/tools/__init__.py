@@ -1,15 +1,18 @@
 """Tool registry: one module per tool with `TOOL = Handler(...)`; a single execute door."""
 
 
+import hashlib
 import logging
 import re
 from pathlib import Path
+from typing import Any
 
 from ..access.permissions import command_allowed
 from ..access.roles import Role
 from ..config import Config
 from ..guard import CONSENT, ActionRequest, approval_summary, scope_proof
-from ..inbound import Directory
+from ..inbound import Address, Directory
+from ..jobs.lease import Superseded
 from ..registry import Handler, Registry, allows, discover
 
 log = logging.getLogger(__name__)
@@ -23,6 +26,9 @@ INVALID_ARGS = "error: invalid arguments for {tool}: {detail}"
 PUBLIC = "public"
 SCRATCH = "scratch"
 PRIVATE = "private"
+LIST_LIMIT = 20
+# A direct address the archive does not know: a phone number, or `name@server`.
+DIRECT_ADDRESS = re.compile(r"^(?:[0-9+][0-9 ()+-]{4,}|[^@\s]+@[^@\s]+)$")
 
 
 class ToolContext:
@@ -35,14 +41,14 @@ class ToolContext:
         thread_id: str = "",
         sender: str = "",
         request: str = "",
-        history=None,
-        memory=None,
-        ledger=None,
-        skills=None,
-        recipes=None,
-        affect=None,
-        agent=None,
-        gateway=None,
+        history: Any = None,
+        memory: Any = None,
+        ledger: Any = None,
+        skills: Any = None,
+        recipes: Any = None,
+        affect: Any = None,
+        agent: Any = None,
+        gateway: Any = None,
         approved: bool = False,
         approval_id: str = "",
         person_id: str = "",
@@ -66,6 +72,10 @@ class ToolContext:
         self.gateway = gateway
         self.approved = approved
         self.approval_id = approval_id
+        # ADR-0006 §4.5: one turn may stage several approvals; they share the batch the store
+        # assigned to the first one, so `/approve batch` can decide them together.
+        self.approvals: list[str] = []
+        self.approval_batch = ""
         self.person_id = person_id or sender
         self.direct = bool(direct)
         self.app = str(app or "")
@@ -115,8 +125,14 @@ def _int(args: dict, key: str, default: int) -> int:
 
 
 def safe_chat(thread_id: str) -> str:
-    value = re.sub(r"[^A-Za-z0-9_.-]", "_", str(thread_id or "")).strip("._")
-    return (value or "chat")[:80]
+    """A scratch directory name that never merges two threads (ADR-0053 §4.1.3).
+
+    The sanitized part is for humans; the digest keeps `app:user_1` and `app_user:1` apart.
+    """
+    raw = str(thread_id or "")
+    value = re.sub(r"[^A-Za-z0-9_.-]", "_", raw).strip("._")
+    digest = hashlib.sha256(raw.encode("utf-8")).hexdigest()[:8]
+    return f"{(value or 'chat')[:80]}_{digest}"
 
 
 def trusted_roles(roles) -> bool:
@@ -299,6 +315,72 @@ def _count_capability(ctx: ToolContext, counter: str) -> None:
         method()
 
 
+def body_of(ctx: ToolContext, name: str = "") -> object | None:
+    """The body a cross-body tool targets: the named one, else the current body."""
+    wanted = str(name or "").strip() or str(getattr(ctx.gateway, "name", "") or "")
+    lookup = getattr(getattr(ctx, "agent", None), "body", None)
+    if callable(lookup):
+        return lookup(wanted)
+    return ctx.gateway if wanted == str(getattr(ctx.gateway, "name", "")) else None
+
+
+def resolve_address(ctx: ToolContext, body, query: str) -> tuple[Address | None, str]:
+    """The address a query names for a body, or a refusal text (ADR-0004 §4.1).
+
+    The archive answers first (`Directory`), then a direct form the body normalizes. A direct
+    address carries an empty `proof`: the caller must require a `reason` for it, and the door
+    evaluates the send as AUTHORIZATION.
+    """
+    name = str(getattr(body, "name", "") or "")
+    raw = str(query or "").strip()
+    if not raw:
+        return None, "error: chat must be a room name, a person, or an address"
+    if isinstance(body, Directory):
+        target, candidates = body.resolve_target(raw)
+        if target is not None:
+            return Address(name, str(target[0]), "gateway"), ""
+        if candidates:
+            listing = "\n".join(
+                f"- {label} ({thread})" if label else f"- {thread}"
+                for thread, label in candidates[:LIST_LIMIT]
+            )
+            return None, f'error: several targets match "{raw}":\n{listing}'
+    normalize = getattr(body, "normalize_address", None)
+    direct = str(normalize(raw) if callable(normalize) else raw).strip()
+    if DIRECT_ADDRESS.fullmatch(direct):
+        return Address(name, direct), ""
+    return None, f'error: target "{raw}" is not in the archive of {name or "this body"}'
+
+
+def record_send(
+    ctx: ToolContext,
+    target: str,
+    target_name: str,
+    kind: str,
+    summary: str,
+    *,
+    ok: bool = True,
+) -> None:
+    """ADR-0007 §4.5: the ledger keeps the class of the send, never the message content."""
+    if ctx.ledger is None or not ctx.thread_id:
+        return
+    label = "cross_send" if target != ctx.thread_id and kind in {"text", "file"} else kind
+    try:
+        ctx.ledger.log_action(
+            ctx.thread_id,
+            str(target),
+            label,
+            str(summary) if ok else f"failed — {summary}",
+            source_name=(
+                ctx.gateway.chat_name(ctx.thread_id) if ctx.gateway is not None else ""
+            ),
+            target_name=str(target_name or ""),
+            request=ctx.request,
+        )
+    except Exception:
+        log.exception("failed to log a send to %s", target)
+
+
 def cross_refusal(ctx: ToolContext, thread_id: str) -> str:
     """`""` when the requester may read that room, `denied: room` otherwise.
 
@@ -333,9 +415,48 @@ def cross_refusal(ctx: ToolContext, thread_id: str) -> str:
 
 # ---------------------------------------------------------------- execute
 
+def side_effecting(spec: Handler) -> bool:
+    """A tool that can change the world: a write, a send, a file, or a process."""
+    return (
+        str(spec.approval_class or "authorization") != "none"
+        or bool(spec.destructive)
+        or str(spec.family or "") == "write"
+    )
+
+
+def lease_refusal(ctx: ToolContext, name: str) -> str:
+    """Ask the live lease immediately before a side-effecting tool runs (ADR-0012 §4.3).
+
+    `""` when the call may run; an error string when the generation moved on. A context with no
+    lease (tests, fakes, an admin path) is not refused here.
+    """
+    guard = getattr(getattr(getattr(ctx, "agent", None), "lease", None), "guard", None)
+    require = getattr(guard, "require", None)
+    if not callable(require):
+        return ""
+    try:
+        require(f"tool:{name}")
+    except Superseded as exc:
+        log.warning("tool %s refused: %s", name, exc)
+        return f"error: refused by the live lease: {exc}"[:MAX_ERROR]
+    return ""
+
+
+def resolve_spec(specs: dict[str, Handler], name: str) -> Handler | None:
+    """The canonical handler a name or alias names; `None` for an unknown tool.
+
+    The one alias rule of the door: the tool loop resolves first, so the step cache, the step
+    log, and the non-idempotent check all read the canonical `Handler.name`.
+    """
+    found = specs.get(name)
+    if found is not None:
+        return found
+    return next((item for item in specs.values() if name in item.aliases), None)
+
+
 async def execute(specs: dict[str, Handler], name: str, args: dict, ctx: ToolContext) -> str:
     """Single entry point: name, permission, arguments, safety/approval, run, cap output."""
-    spec = specs.get(name) or next((item for item in specs.values() if name in item.aliases), None)
+    spec = resolve_spec(specs, name)
     if spec is None:
         return f"error: unknown tool: {name}"
     if not allows(ctx.allowed, spec.name):
@@ -381,11 +502,6 @@ async def execute(specs: dict[str, Handler], name: str, args: dict, ctx: ToolCon
         if decision.verdict == "deny":
             return f"error: {decision.reason or 'action denied by safety policy'}"
         if decision.verdict == "pending":
-            if ctx.approval_id:
-                return (
-                    f"pending approval #{ctx.approval_id} already waiting; "
-                    "ask the sender to /approve it."
-                )
             proof = scope_proof(request, extra=ctx.config.guard.credential_patterns)
             if proof["class"] == CONSENT and not ctx.agent.approvals.consent_allowed(
                 ctx.sender
@@ -405,12 +521,24 @@ async def execute(specs: dict[str, Handler], name: str, args: dict, ctx: ToolCon
                 roles=tuple(role.name for role in ctx.roles),
                 approval_class=str(proof["class"]),
                 scope_proof=proof,
+                batch_id=ctx.approval_batch,
             )
             ctx.approval_id = str(approval.id)
+            if approval.batch_id and not ctx.approval_batch:
+                ctx.approval_batch = approval.batch_id
+            if ctx.approval_id not in ctx.approvals:
+                ctx.approvals.append(ctx.approval_id)
+            waiting = ", ".join(f"#{item}" for item in ctx.approvals)
             return (
                 f"pending approval #{approval.id}: {approval.summary}. "
-                f"Tell the sender to run /approve {approval.id}."
+                f"Tell the sender to run /approve {approval.id}"
+                + (f" (staged in this turn: {waiting})" if len(ctx.approvals) > 1 else "")
+                + "."
             )
+    if side_effecting(spec):
+        refusal = lease_refusal(ctx, spec.name)
+        if refusal:
+            return refusal
     ctx.used.append(spec.name)
     try:
         result = await spec.fn(args, ctx)

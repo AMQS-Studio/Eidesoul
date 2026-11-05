@@ -7,7 +7,7 @@
       "patterns": [
         "(?i)\\b(password\\w{0,2}|passwd|kata\\s+sandi)\\b\\s*(?:[:=]\\s*)?\\S+",
         "(?i)\\b(password|passwd|kata\\s+sandi|sandi|api[\\s_-]?key|kunci\\s+api|token|secret|rahasia)\\b\\s*[:=]\\s*\\S+",
-        "(?i)\\b(-----BEGIN [A-Z ]+PRIVATE KEY-----)"
+        "(?i)(?<![A-Za-z0-9])(-----BEGIN [A-Z ]+PRIVATE KEY-----)"
       ],
       "examples": [
         "passwordku adalah hunter2",
@@ -122,6 +122,11 @@
     "dipaksa",
     "jatuh"
   ],
+  "ambiguous_context": {
+    "terpaksa": ["karena", "harus", "kerja", "orang", "situasi", "uang", "keluarga"],
+    "dipaksa": ["karena", "orang", "kerja", "situasi", "keluarga", "atasan", "teman"],
+    "jatuh": ["tadi", "dari", "tangga", "terjatuh", "kecelakaan", "sakit", "motor", "bangun"]
+  },
   "semantic_floor": 0.34,
   "semantic_margin": 0.03,
   "affect_terms": [

@@ -207,3 +207,24 @@ def test_the_audit_job_purges_with_the_configured_grace_and_batch(tmp_path) -> N
     )
 
     assert memory.calls == [{"grace_days": 2.5, "batch": 7}]
+
+
+def test_forget_ignores_the_request_words_and_targets_the_topic(tmp_path) -> None:
+    memory = store(tmp_path)
+    target = memory.write(
+        "aku tinggal di Bandung sejak lama", scope="person", person_id=PERSON,
+        thread_id=THREAD, owner_id=PERSON, subject_id=PERSON, level=2,
+    )
+    memory.write(
+        "temanku cerita tentang kopi arabika", scope="person", person_id=PERSON,
+        thread_id=THREAD, owner_id=PERSON, subject_id=PERSON, level=2,
+    )
+
+    removed = asyncio.run(
+        memory.forget_by_intent(
+            "tolong lupakan tentang Bandung", person_id=PERSON, thread_id=THREAD
+        )
+    )
+
+    assert removed == [target]
+    assert memory.get(target) is None

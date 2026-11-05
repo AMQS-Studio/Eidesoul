@@ -10,12 +10,13 @@ import time
 import uuid
 from collections.abc import Awaitable, Callable, Mapping, Sequence
 
-from sqlalchemy import select
+from sqlalchemy import bindparam, extract, func, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
-from .. import io
+from .. import embed, io
 from ..guard import SENSITIVE, is_crisis
-from ..schema import memories, memories_readable, memory_index
+from ..jobs.lease import Superseded, fenced_insert
+from ..schema import memories, memories_readable, memory_index, memory_uses
 from . import queries, records
 from .integrity import quarantine_kind, supersede_verdict, trust_for, via_of
 from .records import (
@@ -145,7 +146,7 @@ def _validated(
         raise ValueError(f"unknown scope: {scope}")
     route = via_of(source or via, fallback=via)
     owner = str(owner_id or person_id or "").strip()
-    subject = str(subject_id or owner or "").strip()
+    subject = store._canonical_subject(str(subject_id or owner or "").strip())
     wanted = quarantine_kind(
         kind,
         via=route,
@@ -244,7 +245,7 @@ def _values(
     store, params: _WriteParams, state: str, plan: RetentionPlan, now: float
 ) -> dict:
     memory_id = str(uuid.uuid4())
-    return {
+    values = {
         "id": memory_id,
         "scope": params.scope,
         "person_id": params.person_id,
@@ -284,6 +285,12 @@ def _values(
         "created_at": now,
         "updated_at": now,
     }
+    # ADR-0051 §4.1: the shared 384-dim embedder owns the vector; a failure leaves it NULL and
+    # the row stays reachable through its lexical arm.
+    vector = embed.encode([params.body]) if params.body else []
+    if vector and len(vector[0]) == queries.MEMORY_DIM:
+        values["embedding"] = vector[0]
+    return values
 
 
 def _existing(store, conn, params: _WriteParams) -> str:
@@ -408,6 +415,7 @@ def write(
     memory_id = str(values["id"])
     with store.db.connect() as conn:
         store._fence(conn, "write")
+        fence = store._fence_clause()
         if params.dedupe:
             found = _existing(store, conn, params)
             if found:
@@ -417,14 +425,45 @@ def write(
         old = _superseded(store, conn, params)
         if old is not None:
             values["supersedes"] = str(old["id"])
-        queries.insert_memory(conn, values)
+        added = conn.execute(
+            fenced_insert(memories, values, fence).returning(memories.c.id)
+        ).first()
+        if fence is not None and added is None:
+            raise Superseded("lease generation moved on: memory write refused")
         if old is not None:
-            queries.supersede_row(
-                conn, str(old["id"]), memory_id, store._policy.superseded_expiry(now), now
+            closed = _supersede(
+                conn,
+                str(old["id"]),
+                memory_id,
+                store._policy.superseded_expiry(now),
+                now,
+                fence,
             )
+            if fence is not None and not closed:
+                raise Superseded("lease generation moved on: supersede refused")
         if params.external_id:
             _link(store, conn, memory_id, params.external_id)
     return memory_id
+
+
+def _supersede(
+    conn, memory_id: str, by: str, expires_at, now: float, fence
+) -> int:
+    """Close the superseded row under the same predicate as the row that replaces it."""
+    statement = (
+        memories.update()
+        .where(memories.c.id == memory_id)
+        .values(
+            state="superseded",
+            superseded_by=by,
+            pinned=False,
+            expires_at=expires_at,
+            updated_at=now,
+        )
+    )
+    if fence is not None:
+        statement = statement.where(fence)
+    return int(conn.execute(statement).rowcount or 0)
 
 
 def record_uses(
@@ -434,7 +473,11 @@ def record_uses(
     *,
     delivered: bool = True,
 ) -> int:
-    """ADR-0005 §4.3: one touch per memory per delivered turn, then renew deterministically."""
+    """ADR-0005 §4.3: one touch per memory per delivered turn, then renew deterministically.
+
+    The touch gate is one bulk insert (the primary key is the per-turn dedupe), the counters
+    are one `UPDATE … WHERE id = ANY`, and the policy renewals ship as one executemany.
+    """
     if (
         store.db is None
         or not delivered
@@ -447,35 +490,91 @@ def record_uses(
     if not wanted:
         return 0
     now = time.time()
-    touched = 0
     with store.db.connect() as conn:
         store._fence(conn, "record_uses")
-        for memory_id in wanted:
-            if not queries.record_use(conn, memory_id, str(turn_id)):
-                continue
-            row = queries.locked(conn, memory_id)
-            if row is None or str(row.get("state") or "") != "ok":
-                continue
-            values: dict = {
-                "use_count": memories.c.use_count + 1,
-                "distinct_use_days": queries.distinct_use_days(conn, memory_id),
-                "last_used_at": now,
-                "updated_at": now,
-            }
-            renewed = store._policy.renewed_expiry(
-                kind=str(row.get("kind") or "fact"),
-                level=int(row.get("level") or 0),
-                pinned=bool(row.get("pinned")),
-                confirmed=row.get("confirmed"),
-                max_lifetime_at=row.get("max_lifetime_at"),
-                last_used_at=float(row.get("last_used_at") or 0.0),
-                now=now,
+        fence = store._fence_clause()
+        touched = [
+            str(item)
+            for item in conn.execute(
+                pg_insert(memory_uses)
+                .values(
+                    [
+                        {
+                            "memory_id": memory_id,
+                            "day": func.current_date(),
+                            "turn_id": str(turn_id),
+                        }
+                        for memory_id in wanted
+                    ]
+                )
+                .on_conflict_do_nothing(index_elements=["memory_id", "day", "turn_id"])
+                .returning(memory_uses.c.memory_id)
             )
-            if renewed is not None:
-                values["expires_at"] = renewed
-            queries.update_memory(conn, memory_id, values)
-            touched += 1
-    return touched
+            .scalars()
+            .all()
+        ]
+        if not touched:
+            return 0
+        renewals = _renewals(store, conn, touched, now)
+        statement = (
+            memories.update()
+            .where(memories.c.id.in_(touched), memories.c.state == "ok")
+            .values(
+                use_count=memories.c.use_count + 1,
+                distinct_use_days=(
+                    select(func.count(func.distinct(memory_uses.c.day)))
+                    .where(memory_uses.c.memory_id == memories.c.id)
+                    .scalar_subquery()
+                ),
+                last_used_at=extract("epoch", func.clock_timestamp()),
+                updated_at=extract("epoch", func.clock_timestamp()),
+            )
+        )
+        if fence is not None:
+            statement = statement.where(fence)
+        updated = conn.execute(statement)
+        if renewals:
+            renewal = (
+                memories.update()
+                .where(memories.c.id == bindparam("renew_id"))
+                .values(expires_at=bindparam("renew_expires_at"))
+            )
+            if fence is not None:
+                renewal = renewal.where(fence)
+            conn.execute(renewal, renewals)
+    return int(updated.rowcount or 0)
+
+
+def _renewals(store, conn, memory_ids: Sequence[str], now: float) -> list[dict]:
+    """The rows whose TTL the policy renews, read before the last-used stamp moves."""
+    found = queries.rows(
+        conn,
+        select(
+            memories.c.id,
+            memories.c.kind,
+            memories.c.level,
+            memories.c.pinned,
+            memories.c.confirmed,
+            memories.c.max_lifetime_at,
+            memories.c.last_used_at,
+        ).where(memories.c.id.in_(list(memory_ids)), memories.c.state == "ok"),
+    )
+    renewals: list[dict] = []
+    for row in found:
+        renewed = store._policy.renewed_expiry(
+            kind=str(row.get("kind") or "fact"),
+            level=int(row.get("level") or 0),
+            pinned=bool(row.get("pinned")),
+            confirmed=row.get("confirmed"),
+            max_lifetime_at=row.get("max_lifetime_at"),
+            last_used_at=float(row.get("last_used_at") or 0.0),
+            now=now,
+        )
+        if renewed is not None:
+            renewals.append(
+                {"renew_id": str(row["id"]), "renew_expires_at": float(renewed)}
+            )
+    return renewals
 
 
 def _mapping_external_sync(store, memory_id: str) -> str:
@@ -565,7 +664,7 @@ async def _index_row(store, memory_id: str, *, external_id: str = "") -> str:
 
 
 def _link(store, conn, memory_id: str, external_id: str) -> None:
-    backend = str(getattr(store._index, "backend", "mem0"))
+    backend = str(getattr(store._index, "backend", "postgres"))
     model = str(getattr(store._index, "embedding_model", "") or "")
     dim = int(getattr(store._index, "dim", 384) or 384)
     values = {

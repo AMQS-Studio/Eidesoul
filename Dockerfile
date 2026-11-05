@@ -31,6 +31,10 @@ COPY pyproject.toml uv.lock ./
 RUN uv sync --locked --no-build --no-install-project $EXTRAS
 
 COPY monoagens ./monoagens
+# The Alembic chain is data the image must carry: `monoagens db upgrade` reads it from here.
+# `engine.db` configures Alembic programmatically; the ini only names the chain for tooling.
+COPY alembic.ini ./
+COPY migrations ./migrations
 RUN uv sync --locked --no-build $EXTRAS
 
 ENV PATH="/app/.venv/bin:$PATH" \

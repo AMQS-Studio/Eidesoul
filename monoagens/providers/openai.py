@@ -7,7 +7,13 @@ shape and nothing else: no model id is pinned, the operator chooses one at init 
 
 from collections.abc import Callable
 
-from .base import ProviderDefaults, ProviderResponse, ProviderToolCall, ProviderUsage
+from .base import (
+    ProviderDefaults,
+    ProviderResponse,
+    ProviderToolCall,
+    ProviderUsage,
+    thinking_blocks,
+)
 
 OPENCODE = ProviderDefaults(
     "https://opencode.ai/inference/go/openai/v1",
@@ -24,10 +30,21 @@ CUSTOM = ProviderDefaults("", "")
 
 
 def normalize_response(response: object) -> ProviderResponse:
-    """OpenAI SDK/fake response -> the one shape the loop consumes (ADR-0044 §4.2)."""
+    """OpenAI SDK/fake response -> the one shape the loop consumes (ADR-0044 §4.2).
+
+    A native adapter already answers in that shape; it is returned unchanged instead of being
+    read as an empty OpenAI response.
+    """
+    if isinstance(response, ProviderResponse):
+        return response
     choices = getattr(response, "choices", None) or []
     message = choices[0].message if choices else None
-    text = str(getattr(message, "content", "") or "").strip()
+    content = _field(message, "content")
+    text = _content_text(content)
+    thinking = str(_field(message, "reasoning_content") or "").strip()
+    if not thinking:
+        # Claude's compatibility layer and native thinking blocks travel as content parts.
+        thinking = thinking_blocks(content)
     calls: list[ProviderToolCall] = []
     for call in getattr(message, "tool_calls", None) or []:
         call_id, name, arguments = call_parts(call)
@@ -41,12 +58,36 @@ def normalize_response(response: object) -> ProviderResponse:
     finish = str(getattr(choices[0], "finish_reason", "") or "") if choices else ""
     return ProviderResponse(
         text=text,
+        thinking=thinking,
         tool_calls=tuple(calls),
         usage=usage,
         finish_reason=finish,
         native_finish_reason=finish,
         message=message,
     )
+
+
+def _field(message: object, name: str):
+    """One message attribute from an SDK object, a stub, or a plain mapping."""
+    if isinstance(message, dict):
+        return message.get(name)
+    return getattr(message, name, None)
+
+
+def _content_text(content: object) -> str:
+    """Answer text only; reasoning blocks never leak into the reply."""
+    if isinstance(content, str):
+        return content.strip()
+    if not isinstance(content, list):
+        return ""
+    texts = [
+        str(part.get("text") or "")
+        for part in content
+        if isinstance(part, dict)
+        and part.get("type", "text") == "text"
+        and part.get("thought") is not True
+    ]
+    return "\n".join(texts).strip()
 
 
 def call_parts(call: object) -> tuple[str, str, str]:

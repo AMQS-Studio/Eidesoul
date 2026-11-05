@@ -7,7 +7,7 @@ import logging
 import re
 import secrets
 import time
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Mapping
 from pathlib import Path
 from typing import cast
 
@@ -27,6 +27,7 @@ from ...engine.inbound import Action, GatewayError, Percept
 from ...engine.registry import Handler, discover
 from ...engine.turn.context import Message, human_size
 from ...engine.turn.reply import FENCE, clean_prose, strip_blocks
+from ..base import BaseGateway, register_gateway
 from . import directory, history_sync, ingress, policy
 from .config import WhatsAppSettings
 from .media import download_media, send_kind
@@ -42,8 +43,54 @@ MENTION_TOKEN = re.compile(r"@\+?\d[\d\s().-]{2,24}\d")
 MENTION_NAME = re.compile(r"(?<![\w@])@([^\W\d_][\w.]{1,39})", re.UNICODE)
 
 
-class WhatsAppGateway:
+@register_gateway("whatsapp", extra="whatsapp")
+class WhatsAppGateway(BaseGateway):
     name = "whatsapp"
+    extra = "whatsapp"
+
+    @classmethod
+    def default_settings(cls) -> dict[str, object]:
+        defaults = WhatsAppSettings()
+        return {
+            **super().default_settings(),
+            "session_db": defaults.session_db.as_posix(),
+            "backlog_seconds": defaults.backlog_seconds,
+        }
+
+    @classmethod
+    def default_role_policy(cls, role_name: str) -> dict[str, object]:
+        """Role defaults mirror the catalog: administrators, addressed members, closed guests."""
+        name = str(role_name or "").strip().lower()
+        if name == "administrator":
+            return {"dm": True, "groups": "all", "reply_to_bot": True}
+        if name == "member":
+            return {"dm": True, "groups": "mention", "reply_to_bot": True}
+        return {"dm": False, "groups": "none", "reply_to_bot": False}
+
+    @classmethod
+    def tool_aliases(cls) -> dict[str, str]:
+        """Names a skill or prompt written before the core tools moved still resolves here."""
+        return {
+            "whatsapp_send": "send_message",
+            "whatsapp_send_to": "send_message",
+            "whatsapp_send_file": "send_file",
+            "whatsapp_chat_history": "thread_history",
+        }
+
+    @classmethod
+    def validate_role_policy(cls, block: Mapping[str, object]) -> None:
+        super().validate_role_policy(block)
+        if policy.Access.parse(block) is not None:
+            return
+        allowed = ", ".join(sorted(policy.GROUPS))
+        raise ValueError(
+            "gateway 'whatsapp': a role policy needs dm: bool, "
+            f"groups: one of [{allowed}], reply_to_bot: bool"
+        )
+
+    def check_access(self, block: Mapping[str, object] | None, percept: Percept) -> bool:
+        access = policy.Access.parse(block)
+        return access is not None and not access.refusal(percept.hints)
 
     def __init__(
         self,
@@ -148,12 +195,6 @@ class WhatsAppGateway:
                     return
                 inbound = ingress.event_to_inbound(ev, self)
                 if inbound is None:
-                    return
-                if (
-                    not inbound.payload.outgoing
-                    and not bool(inbound.hints.get("self"))
-                    and self.access_refusal(inbound)
-                ):
                     return
                 await agent.handle(inbound, self)
             except Exception:
@@ -434,11 +475,23 @@ class WhatsAppGateway:
             log.debug("presence update failed", exc_info=True)
 
     async def prepare_media(self, thread: str, message: Message) -> None:
-        if message.media is not None:
-            await download_media(self.client, self.config, thread, message.id, message.media)
-        if message.quote is not None and message.quote.media is not None:
+        if message.media is not None:  # pyright: ignore[reportAttributeAccessIssue]
+            await download_media(  # pyright: ignore[reportAttributeAccessIssue]
+                self.client,
+                self.config,
+                thread,
+                message.id,
+                message.media,  # pyright: ignore[reportAttributeAccessIssue]
+            )
+        if message.quote is not None and message.quote.media is not None:  # pyright: ignore[reportAttributeAccessIssue]
             quote_id = message.quote.id or f"{message.id}-quote"
-            await download_media(self.client, self.config, thread, quote_id, message.quote.media)
+            await download_media(
+                self.client,
+                self.config,
+                thread,
+                quote_id,
+                message.quote.media,  # pyright: ignore[reportAttributeAccessIssue]
+            )
 
     # -------------------------------------------------------------- display
 

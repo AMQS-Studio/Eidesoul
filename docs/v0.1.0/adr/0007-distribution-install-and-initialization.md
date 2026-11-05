@@ -6,7 +6,7 @@
 - **Context:** Re-baselined for v0.1.0; consolidates distribution, installation, terminal wizard interfaces, container packaging, and CLI administration (pre-rebaseline 0027, 0030, 0039, 0049, 0053, 0055).
 - **Supersedes:** pre-rebaseline 0027, 0030, 0039
 - **Related:** ADR-0001 (sovereign deployment), ADR-0004 (address normalization), ADR-0006 (access control)
-- **Implementation:** partial — terminal init wizard exists; container migration packaging, compose bootstrap ordering, comment-preserving YAML updates, and CLI admin fixes are scheduled in Phase P0/P2.
+- **Implementation:** implemented — dynamic terminal wizard and installer, global `$PATH` wrapper, comment-preserving YAML writes with an `EBUSY` fallback, migrations packaged into the image, compose bootstrap ordering, and the full operator CLI.
 
 ---
 

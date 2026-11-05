@@ -5,9 +5,10 @@ import asyncio
 import time
 from dataclasses import replace
 from datetime import UTC, datetime
+from types import SimpleNamespace
 
 import pytest
-from sqlalchemy import select
+from sqlalchemy import select, text
 from support import inbound_message, make_agent
 
 from monoagens.engine.access.relay import RelayStore
@@ -15,6 +16,7 @@ from monoagens.engine.access.roles import Role
 from monoagens.engine.jobs.automation_manifest import describe, validate_manifest
 from monoagens.engine.jobs.automation_store import AutomationStore
 from monoagens.engine.jobs.automation_worker import AutomationWorker
+from monoagens.engine.jobs.lease import Lease
 from monoagens.engine.jobs.schedule import ManifestError, next_after, occurrence_key
 from monoagens.engine.schema import automation_runs, automations, outbound_messages
 
@@ -580,3 +582,61 @@ def test_the_durable_route_survives_a_restart(tmp_path) -> None:
     env.agent._turn_gateways.clear()  # a fresh boot keeps no in-memory map
     assert env.agent.address_of(thread_id).gateway == "other"
     assert env.agent.body_of(thread_id) is other
+
+
+def claim_row(env, run_id: int, *, status: str, claimed_by: str, generation: int) -> None:
+    with env.db.connect() as conn:
+        conn.execute(
+            text(
+                "UPDATE automation_runs SET status = :status, claimed_by = :claimed_by, "
+                "generation = :generation, lease_until = 0 WHERE id = :id"
+            ),
+            {
+                "status": status,
+                "claimed_by": claimed_by,
+                "generation": generation,
+                "id": int(run_id),
+            },
+        )
+
+
+def status_of(env, run_id: int) -> str:
+    found = env.db.fetch_one(
+        text("SELECT status FROM automation_runs WHERE id = :id"), {"id": int(run_id)}
+    )
+    return str(found["status"])
+
+
+def test_reap_touches_only_claimed_or_running_and_only_its_own_generation(tmp_path) -> None:
+    """ADR-0012 §4.3: a reaper never releases a queued/succeeded row nor another generation's."""
+    env = build(tmp_path)
+    automation_id = create(env, manifest(), now=at(9, 50))
+    row = env.store.get(automation_id)
+    env.store._insert_run(row, at(10), "queued", "", at(9, 55))
+    env.store._insert_run(row, at(10, 1), "queued", "", at(9, 55))
+    env.store._insert_run(row, at(10, 2), "queued", "", at(9, 55))
+    env.store._insert_run(row, at(10, 3), "queued", "", at(9, 55))
+    queued, claimed, running, succeeded = [int(item["id"]) for item in runs(env)]
+
+    claim_row(env, claimed, status="claimed", claimed_by="automation:2", generation=3)
+    claim_row(env, running, status="running", claimed_by="automation:2", generation=3)
+    claim_row(env, succeeded, status="succeeded", claimed_by="automation:2", generation=3)
+
+    assert env.store.reap(at(10, 5)) == 2
+    assert status_of(env, queued) == "queued"
+    assert status_of(env, claimed) == "queued"
+    assert status_of(env, running) == "queued"
+    assert status_of(env, succeeded) == "succeeded"
+
+    # A claim another instance took meanwhile is only released by the live generation.
+    claim_row(env, claimed, status="claimed", claimed_by="automation:9", generation=9)
+    head = Lease(env.db, instance_id="owner", host="host-a", pid=1)
+    assert head.acquire() is not None
+    assert head.acquire() is not None  # every acquisition raises the generation
+    env.store.bind_lease(SimpleNamespace(instance_id="owner", generation=head.generation - 1))
+    assert env.store.reap(at(10, 6)) == 0
+    assert status_of(env, claimed) == "claimed"
+
+    env.store.bind_lease(SimpleNamespace(instance_id="owner", generation=head.generation))
+    assert env.store.reap(at(10, 7)) == 1
+    assert status_of(env, claimed) == "queued"

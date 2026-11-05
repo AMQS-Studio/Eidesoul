@@ -8,6 +8,7 @@ the statements it used to carry, so the port keeps its behaviour and loses the S
 
 import re
 import time
+from collections.abc import Sequence
 
 from sqlalchemy import String, and_, case, cast, delete, func, or_, select, text, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
@@ -18,8 +19,8 @@ from ..schema import (
     memory_events,
     memory_index,
     memory_tombstones,
-    memory_uses,
     messages,
+    person_links,
     thread_people,
 )
 from .integrity import TRUST_UNLABELED
@@ -27,9 +28,10 @@ from .integrity import TRUST_UNLABELED
 DAY = 86400.0
 
 
-def rows(conn, statement) -> list[dict]:
+def rows(conn, statement, params: dict | None = None) -> list[dict]:
     """`Database.fetch_all` shape, on a connection the caller already opened."""
-    return [dict(row) for row in conn.execute(statement).mappings().all()]
+    result = conn.execute(statement) if params is None else conn.execute(statement, params)
+    return [dict(row) for row in result.mappings().all()]
 
 
 def one(conn, statement) -> dict | None:
@@ -113,6 +115,145 @@ def match_rows(
         memories_readable.c.created_at.desc(),
     ).limit(max(1, int(limit)))
     return rows(conn, statement)
+
+
+# ADR-0051 §4.2: cosine and lexical arms fused by Reciprocal Rank Fusion, then importance and
+# an exponential recency decay as tie-breakers. The weights stay far below one RRF share, so a
+# row found by both arms always outranks a row found by one.
+MEMORY_DIM = 384
+RRF_K = 60.0
+MIN_SIMILARITY = 0.35
+IMPORTANCE_WEIGHT = 0.001
+RECENCY_WEIGHT = 0.001
+RECENCY_DECAY_SECONDS = 30 * DAY
+
+# The columns `MemoryHit` needs; the vector and the tsvector stay inside Postgres.
+HYBRID_FIELDS = (
+    "id",
+    "scope",
+    "person_id",
+    "thread_id",
+    "kind",
+    "text",
+    "state",
+    "level",
+    "confirmed",
+    "owner_id",
+    "subject_id",
+    "via",
+    "refs",
+    "trust",
+    "audience",
+    "source",
+    "vetoed",
+    "pinned",
+    "durability",
+    "category",
+    "use_count",
+    "created_at",
+    "dispute_state",
+    "privacy_evidence",
+    "privacy_policy",
+)
+SCOPED_FIELDS = ", ".join(f"m.{name}" for name in HYBRID_FIELDS)
+FUSED_FIELDS = ", ".join(f"r.{name}" for name in HYBRID_FIELDS)
+
+HYBRID_SQL = f"""
+WITH scoped AS (
+    SELECT {SCOPED_FIELDS},
+           CASE WHEN m.embedding IS NULL THEN NULL
+                ELSE 1 - (m.embedding <=> CAST(:query_vec AS vector))
+           END AS similarity,
+           ts_rank_cd(m.search_tsv, plainto_tsquery('simple', :query)) AS lexical
+    FROM memories_readable AS m
+    WHERE ({{scope_filter}})
+      AND m.level <= :max_level
+      AND m.dispute_state <> 'open'
+),
+ranked AS (
+    SELECT s.*,
+           CASE WHEN s.similarity IS NOT NULL AND s.similarity >= :min_similarity
+                THEN row_number() OVER (
+                    ORDER BY CASE WHEN s.similarity >= :min_similarity
+                                  THEN s.similarity END DESC NULLS LAST
+                )
+           END AS vector_rank,
+           CASE WHEN s.lexical > 0
+                THEN row_number() OVER (ORDER BY s.lexical DESC)
+           END AS lexical_rank
+    FROM scoped AS s
+)
+SELECT {FUSED_FIELDS},
+       coalesce(1.0 / (:rrf_k + r.vector_rank), 0.0)
+     + coalesce(1.0 / (:rrf_k + r.lexical_rank), 0.0)
+     + :importance_weight * least(r.use_count, 10) / 10.0
+     + :recency_weight * exp(
+           -greatest(
+               extract(epoch from clock_timestamp())::double precision - r.created_at, 0.0
+           ) / :decay_seconds
+       ) AS score
+FROM ranked AS r
+WHERE r.vector_rank IS NOT NULL
+   OR r.lexical_rank IS NOT NULL
+   OR :query = ''
+ORDER BY score DESC, r.created_at DESC
+LIMIT :limit
+"""
+
+
+def _scope_filter(scopes: Sequence[str], person_id: str, thread_id: str) -> str:
+    """The three legal audiences; another person's or another thread's row is unreachable."""
+    clauses: list[str] = []
+    if "global" in scopes:
+        clauses.append("m.scope = 'global'")
+    if "person" in scopes and person_id:
+        clauses.append(
+            "(m.scope = 'person' AND m.person_id = :person_id "
+            "AND (m.audience <> 'group' OR m.thread_id = :thread_id))"
+        )
+    if "thread" in scopes and thread_id:
+        clauses.append("(m.scope = 'thread' AND m.thread_id = :thread_id)")
+    return " OR ".join(clauses)
+
+
+def _vector_literal(vector: Sequence[float] | None) -> str | None:
+    if not vector:
+        return None
+    return "[" + ",".join(f"{float(item):.6f}" for item in vector) + "]"
+
+
+def hybrid_rows(
+    conn,
+    *,
+    query: str,
+    vector: Sequence[float] | None,
+    person_id: str,
+    thread_id: str,
+    limit: int,
+    scopes: Sequence[str] = ("global", "person", "thread"),
+    max_level: int = 4,
+) -> list[dict]:
+    """One statement over `memories_readable`: vector + lexical fused by RRF (ADR-0051)."""
+    scope_filter = _scope_filter(scopes, person_id, thread_id)
+    if not scope_filter:
+        return []
+    params: dict = {
+        "query": str(query or ""),
+        "query_vec": _vector_literal(vector),
+        "max_level": max(0, int(max_level)),
+        "min_similarity": MIN_SIMILARITY,
+        "rrf_k": RRF_K,
+        "importance_weight": IMPORTANCE_WEIGHT,
+        "recency_weight": RECENCY_WEIGHT,
+        "decay_seconds": RECENCY_DECAY_SECONDS,
+        "limit": max(1, int(limit)),
+    }
+    if ":person_id" in scope_filter:
+        params["person_id"] = str(person_id)
+    if ":thread_id" in scope_filter:
+        params["thread_id"] = str(thread_id)
+    statement = text(HYBRID_SQL.format(scope_filter=scope_filter))
+    return rows(conn, statement, params)
 
 
 def get_view(conn, memory_id: str) -> dict | None:
@@ -224,13 +365,38 @@ def pending_candidates(conn, scope: str, limit: int, now: float) -> list[dict]:
 
 
 def supersede_candidates(conn, scope: str, limit: int) -> list[dict]:
+    """Pending `supersede:` candidates, across person/thread/global for the same subject.
+
+    The candidate and the row it replaces may live in different scopes (ADR-0051 §4.4); a
+    person pass therefore matches on the subject, a thread pass on the thread, and the global
+    pass sees every scope.
+    """
     statement = (
         select(memories)
         .where(memories.c.state == "pending")
         .order_by(memories.c.created_at)
         .limit(max(1, int(limit)))
     )
-    return rows(conn, apply_scope(statement, scope))
+    kind, _, value = str(scope or "").partition(":")
+    if kind == "person" and value:
+        statement = statement.where(
+            or_(memories.c.subject_id == value, memories.c.person_id == value)
+        )
+    elif kind == "thread" and value:
+        statement = statement.where(memories.c.thread_id == value)
+    return rows(conn, statement)
+
+
+def person_for_address(conn, address: str) -> str:
+    """The canonical `per_…` behind a gateway address; the IdentityStore mapping."""
+    value = str(address or "").strip()
+    if not value:
+        return ""
+    found = one(
+        conn,
+        select(person_links.c.person_id).where(person_links.c.address == value).limit(1),
+    )
+    return str(found["person_id"]) if found else ""
 
 
 def reflection_rows(conn, scope: str, limit: int) -> list[dict]:
@@ -551,28 +717,6 @@ def delete_row(conn, memory_id: str, cutoff: float) -> bool:
 
 def insert_tombstone(conn, values: dict) -> None:
     conn.execute(pg_insert(memory_tombstones).values(**values))
-
-
-def record_use(conn, memory_id: str, turn_id: str) -> bool:
-    """Insert the (memory, day, turn) touch once; a repeated delivery is a no-op."""
-    inserted = conn.execute(
-        pg_insert(memory_uses)
-        .values(memory_id=memory_id, day=func.current_date(), turn_id=str(turn_id))
-        .on_conflict_do_nothing(index_elements=["memory_id", "day", "turn_id"])
-        .returning(memory_uses.c.memory_id)
-    ).scalar()
-    return inserted is not None
-
-
-def distinct_use_days(conn, memory_id: str) -> int:
-    return int(
-        conn.execute(
-            select(func.count(func.distinct(memory_uses.c.day))).where(
-                memory_uses.c.memory_id == memory_id
-            )
-        ).scalar()
-        or 1
-    )
 
 
 def candidate_values(

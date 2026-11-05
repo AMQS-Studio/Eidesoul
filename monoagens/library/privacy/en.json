@@ -7,7 +7,7 @@
       "patterns": [
         "(?i)\\b(password\\w{0,2}|passwd)\\b\\s*(?:[:=]\\s*)?\\S+",
         "(?i)\\b(password|passwd|api[\\s_-]?key|token|secret)\\b\\s*[:=]\\s*\\S+",
-        "(?i)\\b(-----BEGIN [A-Z ]+PRIVATE KEY-----)"
+        "(?i)(?<![A-Za-z0-9])(-----BEGIN [A-Z ]+PRIVATE KEY-----)"
       ],
       "examples": [
         "my password is hunter2",
@@ -122,6 +122,11 @@
     "coerced",
     "fell"
   ],
+  "ambiguous_context": {
+    "forced": ["to", "into", "labour", "labor", "by", "out", "quit"],
+    "coerced": ["into", "by", "confession", "sign"],
+    "fell": ["from", "down", "off", "stairs", "yesterday", "sick", "asleep"]
+  },
   "semantic_floor": 0.34,
   "semantic_margin": 0.03,
   "affect_terms": [

@@ -63,7 +63,9 @@ class Database:
         url: str,
         *,
         pool_size: int = 5,
+        max_overflow: int = 0,
         pool_timeout: float = 30.0,
+        control_pool_size: int = 2,
     ) -> None:
         self.url = str(url)
         if not self.url:
@@ -74,10 +76,23 @@ class Database:
                 f"database must be Postgres+pgvector (ADR-0029), not '{backend}'"
             )
         self.label = redact_dsn(self.url)
+        # `DatabaseConfig` sizes the turn pool; overflow stays 0 by default so a burst waits
+        # instead of opening an unbounded number of Postgres backends.
         self.engine: Engine = create_engine(
             self.url,
             pool_pre_ping=True,
             pool_size=int(pool_size),
+            max_overflow=int(max_overflow),
+            pool_timeout=float(pool_timeout),
+            future=True,
+        )
+        # ADR-0003 §4.4: lease heartbeats and delivery gates need a connection even while
+        # every turn-pool slot is busy, so they get their own tiny pool.
+        self.control_engine: Engine = create_engine(
+            self.url,
+            pool_pre_ping=True,
+            pool_size=max(1, int(control_pool_size)),
+            max_overflow=0,
             pool_timeout=float(pool_timeout),
             future=True,
         )
@@ -85,9 +100,11 @@ class Database:
     # ------------------------------------------------------------- schema
 
     def create_all(self) -> None:
-        # ADR-0026 §4.6: the trigram indexes need the extension before the tables are created.
+        # ADR-0026 §4.6/ADR-0051 §4.1: the trigram and vector types need their extensions
+        # before the tables are created.
         with self.engine.connect().execution_options(isolation_level="AUTOCOMMIT") as conn:
             conn.execute(text("CREATE EXTENSION IF NOT EXISTS pg_trgm"))
+            conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
         metadata.create_all(self.engine)
         with self.connect() as conn:
             # ADR-0004 §5.3: the one readable path. Migrations create the same view.
@@ -128,7 +145,7 @@ class Database:
             with self.engine.connect().execution_options(isolation_level="AUTOCOMMIT") as conn:
                 conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
             return True
-        except Exception as exc:  # missing permission/pgvector: Mem0 is unavailable, not a crash
+        except Exception as exc:  # missing permission/pgvector: the store reports it, not a crash
             log.warning("pgvector could not be enabled: %s", exc)
             return False
 
@@ -223,6 +240,12 @@ class Database:
         with self.engine.begin() as conn:
             yield conn
 
+    @contextmanager
+    def control(self) -> Iterator[Connection]:
+        """Heartbeat/gate reads on the dedicated pool; a busy turn pool cannot starve it."""
+        with self.control_engine.begin() as conn:
+            yield conn
+
     def fetch_all(self, statement) -> list[dict]:
         with self.connect() as conn:
             return [dict(row) for row in conn.execute(statement).mappings().all()]
@@ -270,3 +293,5 @@ class Database:
     def dispose(self) -> None:
         with contextlib.suppress(Exception):
             self.engine.dispose()
+        with contextlib.suppress(Exception):
+            self.control_engine.dispose()

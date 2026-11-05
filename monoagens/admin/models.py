@@ -26,8 +26,12 @@ def list_models(config: Config, *, timeout: float = 10.0) -> list[str]:
         "Accept": "application/json",
         "User-Agent": USER_AGENT,
     }
-    if getattr(llm, "models_native", False):
+    wire = str(getattr(llm, "wire", "openai") or "openai")
+    if wire == "gemini":
         headers["x-goog-api-key"] = key
+    elif wire == "anthropic":
+        headers["x-api-key"] = key
+        headers["anthropic-version"] = "2023-06-01"
     else:
         headers["Authorization"] = f"Bearer {key}"
     request = urllib.request.Request(url, headers=headers)
@@ -43,7 +47,7 @@ def list_models(config: Config, *, timeout: float = 10.0) -> list[str]:
         raise ConfigError(f"cannot list models at {url}: {exc}") from exc
     if not isinstance(body, dict):
         return []
-    if getattr(llm, "models_native", False):
+    if wire == "gemini":
         rows = body.get("models")
         ids = set()
         for item in rows or []:

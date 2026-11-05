@@ -156,7 +156,16 @@ def test_percept_is_exactly_the_seam() -> None:
     fields = [item.name for item in Percept.__dataclass_fields__.values()]
     assert fields == ["source", "thread", "actor", "kind", "payload", "hints", "raw"]
     action = [item.name for item in Action.__dataclass_fields__.values()]
-    assert action == ["address", "capability", "payload", "approval_class", "id"]
+    assert action == [
+        "address",
+        "capability",
+        "payload",
+        "approval_class",
+        "id",
+        "stream_id",
+        "replace_id",
+        "meta",
+    ]
     with pytest.raises(ValueError, match="approval_class must be one of"):
         Action(
             address=Address("fake", "t"),

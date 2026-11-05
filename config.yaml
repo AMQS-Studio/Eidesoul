@@ -1,166 +1,705 @@
+# ============================================================================
+# MonoAgens host configuration (config.yaml)
+# Authoritative source of truth for this deployment.
+# Secrets (API keys, database passwords) live only in .env.
+# ============================================================================
+
+# --- 1. DATABASE & POSTGRESQL CONNECTION ---
+# Postgres store and pool; the URL comes from `.env` or `url`.
 database:
+  # Environment variable that holds the Postgres URL. Default: MONOAGENS_DATABASE_URL.
   url_env: MONOAGENS_DATABASE_URL
+  # Inline URL; keep it empty so the password stays in `.env`.
   url: ''
+  # Connection pool size. Default: 5.
   pool_size: 5
+  # Seconds to wait for a pooled connection. Default: 30.
   pool_timeout: 30
+
+# --- 2. PATHS & COMPANION FILES ---
+# Writable root for public/ and scratch/ data. Default: .monoagens/workspace.
 workspace: .monoagens/workspace
+# Role mirror and seed. Default: roles.yaml.
 roles_file: roles.yaml
+# Soul mirror and seed. Default: soul.yaml.
 soul_file: soul.yaml
+# Apply changed host files on start; DB wins conflicts. Default: true.
 sync_documents: true
+
+# --- 3. SANDBOX CONTAINER ---
+# Sandbox runtime and resource limits.
 sandbox:
+  # Container runtime; empty autodetects podman then docker.
   runtime: ''
-  image: docker.io/library/python:3.14-slim
+  # Container image for the sandbox.
+  image: docker.io/library/python:3.12-slim
+  # Sandbox command timeout. Default: 120.
   timeout_seconds: 120
+  # Dedicated sandbox network; bridge, none, and host are rejected.
   network: monoagens-sandbox
+  # Host path mounted into the sandbox; empty uses the workspace.
   host_workspace: null
+  # Extra environment variables allowed into the container.
   env: []
+  # HTTP proxy for the sandbox network.
   proxy: http://sandbox-proxy:3128
+  # Process limit inside the sandbox.
   pids_limit: 256
+  # Memory limit for the sandbox.
   memory: 512m
+  # CPU limit for the sandbox.
   cpus: 1.0
+
+# --- 4. WEB SEARCH (MULTI-PROVIDER) ---
+# Search provider, fallback chain, and fetch policy.
 web_search:
+  # Primary search provider: ddgs, searxng, tavily, brave, exa, serper, google, or off.
+  provider: ddgs
+  # Providers tried in order after the primary one fails.
+  fallbacks: []
+  # SearXNG JSON endpoint; empty means that provider cannot run.
   base_url: ''
+  # Environment variable that holds the search key; never the key.
+  api_key_env: ''
+  # Environment variable holding the Google CSE engine id.
+  engine_id_env: ''
+  # ddgs backend selection; auto lets the library choose.
+  ddgs_backend: auto
+  # Search region hint; empty means no region bias.
+  region: ''
+  # Search timeout. Default: 10.
   timeout_seconds: 10
+
+# --- 5. MODEL CONTEXT PROTOCOL ---
+# MCP servers available to the engine.
 mcp:
+  # Server map; empty means no MCP server.
   servers: {}
+
+# --- 6. PLUGIN SYSTEM ---
+# Plugin code location and fetch policy.
+plugin:
+  # Plugin root; empty means `<workspace>/plugins`.
+  root: ''
+  # Fetch plugin code by digest before enabling. Default: true.
+  fetch: true
+  # Source used when fetching a plugin.
+  source: ''
+# Per-plugin enable flags and pinned digests.
+plugins: {}
+
+# ============================================================================
+# ENGINE
+# Mechanism and runtime settings; soul and roles live in their own files.
+# ============================================================================
+# Engine mechanism and runtime settings.
 engine:
-  llm:
-    provider: ''
-    base_url: ''
-    model: ''
-    api_key_env: ''
-    reasoning_effort: ''
-    timeout_seconds: 120
-    run_budget_seconds: 240
-    retry:
-      turn_attempts: 1
-      worker_attempts: 3
-      base_seconds: 2
-      cap_seconds: 60
-      jitter: 0.2
-      retry_after_max_seconds: 10
-    utility_temperature: 0.2
+
+  # --- engine.default_role: DEFAULT ROLE ---
+  # Role for an unknown sender. Default: guest.
   default_role: guest
-  turn:
-    timeout_seconds: 300
-    min_call_seconds: 5
-  turns:
-    resume: true
-    max_attempts: 2
-    max_age_seconds: 900
-    stale_after_seconds: 21600
-    partial_delivery: skip
-    max_resume_per_chat: 5
-    max_resume_per_minute: 10
-    backlog_policy: per_message_then_consolidate
-    shutdown:
-      grace_seconds: 25
-      drain_seconds: 15
-      notice_seconds: 5
-      notice_per_chat: true
-      notice_retry:
-        attempts: 2
-        backoff_seconds: 1
-      resume_notice:
-        after_seconds: 300
-      stop_grace_period: 30
-  worker:
-    retry:
-      attempts: 5
-      backoff_seconds: 2
-      dead_letter_after: 5
-    reaper:
-      every_seconds: 30
-      batch: 100
-  io:
-    workers: 8
-  concurrency:
-    max_chat_locks: 256
-  memory:
-    backend: mem0
-    auto_capture: true
-    capture_min_chars: 8
-    max_items: 12
-    max_chars: 3000
-    collection: monoagens_memories
-    extraction_model: ''
-    privacy:
-      enabled: true
-      default_level: 2
-      ask_level: 4
-      group_max_level: 2
-      dm_max_level: 4
-      auditor: true
-    telemetry: false
-  approval:
-    mode: yolo
-    sensitive_tools: []
-    sensitive_commands:
-    - rm *
-    - rmdir *
-    - shred *
-    - dd *
-    - truncate *
-    - wipefs *
-    - mkfs*
-    - fdisk *
-    - parted *
-    - shutdown *
-    - reboot *
-    - poweroff *
-    - halt *
-    - systemctl *
-    - service *
-    - kill *
-    - pkill *
-    - killall *
-    - chmod *
-    - chown *
-    - chgrp *
-    - mount *
-    - umount *
-    - git reset --hard*
-    - git clean -*f*
-    - git push *--force*
-    - git push -f*
-    - find * -delete*
-    - find * -exec rm*
-    settings: true
-    ttl_seconds: 900
-  skills:
-    max_index_chars: 3000
-  prompt:
-    salience: true
-    max_chars: 9000
-    thread_chars: 4000
-  guard:
-    enabled: true
+
+  # --- engine.llm: PROVIDER & MODEL ---
+  # Provider wire, model, and operational limits.
+  llm:
+    # Provider name selected at init; no code default.
+    provider: ''
+    # Provider endpoint; empty uses the provider record.
+    base_url: ''
+    # Model id selected by the operator; no code default.
     model: ''
-    timeout_seconds: 6
-    max_command_chars: 4000
-  research:
-    mode: auto
-    require_citation: true
-    freshness_hours: 24
-    max_results: 5
+    # Environment variable that holds the provider key.
+    api_key_env: ''
+    # Reasoning effort; empty uses the provider default.
+    reasoning_effort: ''
+    # Per-call model timeout. Default: 120.
+    timeout_seconds: 120
+    # Temperature for decisions, summaries, and extraction. Default: 0.2.
+    utility_temperature: 0.2
+    # Wall-clock budget for one turn. Default: 240.
+    run_budget_seconds: 240
+    # Model calls allowed in one turn. Default: 6.
+    max_calls_per_turn: 6
+    # Send a stable prefix first for provider prompt caching. Default: true.
+    prompt_cache: true
+    # Retry policy for the turn and background paths.
+    retry:
+      # Turn attempts. Default: 1.
+      turn_attempts: 1
+      # Background attempts. Default: 3.
+      worker_attempts: 3
+      # Initial backoff. Default: 2.
+      base_seconds: 2
+      # Backoff cap. Default: 60.
+      cap_seconds: 60
+      # Backoff jitter ratio. Default: 0.2.
+      jitter: 0.2
+      # Cap on a provider Retry-After. Default: 10.
+      retry_after_max_seconds: 10
+
+  # --- engine.turns: TURN LIFECYCLE & SHUTDOWN ---
+  # Turn lifecycle, resume, and shutdown.
+  turns:
+    # Resume an interrupted turn after a restart. Default: true.
+    resume: true
+    # Turn attempts before permanent failure. Default: 2.
+    max_attempts: 2
+    # Oldest resumable turn. Default: 900.
+    max_age_seconds: 900
+    # Age before an orphaned turn is swept. Default: 21600.
+    stale_after_seconds: 21600
+    # skip or resend a partially delivered reply. Default: skip.
+    partial_delivery: skip
+    # Resume cap per chat. Default: 5.
+    max_resume_per_chat: 5
+    # Resume rate cap across the system. Default: 10.
+    max_resume_per_minute: 10
+    # How a busy chat's queue is handled. Default: consolidate.
+    backlog_policy: per_message_then_consolidate
+    # Hard one-turn deadline. Default: 300.
+    timeout_seconds: 300
+    # Do not start a model call below this remaining time. Default: 5.
+    min_call_seconds: 5
+    # Graceful shutdown budget.
+    shutdown:
+      # Time a live turn may finish. Default: 25.
+      grace_seconds: 25
+      # Time to drain outbound sends. Default: 15.
+      drain_seconds: 15
+      # Restart notice send budget. Default: 5.
+      notice_seconds: 5
+      # At most one notice per chat. Default: true.
+      notice_per_chat: true
+      # Notice delivery retry.
+      notice_retry:
+        # Notice attempts. Default: 2.
+        attempts: 2
+        # Notice backoff. Default: 1.
+        backoff_seconds: 1
+      # When to announce a resumed turn.
+      resume_notice:
+        # Announce after this delay. Default: 300.
+        after_seconds: 300
+      # Orchestrator stop deadline. Default: 30.
+      stop_grace_period: 30
+
+  # --- engine.worker: BACKGROUND WORKER ---
+  # Background worker retry and reaper.
+  worker:
+    # Background job retry budget.
+    retry:
+      # Attempts before dead-letter. Default: 5.
+      attempts: 5
+      # Initial backoff. Default: 2.
+      backoff_seconds: 2
+      # Failures before dead-letter. Default: 5.
+      dead_letter_after: 5
+    # Stale claim sweeper.
+    reaper:
+      # Sweep interval. Default: 30.
+      every_seconds: 30
+      # Rows recovered per sweep. Default: 100.
+      batch: 100
+
+  # --- engine.io: BLOCKING I/O ---
+  # Blocking I/O worker threads.
+  io:
+    # Worker thread count. Default: 8.
+    workers: 8
+
+  # --- engine.concurrency: CONCURRENCY ---
+  # Per-chat concurrency bounds.
+  concurrency:
+    # Maximum chat locks. Default: 256.
+    max_chat_locks: 256
+
+  # --- engine.memory: MEMORY, PRIVACY & RETENTION ---
+  # Memory store, capture, privacy, and retention.
+  memory:
+    # Capture durable facts automatically. Default: true.
+    auto_capture: true
+    # Deterministic capture gate.
+    capture:
+      # off, conservative, balanced, or eager. Default: balanced.
+      mode: balanced
+      # Shortest text worth capturing. Default: 8.
+      min_chars: 8
+      # Duplicate cutoff. Default: 0.88.
+      novelty_threshold: 0.88
+    # Memory items per prompt. Default: 12.
+    max_items: 12
+    # Memory prompt budget. Default: 3000.
+    max_chars: 3000
+    # Memory collection label.
+    collection: monoagens_memories
+    # Extraction model; empty uses engine.llm.model.
+    extraction_model: ''
+    # Send memory telemetry. Default: false.
+    telemetry: false
+    # Disclosure limits and group capture policy.
+    privacy:
+      # Apply privacy levels. Default: true.
+      enabled: true
+      # Default disclosure level, 0-4. Default: 2.
+      default_level: 2
+      # Level that requires confirmation. Default: 4.
+      ask_level: 4
+      # Ceiling in groups. Default: 2.
+      group_max_level: 2
+      # Ceiling in direct messages. Default: 4.
+      dm_max_level: 4
+      # Run the disclosure auditor. Default: true.
+      auditor: true
+      # What may be captured in a group.
+      group_capture:
+        # Only the speaker's own words. Default: true.
+        self_only: true
+        # drop or deny third-party facts.
+        third_party: drop
+        # Ask before group capture. Default: false.
+        ask_in_group: false
+    # Cognition queue worker.
+    worker:
+      # Queue poll interval. Default: 1.
+      tick_seconds: 1
+      # Concurrent cognition jobs. Default: 2.
+      concurrency: 2
+      # Capture batch size. Default: 20.
+      capture_max_items: 20
+      # Consolidation interval. Default: 60.
+      consolidation_every_seconds: 60
+      # Audit interval. Default: 86400.
+      audit_every_seconds: 86400
+      # Queue capacity. Default: 5000.
+      queue_cap: 5000
+      # Cognition retry budget.
+      retry:
+        # Attempts before dead-letter. Default: 5.
+        attempts: 5
+        # Initial backoff. Default: 2.
+        backoff_seconds: 2
+        # Failures before dead-letter. Default: 5.
+        dead_letter_after: 5
+    # Cross-room recall limits.
+    rooms:
+      # Rooms read per turn. Default: 2.
+      max_rooms_per_turn: 2
+      # Messages read per room. Default: 20.
+      max_messages: 20
+      # Fail closed on unknown membership. Default: true.
+      require_membership: true
+      # gateway_first or recorded. Default: gateway_first.
+      source: gateway_first
+    # Prototype intent thresholds; never a model call.
+    intent:
+      # The remember intent.
+      remember:
+        # Route remember hints. Default: true.
+        enabled: true
+        # Minimum score. Default: 0.62.
+        floor: 0.62
+        # Score margin over the runner-up. Default: 0.06.
+        margin: 0.06
+      # The forget intent.
+      forget:
+        # Route forget hints. Default: true.
+        enabled: true
+        # Minimum score. Default: 0.64.
+        floor: 0.64
+        # Score margin over the runner-up. Default: 0.06.
+        margin: 0.06
+    # How long memory rows live.
+    retention:
+      # Daily purge limits.
+      purge:
+        # Grace window before purge. Default: 1.
+        grace_days: 1.0
+        # Rows removed per run. Default: 500.
+        batch: 500
+
+  # --- engine.approval: APPROVAL POLICY ---
+  # Approval policy for sensitive commands and settings.
+  approval:
+    # default, yolo, or strict. Default: yolo.
+    mode: default
+    # Command patterns that always need approval.
+    sensitive_commands:
+      - rm *
+      - rmdir *
+      - shred *
+      - dd *
+      - truncate *
+      - wipefs *
+      - mkfs*
+      - fdisk *
+      - parted *
+      - shutdown *
+      - reboot *
+      - poweroff *
+      - halt *
+      - systemctl *
+      - service *
+      - kill *
+      - pkill *
+      - killall *
+      - chmod *
+      - chown *
+      - chgrp *
+      - mount *
+      - umount *
+      - git reset --hard*
+      - git clean -*f*
+      - git push *--force*
+      - git push -f*
+      - find * -delete*
+      - find * -exec rm*
+    # Ask before a settings change. Default: true.
+    settings: true
+    # How long an approval stays valid. Default: 900.
+    ttl_seconds: 900
+    # Self-confirmation anti-spam cap. Default: 20.
+    consent_max_per_hour: 20
+    # Ask in chat and accept a natural yes/no. Default: true.
+    natural_confirm: true
+    # Ask before a cross-room or cross-gateway send. Default: true.
+    confirm_cross_gateway: true
+    # Ask before creating a durable task. Default: true.
+    confirm_tasks: true
+
+  # --- engine.skills: SKILLS ---
+  # Procedures, efficiency evidence, and the automation ladder.
+  skills:
+    # Use skills. Default: true.
+    enabled: true
+    # Task idle window. Default: 10.
+    task_idle_minutes: 10
+    # Idle after a send. Default: 3.
+    idle_after_send_minutes: 3
+    # Skills retrieved per episode. Default: 1.
+    per_episode: 1
+    # Skill prompt budget. Default: 800.
+    max_chars: 800
+    # Stored skill body cap. Default: 18000.
+    max_body_chars: 18000
+    # Renew an unused skill after this window. Default: 30.
+    use_renewal_days: 30
+    # Efficiency comparison evidence.
+    efficiency:
+      # Compare outcomes. Default: true.
+      enabled: true
+      # Minimum episodes. Default: 2.
+      min_evidence_episodes: 2
+      # Evidence window. Default: 30.
+      window_days: 30.0
+    # Automation proposal ladder.
+    ladder:
+      # Propose automations. Default: true.
+      enabled: true
+      # Proposal cooldown. Default: 14.
+      proposal_cooldown_days: 14.0
+
+  # --- engine.prompt: PROMPT ASSEMBLY ---
+  # Prompt assembly and salience.
+  prompt:
+    # Select volatile blocks by salience. Default: true.
+    salience: true
+    # Volatile prompt budget. Default: 9000.
+    max_chars: 9000
+    # Thread window budget. Default: 4000.
+    thread_chars: 4000
+    # Blocks that always stay in the prompt.
+    pinned_blocks:
+      - base
+      - self
+      - roles
+      - away
+    # Render the capability index. Default: true.
+    capability_index: true
+    # Capability index budget. Default: 1200.
+    capability_index_max_chars: 1200
+    # Two-level index threshold. Default: 150.
+    capability_index_two_level_at: 150
+    # Hash the stable prefix for caching. Default: true.
+    prefix_hash: true
+    # The self-knowledge block.
+    self_block:
+      # non_administrator, never, or always. Default: non_administrator.
+      redact_infra: non_administrator
+
+  # --- engine.ambient: AMBIENT WORK ---
+  # Ambient background work.
   ambient:
+    # Run ambient work. Default: true.
     enabled: true
+    # Ambient tick. Default: 10.
     tick_seconds: 10
+    # Messages between room digests. Default: 12.
     digest_every: 12
+    # Digest cooldown. Default: 900.
     digest_cooldown: 900
+    # Messages read per digest. Default: 30.
     history_window: 30
+    # Idle minutes before research. Default: 20.
     idle_minutes: 20
+    # Research cooldown. Default: 21600.
     research_cooldown: 21600
+    # Ambient research quota. Default: 6.
     research_per_day: 6
+    # Results per ambient research. Default: 5.
     research_results: 5
-    context_enabled: true
-    context_hours: 6
-    context_topics: 2
-    context_results: 4
-gateways:
-  cli:
+
+  # --- engine.guard: GUARD ---
+  # Deterministic and classifier guard limits.
+  guard:
+    # Run the guard. Default: true.
     enabled: true
-    role: administrator
-    user: local
-    thread_id: cli:local
-    chat_name: Terminal
+    # Classifier model; empty uses engine.llm.model.
+    model: ''
+    # Classifier timeout. Default: 6.
+    timeout_seconds: 6
+    # Maximum command length scanned. Default: 4000.
+    max_command_chars: 4000
+    # Operator additions to the credential patterns.
+    credential_patterns: []
+
+  # --- engine.language: LANGUAGE PACK ---
+  # Language pack location.
+  language:
+    # Lexicon override; empty uses the packaged catalog.
+    lexicon_dir: ''
+
+  # --- engine.reflection: REFLECTION ---
+  # Background reflection passes over memory.
+  reflection:
+    # Run reflection. Default: true.
+    enabled: true
+    # Pass interval. Default: 60.
+    every_minutes: 60
+    # Idle minutes before a pass. Default: 30.
+    idle_minutes: 30
+    # Rows needed before a pass. Default: 25.
+    min_new_rows: 25
+    # Minimum candidates. Default: 1.
+    min_candidates: 1
+    # Scopes per pass. Default: 1.
+    scopes_per_pass: 1
+    # Items considered per pass. Default: 40.
+    items_per_pass: 40
+    # Writes per pass. Default: 20.
+    writes_per_pass: 20
+    # Pass time budget. Default: 60.
+    seconds_per_pass: 60
+    # Daily pass cap. Default: 24.
+    passes_per_day: 24
+    # Derived-fact depth. Default: 1.
+    derive_depth: 1
+    # Dispute lifetime. Default: 30.
+    dispute_ttl_days: 30
+    # Dispute questions per day. Default: 1.
+    questions_per_day: 1
+
+  # --- engine.research: RESEARCH & CITATIONS ---
+  # Model prior, websearch triggers, and citation verification.
+  research:
+    # off, auto, or always. Default: auto.
+    mode: auto
+    # Require a real [Rn] for current claims. Default: true.
+    require_citation: true
+    # Maximum source age for a current claim; 0 disables. Default: 24.
+    freshness_hours: 24
+    # Search result count, 1-10. Default: 5.
+    max_results: 5
+
+  # --- engine.self_knowledge: SELF KNOWLEDGE ---
+  # Generated self knowledge and capability index.
+  self_knowledge:
+    # Render self knowledge. Default: true.
+    enabled: true
+    # Include the capability index. Default: true.
+    capability_index: true
+    # Topics that may be described.
+    topics:
+      - rooms
+      - memory
+      - permissions
+      - initiative
+      - failure
+      - limits
+    # Publish coarse counts. Default: true.
+    coarse_buckets: true
+    # Describe the topology. Default: true.
+    topology: true
+    # Topic budget. Default: 1200.
+    max_chars_per_topic: 1200
+    # Reject forbidden tokens. Default: true.
+    forbidden_token_check: true
+    # Repo documents read for identity.
+    docs:
+      - README.md
+    # Document budget. Default: 4000.
+    docs_max_chars: 4000
+
+  # --- engine.safety: SAFETY POLICY ---
+  # Safety pack policy.
+  safety:
+    # Run without a language safety pack. Default: false.
+    allow_degraded: false
+
+  # --- engine.tools: TOOL CONTRACT ---
+  # Tool call validation and context budget.
+  tools:
+    # Argument validation mode. Default: strict.
+    args: strict
+    # Consecutive invalid calls allowed. Default: 5.
+    max_errors: 5
+    # Tools always indexed in the prompt.
+    hot:
+      - read
+      - thread_history
+      - memory
+      - info
+    # Load other tools on demand. Default: true.
+    activate_on_demand: true
+
+  # --- engine.shell: SHELL ENVIRONMENT ---
+  # Environment inherited by shell commands.
+  shell:
+    # Variable names passed through to the child.
+    env:
+      - PATH
+      - HOME
+      - XDG_RUNTIME_DIR
+      - TMPDIR
+      - TERM
+
+  # --- engine.speech: SPEECH ---
+  # engine.speech — operator section.
+  speech:
+    # engine.speech.stt — operator section.
+    stt:
+      # engine.speech.stt.provider — operator setting. Default: ''
+      provider: ''
+      # engine.speech.stt.base_url — operator setting. Default: ''
+      base_url: ''
+      # engine.speech.stt.api_key_env — operator setting. Default: ''
+      api_key_env: ''
+      # engine.speech.stt.model — operator setting. Default: ''
+      model: ''
+      # engine.speech.stt.language — operator setting. Default: ''
+      language: ''
+    # engine.speech.tts — operator section.
+    tts:
+      # engine.speech.tts.provider — operator setting. Default: ''
+      provider: ''
+      # engine.speech.tts.base_url — operator setting. Default: ''
+      base_url: ''
+      # engine.speech.tts.api_key_env — operator setting. Default: ''
+      api_key_env: ''
+      # engine.speech.tts.model — operator setting. Default: ''
+      model: ''
+      # engine.speech.tts.voice — operator setting. Default: ''
+      voice: ''
+    # engine.speech.timeout_seconds — operator setting. Default: 30
+    # ...
+    timeout_seconds: 30
+
+  # --- engine.search: SEARCH ---
+  # Full-text and trigram search limits.
+  search:
+    # Use full-text search. Default: true.
+    fts: true
+    # Postgres text search language. Default: simple.
+    lang: simple
+    # Use trigram fallback. Default: true.
+    trgm: true
+    # Trigram similarity floor. Default: 0.3.
+    trgm_threshold: 0.3
+    # Rows returned per search. Default: 50.
+    max_results: 50
+    # Snippet length. Default: 240.
+    snippet_chars: 240
+
+  # --- engine.metrics: METRICS ---
+  # Cost metrics retention and window.
+  metrics:
+    # Metric retention. Default: 90.
+    retention_days: 90
+    # Record llm_calls. Default: true.
+    enabled: true
+    # Status window. Default: 300.
+    window_seconds: 300
+
+  # --- engine.logging: LOGGING ---
+  # Log format and level.
+  logging:
+    # text or json. Default: text.
+    format: text
+    # Standard logging level. Default: INFO.
+    level: INFO
+
+  # --- engine.automations: AUTOMATIONS ---
+  # Scheduled automations and their limits.
+  automations:
+    # Allow automations. Default: true.
+    enabled: true
+    # Stop every automation at once. Default: false.
+    kill_switch: false
+    # Default daily budget. Default: 4.
+    default_budget_per_day: 4
+    # One run's deadline. Default: 120.
+    run_timeout_seconds: 120
+    # Steps per run. Default: 10.
+    max_steps: 10
+    # Shortest schedule interval. Default: 60.
+    min_interval_seconds: 60
+    # Occurrence cap. Default: 24.
+    max_occurrences_per_day: 24
+    # Default quiet window. Default: 22:00-07:00.
+    default_quiet_hours: 22:00-07:00
+    # skip or defer. Default: skip.
+    default_quiet_policy: skip
+    # Active automations per person. Default: 10.
+    max_active_per_person: 10
+    # Sandbox step limits.
+    sandbox:
+      # Root for sandbox programs. Default: workspace.
+      programs_root: workspace
+    # Natural-language conditions.
+    condition:
+      # Allow NL criteria. Default: true.
+      nl_criteria: true
+      # Daily token budget. Default: 20000.
+      nl_budget_tokens_per_day: 20000
+    # Transient failure retry.
+    retry:
+      # Attempts. Default: 3.
+      max_attempts: 3
+      # Initial backoff. Default: 30.
+      backoff_seconds: 30
+      # Backoff cap. Default: 900.
+      max_backoff_seconds: 900
+      # Add jitter. Default: true.
+      jitter: true
+      # Honor Retry-After. Default: true.
+      respect_retry_after: true
+    # Missed occurrences and stale claims.
+    resilience:
+      # Catch-up window. Default: 15.
+      catchup_minutes: 15
+      # Stale claim age. Default: 7.
+      max_stale_days: 7
+      # Claim lease. Default: 300.
+      stale_claim_seconds: 300
+      # Apologize once for a miss. Default: true.
+      missed_apology: true
+      # Fold apologies into a digest. Default: true.
+      apology_digest: true
+      # Keep apologies inside quiet hours. Default: true.
+      apology_respect_quiet_hours: true
+
+# ============================================================================
+# GATEWAYS
+# Each gateway is opt-in; `monoagens gateway enable <name>` adds its block.
+# ============================================================================
+# Transport bodies; each is off until enabled.
+gateways: {}

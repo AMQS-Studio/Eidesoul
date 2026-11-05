@@ -5,7 +5,7 @@ Functions take the facade first; no second read path exists (ADR-0001, ADR-0037 
 
 import logging
 
-from .. import io
+from .. import embed, io
 from ..config import PrivacyConfig
 from . import MemoryContext, MemoryHit, queries
 from . import context as memory_context
@@ -48,10 +48,36 @@ def _rows(
     return [_hit(row) for row in found]
 
 
-async def _search_scope(
-    store, scope: str, query: str, person_id: str, thread_id: str, limit: int
+def _hybrid(
+    store,
+    query: str,
+    person_id: str,
+    thread_id: str,
+    limit: int,
+    scopes: tuple[str, ...],
+    max_level: int,
 ) -> list[MemoryHit]:
-    return await io.run(_rows, store, scope, query, person_id, thread_id, limit)
+    """One statement over `memories_readable`; the vector comes from the shared embedder."""
+    if store.db is None:
+        return []
+    body = str(query or "").strip()
+    vector = None
+    if body:
+        encoded = embed.encode([body])
+        if encoded and len(encoded[0]) == queries.MEMORY_DIM:
+            vector = encoded[0]
+    with store.db.connect() as conn:
+        found = queries.hybrid_rows(
+            conn,
+            query=body,
+            vector=vector,
+            person_id=person_id,
+            thread_id=thread_id,
+            limit=limit,
+            scopes=scopes,
+            max_level=max_level,
+        )
+    return [_hit(row) for row in found]
 
 
 async def search(
@@ -62,14 +88,11 @@ async def search(
     thread_id: str = "",
     limit: int = 12,
     scopes: tuple[str, ...] = SCOPES,
+    max_level: int = 4,
 ) -> list[MemoryHit]:
-    return await memory_context.gather(
-        store,
-        query=query,
-        person_id=person_id,
-        thread_id=thread_id,
-        limit=limit,
-        scopes=scopes,
+    """ADR-0051 §4.2: one hybrid retrieval for the three legal audiences."""
+    return await io.run(
+        _hybrid, store, query, person_id, thread_id, limit, scopes, max_level
     )
 
 

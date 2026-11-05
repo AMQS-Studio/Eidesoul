@@ -16,6 +16,21 @@ from . import lexicon
 
 MARKDOWN = re.compile(r"(?m)^\s*(?:#{1,6}\s+|[-*]\s+|\d+[.)]\s+)")
 SENTENCE = re.compile(r"[.!?]+(?:\s|$)")
+# Numbers, amounts, times, and dates a rewrite must never touch (ADR-0003 §4.2).
+NUMBER_TOKEN = re.compile(
+    r"""
+    (?<![\w])
+    (?:
+        \d{4}-\d{1,2}-\d{1,2}
+      | \d{1,2}:\d{2}(?::\d{2})?
+      | \d{1,4}[/.\-]\d{1,2}(?:[/.\-]\d{1,4})?
+      | (?:rp|idr|usd|sgd|myr|rm|eur|gbp|\$|€|£|¥)\.?\s*\d+(?:[.,]\d+)*
+        (?:\s*(?:rb|ribu|k|jt|juta|m|miliar|bn))?
+      | \d+(?:[.,]\d+)*(?:\s*(?:%|percent|persen|rb|ribu|k|jt|juta|m|miliar|bn))?
+    )
+    """,
+    re.IGNORECASE | re.VERBOSE,
+)
 BUBBLE_LINE = re.compile(r"(?m)^\s*-{3,}\s*$")
 QUOTES = "\"'`\u201c\u201d"
 FINAL_PREFIX = re.compile(r"^\s*FINAL\s*:\s*", re.IGNORECASE)
@@ -111,11 +126,23 @@ def _clean(raw: str) -> str:
     return unwrap_quotes(text).strip()
 
 
+def _numeric_signature(text: str) -> tuple[str, ...]:
+    """Every number, amount, time, and date token in `text`, normalized and sorted.
+
+    Two texts with the same signature carry the same facts: a rewrite that drops, alters, or
+    invents any of them is discarded, so `polish` can never drift a price or a meeting time.
+    """
+    tokens = (match.group(0) for match in NUMBER_TOKEN.finditer(str(text or "")))
+    return tuple(sorted(" ".join(token.lower().split()) for token in tokens))
+
+
 def _rejected(draft: str, text: str, language: str) -> bool:
     if not text:
         return True
     tell = assistant_tell(language)
     if (tell is not None and tell.search(text)) or MARKDOWN.search(text):
+        return True
+    if _numeric_signature(draft) != _numeric_signature(text):
         return True
     return len(text) > max(600, int(len(draft) * 1.5))
 
@@ -150,7 +177,7 @@ async def polish(
     language = config.soul.language
     voice = config.soul.voice
     character = voice.character
-    if not body or not voice.enabled or not character.enabled:
+    if not body or not character.enabled:
         return body
     if not needs_polish(body, max_chars=character.max_chars, language=language):
         return body

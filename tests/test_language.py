@@ -23,7 +23,7 @@ from monoagens.engine.soul import Soul, load_soul, normalize_language
 from monoagens.engine.turn import salience
 from monoagens.engine.turn.prompts import system_prompt
 
-CHAT = "cli:local"
+CHAT = "console:local"
 ROOT = Path(__file__).resolve().parents[1]
 ENGINE = ROOT / "monoagens" / "engine"
 LEXICON_DIR = ROOT / "monoagens" / "library" / "lexicon"
@@ -212,7 +212,7 @@ def test_catalog_parity_and_command_descriptions() -> None:
     for code, messages in (("en", english), ("id", indonesian)):
         assert messages["soul.pronoun.default"].strip(), code
     names = _handler_names()
-    assert len(names) >= 22
+    assert len(names) >= 21
     for code, messages in (("en", english), ("id", indonesian)):
         missing = sorted(name for name in names if f"command.{name}.description" not in messages)
         assert missing == [], code

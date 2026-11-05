@@ -78,14 +78,19 @@ class RoleRegistry:
     def policy_for(
         self, person_id: str, gateway: str
     ) -> tuple[Role, Mapping[str, object] | None]:
-        """ADR-0046 §4.3: the highest-priority role is the only policy source.
+        """The highest-priority role that defines this gateway's block (ADR-0046 §4.3).
 
-        The block is returned raw: the core knows no gateway name and no policy value. An absent
-        block is `None` and stays a denial; a lower role never grants access.
+        A role that omits the block never silently denies a person who holds another role
+        that defines it; the returned role is the one whose block applies. When no assigned
+        role defines the block the highest-priority role is returned with `None`, which stays
+        a denial.
         """
-        role = self.for_person(person_id)[0]
-        found = role.gateways.get(str(gateway or ""))
-        return role, found
+        roles = self.for_person(person_id)
+        for role in roles:
+            found = role.gateways.get(str(gateway or ""))
+            if found is not None:
+                return role, found
+        return roles[0], None
 
     def require_administrator(self) -> Role:
         """Boot gate (ADR-0022 §4.2): the protected role must exist and stay able to approve."""

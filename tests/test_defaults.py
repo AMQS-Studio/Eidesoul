@@ -42,4 +42,4 @@ def test_compose_is_a_working_default():
     parsed = yaml.safe_load(text)
     assert set(parsed["services"]) == {"postgres", "monoagens", "sandbox-proxy"}
     assert parsed["services"]["sandbox-proxy"]["profiles"] == ["sandbox"]
-    assert parsed["services"]["monoagens"]["build"]["args"]["EXTRAS"] == ""
+    assert parsed["services"]["monoagens"]["build"]["args"]["EXTRAS"] == "${EXTRAS:-}"

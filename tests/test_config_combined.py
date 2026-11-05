@@ -43,7 +43,7 @@ BASE = {
         },
     },
     "soul_file": "soul.yaml",
-    "gateways": {"cli": {"enabled": True, "thread_id": "cli:local"}},
+    "gateways": {"whatsapp": {"enabled": True}},
 }
 
 SOUL = "name: MonoAgens\nlanguage: en\nlocale: en-US\ntimezone: UTC\npronouns: aku\n"
@@ -86,7 +86,7 @@ def test_load_config_reads_all_sections(tmp_path, monkeypatch) -> None:
     assert config.llm.model == "seed-model"
     assert config.default_role == "guest"
     assert config.soul.language == "en"
-    assert config.gateways["cli"].enabled is True
+    assert config.gateways["whatsapp"].enabled is True
     assert config.roles.get("administrator").memory_admin is True
     assert config.memory.privacy.group_max_level == 1
     assert config.memory.privacy.auditor is False
@@ -169,7 +169,6 @@ def test_approval_defaults_to_command_patterns(tmp_path, monkeypatch) -> None:
 
     loaded = load_config(tmp_path / "config.yaml", require_key=False)
 
-    assert loaded.approval.sensitive_tools == ()
     assert loaded.approval.sensitive_commands == DEFAULT_SENSITIVE_COMMANDS
 
 
@@ -182,7 +181,6 @@ def test_approval_sensitive_commands_override_and_disable(tmp_path, monkeypatch)
 
         loaded = load_config(tmp_path / "config.yaml", require_key=False)
 
-        assert loaded.approval.sensitive_tools == ()
         assert loaded.approval.sensitive_commands == expected
 
 
@@ -197,3 +195,40 @@ def test_load_env_rejects_paths_outside_the_working_directory(tmp_path, monkeypa
     for bad in ("../.env", "/etc/passwd", "sub/.env"):
         with pytest.raises(ConfigError):
             load_env(bad)
+
+
+def test_speech_section_parses_and_rejects_unknown_keys(tmp_path, monkeypatch) -> None:
+    monkeypatch.setenv("MONOAGENS_TEST_KEY", "x")
+    config = yaml.safe_load(yaml.safe_dump(BASE))
+    config["engine"]["speech"] = {
+        "timeout_seconds": 20,
+        "stt": {"provider": "openai", "language": "id"},
+        "tts": {"provider": "elevenlabs", "voice": "v1"},
+    }
+    write_folder(tmp_path, config=config)
+
+    loaded = load_config(tmp_path / "config.yaml", require_key=False)
+
+    assert loaded.speech.timeout_seconds == 20.0
+    assert loaded.speech.enabled is True
+    assert loaded.speech.stt.provider == "openai"
+    assert loaded.speech.stt.model == "whisper-1"
+    assert loaded.speech.stt.language == "id"
+    assert loaded.speech.tts.provider == "elevenlabs"
+    assert loaded.speech.tts.voice == "v1"
+
+    config["engine"]["speech"]["stt"]["bogus"] = True
+    write_folder(tmp_path, config=config)
+
+    with pytest.raises(ConfigError, match=r"engine\.speech\.stt\.bogus"):
+        load_config(tmp_path / "config.yaml", require_key=False)
+
+
+def test_speech_provider_names_are_validated_at_load(tmp_path, monkeypatch) -> None:
+    monkeypatch.setenv("MONOAGENS_TEST_KEY", "x")
+    config = yaml.safe_load(yaml.safe_dump(BASE))
+    config["engine"]["speech"] = {"tts": {"provider": "acme", "base_url": "http://x"}}
+    write_folder(tmp_path, config=config)
+
+    with pytest.raises(ConfigError, match=r"engine\.speech\.tts\.provider 'acme'"):
+        load_config(tmp_path / "config.yaml", require_key=False)

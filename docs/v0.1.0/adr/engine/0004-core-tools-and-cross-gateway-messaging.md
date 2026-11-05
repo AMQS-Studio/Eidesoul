@@ -6,7 +6,7 @@
 - **Context:** Re-baselined for v0.1.0; consolidates tool manifests, gateway contracts, input/output contracts, turn cost, and cross-gateway messaging (pre-rebaseline 0015, 0018, 0021, 0024, 0025, 0032, 0049, 0050, 0053).
 - **Supersedes:** pre-rebaseline 0015, 0018, 0021, 0024, 0025, 0032, 0050
 - **Related:** ADR-0001 (sovereign core), ADR-0003 (turn lifecycle), ADR-0006 (access control)
-- **Implementation:** partial — base tool index exists; core messaging tools, explicit origin enforcement, and approval origin tracking are scheduled in Phase P0/P1.
+- **Implementation:** implemented — core `send_message`/`send_file`/`thread_history`, explicit origin on the one door, origin-tracked approvals with a unique action id, cross-room leak guard, and the multi-attachment envelope.
 
 ---
 

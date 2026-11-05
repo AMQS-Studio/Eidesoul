@@ -6,7 +6,7 @@
 - **Context:** Re-baselined for v0.1.0; unifies the memory pipeline, retention, integrity, privacy, reflection, native hybrid retrieval, and detector precision (pre-rebaseline 0001–0006, 0008, 0010, 0020, 0026, 0033, 0038, 0043, 0051, 0052, 0053).
 - **Supersedes:** pre-rebaseline 0001, 0002, 0003, 0004, 0005, 0006, 0008, 0010, 0020, 0026, 0033, 0038, 0043, 0051, 0052
 - **Related:** ADR-0001 (sovereign core), ADR-0003 (turn lifecycle), ADR-0006 (sandbox guard)
-- **Implementation:** partial — canonical PostgreSQL schema and privacy policies are implemented; detector word boundaries, native hybrid retrieval, and Mem0 retirement are scheduled in Phase P0/P1.
+- **Implementation:** implemented — native pgvector + tsvector hybrid retrieval with RRF, mem0 retired, word-boundary detectors, and value-shaped credential patterns with redaction.
 
 ---
 

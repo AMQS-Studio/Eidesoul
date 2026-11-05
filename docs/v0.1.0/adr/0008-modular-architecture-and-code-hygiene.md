@@ -6,7 +6,7 @@
 - **Context:** Re-baselined for v0.1.0; consolidates the ADR home, engine structure, module budgets, repository slimming, config/language hygiene, and real-seam testing discipline (pre-rebaseline 0009, 0031, 0037, 0049, 0053, 0055).
 - **Supersedes:** pre-rebaseline 0009, 0031, 0037, 0055
 - **Related:** ADR-0001 (sovereign core), ADR-0003 (turn lifecycle), ADR-0005 (extensions)
-- **Implementation:** partial — English-only ADR home and `scripts/adr.py --check` are implemented; `loop.py` cap fix, unknown config key rejection, typed turn pipeline, and staged module merges are scheduled in Phase P0/P2.
+- **Implementation:** implemented — English-only ADR home and structure gate, typed turn pipeline, module cap enforced with an empty allowlist, unknown config/soul key rejection, and the vendored affect engine replaced by native PAD math.
 
 ---
 

@@ -1,7 +1,8 @@
 """The turn state machine (ADR-0013, ADR-0037 §4.3): claim, decide, draft, review, send.
 
 One turn per call, checkpointed by step name; a resumed turn starts from `turns.step` and takes
-the same path. The service never imports `agent.py`; the host is the `Agent` it is bound to.
+the same path. The service never imports `agent.py`; it is injected with the `TurnRuntime`, the
+`TurnCoordinator`, the `Delivery`, and the `TurnSteps` bookkeeping.
 """
 
 
@@ -12,14 +13,12 @@ import random
 from dataclasses import asdict, replace
 
 from .. import guard, io
-from ..character.character import polish
 from ..i18n import t
 from ..inbound import CONSENT, Action, Address, GatewayCore, Percept, prompt_section
 from ..memory import MemoryContext
-from ..registry import allows
 from ..runtime import ACTIVE_GENERATION
-from ..tools.web_search import collect
-from . import assembly
+from .approval_flow import ApprovalFlow
+from .confirmations import with_tool_result
 from .context import (
     Message,
     build_user_content,
@@ -28,49 +27,66 @@ from .context import (
     prompt_entry,
 )
 from .decision import Appraisal, Decision, RelationshipDelta, decide_turn, decision_from_row
+from .delivery import bind_origin, reset_origin
+from .progress import _progress_callbacks
 from .prompts import CORE_PARTS, CRISIS_SAFETY, PromptContext, away_block, system_prompt
 from .reply import plan_chunks
-from .research import build_card, retry_prompt, trigger_reason, verify
-from .research import render as render_research
+from .research_flow import ResearchFlow
+from .review import DECISION_LINE_CHARS, TurnReview
+from .state import TurnState, actor_of
 from .steps import SideEffectAlreadyRan
 
 log = logging.getLogger(__name__)
 
-TYPING_REFRESH = 8
-DECISION_HISTORY = 30
-DECISION_FALLBACK_HISTORY = 20
-DECISION_LINE_CHARS = 500
 
 
-class TurnRunner:
+
+
+
+
+
+
+
+
+
+
+class TurnRunner(ApprovalFlow, ResearchFlow, TurnReview):
     """The turn state machine: claim, decide, draft, review, send."""
 
-    def __init__(self, agent) -> None:
-        self.agent = agent
+    def __init__(self, runtime, coordinator, delivery, steps) -> None:
+        super().__init__(runtime, coordinator, delivery)
+        self.steps = steps
 
-    def __getattr__(self, name: str):
-        return getattr(self.agent, name)
+    # --------------------------------------------------------- approvals
 
-    def _challenged(self, message, thread_id: str) -> bool:
-        """A quote is a challenge only when it answers a bot claim that needed evidence.
 
-        A quoted notice (timeout, interruption, shutdown) is not an answer, and an answer
-        without a current claim has nothing to verify. The cue itself is checked in
-        `trigger_reason`, so a bare quote never forces a search.
-        """
-        quote = message.quote
-        if quote is None or quote.sender_name != self.soul.name:
-            return False
-        quoted = self.history.find(thread_id, quote.id)
-        if quoted is not None and quoted.notice:
-            return False
-        return bool(
-            trigger_reason(
-                quoted.text if quoted is not None else quote.text,
-                language=self.soul.language,
-                mode=self.config.research.mode,
+
+    # ------------------------------------------------------------ state
+
+    async def _checkpoint(self, state: TurnState, step: str, **fields) -> None:
+        """Persist one checkpoint and record it in the turn's own state."""
+        await io.run(self.runtime.turns.checkpoint, state.turn_id, step, **fields)
+        state.checkpoints[step] = self.runtime.clock()
+
+    async def _learn_style(self, state: TurnState, reply: str) -> None:
+        """Feed a delivered reply to the style profile; a failure never fails the turn."""
+        style = self.runtime.style
+        if style is None or not self.runtime.config.soul.voice.style.enabled:
+            return
+        text = str(reply or "").strip()
+        if not text:
+            return
+        try:
+            await io.run(
+                style.learn,
+                text,
+                thread_id=state.thread_id,
+                person_id=state.sender_id,
             )
-        )
+        except Exception:
+            log.warning("style: failed to learn turn=%s", state.turn_id, exc_info=True)
+
+    # -------------------------------------------------------------- run
 
     async def run(
         self,
@@ -84,64 +100,93 @@ class TurnRunner:
         claimed: dict | None = None,
     ) -> list[Action]:
         """One turn, checkpointed; a resumed turn starts from `turns.step`."""
+        runtime = self.runtime
         actions: list[Action] = []
         message = inbound.payload
         thread_id = inbound.thread
-        min_call = float(self.config.turns.min_call_seconds)
-        generation = int(getattr(self.lease, "generation", 0) or 0)
-        lease_seconds = max(60.0, float(self.config.turns.timeout_seconds) + 30.0)
-        queue = contextlib.nullcontext() if is_command else self._thread_lock(thread_id)
+        running = asyncio.current_task()
+        min_call = float(runtime.config.turns.min_call_seconds)
+        lease = runtime.lease()
+        generation = int(getattr(lease, "generation", 0) or 0)
+        lease_seconds = max(60.0, float(runtime.config.turns.timeout_seconds) + 30.0)
+        queue = (
+            contextlib.nullcontext() if is_command else self.coordinator.thread_lock(thread_id)
+        )
+        state = TurnState(
+            percept=inbound,
+            gateway=gateway,
+            turn_id=turn_id,
+            thread_id=thread_id,
+            sender_id=actor_of(inbound),
+            role_policy=runtime.role_policy(inbound),
+            started_at=runtime.clock(),
+            attachments=message.attachments,
+        )
         async with queue:
-            if not is_command and (running := asyncio.current_task()) is not None:
-                self._turn_tasks[thread_id] = running
-                self._turn_gateways[thread_id] = gateway
-            claimed = claimed or self.turns.claim(
+            if not is_command and running is not None:
+                self.coordinator.register(thread_id, running, gateway, active=True)
+            claimed = claimed or await io.run(
+                runtime.turns.claim,
                 turn_id,
-                owner=getattr(self.lease, "instance_id", "") or "local",
+                owner=getattr(lease, "instance_id", "") or "local",
                 generation=generation,
                 lease_seconds=lease_seconds,
-                boot_epoch=self.boot_epoch,
+                boot_epoch=runtime.boot_epoch,
             )
             if claimed is None:
                 log.info("turn %s is terminal or owned elsewhere", turn_id)
-                if not is_command and self._turn_tasks.get(thread_id) is asyncio.current_task():
-                    self._turn_tasks.pop(thread_id, None)
-                    self._turn_gateways.pop(thread_id, None)
+                if not is_command and running is not None:
+                    self.coordinator.release(thread_id, running, active=True)
                 return actions
-            if self.draining:
-                self._interrupt(turn_id, "shutdown", force=True)
-                if not is_command and self._turn_tasks.get(thread_id) is asyncio.current_task():
-                    self._turn_tasks.pop(thread_id, None)
-                    self._turn_gateways.pop(thread_id, None)
+            if runtime.draining():
+                await self.coordinator.interrupt(turn_id, "shutdown")
+                if not is_command and running is not None:
+                    self.coordinator.release(thread_id, running, active=True)
                 return actions
             token = ACTIVE_GENERATION.set(generation)
+            origin_token = bind_origin(
+                Address(str(getattr(gateway, "name", "") or ""), str(thread_id))
+            )
             try:
                 step = str(claimed["step"] or "received")
+                state.checkpoints[step] = state.started_at
                 attempt = int(claimed["attempt"] or 0)
-                if attempt > int(self.config.turns.max_attempts):
-                    self._interrupt(turn_id, "resume abandoned: attempts exhausted", force=True)
-                    await self._notice_interrupted(turn_id, thread_id, gateway)
-                    return actions
-                if step in {"received", "decided"} and self.turns.side_effect_done(turn_id):
-                    self._interrupt(
-                        turn_id, "non-idempotent action already executed", force=True
+                if attempt > int(runtime.config.turns.max_attempts):
+                    await self.coordinator.interrupt(
+                        turn_id,
+                        "resume abandoned: attempts exhausted",
                     )
-                    await self._notice_interrupted(turn_id, thread_id, gateway)
+                    await self.delivery.notice_interrupted(turn_id, thread_id, gateway)
+                    return actions
+                if step in {"received", "decided"} and await io.run(
+                    runtime.turns.side_effect_done, turn_id
+                ):
+                    await self.coordinator.interrupt(
+                        turn_id,
+                        "non-idempotent action already executed",
+                    )
+                    await self.delivery.notice_interrupted(turn_id, thread_id, gateway)
                     return actions
                 skip_decision = step in {"decided", "drafted", "reviewed", "sending"}
                 skip_draft = step in {"drafted", "reviewed", "sending"}
+                skip_review = step in {"reviewed", "sending"}
                 resuming = step != "received"
-                resume_reply = str(claimed.get("reviewed_text") or claimed.get("draft_text") or "")
+                resume_reply = str(
+                    claimed.get("reviewed_text") or claimed.get("draft_text") or ""
+                )
 
                 text = message.text
-                crisis = guard.is_crisis(text, self.soul.language)
-                roles = self._role_set(inbound)
-                if not is_command and await self.privacy.handle_pending(inbound, gateway):
-                    self._finish(turn_id)
+                crisis = guard.is_crisis(text, runtime.soul.language)
+                roles = state.role_policy
+                if not is_command and await runtime.privacy.handle_pending(inbound, gateway):
+                    await self.coordinator.finish(turn_id)
                     return actions
-                if not is_command and not crisis and self.llm is None:
-                    self._finish(turn_id)
+                if not is_command and not crisis and runtime.llm is None:
+                    await self.coordinator.finish(turn_id)
                     return actions
+                approval_block = ""
+                if not is_command and not resuming:
+                    approval_block = await self._resume_approvals(state)
                 head_word, _, rest = body[1:].partition(" ") if is_command else ("", "", "")
                 name = head_word.lower()
                 direct = (
@@ -150,33 +195,44 @@ class TurnRunner:
                     or bool(inbound.hints.get("reply"))
                 )
 
-                missed = self.backlog.pop(thread_id, 0) if not is_command and not resuming else 0
+                missed = (
+                    runtime.backlog.pop(thread_id, 0)
+                    if not is_command and not resuming
+                    else 0
+                )
                 away = away_block(missed)
                 vibe = ""
                 if (
-                    self.vibe is not None
+                    runtime.vibe is not None
                     and not is_command
                     and not crisis
                     and not resuming
                     and text.strip()
                 ):
                     try:
-                        vibe = await self.vibe.observe(thread_id, text)
+                        vibe = await runtime.vibe.observe(thread_id, text)
                     except Exception:
                         log.exception("failed to update vibe chat=%s", thread_id)
                 emotion_block = ""
                 emotion = None
-                if not is_command and self.affect is not None and not resuming:
+                if not is_command and runtime.affect is not None and not resuming:
                     try:
-                        emotion = self.affect.turn_start(thread_id, message.id)
+                        # ADR-0017 §4.1: affect reads/writes are synchronous store calls.
+                        emotion = await io.run(
+                            runtime.affect.turn_start, thread_id, message.id
+                        )
                     except Exception:
                         log.exception("failed to open the emotion turn chat=%s", thread_id)
                     try:
-                        emotion_block = self.affect.prompt(thread_id, inbound.actor)
+                        emotion_block = await io.run(
+                            runtime.affect.prompt, thread_id, inbound.actor
+                        )
                     except Exception:
                         log.exception("failed to read the emotion state chat=%s", thread_id)
 
-                called = bool(inbound.hints.get("mention")) or bool(inbound.hints.get("reply"))
+                called = bool(inbound.hints.get("mention")) or bool(
+                    inbound.hints.get("reply")
+                )
                 unprompted = (
                     not bool(inbound.hints.get("dm"))
                     and not is_command
@@ -229,12 +285,15 @@ class TurnRunner:
                     )
                 else:
                     annoyance = 0.0
-                    if emotion is not None and self.affect is not None:
+                    if emotion is not None and runtime.affect is not None:
                         try:
+                            people = await io.run(
+                                runtime.affect.known_people, thread_id, 20
+                            )
                             annoyance = next(
                                 (
                                     float(row["annoyance"])
-                                    for row in self.affect.known_people(thread_id, 20)
+                                    for row in people
                                     if row["person_id"] == inbound.actor
                                 ),
                                 0.0,
@@ -243,12 +302,14 @@ class TurnRunner:
                             log.debug(
                                 "failed to read annoyance chat=%s", thread_id, exc_info=True
                             )
+                    # ADR-0017 §4.1: the transcript comes from the synchronous archive.
+                    transcript = await io.run(self.decision_transcript, thread_id)
                     decision = await decide_turn(
-                        self.llm,
+                        runtime.llm,
                         thread_id=thread_id,
                         chat_name=gateway.chat_name(thread_id),
-                        current=prompt_entry(message, self.soul.name, DECISION_LINE_CHARS),
-                        transcript=self.decision_transcript(thread_id),
+                        current=prompt_entry(message, runtime.soul.name, DECISION_LINE_CHARS),
+                        transcript=transcript,
                         emotion=emotion,
                         relationship=emotion_block,
                         direct=bool(inbound.hints.get("dm")),
@@ -256,15 +317,17 @@ class TurnRunner:
                         replied=bool(inbound.hints.get("reply")),
                         away=away,
                         vibe=vibe,
-                        soul=self.soul, feelings=emotion is not None,
+                        soul=runtime.soul,
+                        feelings=emotion is not None,
                         deadline=deadline,
                         min_call_seconds=min_call,
                         annoyance=annoyance,
                     )
 
-                if not is_command and self.affect is not None and not resuming:
+                if not is_command and runtime.affect is not None and not resuming:
                     try:
-                        self.affect.turn_end(
+                        await io.run(
+                            runtime.affect.turn_end,
                             thread_id,
                             inbound.actor,
                             message.sender_name,
@@ -285,10 +348,10 @@ class TurnRunner:
                             decision.addressed,
                             decision.reason,
                         )
-                        self._finish(turn_id)
+                        await self.coordinator.finish(turn_id)
                         return actions
                     if decision is not None and decision.act == "react":
-                        label = await self.deliver_sticker(
+                        label = await self.delivery.sticker(
                             thread_id, message.id, gateway=gateway
                         )
                         if label:
@@ -301,16 +364,16 @@ class TurnRunner:
                                     id=f"turn:{turn_id}:sticker",
                                 )
                             )
-                        self._finish(turn_id)
+                        await self.coordinator.finish(turn_id)
                         return actions
 
                 if not is_command and not skip_decision:
-                    self.turns.checkpoint(
-                        turn_id,
+                    await self._checkpoint(
+                        state,
                         "decided",
                         decision_json=asdict(decision) if decision is not None else None,
                     )
-                await self._typing(gateway, thread_id, True)
+                await self.delivery.typing(gateway, thread_id, True)
                 typing = asyncio.create_task(self.keep_typing(thread_id, gateway))
                 try:
                     log.info(
@@ -325,22 +388,24 @@ class TurnRunner:
                     )
                     reply: str | None = None
                     memory_ctx = MemoryContext()
+                    messages: list[Message] = []
+                    tool_ctx = None
                     if skip_draft:
                         reply = resume_reply
                     elif is_command:
-                        reply = await self._command(
+                        reply = await runtime.command(
                             name,
                             rest.strip(),
                             thread_id,
-                            self._actor(inbound),
+                            state.sender_id,
                             roles,
                             gateway,
                             inbound,
                         )
                     else:
-                        if decision is None or self.llm is None:  # pragma: no cover
+                        if decision is None or runtime.llm is None:  # pragma: no cover
                             raise RuntimeError("a reply turn needs a decision and a model")
-                        specs = self._specs(roles, gateway)
+                        specs = runtime.specs(roles, gateway)
                         mood = None
                         if emotion is not None:
                             mood = (
@@ -350,70 +415,73 @@ class TurnRunner:
                         memory_block = ""
                         style_block = topic_block = person_style = ""
                         try:
-                            memory_ctx = await self.memory.context(
+                            memory_ctx = await runtime.memory.context(
                                 person_id=inbound.actor,
                                 thread_id=thread_id,
                                 query=message.text,
                                 direct=bool(inbound.hints.get("dm")),
                                 mood=mood,
-                                max_items=self.config.memory.max_items,
-                                max_chars=self.config.memory.max_chars,
+                                max_items=runtime.config.memory.max_items,
+                                max_chars=runtime.config.memory.max_chars,
                             )
                             memory_block = memory_ctx.text
                         except Exception:
                             log.exception("failed to read memory chat=%s", thread_id)
                         actions_block = ""
-                        if self.ledger is not None:
+                        if runtime.ledger is not None:
                             try:
-                                actions_block = self.ledger.actions_context(tz=self.soul.timezone)
+                                actions_block = await io.run(
+                                    runtime.ledger.actions_context, tz=runtime.soul.timezone
+                                )
                             except Exception:
                                 log.exception(
                                     "failed to read the action ledger chat=%s", thread_id
                                 )
                         skill_block = ""
-                        if self.skills is not None:
+                        if runtime.skills is not None:
                             try:
-                                skill_block = self.skills.retrieve(
+                                skill_block = await io.run(
+                                    runtime.skills.retrieve,
                                     message.text,
                                     thread_id=thread_id,
                                     person_id=inbound.actor,
                                     held_tools=tuple(spec.name for spec in specs),
-                                    catalog_tools=self.tool_index.names(gateway.name),
-                                    max_chars=int(self.config.skills.max_chars),
+                                    catalog_tools=runtime.tool_index.names(gateway.name),
+                                    max_chars=int(runtime.config.skills.max_chars),
                                     app=str(inbound.hints.get("app") or ""),
                                 )
                             except Exception:
                                 log.exception("failed to retrieve procedures")
-                        if self.affect is not None:
+                        if runtime.affect is not None:
                             try:
-                                topic_block = self.affect.topic_block(thread_id)
+                                topic_block = await io.run(
+                                    runtime.affect.topic_block, thread_id
+                                )
                             except Exception:
                                 log.exception(
                                     "failed to read the chat topic chat=%s", thread_id
                                 )
-                        if self.style is not None:
+                        if runtime.style is not None:
                             try:
-                                style_block = self.style.profile(thread_id)
-                                person_style = self.style.person_profile(inbound.actor)
+                                style_block = await io.run(
+                                    runtime.style.profile, thread_id
+                                )
+                                person_style = await io.run(
+                                    runtime.style.person_profile, inbound.actor
+                                )
                             except Exception:
                                 log.debug(
                                     "style: failed to read the chat profile chat=%s",
                                     thread_id,
                                     exc_info=True,
                                 )
-                        messages = assembly.thread(
-                            self.history,
-                            thread_id,
-                            message,
-                            max_chars=self.config.prompt.thread_chars,
-                            window=self.windows.get(thread_id),
-                        )
+                        messages = await io.run(self._thread_view, thread_id, message)
                         for entry in messages:
                             with contextlib.suppress(Exception):
-                                await self._prepare_media(gateway, thread_id, entry)
+                                await self.delivery.prepare_media(gateway, thread_id, entry)
                         try:
                             content = await build_user_content(
-                                self.config,
+                                runtime.config,
                                 thread_id,
                                 messages,
                                 message,
@@ -423,92 +491,41 @@ class TurnRunner:
                             log.exception(
                                 "failed to assemble the payload chat=%s", thread_id
                             )
-                            content = fallback_content(self.config, message)
-                        tool_ctx = self.tool_context(
+                            content = fallback_content(runtime.config, message)
+                        content = with_tool_result(content, approval_block)
+                        tool_ctx = runtime.tool_context(
                             thread_id,
-                            self._actor(inbound),
+                            state.sender_id,
                             roles,
                             gateway,
                             request=message.text,
                             person_id=inbound.actor,
                             direct=bool(inbound.hints.get("dm")),
                             app=str(inbound.hints.get("app") or ""),
+                            turn_id=turn_id,
                         )
-                        challenged = self._challenged(message, thread_id)
-                        trigger = trigger_reason(
-                            message.text,
-                            language=self.soul.language,
-                            mode=self.config.research.mode,
-                            challenged=challenged,
+                        trigger, research_card, research_text = (
+                            await self._research_context(message, thread_id, tool_ctx)
                         )
-                        research_card = next(
-                            (
-                                card
-                                for card in reversed(tool_ctx.research_cards)
-                                if card.status == "ok" and card.sources
-                            ),
-                            None,
-                        )
-                        if trigger and research_card is None:
-                            if allows(tool_ctx.allowed, "web_search"):
-                                try:
-                                    hits, fetch_failed = await collect(
-                                        tool_ctx,
-                                        message.text,
-                                        self.config.research.max_results,
-                                    )
-                                    tool_ctx.used.append("web_search")
-                                    research_card = build_card(
-                                        message.text,
-                                        hits,
-                                        timezone=self.soul.timezone,
-                                        reason=trigger,
-                                        status="failed" if fetch_failed else None,
-                                    )
-                                except Exception:
-                                    log.exception("research search failed chat=%s", thread_id)
-                                    research_card = build_card(
-                                        message.text,
-                                        [],
-                                        timezone=self.soul.timezone,
-                                        status="failed",
-                                        reason=trigger,
-                                    )
-                            else:
-                                research_card = build_card(
-                                    message.text,
-                                    [],
-                                    timezone=self.soul.timezone,
-                                    status="failed",
-                                    reason=trigger,
-                                )
-                            research_text = render_research(research_card)
-                        elif self.config.research.mode == "off":
-                            research_text = (
-                                "Research is off. If a claim needs current evidence, say you "
-                                "cannot verify it; never fill the gap from the model prior."
-                            )
-                        else:
-                            research_text = (
-                                "Research policy: stable common knowledge may be answered from "
-                                "your prior. If you are unsure about a current, specific, local, "
-                                "numeric, or disputed fact, call web_search before answering. "
-                                "Use the returned Research card and cite [Rn]; if it has no "
-                                "usable source, say you cannot verify the claim."
-                            )
                         bonuses: dict[str, float] = {}
-                        if self.affect is not None:
+                        if runtime.affect is not None:
                             try:
+                                people = await io.run(
+                                    runtime.affect.known_people, thread_id, 20
+                                )
                                 person_row = next(
                                     (
                                         row
-                                        for row in self.affect.known_people(thread_id, 20)
+                                        for row in people
                                         if row["person_id"] == inbound.actor
                                     ),
                                     None,
                                 )
+                                pending_topic = await io.run(
+                                    runtime.affect.pending, thread_id
+                                )
                                 bonuses = {
-                                    "topic": 0.3 if self.affect.pending(thread_id) > 0 else 0.0,
+                                    "topic": 0.3 if pending_topic > 0 else 0.0,
                                     "person_style": (
                                         0.25
                                         if person_row
@@ -533,20 +550,20 @@ class TurnRunner:
                         bonuses["memory"] = (
                             0.35
                             if memory_block
-                            and keyword_set(message.text, self.soul.language)
-                            & keyword_set(memory_block, self.soul.language)
+                            and keyword_set(message.text, runtime.soul.language)
+                            & keyword_set(memory_block, runtime.soul.language)
                             else 0.0
                         )
                         prompt_context = PromptContext(
-                            config=self.config,
+                            config=runtime.config,
                             roles=roles,
-                            runtime=self.runtime,
+                            runtime=runtime.facts,
                             query=message.text,
                             thread_id=thread_id,
                             person_id=inbound.actor,
                             direct=bool(inbound.hints.get("dm")),
                             body_section=prompt_section(gateway),
-                            language=self.soul.language,
+                            language=runtime.soul.language,
                             style=style_block,
                             vibe=vibe,
                             topic=topic_block,
@@ -555,9 +572,9 @@ class TurnRunner:
                             memory=memory_block,
                             actions=actions_block,
                             skills=skill_block,
-                            tools=self.tool_index.registry(gateway.name),
-                            commands=self.commands,
-                            bodies=self.tool_index.other_bodies(gateway.name),
+                            tools=runtime.tool_index.registry(gateway.name),
+                            commands=runtime.commands,
+                            bodies=runtime.tool_index.other_bodies(gateway.name),
                             sender=message.sender_name,
                             mode=decision.mode,
                             tone=decision.tone,
@@ -568,12 +585,12 @@ class TurnRunner:
                             person_style=person_style,
                             bonuses=bonuses,
                         )
-                        answer = await self.llm.run(
+                        answer = await runtime.llm.run(
                             system_prompt(
-                                self.config,
+                                runtime.config,
                                 roles,
                                 context=prompt_context,
-                                parts=(*CORE_PARTS, *self.plugin_parts),
+                                parts=(*CORE_PARTS, *runtime.plugin_parts),
                             ),
                             content,
                             specs,
@@ -584,129 +601,76 @@ class TurnRunner:
                             min_call_seconds=min_call,
                             on_step=self.steps.recorder(turn_id, "drafted"),
                             lookup_step=self.steps.lookup(turn_id),
-                            temperature=(
-                                self.soul.voice.sampling.professional_temperature
-                                if decision is not None and decision.mode == "professional"
-                                else self.soul.voice.sampling.daily_temperature
+                            **_progress_callbacks(
+                                runtime.dispatch, gateway, thread_id, turn_id
                             ),
-                            sampling=self.soul.voice.sampling,
+                            temperature=(
+                                runtime.soul.voice.sampling.professional_temperature
+                                if decision is not None and decision.mode == "professional"
+                                else runtime.soul.voice.sampling.daily_temperature
+                            ),
+                            sampling=runtime.soul.voice.sampling,
                         )
-                        card = research_card
-                        if card is None and tool_ctx.research_cards:
-                            card = tool_ctx.research_cards[-1]
-                        if card is not None and (trigger or tool_ctx.research_cards):
-                            ok, failure = verify(
-                                card,
-                                answer,
-                                require_citation=self.config.research.require_citation,
-                                freshness_hours=self.config.research.freshness_hours,
-                            )
-                            log.info(
-                                "research chat=%s trigger=%s status=%s verify=%s",
-                                thread_id,
-                                trigger or "tool",
-                                card.status,
-                                failure,
-                            )
-                            if not ok:
-                                system = system_prompt(
-                                    self.config,
-                                    roles,
-                                    context=prompt_context,
-                                    parts=(*CORE_PARTS, *self.plugin_parts),
-                                )
-                                retry = await self.llm.complete(
-                                    str(system),
-                                    retry_prompt(card, answer, failure),
-                                    max_tokens=800,
-                                    session=f"monoagens-research-{thread_id}",
-                                    deadline=deadline,
-                                    min_call_seconds=min_call,
-                                    purpose="research",
-                                )
-                                ok, failure = verify(
-                                    card,
-                                    retry,
-                                    require_citation=self.config.research.require_citation,
-                                    freshness_hours=self.config.research.freshness_hours,
-                                )
-                                log.info(
-                                    "research retry chat=%s verify=%s", thread_id, failure
-                                )
-                                if ok:
-                                    answer = retry
-                                else:
-                                    answer = t(
-                                        "agent.research_abstain", self.soul.language
-                                    )
+                        answer = await self._verify_research(
+                            answer,
+                            research_card,
+                            trigger,
+                            tool_ctx,
+                            roles,
+                            prompt_context,
+                            thread_id,
+                            deadline,
+                            min_call,
+                        )
                         reply = (
                             answer
                             if answer.strip() or not tool_ctx.sent
-                            else t("agent.sent_ack", self.soul.language)
+                            else t("agent.sent_ack", runtime.soul.language)
                         )
-                        self.turns.checkpoint(turn_id, "drafted", draft_text=reply or "")
-                        daily = decision is None or decision.mode != "professional"
-                        if (
-                            daily
-                            and not crisis
-                            and reply
-                            and not tool_ctx.sent
-                        ):
-                            recent = "\n".join(
-                                f"{entry.sender_name}: {entry.text}"
-                                for entry in messages[-6:]
-                                if entry.text.strip()
-                            )
-                            before = reply
-                            reply = await polish(
-                                self.llm,
-                                self.config,
-                                reply,
-                                latest=message.text,
-                                recent=recent,
-                                direct=bool(inbound.hints.get("dm")),
-                                tone=decision.tone if decision is not None else "neutral",
-                                session=f"monoagens-character-{thread_id}",
-                                deadline=deadline,
-                                min_call_seconds=min_call,
-                            )
-                            log.info(
-                                "character chat=%s status=%s",
-                                thread_id,
-                                "rewrite" if reply != before else "pass",
-                            )
-                            if not reply.strip():
-                                reply = before
-                        review = await self.privacy.review(
+                        state.draft = reply or ""
+                        await self._checkpoint(state, "drafted", draft_text=state.draft)
+
+                    if not is_command and not skip_review and reply is not None:
+                        if skip_draft:
+                            # Resumed from "drafted": rebuild the recent lines polish reads.
+                            messages = await io.run(self._thread_view, thread_id, message)
+                        state.memories = [
+                            *memory_ctx.hits,
+                            *(tool_ctx.memory_hits if tool_ctx else ()),
+                        ]
+                        reply = await self._review(
                             inbound,
                             reply,
-                            [*memory_ctx.hits, *tool_ctx.memory_hits],
                             gateway,
+                            hits=state.memories,
+                            cross_reads=tool_ctx.cross_reads if tool_ctx else (),
+                            decision=decision,
+                            crisis=crisis,
+                            sent=bool(tool_ctx.sent) if tool_ctx else False,
+                            messages=messages,
+                            deadline=deadline,
+                            min_call=min_call,
                         )
-                        if review.handled:
-                            self._finish(turn_id)
+                        if reply is None:
+                            await self.coordinator.finish(turn_id)
                             return actions
-                        reply = review.reply
-                        if reply and tool_ctx.cross_reads and guard.cross_chat_leak(
-                            reply, tool_ctx.cross_reads
-                        ):
-                            log.warning("cross-chat verbatim reply blocked chat=%s", thread_id)
-                            reply = t("agent.cross_chat_blocked", self.soul.language)
-                        self.turns.checkpoint(turn_id, "reviewed", reviewed_text=reply or "")
+                        reply = await self._approval_badge(
+                            reply, thread_id, state.sender_id, state.started_at
+                        )
+                        state.draft = reply or ""
+                        await self._checkpoint(state, "reviewed", reviewed_text=state.draft)
 
                     professional = bool(
                         decision is not None and decision.mode == "professional"
                     )
                     humanize = replace(
-                        self.soul.voice.humanize,
-                        enabled=bool(
-                            self.soul.voice.enabled and self.soul.voice.humanize.enabled
-                        ),
+                        runtime.soul.voice.humanize,
+                        enabled=bool(runtime.soul.voice.humanize.enabled),
                     )
                     chunks, pace, quote_all = plan_chunks(
                         reply,
                         gateway=gateway,
-                        language=self.soul.language,
+                        language=runtime.soul.language,
                         is_command=is_command,
                         professional=professional,
                         humanize=humanize,
@@ -714,10 +678,11 @@ class TurnRunner:
                     planned_chunks = int(claimed["planned_chunks"] or 0)
                     if resume_reply and planned_chunks and len(chunks) != planned_chunks:
                         # The stored chunk plan no longer matches: sending would duplicate.
-                        self._interrupt(
-                            turn_id, "resume mismatch: chunk plan changed", force=True
+                        await self.coordinator.interrupt(
+                            turn_id,
+                            "resume mismatch: chunk plan changed",
                         )
-                        await self._notice_interrupted(turn_id, thread_id, gateway)
+                        await self.delivery.notice_interrupted(turn_id, thread_id, gateway)
                         return actions
                     _sent_ids, sent_actions, stop = await self.delivery.send_reply(
                         turn_id=turn_id,
@@ -728,82 +693,72 @@ class TurnRunner:
                         pace=pace,
                         quote_all=quote_all,
                         generation=generation,
-                        partial=str(self.config.turns.partial_delivery or "skip"),
+                        partial=str(runtime.config.turns.partial_delivery or "skip"),
                         humanize=humanize,
                     )
                     actions.extend(sent_actions)
                     if stop.startswith("refused:"):
-                        self._interrupt(
-                            turn_id, f"send refused: {stop.split(':', 1)[1]}", force=True
+                        await self.coordinator.interrupt(
+                            turn_id,
+                            f"send refused: {stop.split(':', 1)[1]}",
                         )
-                        await self._notice_interrupted(turn_id, thread_id, gateway)
+                        await self.delivery.notice_interrupted(turn_id, thread_id, gateway)
                         return actions
                     if stop.startswith("failed"):
-                        self.turns.defer(
+                        await io.run(
+                            runtime.turns.defer,
                             turn_id,
                             "send failed",
                             delay_seconds=min(
-                                max(0.1, float(self.config.llm.retry.cap_seconds)),
+                                max(0.1, float(runtime.config.llm.retry.cap_seconds)),
                                 max(
-                                    float(self.config.worker.retry.backoff_seconds),
-                                    float(self.config.llm.retry.base_seconds),
+                                    float(runtime.config.worker.retry.backoff_seconds),
+                                    float(runtime.config.llm.retry.base_seconds),
                                 )
                                 * (2 ** max(0, attempt - 1))
                                 * (
                                     1.0
-                                    + random.uniform(0.0, float(self.config.llm.retry.jitter))
+                                    + random.uniform(
+                                        0.0, float(runtime.config.llm.retry.jitter)
+                                    )
                                 ),
                             ),
                         )
                     else:
-                        touch = getattr(self.memory, "record_uses", None)
+                        touch = getattr(runtime.memory, "record_uses", None)
                         if touch is not None and memory_ctx.hits:
                             try:
                                 await io.run(
                                     touch, turn_id, [hit.id for hit in memory_ctx.hits]
                                 )
                             except Exception:
-                                log.exception("failed to record memory use chat=%s", thread_id)
-                        self._finish(turn_id, planned=len(chunks))
-                    self.runtime.pending_approvals = self.approvals.count_pending()
-                    self.approvals.expire()
+                                log.exception(
+                                    "failed to record memory use chat=%s", thread_id
+                                )
+                        await self.coordinator.finish(turn_id, planned=len(chunks))
+                        if not is_command and reply is not None:
+                            await self._learn_style(state, reply)
+                    runtime.facts.pending_approvals = await io.run(
+                        runtime.approvals.count_pending
+                    )
+                    await io.run(runtime.approvals.expire)
                 finally:
                     typing.cancel()
                     with contextlib.suppress(asyncio.CancelledError):
                         await typing
-                    await self._typing(gateway, thread_id, False)
+                    await self.delivery.typing(gateway, thread_id, False)
             except asyncio.CancelledError:
-                reason = self._cancel_reasons.get(turn_id, "cancelled")
-                self._interrupt(turn_id, reason, force=True)
+                reason = self.coordinator.reason(turn_id)
+                await self.coordinator.interrupt(turn_id, reason)
                 raise
             except SideEffectAlreadyRan as exc:
                 log.warning("turn %s interrupted: %s", turn_id, exc)
-                self._interrupt(turn_id, str(exc), force=True)
-                await self._notice_interrupted(turn_id, thread_id, gateway)
+                await self.coordinator.interrupt(turn_id, str(exc))
+                await self.delivery.notice_interrupted(turn_id, thread_id, gateway)
                 return actions
             finally:
                 ACTIVE_GENERATION.reset(token)
-                if not is_command and self._turn_tasks.get(thread_id) is asyncio.current_task():
-                    self._turn_tasks.pop(thread_id, None)
-                    self._turn_gateways.pop(thread_id, None)
+                reset_origin(origin_token)
+                if not is_command and running is not None:
+                    self.coordinator.release(thread_id, running, active=True)
         return actions
-
-    async def keep_typing(self, thread_id: str, gateway: GatewayCore) -> None:
-        while True:
-            await asyncio.sleep(TYPING_REFRESH)
-            await self._typing(gateway, thread_id, True)
-
-    def decision_transcript(self, thread_id: str) -> str:
-        entries: list[Message] = []
-        try:
-            entries = list(self.history.recent(thread_id, DECISION_HISTORY))
-        except Exception:  # a broken archive must not fail the decision
-            log.debug(
-                "failed to read the archive for the decision chat=%s", thread_id, exc_info=True
-            )
-        if not entries:
-            entries = self.windows.get(thread_id)[-DECISION_FALLBACK_HISTORY:]
-        lines = [
-            prompt_entry(entry, self.soul.name, DECISION_LINE_CHARS) for entry in entries
-        ]
-        return "\n".join(line for line in lines if line)

@@ -6,7 +6,7 @@ No SQL lives here: each helper reads through the store's one database handle and
 
 import hashlib
 import re
-from collections.abc import Mapping
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 
 from . import MemoryHit, queries
@@ -106,13 +106,14 @@ def _digest(text: str) -> str:
 WORD = re.compile(r"\w+", re.UNICODE)
 
 
-def _tokens(text: str) -> set[str]:
-    """Content tokens of four characters or more; short words never match.
+def _tokens(text: str, stopwords: Iterable[str] = ()) -> set[str]:
+    """Content tokens of four characters or more, minus the caller's stopwords.
 
-    The length floor is the whole filter: it is language-neutral, so the engine holds no
-    per-language stopword list (ADR-0008 keeps language data out of the core).
+    The length floor is language-neutral; the stopword list is data the caller supplies, so
+    the engine still holds no per-language vocabulary of its own (ADR-0008).
     """
-    return {token for token in WORD.findall(str(text or "").lower()) if len(token) >= 4}
+    words = {token for token in WORD.findall(str(text or "").lower()) if len(token) >= 4}
+    return words - set(stopwords)
 
 
 def _marked_supersede(row: Mapping) -> bool:

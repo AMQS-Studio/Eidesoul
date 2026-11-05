@@ -35,6 +35,7 @@ from .automation_manifest import (
     evaluate_condition,
 )
 from .automation_store import AutomationStore
+from .lease import bind_stores
 from .schedule import in_quiet, quiet_end
 
 log = logging.getLogger(__name__)
@@ -59,6 +60,12 @@ class AutomationWorker:
         self.agent = agent
         self.config: AutomationConfig = agent.config.automations
         self.store = store or AutomationStore(agent.db, self.config)
+        # ADR-0012 §4.3: the supervisor builds this worker after attaching the lease, so this
+        # is the one place every store learns the generation it must write under.
+        bind = getattr(self.store, "bind_lease", None)
+        if callable(bind):
+            bind(getattr(agent, "lease", None))
+        bind_stores(agent)
         self.tick = max(1.0, float(tick))
         self.limit = max(1, int(limit))
         self.worker_id = f"automation:{os.getpid()}"
@@ -81,7 +88,10 @@ class AutomationWorker:
         self._running = False
 
     def interrupt(self) -> int:
-        return self.store.interrupt()
+        """Only this instance's in-flight runs: a takeover never closes another's work."""
+        return self.store.interrupt(
+            worker=self.worker_id, generation=self._generation()
+        )
 
     async def _loop(self) -> None:
         while True:

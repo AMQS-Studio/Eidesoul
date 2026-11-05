@@ -292,3 +292,66 @@ def test_the_turn_app_hint_selects_the_skill_corpus(tmp_path: Path) -> None:
     assert "b-proc" not in env.llm.system
     row = env.db.fetch_one(select(turns.c.app))
     assert row["app"] == "a"
+
+
+def test_two_apps_may_share_a_skill_name_without_overwriting(tmp_path: Path) -> None:
+    store = SkillStore(database())
+    assert store.save(
+        "deploy", "Deploy corpus A.", "# A\n", app="a", language="id"
+    ) == "deploy"
+    assert store.save(
+        "deploy", "Deploy corpus B.", "# B\n", app="b", language="id"
+    ) == "deploy"
+
+    first = store.get("deploy", app="a")
+    second = store.get("deploy", app="b")
+    assert first is not None
+    assert second is not None
+    assert (first.name, first.app, first.description) == ("deploy", "a", "Deploy corpus A.")
+    assert (second.name, second.app, second.description) == ("deploy", "b", "Deploy corpus B.")
+    assert store.get("deploy") in {first, second}
+    assert [row["revision"] for row in store.revisions("deploy", app="a")] == [1]
+    assert [row["revision"] for row in store.revisions("deploy", app="b")] == [1]
+
+    store.save("deploy", "Deploy corpus A2.", "# A2\n", app="a", overwrite=True, language="id")
+    assert store.get("deploy", app="a").description == "Deploy corpus A2."
+    assert store.get("deploy", app="b").description == "Deploy corpus B."
+
+    inside = store.retrieve(
+        "deploy", app="b", thread_id="chat", person_id="p",
+        catalog_tools=(), held_tools=(),
+    )
+    assert "# B" in inside
+    assert "# A2" not in inside
+
+
+def test_the_app_hint_is_ignored_without_a_gateway_declaration(tmp_path: Path) -> None:
+    from dataclasses import replace
+
+    from monoagens.engine.config import GatewaySettings
+
+    undeclared = replace(
+        build_config(tmp_path),
+        gateways={"whatsapp": GatewaySettings("whatsapp", True, {})},
+    )
+    store = SkillStore(database(), undeclared)
+    store.save(
+        "deploy", "Undeclared.", "# U\n", app="a", gateway="whatsapp", language="id"
+    )
+    row = store.get("deploy")
+    assert row is not None
+    assert row.app == ""
+    assert store.declared_app("whatsapp", "a") == ""
+
+    declared = replace(
+        build_config(tmp_path),
+        gateways={"whatsapp": GatewaySettings("whatsapp", True, {"app": "a"})},
+    )
+    store = SkillStore(database(), declared)
+    store.save(
+        "deploy", "Declared.", "# D\n", app="a", gateway="whatsapp", language="id"
+    )
+    scoped = store.get("deploy", app="a")
+    assert scoped is not None
+    assert scoped.app == "a"
+    assert store.declared_app("whatsapp", "b") == ""

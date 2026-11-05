@@ -6,14 +6,14 @@ from pathlib import Path
 
 from support import build_config, role
 
-from monoagens.engine.tools import REGISTRY, ToolContext, execute
+from monoagens.engine.tools import REGISTRY, ToolContext, execute, safe_chat
 
 
 def env(tmp_path, *, trusted: bool = True):
     config = build_config(tmp_path)
     config.workspace.mkdir(parents=True, exist_ok=True)
     (config.workspace / "public").mkdir(parents=True, exist_ok=True)
-    (config.workspace / "scratch" / "chat").mkdir(parents=True, exist_ok=True)
+    (config.workspace / "scratch" / safe_chat("chat")).mkdir(parents=True, exist_ok=True)
     tools = ("*",) if trusted else ("grep", "read")
     ctx = ToolContext(
         config, (role("member", tools=tools),), ("grep",), thread_id="chat", sender="p"
@@ -34,14 +34,15 @@ def write(config, relative: str, text: str) -> Path:
 
 def test_member_sees_only_public_and_this_scratch(tmp_path) -> None:
     config, ctx = env(tmp_path, trusted=False)
+    own = f"scratch/{safe_chat('chat')}/b.py"
     write(config, "public/a.py", "needle here")
-    write(config, "scratch/chat/b.py", "needle there")
+    write(config, own, "needle there")
     write(config, "scratch/other/c.py", "needle hidden")
 
     result = run(ctx, {"pattern": "needle"})
 
     assert "public/a.py" in result
-    assert "scratch/chat/b.py" in result
+    assert own in result
     assert "scratch/other" not in result
 
 

@@ -53,15 +53,9 @@ def stub_vector(text: str) -> list[float]:
 
 
 class StubEncoder:
-    """The embedder every test sees: the engine's `.encode` and Mem0's `.embed` contracts."""
+    """The embedder every test sees through the engine's `.encode` contract."""
 
     def encode(self, texts, *, convert_to_numpy=True, show_progress_bar=False, **kwargs):
-        return [stub_vector(text) for text in texts]
-
-    def embed(self, text, memory_action=None):
-        return stub_vector(text)
-
-    def embed_batch(self, texts, memory_action=None):
         return [stub_vector(text) for text in texts]
 
 
@@ -78,7 +72,6 @@ def default_soul(**overrides) -> Soul:
         "timezone": "UTC",
         "persona": "p",
         "voice": VoiceConfig(
-            enabled=True,
             affect=AffectConfig(enabled=True),
             style=StyleConfig(enabled=True),
             character=CharacterConfig(enabled=False),
@@ -132,7 +125,9 @@ def build_config(
         database=database_config or DatabaseConfig(url=test_dsn(), url_env=""),
         llm=LLMConfig(base_url="http://x", model="m", api_key_env="K"),
         workspace=workspace_path,
-        approval=approval or ApprovalConfig(),
+        # The fixture opts into `yolo`; the product default is `default` and the tier matrix is
+        # covered by tests/test_safety.py / tests/test_approvals.py.
+        approval=approval or ApprovalConfig(mode="yolo"),
         roles=RoleRegistry(by_name=role_map, default=default_role),
         default_role=default_role,
         gateways={},
@@ -146,71 +141,6 @@ def build_config(
 def database() -> Database:
     """The session-migrated Postgres store; conftest truncates it before every test."""
     return Database(test_dsn())
-
-
-class FakeMem0:
-    """Fake AsyncMemory: just enough for the adapter contract (not Mem0 behavior)."""
-
-    available = True
-
-    def __init__(self) -> None:
-        self.items: dict[str, dict] = {}
-        self.calls: list[tuple[str, dict]] = []
-        self.counter = 0
-
-    @staticmethod
-    def _match(item: dict, filters: dict | None) -> bool:
-        if not filters:
-            return True
-        return all(item.get(key) == value for key, value in filters.items())
-
-    async def add(self, messages, *, metadata=None, infer=True, **identity):
-        self.calls.append(
-            ("add", {"messages": messages, "metadata": metadata, "infer": infer, **identity})
-        )
-        if isinstance(messages, list):
-            text = " ".join(str(item.get("content") or "") for item in messages)
-        else:
-            text = str(messages)
-        self.counter += 1
-        item = {
-            "id": f"m{self.counter}",
-            "memory": text,
-            "metadata": dict(metadata or {}),
-            "created_at": 1_700_000_000 + len(self.items),
-            **identity,
-        }
-        self.items[item["id"]] = item
-        return {"results": [item]}
-
-    async def search(self, query, *, top_k=20, filters=None, **_kwargs):
-        self.calls.append(("search", {"query": query, "filters": filters, "top_k": top_k}))
-        found = [dict(item) for item in self.items.values() if self._match(item, filters)]
-        return {"results": found[:top_k]}
-
-    async def get_all(self, *, filters=None, top_k=20):
-        self.calls.append(("get_all", {"filters": filters, "top_k": top_k}))
-        found = [dict(item) for item in self.items.values() if self._match(item, filters)]
-        return {"results": found[:top_k]}
-
-    async def get(self, memory_id):
-        return dict(self.items[memory_id]) if memory_id in self.items else None
-
-    async def delete(self, memory_id):
-        self.items.pop(memory_id, None)
-        return {"message": "deleted"}
-
-    async def update(self, memory_id, *, metadata=None, **_kwargs):
-        self.calls.append(("update", {"id": memory_id, "metadata": metadata}))
-        item = self.items.get(memory_id)
-        if item is None:
-            return {"message": "not found"}
-        if isinstance(metadata, dict):
-            item["metadata"] = dict(metadata)
-        return item
-
-    async def close(self):
-        return None
 
 
 class FakeGateway(CoreDefaults):
@@ -371,7 +301,7 @@ class RichDirectoryFakeGateway(RichFakeGateway):
 
 
 class FakeMemory:
-    """Fake MemoryBackend for agent tests (no Mem0)."""
+    """Fake MemoryBackend for agent tests."""
 
     available = True
     reason = ""
@@ -537,7 +467,14 @@ def make_agent(
         or {
             "member": Role(
                 "member",
-                tools=("read", "memory", "chat_history", "recipe", "send"),
+                tools=(
+                    "read",
+                    "memory",
+                    "thread_history",
+                    "recipe",
+                    "send_file",
+                    "send_message",
+                ),
                 commands=("*",),
             )
         },
@@ -546,13 +483,14 @@ def make_agent(
             soul or default_soul(),
             voice=replace(
                 (soul or default_soul()).voice,
-                enabled=bool(affect),
                 affect=AffectConfig(enabled=bool(affect)),
                 style=StyleConfig(enabled=False),
                 humanize=humanize or HumanizeConfig(enabled=False),
             ),
         ),
-        approval=approvals or ApprovalConfig(),
+        # A fixture tests the path it names, not the approval tier: opt into `yolo` here and
+        # let tests/test_safety.py and tests/test_approvals.py own the tier matrix.
+        approval=approvals or ApprovalConfig(mode="yolo"),
     )
     config.workspace.mkdir(parents=True, exist_ok=True)
     (config.workspace / "public").mkdir(parents=True, exist_ok=True)

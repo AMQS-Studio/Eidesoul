@@ -3,10 +3,9 @@
 
 import json
 import logging
-import re
 import time
 from collections.abc import Sequence
-from datetime import datetime
+from datetime import UTC, datetime
 
 from sqlalchemy import Text, and_, case, cast, func, literal, or_, select
 from sqlalchemy.dialects.postgresql import JSONB
@@ -25,6 +24,9 @@ from ..turn.context import (
     Quote,
     clamp_visibility,
 )
+from .attachments import AttachmentStore
+from .history_codec import FACT_KEYS, _blob, _data, _like_terms, _media_from
+from .turns import turn_identity
 
 log = logging.getLogger(__name__)
 
@@ -37,75 +39,6 @@ class RouteConflict(RuntimeError):
         self.thread = thread
         self.owner = owner
         self.claimant = claimant
-
-# Facts ride in the `data` blob but never make a row richer: the upsert keeps the old content
-# when the incoming row carries nothing but these keys.
-FACT_KEYS = ("sender_kind",)
-
-
-def _media_json(media: Media) -> dict:
-    return {
-        "kind": media.kind,
-        "mimetype": media.mimetype,
-        "filename": media.filename,
-        "size": int(media.size or 0),
-    }
-
-
-def _media_from(value, ref) -> Media | None:
-    if not isinstance(value, dict):
-        return None
-    return Media(
-        kind=str(value.get("kind") or ""),
-        mimetype=str(value.get("mimetype") or ""),
-        filename=str(value.get("filename") or ""),
-        size=int(value.get("size") or 0),
-        proto=None,
-        ref=bytes(ref) if ref else None,
-    )
-
-
-def _data(message: Message) -> dict:
-    data: dict = {}
-    if message.media is not None:
-        data["media"] = _media_json(message.media)
-    if message.quote is not None:
-        quote = {
-            "id": message.quote.id,
-            "sender_name": message.quote.sender_name,
-            "sender_id": message.quote.sender_id,
-            "text": message.quote.text,
-            "when": message.quote.when.timestamp() if message.quote.when else None,
-        }
-        if message.quote.media is not None:
-            quote["media"] = _media_json(message.quote.media)
-        data["quote"] = quote
-    if message.view_once:
-        data["view_once"] = True
-    if message.unreadable:
-        data["unreadable"] = True
-    if message.sender_kind:
-        data["sender_kind"] = message.sender_kind
-    return data
-
-
-def _blob(media: Media | None) -> bytes | None:
-    if media is None:
-        return None
-    if media.ref:
-        return bytes(media.ref)
-    proto = getattr(media, "proto", None)
-    if proto is None:
-        return None
-    try:
-        return proto.SerializeToString()
-    except (AttributeError, TypeError):
-        return None
-
-
-def _like_terms(query: str) -> list[str]:
-    return re.findall(r"\w+", query, re.UNICODE) or [query.strip()]
-
 
 class HistoryStore:
     """One row per (chat, message id); an upsert keeps the richer content."""
@@ -127,6 +60,8 @@ class HistoryStore:
         # ADR-0014 §4.3: the message-event sink writes inside the intake transaction.
         self.event_sink = event_sink
         self.search_config = search or SearchConfig()
+        # ADR-0001 §4.2: the durable handle of every attachment, written by the same intake.
+        self.attachments = AttachmentStore(db)
 
     # ------------------------------------------------------------ write
 
@@ -150,22 +85,37 @@ class HistoryStore:
 
     @staticmethod
     def _media_rows(thread_id: str, message: Message) -> list[dict]:
-        """The bytes that no longer live on the row (ADR-0016 §4.5)."""
+        """The bytes that no longer live on the row (ADR-0016 §4.5), numbered per message.
+
+        Every attachment gets a row even when the body carried no bytes, so the row set mirrors
+        the envelope and `seq` is the attachment's place in it. A quote's bytes use the next
+        free number: `kind` says what the row is, `seq` is the identity.
+        """
         rows: list[dict] = []
-        quote = message.quote
-        for kind, media in (
-            ("media", message.media),
-            ("quote", quote.media if quote is not None else None),
-        ):
-            blob = _blob(media)
-            if blob is None:
+        for seq, media in enumerate(message.attachments):
+            if media is None:
                 continue
             rows.append(
                 {
                     "thread_id": thread_id,
                     "message_id": message.id,
-                    "kind": kind,
-                    "mime": str(getattr(media, "mimetype", "") or ""),
+                    "seq": seq,
+                    "kind": "media",
+                    "mime": str(media.mimetype or ""),
+                    "bytes_ref": _blob(media),
+                }
+            )
+        quote = message.quote
+        quote_media = quote.media if quote is not None else None
+        blob = _blob(quote_media)
+        if blob is not None:
+            rows.append(
+                {
+                    "thread_id": thread_id,
+                    "message_id": message.id,
+                    "seq": len(message.attachments),
+                    "kind": "quote",
+                    "mime": str(getattr(quote_media, "mimetype", "") or ""),
                     "bytes_ref": blob,
                 }
             )
@@ -176,7 +126,7 @@ class HistoryStore:
         """The incoming `data` without its fact keys; NULL when the row carries no content."""
         stripped = cast(excluded.data, JSONB)
         for key in FACT_KEYS:
-            stripped = stripped - cast(literal(key), Text)
+            stripped = stripped.op("-")(cast(literal(key), Text))
         return func.nullif(cast(stripped, Text), "{}")
 
     @staticmethod
@@ -251,6 +201,7 @@ class HistoryStore:
         with self.db.connect() as conn:
             self._upsert_messages(conn, rows)
             self._upsert_media(conn, items)
+            self._store_attachments(conn, items)
         return len(rows)
 
     def _upsert_media(self, conn, items: list[tuple[str, Message]]) -> None:
@@ -260,14 +211,38 @@ class HistoryStore:
         statement = pg_insert(message_media).values(rows)
         conn.execute(
             statement.on_conflict_do_update(
-                index_elements=["thread_id", "message_id", "kind"],
+                index_elements=["thread_id", "message_id", "seq"],
                 set_={
+                    "kind": statement.excluded.kind,
                     "mime": statement.excluded.mime,
                     "bytes_ref": func.coalesce(
                         statement.excluded.bytes_ref, message_media.c.bytes_ref
                     ),
                 },
             )
+        )
+
+    def _route_gateway(self, conn, thread_id: str) -> str:
+        found = conn.execute(
+            select(threads.c.gateway).where(threads.c.thread_id == str(thread_id))
+        ).scalar()
+        return str(found or "")
+
+    def _store_attachments(
+        self, conn, items: list[tuple[str, Message]], gateway: str | None = None
+    ) -> int:
+        """Give every attachment a durable handle in the intake transaction (ADR-0001 §4.2)."""
+        groups: dict[str, list[tuple[str, Message]]] = {}
+        for thread_id, message in items:
+            if not message.attachments:
+                continue
+            name = gateway if gateway is not None else self._route_gateway(conn, thread_id)
+            groups.setdefault(str(name or ""), []).append((thread_id, message))
+        if not groups:
+            return 0
+        return sum(
+            self.attachments.save_many(conn, gateway=name, items=group)
+            for name, group in groups.items()
         )
 
     def intake(
@@ -281,6 +256,7 @@ class HistoryStore:
         category: str = "chat",
         gateway: str = "",
         app: str = "",
+        hints: dict | None = None,
     ) -> bool:
         """The one intake transaction (ADR-0011 §4.1): message + turn + memory journal + candidate.
 
@@ -289,23 +265,33 @@ class HistoryStore:
         `capture` job in this transaction. Any failure rolls all five writes back together, so a
         turn is never processed from a partial intake. A duplicate message id is idempotent: the
         existing turn is kept, no second candidate is written, and `False` is returned.
+
+        `hints` is the body's percept evidence (`dm`, `mention`, `reply`, `app`); it rides on
+        the turn row so a resumed turn reconstructs the same `Percept` (ADR-0001/ADR-0003).
         """
         now = time.time()
         row = self._row(thread_id, message)
+        message_id = str(message.id or row["msg_id"])
+        # ADR-0001 §4.3: the turn is keyed by the namespaced identity, so two bodies that happen
+        # to use the same message id never own the same turn; the raw id is kept beside it.
+        turn_id = turn_identity(gateway, thread_id, message_id)
         with self.db.connect() as conn:
             self._route(conn, str(thread_id), str(gateway or ""), audience)
             self._upsert_messages(conn, [row])
             self._upsert_media(conn, [(thread_id, message)])
+            self._store_attachments(conn, [(thread_id, message)], gateway=str(gateway or ""))
             created = conn.execute(
                 pg_insert(turns)
                 .values(
-                    id=str(message.id or row["msg_id"]),
+                    id=turn_id,
+                    message_id=message_id,
                     thread_id=str(thread_id),
                     person_id=str(person_id or "")[:80],
                     status="received",
                     step="received",
                     app=str(app or "").strip().lower(),
                     category="action" if str(category) == "action" else "chat",
+                    hints=dict(hints or {}),
                     attempt=0,
                     lease_owner="",
                     lease_until=0.0,
@@ -327,7 +313,7 @@ class HistoryStore:
                 conn,
                 thread_id=str(thread_id),
                 person_id=str(person_id or ""),
-                message_id=str(message.id or row["msg_id"]),
+                message_id=message_id,
                 text=str(message.text or ""),
                 language=language,
                 audience=audience,
@@ -357,6 +343,13 @@ class HistoryStore:
                 select(threads.c.gateway).where(threads.c.thread_id == str(thread_id))
             ).scalar()
             if owner and str(owner) != str(gateway):
+                # A structured diagnostic, never a silent drop (ADR-0032 §4.7).
+                log.error(
+                    "route conflict thread=%s owner=%s claimant=%s: the message is refused",
+                    thread_id,
+                    owner,
+                    gateway,
+                )
                 raise RouteConflict(str(thread_id), str(owner), str(gateway))
         insert = pg_insert(threads).values(
             thread_id=thread_id,
@@ -384,7 +377,7 @@ class HistoryStore:
         self, thread_id: str, text: str, *, kind: str, message_id: str = ""
     ) -> None:
         """Record a `notice:*` bot message; `kind` rides in `messages.data`, never `turns`."""
-        when = datetime.now()
+        when = datetime.now(UTC)
         message = Message(
             id=str(message_id or f"notice-{time.time_ns()}"),
             sender_name="",
@@ -448,6 +441,7 @@ class HistoryStore:
             select(
                 message_media.c.thread_id,
                 message_media.c.message_id,
+                message_media.c.seq,
                 message_media.c.kind,
                 message_media.c.bytes_ref,
             ).where(
@@ -457,20 +451,26 @@ class HistoryStore:
                 )
             )
         )
-        blobs: dict[tuple[str, str, str], bytes] = {}
+        # One blob per (thread, message, kind, seq); a NULL reference still marks the attachment.
+        blobs: dict[tuple[str, str, str], dict[tuple[int, str], bytes | None]] = {}
         for item in found:
-            if item.get("bytes_ref") is None:
-                continue
             key = (str(item["thread_id"]), str(item["kind"]), str(item["message_id"]))
-            blobs[key] = bytes(item["bytes_ref"])
+            body = item.get("bytes_ref")
+            blobs.setdefault(key, {})[(int(item["seq"]), str(item["kind"]))] = (
+                bytes(body) if body is not None else None
+            )
         return [self._decode(row, blobs) for row in rows]
 
     def _decode(
-        self, row: dict, blobs: dict[tuple[str, str, str], bytes] | None = None
+        self,
+        row: dict,
+        blobs: dict[tuple[str, str, str], dict[tuple[int, str], bytes | None]] | None = None,
     ) -> Message:
         blobs = blobs or {}
         thread_id = str(row["thread_id"])
         message_id = str(row["msg_id"])
+        media_rows = blobs.get((thread_id, "media", message_id), {})
+        quote_rows = blobs.get((thread_id, "quote", message_id), {})
         try:
             data = row.get("data") or {}
         except AttributeError:
@@ -492,7 +492,8 @@ class HistoryStore:
                 sender_id=str(quote_data.get("sender_id") or ""),
                 text=str(quote_data.get("text") or ""),
                 media=_media_from(
-                    quote_data.get("media"), blobs.get((thread_id, "quote", message_id))
+                    quote_data.get("media"),
+                    next(iter(quote_rows.values()), None),
                 ),
                 when=datetime.fromtimestamp(float(when)) if when else None,
             )
@@ -508,7 +509,7 @@ class HistoryStore:
             sender_id=str(row["sender_id"]),
             when=datetime.fromtimestamp(float(row["ts"])),
             text=str(row["text"]),
-            media=_media_from(data.get("media"), blobs.get((thread_id, "media", message_id))),
+            attachments=self._attachments(data, media_rows),
             quote=quote,
             outgoing=bool(row["outgoing"]),
             sender_address=str(row["sender_address"]),
@@ -521,6 +522,36 @@ class HistoryStore:
             deleted_by=str(row.get("deleted_by")),
             deleted_admin=bool(row.get("deleted_admin")),
             notice=notice,
+        )
+
+    @staticmethod
+    def _attachments(
+        data: dict, media_rows: dict[tuple[int, str], bytes | None]
+    ) -> tuple[Media, ...]:
+        """The envelope of one archived message, in `seq` order (ADR-0001 §4.2)."""
+        metas = data.get("attachments")
+        if not isinstance(metas, list):
+            # An archive written before the envelope: the single `media` key is the envelope.
+            first = data.get("media")
+            metas = [first] if isinstance(first, dict) else []
+        found: list[Media] = []
+        for seq, meta in enumerate(metas):
+            if not isinstance(meta, dict):
+                continue
+            media = _media_from(meta, media_rows.get((seq, "media")))
+            if media is not None:
+                found.append(media)
+        if found or not media_rows:
+            return tuple(found)
+        # Metadata lost but the bytes remain: the rows still describe the attachments.
+        return tuple(
+            media
+            for media in (
+                _media_from({}, body)
+                for _, body in sorted(media_rows.items())
+                if body is not None
+            )
+            if media is not None
         )
 
     def chat_name(self, thread_id: str) -> str:

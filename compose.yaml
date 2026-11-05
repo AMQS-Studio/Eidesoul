@@ -30,8 +30,9 @@ services:
     build:
       context: .
       args:
-        # the image stays core: no gateway and no plugin is bundled (ADR-0027)
-        EXTRAS: ""
+        # Dynamic extras from `.env` (for example EXTRAS="--extra whatsapp"); the image stays
+        # core by default: no gateway and no plugin is bundled (ADR-0027).
+        EXTRAS: "${EXTRAS:-}"
     restart: unless-stopped
     # ADR-0011: the drain+notice budget (25 s) must fit inside the orchestrator's grace.
     stop_grace_period: 30s

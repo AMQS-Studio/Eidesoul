@@ -17,6 +17,7 @@ from monoagens.engine.config import TurnConfig
 from monoagens.engine.i18n import t
 from monoagens.engine.memory.ledger import OutboundLedger
 from monoagens.engine.schema import turns
+from monoagens.engine.stores.turns import turn_identity
 
 DM = "628111@s.whatsapp.net"
 OTHER = "628222@s.whatsapp.net"
@@ -24,6 +25,15 @@ OTHER = "628222@s.whatsapp.net"
 
 def handle(env, inbound, **kwargs):
     return asyncio.run(env.agent.handle(inbound, env.gateway, **kwargs))
+
+
+def turn_row(env, message_id: str, thread: str = DM):
+    """The namespaced turn identity is the key; `message_id` is the raw transport id."""
+    return env.agent.turns.get(turn_identity(env.gateway.name, thread, message_id))
+
+
+def turn_scope(env, message_id: str, thread: str = DM) -> str:
+    return f"turn:{turn_identity(env.gateway.name, thread, message_id)}"
 
 
 class SlowLLM(FakeLLM):
@@ -60,14 +70,14 @@ def test_a_turn_is_checkpointed_and_delivered(tmp_path) -> None:
 
     handle(env, inbound)
 
-    turn = env.agent.turns.get(inbound.payload.id)
+    turn = turn_row(env, inbound.payload.id)
     assert turn["status"] == "delivered"
     assert turn["step"] == "delivered"
     assert turn["planned_chunks"] == 1
     assert turn["delivered_chunks"] == 1
     assert turn["attempt"] == 1
     ledger = OutboundLedger(env.db)
-    assert ledger.status(f"turn:{inbound.payload.id}:0", 0) == "sent"
+    assert ledger.status(f"{turn_scope(env, inbound.payload.id)}:0", 0) == "sent"
 
 
 def test_a_delivered_turn_is_never_processed_twice(tmp_path) -> None:
@@ -105,7 +115,7 @@ def test_a_mid_turn_failure_resumes_without_a_duplicate_send(tmp_path) -> None:
     inbound = inbound_message("halo", thread=DM, message_id="resume-1")
 
     handle(env, inbound)
-    first = env.agent.turns.get("resume-1")
+    first = turn_row(env, "resume-1")
     assert first["status"] == "sending"
     assert first["delivered_chunks"] == 1
 
@@ -115,7 +125,7 @@ def test_a_mid_turn_failure_resumes_without_a_duplicate_send(tmp_path) -> None:
     )
     handle(env, inbound)
 
-    turn = env.agent.turns.get("resume-1")
+    turn = turn_row(env, "resume-1")
     assert turn["status"] == "delivered"
     assert [text for _, text, _ in env.gateway.sent] == ["satu", "dua"]
     assert turn["delivered_chunks"] == 2
@@ -157,7 +167,7 @@ def test_a_standby_refuses_intake_and_sends_nothing(tmp_path) -> None:
 
     assert actions == []
     assert env.gateway.sent == []
-    assert env.agent.turns.get("m-halo") is None
+    assert turn_row(env, "m-halo") is None
     result = asyncio.run(env.agent.send_text(DM, "halo", gateway=env.gateway))
     assert result.startswith("error:")
     assert env.gateway.sent == []
@@ -195,7 +205,7 @@ def test_the_turn_deadline_interrupts_once_with_one_notice(tmp_path) -> None:
     handle(env, inbound)
     handle(env, inbound)
 
-    turn = env.agent.turns.get("slow-1")
+    turn = turn_row(env, "slow-1")
     assert turn["status"] == "interrupted"
     assert turn["last_error"] == "timeout"
     notices = [text for _, text, _ in env.gateway.sent if "terlalu lama" in text]
@@ -234,7 +244,7 @@ def test_stop_cancels_only_the_running_turn(tmp_path) -> None:
 
     asyncio.run(run())
 
-    turn = env.agent.turns.get("stop-1")
+    turn = turn_row(env, "stop-1")
     assert turn["status"] == "interrupted"
     assert turn["last_error"] == "user_stop"
     assert t("command.stop.cancelled", lang) in [text for _, text, _ in env.gateway.sent]
@@ -262,7 +272,7 @@ def test_shutdown_drains_notices_once_and_keeps_the_turn_unfinished(tmp_path) ->
             )
         )
         for _ in range(200):
-            if env.agent._turn_tasks.get(DM) is not None:
+            if env.agent.coordinator.active_task(DM) is not None:
                 break
             await asyncio.sleep(0.005)
         env.agent.begin_drain()
@@ -272,13 +282,13 @@ def test_shutdown_drains_notices_once_and_keeps_the_turn_unfinished(tmp_path) ->
         return pending
 
     pending = asyncio.run(run())
-    assert pending["628111@s.whatsapp.net"] == "drain-1"
+    assert pending[DM] == turn_identity(env.gateway.name, DM, "drain-1")
     asyncio.run(env.agent.shutdown_notices(pending, 1.0))
     asyncio.run(env.agent.shutdown_notices(pending, 1.0))
 
     notices = [text for _, text, _ in env.gateway.sent if "Koneksiku putus" in text]
     assert len(notices) == 1
-    turn = env.agent.turns.get("drain-1")
+    turn = turn_row(env, "drain-1")
     assert turn["status"] == "interrupted"
     assert turn["shutdown_epoch"] > 0
 
@@ -329,8 +339,8 @@ def test_two_parallel_threads_keep_their_own_turn_rows(tmp_path) -> None:
 
     asyncio.run(run())
 
-    assert env.agent.turns.get("p1")["thread_id"] == DM
-    assert env.agent.turns.get("p2")["thread_id"] == OTHER
+    assert turn_row(env, "p1")["thread_id"] == DM
+    assert turn_row(env, "p2", OTHER)["thread_id"] == OTHER
     rows = env.db.fetch_all(_turns_table().select())
     assert {row["status"] for row in rows} == {"delivered"}
 
@@ -361,7 +371,7 @@ def test_a_turn_row_requires_a_valid_status(tmp_path) -> None:
         conn.execute(
             _turns_table()
             .update()
-            .where(_turns_table().c.id == "bad-1")
+            .where(_turns_table().c.id == turn_identity("", DM, "bad-1"))
             .values(status="exploded")
         )
 
@@ -380,7 +390,7 @@ def test_time_is_bounded_by_the_deadline_not_per_call(tmp_path) -> None:
 
     elapsed = time.monotonic() - started
     assert elapsed < 0.8
-    assert env.agent.turns.get("budget-1")["status"] in {"delivered", "interrupted"}
+    assert turn_row(env, "budget-1")["status"] in {"delivered", "interrupted"}
 
 
 def backlog(env, thread: str, count: int, *, action: bool = False) -> list[str]:
@@ -399,7 +409,7 @@ def backlog(env, thread: str, count: int, *, action: bool = False) -> list[str]:
             gateway=env.gateway.name,
         language="id",
         )
-        ids.append(str(message.payload.id))
+        ids.append(turn_identity(env.gateway.name, thread, message.payload.id))
     return ids
 
 
@@ -457,9 +467,15 @@ def test_the_backlog_pass_is_paced_and_round_robin(tmp_path) -> None:
     }
     # Round-robin: the two oldest rows of `a`, one of `b`, one of `c`.
     assert [len(running[thread]) for thread in threads] == [2, 1, 1]
-    assert running[threads[0]] == [f"{threads[0]}-chat-0", f"{threads[0]}-chat-1"]
-    assert running[threads[1]] == [f"{threads[1]}-chat-0"]
-    assert running[threads[2]] == [f"{threads[2]}-chat-0"]
+    first = turn_identity(env.gateway.name, threads[0], f"{threads[0]}-chat-0")
+    second = turn_identity(env.gateway.name, threads[0], f"{threads[0]}-chat-1")
+    assert sorted(running[threads[0]]) == sorted([first, second])
+    assert running[threads[1]] == [
+        turn_identity(env.gateway.name, threads[1], f"{threads[1]}-chat-0")
+    ]
+    assert running[threads[2]] == [
+        turn_identity(env.gateway.name, threads[2], f"{threads[2]}-chat-0")
+    ]
     assert all(
         value == ("received", 0)
         for thread in threads
@@ -514,3 +530,118 @@ def test_consolidation_expires_the_tail_but_never_an_action(tmp_path) -> None:
     assert states[action_ids[0]][0] == "running"  # the action turn is never consolidated
     assert [states[ids[1]][0], states[ids[2]][0]] == ["expired", "expired"]
     assert env.agent.backlog[thread] == 2
+
+
+def test_a_turn_resumed_from_drafted_reviews_again_before_sending(tmp_path, monkeypatch) -> None:
+    """ADR-0003 §4.2: a crash after `drafted` must re-run review, never send the raw draft."""
+    from monoagens.engine import guard
+
+    env = make_agent(tmp_path)
+    inbound = inbound_message("halo", thread=DM, message_id="review-1")
+    original = env.agent.privacy.review
+    calls = {"review": 0, "leak": 0}
+
+    async def review(*args, **kwargs):
+        calls["review"] += 1
+        if calls["review"] == 1:
+            raise RuntimeError("crash after drafted")
+        return await original(*args, **kwargs)
+
+    def leak(reply, sources):
+        calls["leak"] += 1
+        return False
+
+    monkeypatch.setattr(env.agent.privacy, "review", review)
+    monkeypatch.setattr(guard, "cross_chat_leak", leak)
+
+    with pytest.raises(RuntimeError, match="crash after drafted"):
+        handle(env, inbound)
+
+    turn = turn_row(env, "review-1")
+    assert turn["step"] == "drafted"
+    assert turn["draft_text"] == "halo juga"
+    assert not turn["reviewed_text"]
+    assert calls == {"review": 1, "leak": 0}
+
+    handle(env, inbound)
+
+    turn = turn_row(env, "review-1")
+    assert turn["status"] == "delivered"
+    assert turn["step"] == "delivered"
+    assert turn["reviewed_text"] == "halo juga"
+    assert calls == {"review": 2, "leak": 1}
+    assert [text for _, text, _ in env.gateway.sent] == ["halo juga"]
+
+
+def test_a_turn_resumed_from_reviewed_never_reviews_again(tmp_path, monkeypatch) -> None:
+    """The `reviewed` checkpoint is the gate: resume sends that text unchanged."""
+    from monoagens.engine import guard
+
+    env = make_agent(tmp_path)
+    inbound = inbound_message("halo", thread=DM, message_id="review-2")
+    original_review = env.agent.privacy.review
+    original_send = env.agent.delivery.send_reply
+    calls = {"review": 0, "leak": 0}
+    crashed = {"done": False}
+
+    async def review(*args, **kwargs):
+        calls["review"] += 1
+        return await original_review(*args, **kwargs)
+
+    def leak(reply, sources):
+        calls["leak"] += 1
+        return False
+
+    async def send_reply(*args, **kwargs):
+        if not crashed["done"]:
+            crashed["done"] = True
+            raise RuntimeError("crash before send")
+        return await original_send(*args, **kwargs)
+
+    monkeypatch.setattr(env.agent.privacy, "review", review)
+    monkeypatch.setattr(guard, "cross_chat_leak", leak)
+    monkeypatch.setattr(env.agent.delivery, "send_reply", send_reply)
+
+    with pytest.raises(RuntimeError, match="crash before send"):
+        handle(env, inbound)
+
+    turn = turn_row(env, "review-2")
+    assert turn["step"] == "reviewed"
+    assert turn["reviewed_text"] == "halo juga"
+    assert calls == {"review": 1, "leak": 1}
+
+    handle(env, inbound)
+
+    turn = turn_row(env, "review-2")
+    assert turn["status"] == "delivered"
+    assert calls == {"review": 1, "leak": 1}
+    assert [text for _, text, _ in env.gateway.sent] == ["halo juga"]
+
+
+def test_a_progress_emission_goes_through_the_door_with_a_deterministic_id(tmp_path) -> None:
+    """ADR-0001 §4.2: progress is delivery, so it takes the door, the origin, and a stable id."""
+    from monoagens.engine.turn.progress import _progress_callbacks
+
+    env = make_agent(tmp_path)
+    env.gateway.settings = {"interim_updates": True}
+    calls: list[tuple] = []
+    original = env.agent.dispatch
+
+    async def spy(subject, address, action, *, origin, reason=""):
+        calls.append((subject, address, action, origin, reason))
+        return await original(subject, address, action, origin=origin, reason=reason)
+
+    env.agent.dispatch = spy
+    callbacks = _progress_callbacks(env.agent.dispatch, env.gateway, DM, "turn-7")
+
+    asyncio.run(callbacks["send_interim"]("sedang menulis"))
+    asyncio.run(callbacks["send_interim"]("lagi"))
+
+    assert [item[2].id for item in calls] == [
+        "turn:turn-7:progress:0",
+        "turn:turn-7:progress:1",
+    ]
+    for _subject, address, action, origin, _reason in calls:
+        assert address == origin
+        assert address.thread == DM
+        assert action.capability == "send_interim"

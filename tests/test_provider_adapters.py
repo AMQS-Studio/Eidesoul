@@ -41,6 +41,69 @@ def test_openai_response_normalizes_text_usage_and_tool_calls() -> None:
     assert found.finish_reason == "tool_calls"
 
 
+def test_openai_reasoning_content_is_thinking_not_answer_text() -> None:
+    response = SimpleNamespace(
+        choices=[
+            SimpleNamespace(
+                message=SimpleNamespace(
+                    content="The answer.",
+                    reasoning_content="First I check the dates.",
+                ),
+                finish_reason="stop",
+            )
+        ]
+    )
+
+    found = normalize_response(response)
+
+    assert found.text == "The answer."
+    assert found.thinking == "First I check the dates."
+
+
+def test_anthropic_thinking_blocks_are_separated_from_the_answer() -> None:
+    """Claude's compatibility wire returns thinking as content blocks, never as text."""
+    response = SimpleNamespace(
+        choices=[
+            SimpleNamespace(
+                message=SimpleNamespace(
+                    content=[
+                        {"type": "thinking", "thinking": "Weigh the options."},
+                        {"type": "text", "text": "Here is the answer."},
+                    ]
+                ),
+                finish_reason="stop",
+            )
+        ]
+    )
+
+    found = normalize_response(response)
+
+    assert found.text == "Here is the answer."
+    assert found.thinking == "Weigh the options."
+
+
+def test_gemini_thought_parts_are_thinking_not_answer_text() -> None:
+    found = _response(
+        {
+            "candidates": [
+                {
+                    "content": {
+                        "parts": [
+                            {"text": "Consider the source.", "thought": True},
+                            {"text": "The answer."},
+                        ]
+                    },
+                    "finishReason": "STOP",
+                }
+            ]
+        }
+    )
+
+    assert found.text == "The answer."
+    assert found.thinking == "Consider the source."
+
+
+
 def test_gemini_request_carries_native_tools_sampling_and_safety(monkeypatch) -> None:
     captured: dict = {}
 

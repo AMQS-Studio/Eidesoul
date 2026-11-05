@@ -6,8 +6,12 @@ need to answer this one, not an arbitrary count of rows.
 
 
 import logging
+from typing import TYPE_CHECKING
 
-from .context import Message
+from .context import Message, _message_lines
+
+if TYPE_CHECKING:
+    from ..config import Config
 
 log = logging.getLogger(__name__)
 
@@ -94,12 +98,24 @@ def _merge(groups: list[list[Message]]) -> list[Message]:
     return sorted(merged, key=_key)
 
 
+def _rendered(config: Config, thread_id: str, entry: Message) -> int:
+    """Full rendered size of one row: body, quote, and attachment lines, without writing.
+
+    `thread_chars` protects the model's context window, so a short text with a long quote or an
+    inlined attachment costs what the payload actually carries (ADR-0003 §4.2).
+    """
+    lines = _message_lines(config, thread_id, entry, {}, entry, persist=False)
+    return sum(len(line) for line in lines)
+
+
 def _trim(
     merged: list[Message],
     current: Message,
     anchors: list[Message],
     floor: set[str],
     max_chars: int,
+    config: Config,
+    thread_id: str,
 ) -> list[Message]:
     """Drop the oldest rows beyond the floor until the budget fits.
 
@@ -107,15 +123,16 @@ def _trim(
     to "three messages above" must not lose the context the budget was meant to protect.
     """
     keep = floor | {entry.id for entry in (current, *anchors) if entry.id}
-    total = sum(len(entry.text or "") for entry in merged)
+    sizes = [_rendered(config, thread_id, entry) for entry in merged]
+    total = sum(sizes)
     trimmed = list(merged)
-    for entry in merged:
+    for index, entry in enumerate(merged):
         if total <= max_chars:
             break
         if entry.id in keep:
             continue
         trimmed.remove(entry)
-        total -= len(entry.text or "")
+        total -= sizes[index]
     return trimmed
 
 
@@ -131,6 +148,7 @@ def thread(
     current: Message,
     *,
     max_chars: int,
+    config: Config,
     window=None,
 ) -> list[Message]:
     """The payload rows for this turn: tail, quote anchors, deduped, budget-trimmed."""
@@ -138,7 +156,7 @@ def thread(
     tail = _tail(rows, current)
     anchors = _anchors(history, thread_id, current, window, tail)
     floor = {entry.id for entry in tail[-TAIL_MIN_MESSAGES:] if entry.id}
-    return _trim(_merge([tail, anchors]), current, anchors, floor, max_chars)
+    return _trim(_merge([tail, anchors]), current, anchors, floor, max_chars, config, thread_id)
 
 
 def _newer(entry: Message, current: Message) -> bool:

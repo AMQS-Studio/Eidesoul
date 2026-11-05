@@ -100,12 +100,13 @@ def seed_artifact(db, msg_id: str, *, thread: str = THREAD, ts: float) -> None:
                 {
                     "thread_id": thread,
                     "message_id": msg_id,
+                    "seq": 0,
                     "kind": "media",
                     "mime": "image/jpeg",
                     "bytes_ref": b"x",
                 }
             ],
-            ["thread_id", "message_id", "kind"],
+            ["thread_id", "message_id", "seq"],
         )
 
 

@@ -100,7 +100,7 @@ def test_forced_search_enters_the_prompt_as_a_card(tmp_path, monkeypatch) -> Non
             False,
         )
 
-    monkeypatch.setattr("monoagens.engine.turn.loop.collect", fake_collect)
+    monkeypatch.setattr("monoagens.engine.turn.research_flow.collect", fake_collect)
     env = make_agent(
         tmp_path,
         answer="Tim tuan rumah menang 2-1 [R1].",
@@ -183,7 +183,7 @@ def test_a_quoted_timeout_notice_is_not_a_research_challenge(tmp_path, monkeypat
         queries.append(query)
         return [], False
 
-    monkeypatch.setattr("monoagens.engine.turn.loop.collect", fake_collect)
+    monkeypatch.setattr("monoagens.engine.turn.research_flow.collect", fake_collect)
     env = make_agent(
         tmp_path, roles={"member": role("member", tools=("web_search", "read"))}
     )
@@ -235,3 +235,10 @@ def test_unrelated_citation_is_not_supported() -> None:
 
     assert ok is False
     assert "unsupported citation" in reason
+
+
+def test_research_triggers_are_whole_words_not_substrings() -> None:
+    for text in ("teknik ini", "unik sekali", "kesimpulan rapat", "bekas sepatu"):
+        assert trigger_reason(text, language="id") == "", text
+
+    assert trigger_reason("versi terbaru", language="id") == "time"

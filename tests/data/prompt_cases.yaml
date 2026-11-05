@@ -17,14 +17,14 @@ cases:
       - "mention="
       - "WhatsApp"
       - "chat_history"
-  - id: cli-body
+  - id: console-body
     language: en
     locale: en-US
     timezone: UTC
-    section_from: cli
-    stable_prefix_hash: b2801456556f9797
+    section_from: console
+    stable_prefix_hash: 0e0a08c7025e0ff4
     expect_contains:
-      - "## CLI interface"
+      - "## Console interface"
     expect_absent:
       - "sticker"
       - "mention="

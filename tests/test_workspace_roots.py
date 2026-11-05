@@ -8,24 +8,31 @@ from support import make_agent, role
 
 from monoagens.engine.registry import Handler
 from monoagens.engine.tools import execute, safe_chat
-from monoagens.gateways.whatsapp.tools.send import _send
-from monoagens.gateways.whatsapp.tools.send_to import _send_to
+from monoagens.engine.tools.send_file import TOOL as SEND_FILE
+from monoagens.engine.tools.send_message import TOOL as SEND_MESSAGE
 
 SEND = Handler(
-    name="send",
+    name="send_file",
     family="write",
     description="test",
-    fn=_send,
-    parameters={"type": "object", "properties": {"path": {"type": "string"}}},
-)
-SEND_TO = Handler(
-    name="send_to",
-    family="write",
-    description="test",
-    fn=_send_to,
+    fn=SEND_FILE.fn,
     parameters={
         "type": "object",
-        "properties": {"chat": {"type": "string"}, "text": {"type": "string"}},
+        "properties": {"path": {"type": "string"}, "chat": {"type": "string"}},
+    },
+)
+SEND_TO = Handler(
+    name="send_message",
+    family="write",
+    description="test",
+    fn=SEND_MESSAGE.fn,
+    parameters={
+        "type": "object",
+        "properties": {
+            "chat": {"type": "string"},
+            "text": {"type": "string"},
+            "reason": {"type": "string"},
+        },
     },
 )
 
@@ -35,7 +42,9 @@ def member_env(tmp_path):
         tmp_path,
         roles={
             "member": role(
-                "member", tools=("read", "write", "send", "send_to"), commands=("*",)
+                "member",
+                tools=("read", "write", "send_file", "send_message"),
+                commands=("*",),
             )
         },
         default_role="member",
@@ -50,8 +59,8 @@ def member_ctx(env, thread_id: str = "111@g.us"):
 
 def call(env, name: str, args: dict, ctx):
     specs = dict(env.agent.tools.by_name)
-    specs["send"] = SEND
-    specs["send_to"] = SEND_TO
+    specs["send_file"] = SEND
+    specs["send_message"] = SEND_TO
     return asyncio.run(execute(specs, name, args, ctx))
 
 
@@ -119,8 +128,8 @@ def test_member_send_reads_public_but_not_private(tmp_path) -> None:
     private.write_text("no", encoding="utf-8")
     ctx = member_ctx(env)
 
-    public = call(env, "send", {"path": "public/ok.txt"}, ctx)
-    denied = call(env, "send", {"path": "private/s.txt"}, ctx)
+    public = call(env, "send_file", {"path": "public/ok.txt"}, ctx)
+    denied = call(env, "send_file", {"path": "private/s.txt"}, ctx)
 
     assert not public.startswith("error:")
     assert denied.startswith("error: path is not allowed for this role")
@@ -133,9 +142,10 @@ def test_member_cannot_send_to_another_chat(tmp_path) -> None:
     env.gateway.resolve_target = lambda query: (target, [])
     ctx = member_ctx(env)
 
-    result = call(env, "send_to", {"chat": "budi", "text": "halo"}, ctx)
+    result = call(env, "send_message", {"chat": "budi", "text": "halo"}, ctx)
 
-    assert result == "denied: room"
+    assert result.startswith(("denied:", "error:"))
+    assert not env.gateway.sent
 
 
 def test_trusted_role_keeps_full_workspace(tmp_path) -> None:
@@ -167,3 +177,14 @@ def test_safe_chat_strips_path_separators() -> None:
     assert "\\" not in value
     assert Path(value).name == value
     assert value not in {"", ".", ".."}
+
+
+def test_safe_chat_keeps_thread_ids_that_sanitize_alike_apart() -> None:
+    dashed = safe_chat("app:user_1")
+    underscored = safe_chat("app_user:1")
+
+    assert dashed != underscored
+    assert Path(dashed).name == dashed
+    assert Path(underscored).name == underscored
+    assert safe_chat("app:user_1") == dashed
+    assert safe_chat("").startswith("chat_")

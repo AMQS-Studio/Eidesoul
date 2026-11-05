@@ -71,7 +71,12 @@ class PrivacyService:
         audit = self._audit(reply, hits, inbound) if self.config.auditor else AuditResult(
             verdict="ask"
         )
-        selected = [hit for hit in hits if hit.id in audit.mentions] or risky
+        # Only a hit the draft actually mentions can be disclosed: an unmentioned memory is
+        # not a leak, and the old `or risky` fallback bypassed the calibrated policy by
+        # letting a hit the draft never mentioned decide the review.
+        selected = [hit for hit in hits if hit.id in audit.mentions]
+        if not selected:
+            return ReviewResult(False, reply)
         requester = self.agent._actor(inbound)
         verdicts = [
             self.policy.disclose(hit, requester=requester, direct=direct) for hit in selected

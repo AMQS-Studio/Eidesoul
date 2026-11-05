@@ -11,7 +11,7 @@ from collections.abc import Mapping, Sequence
 
 from sqlalchemy import select
 
-from .. import io
+from .. import embed, io
 from ..guard import SENSITIVE, is_crisis, is_injection
 from ..schema import memories
 from . import MemoryHit, gate, queries, records, writes
@@ -124,6 +124,17 @@ def _pending_ids(store, conn, thread_id: str, refs: Sequence[str]) -> list[str]:
     return [str(row["id"]) for row in conn.execute(statement).mappings().all()]
 
 
+def _vector(text: str) -> list[float] | None:
+    """The shared 384-dim embedding, or None when the embedder cannot provide it."""
+    body = str(text or "").strip()
+    if not body:
+        return None
+    encoded = embed.encode([body])
+    if not encoded or len(encoded[0]) != queries.MEMORY_DIM:
+        return None
+    return encoded[0]
+
+
 def _transition_values(
     store,
     row: Mapping,
@@ -172,6 +183,8 @@ def _transition_values(
             str(row.get("subject_id") or ""),
         )
         values["last_error"] = ""
+        # ADR-0051 §4.1: the row becomes readable here, so it gains its vector here.
+        values["embedding"] = _vector(str(row.get("text") or ""))
     elif to_state in {"failed", "not_worth"}:
         values["level"] = None
         values["confirmed"] = None
@@ -431,7 +444,7 @@ async def capture(
     worth: bool = True,
     language: str,
 ) -> list[str]:
-    """Label a turn candidate; Mem0 extraction is used when present, canonical never waits."""
+    """Label a turn candidate; a configured extractor is used when present and never blocks."""
     user = _user_text(messages)
     if level is None or int(level) > 4 or int(level) < 0:
         return []
@@ -475,7 +488,7 @@ async def capture(
                 subject_id=ctx.subject,
                 confirmed=ctx.confirmed,
             )
-        except Exception as exc:  # Mem0/LLM trouble must not lose the canonical candidate
+        except Exception as exc:  # extractor/LLM trouble must not lose the canonical candidate
             log.warning("memory extraction skipped: %s: %s", type(exc).__name__, exc)
         else:
             if facts:
@@ -606,7 +619,7 @@ def label_candidate(
             return False
         route = via_of(str(row.get("source") or ""), fallback=str(row.get("via") or "turn"))
         owner = str(row.get("owner_id") or "")
-        subject = str(subject_id or row.get("subject_id") or "")
+        subject = store._canonical_subject(str(subject_id or row.get("subject_id") or ""))
         # ADR-0008 §4.3: the stored kind passes the same quarantine the canonical write
         # applies, so a `rule` request from a turn is stored as a sourced fact.
         wanted_kind = quarantine_kind(
@@ -639,6 +652,7 @@ def label_candidate(
             return False
         if body:
             extra["text"] = body
+            extra["embedding"] = _vector(body)
         queries.update_memory(conn, resolved, extra)
         queries.update_memory(conn, resolved, values)
         refs = [

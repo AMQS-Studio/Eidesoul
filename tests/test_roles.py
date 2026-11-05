@@ -83,7 +83,7 @@ def test_gateway_policy_comes_only_from_the_highest_priority_role() -> None:
     assert block == {"dm": True, "groups": "all", "reply_to_bot": True}
 
 
-def test_a_lower_role_never_grants_a_missing_policy() -> None:
+def test_a_role_without_a_block_falls_back_to_one_that_defines_it() -> None:
     source = {
         "administrator": (
             f"name: administrator\npriority: 100\nusers: ['{PERSON}']\ntools: ['*']\n"
@@ -98,8 +98,27 @@ def test_a_lower_role_never_grants_a_missing_policy() -> None:
 
     role, block = load_roles(source, "guest").policy_for(PERSON, "whatsapp")
 
+    assert role.name == "member"
+    assert block == {"dm": True}
+
+
+def test_a_denying_block_on_the_highest_role_still_wins() -> None:
+    source = {
+        "administrator": (
+            f"name: administrator\npriority: 100\nusers: ['{PERSON}']\ntools: ['*']\n"
+            "commands: ['*']\ngateways:\n  whatsapp:\n    dm: false\n"
+        ),
+        "member": (
+            f"name: member\npriority: 10\nusers: ['{PERSON}']\n"
+            "gateways:\n  whatsapp:\n    dm: true\n"
+        ),
+        "guest": "name: guest\n",
+    }
+
+    role, block = load_roles(source, "guest").policy_for(PERSON, "whatsapp")
+
     assert role.name == "administrator"
-    assert block is None
+    assert block == {"dm": False}
 
 
 def test_unlinked_sender_uses_the_default_role_policy() -> None:
@@ -267,11 +286,11 @@ def test_whoami_help_and_guard_agree_on_the_name(tmp_path) -> None:
             env.agent._command(
                 name,
                 "",
-                "cli:local",
+                "console:local",
                 "local",
                 roles,
                 env.gateway,
-                inbound_message(f"/{name}", thread="cli:local"),
+                inbound_message(f"/{name}", thread="console:local"),
             )
         )
 
@@ -299,7 +318,9 @@ def test_shipped_role_surfaces_use_administrator() -> None:
     assert template["administrator"]["commands"] == ["*"]
     assert template["administrator"]["memory_admin"] is True
     assert template["administrator"]["protected"] is True
-    assert "role" not in templates.GATEWAY["gateways"]["cli"]
+    assert all(
+        "role" not in body for body in templates.GATEWAY["gateways"].values()
+    )
 
 
 def test_no_owner_role_literal_in_the_role_surfaces() -> None:
@@ -351,7 +372,7 @@ def test_people_add_bootstraps_an_administrator_and_writes_the_mirror(tmp_path) 
         encoding="utf-8",
     )
 
-    person = admin_people.add(db, config.paths, "cli", "local", "administrator", name="Boss")
+    person = admin_people.add(db, config.paths, "console", "local", "administrator", name="Boss")
 
     stored = yaml.safe_load(docs.get("role:administrator"))
     assert stored["users"] == [person]
@@ -372,4 +393,4 @@ def test_people_add_refuses_a_non_administrator_first_user(tmp_path) -> None:
     )
 
     with pytest.raises(ValueError, match="first user"):
-        admin_people.add(db, config.paths, "cli", "local", "member")
+        admin_people.add(db, config.paths, "console", "local", "member")

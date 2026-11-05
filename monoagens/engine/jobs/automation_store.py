@@ -12,8 +12,7 @@ import time
 from datetime import datetime, timedelta
 from datetime import time as clock_time
 
-from sqlalchemy import func, select, update
-from sqlalchemy.dialects.postgresql import insert as pg_insert
+from sqlalchemy import ColumnElement, TextClause, func, select, update
 
 from ..config import AutomationConfig
 from ..db import Database
@@ -31,6 +30,7 @@ from .automation_manifest import (
     describe,
     validate_manifest,
 )
+from .lease import FencedStore, Superseded, fenced_insert
 from .schedule import (
     DAY,
     ManifestError,
@@ -48,12 +48,16 @@ _RETRY_AFTER = re.compile(r"retry[- ]after[: ]+(\d+)", re.IGNORECASE)
 MATERIALIZE_CAP = 100
 
 
-class AutomationStore:
+class AutomationStore(FencedStore):
     """The row, its runs, and the transition log; no delivery lives here."""
 
     def __init__(self, db: Database, config: AutomationConfig) -> None:
         self.db = db
         self.config = config
+
+    def _live(self, generation: int = 0):
+        """The predicate a scheduler mutation carries: the bound lease, else the caller's."""
+        return self.guard_clause(generation)
 
     # ---------------------------------------------------------------- read
 
@@ -76,6 +80,13 @@ class AutomationStore:
             .where(automation_state_log.c.automation_id == int(automation_id))
             .order_by(automation_state_log.c.id)
         )
+
+    def by_owner(self, owner: str, *, states: tuple[str, ...] = ()) -> list[dict]:
+        """Every row one person owns, newest first; `/task list` reads exactly this."""
+        statement = select(automations).where(automations.c.owner == str(owner))
+        if states:
+            statement = statement.where(automations.c.state.in_(tuple(states)))
+        return self.db.fetch_all(statement.order_by(automations.c.id.desc()))
 
     # --------------------------------------------------------------- write
 
@@ -163,20 +174,29 @@ class AutomationStore:
             "created_at": created,
             "updated_at": moment,
         }
+        fence = self.fence_clause()
         with self.db.connect() as conn:
-            found = conn.execute(automations.insert().values(row).returning(automations.c.id))
+            found = conn.execute(
+                fenced_insert(automations, row, fence).returning(automations.c.id)
+            )
             new_id = found.scalar()
+            if new_id is None and fence is not None:
+                raise Superseded("lease generation moved on: automation refused")
             if new_id is None:  # pragma: no cover - the insert always returns its own row
                 raise RuntimeError("the new automation could not be read back")
             automation_id = int(new_id)
             conn.execute(
-                automation_state_log.insert().values(
-                    automation_id=automation_id,
-                    from_state="draft",
-                    to_state="active",
-                    reason="approved",
-                    actor=str(body["owner"]),
-                    at=moment,
+                fenced_insert(
+                    automation_state_log,
+                    {
+                        "automation_id": automation_id,
+                        "from_state": "draft",
+                        "to_state": "active",
+                        "reason": "approved",
+                        "actor": str(body["owner"]),
+                        "at": moment,
+                    },
+                    fence,
                 )
             )
         log.info(
@@ -218,20 +238,28 @@ class AutomationStore:
         if target not in legal:
             raise ManifestError(f"illegal transition {current} -> {target}")
         moment = time.time() if now is None else float(now)
+        fence = self.fence_clause()
+        statement = (
+            update(automations)
+            .where(automations.c.id == int(automation_id))
+            .values(state=target, reason=str(reason or ""), updated_at=moment)
+        )
+        if fence is not None:
+            statement = statement.where(fence)
         with self.db.connect() as conn:
+            conn.execute(statement)
             conn.execute(
-                update(automations)
-                .where(automations.c.id == int(automation_id))
-                .values(state=target, reason=str(reason or ""), updated_at=moment)
-            )
-            conn.execute(
-                automation_state_log.insert().values(
-                    automation_id=int(automation_id),
-                    from_state=current,
-                    to_state=target,
-                    reason=str(reason or ""),
-                    actor=str(actor or ""),
-                    at=moment,
+                fenced_insert(
+                    automation_state_log,
+                    {
+                        "automation_id": int(automation_id),
+                        "from_state": current,
+                        "to_state": target,
+                        "reason": str(reason or ""),
+                        "actor": str(actor or ""),
+                        "at": moment,
+                    },
+                    fence,
                 )
             )
         log.info(
@@ -287,20 +315,25 @@ class AutomationStore:
             if sender and str(person_id) != sender:
                 continue
             found = conn.execute(
-                pg_insert(automation_runs)
-                .values(
-                    automation_id=int(row["id"]),
-                    occurrence_key=f"message:{int(row['id'])}:{message.id!s}",
-                    scheduled_at=float(message.when.timestamp()) if message.when else float(now),
-                    status="queued",
-                    payload={
-                        "message_id": str(message.id),
-                        "thread": str(thread_id),
-                        "gateway": str(gateway),
-                        "person_id": str(person_id),
+                fenced_insert(
+                    automation_runs,
+                    {
+                        "automation_id": int(row["id"]),
+                        "occurrence_key": f"message:{int(row['id'])}:{message.id!s}",
+                        "scheduled_at": (
+                            float(message.when.timestamp()) if message.when else float(now)
+                        ),
+                        "status": "queued",
+                        "payload": {
+                            "message_id": str(message.id),
+                            "thread": str(thread_id),
+                            "gateway": str(gateway),
+                            "person_id": str(person_id),
+                        },
+                        "created_at": now,
+                        "updated_at": now,
                     },
-                    created_at=now,
-                    updated_at=now,
+                    self.fence_clause(),
                 )
                 .on_conflict_do_nothing(index_elements=["occurrence_key"])
                 .returning(automation_runs.c.id)
@@ -366,12 +399,16 @@ class AutomationStore:
     def _store_schedule(
         self, automation_id: int | str, current: float, fire: int, now: float
     ) -> None:
+        fence = self.fence_clause()
+        statement = (
+            update(automations)
+            .where(automations.c.id == int(automation_id))
+            .values(next_occurrence=current, fire_count=fire, updated_at=now)
+        )
+        if fence is not None:
+            statement = statement.where(fence)
         with self.db.connect() as conn:
-            conn.execute(
-                update(automations)
-                .where(automations.c.id == int(automation_id))
-                .values(next_occurrence=current, fire_count=fire, updated_at=now)
-            )
+            conn.execute(statement)
 
     def _insert_run(
         self, automation: dict, scheduled_at: float, status: str, detail: str, now: float
@@ -387,8 +424,7 @@ class AutomationStore:
         }
         with self.db.connect() as conn:
             found = conn.execute(
-                pg_insert(automation_runs)
-                .values(row)
+                fenced_insert(automation_runs, row, self.fence_clause())
                 .on_conflict_do_nothing(index_elements=["occurrence_key"])
                 .returning(automation_runs.c.id)
             ).scalar()
@@ -405,6 +441,7 @@ class AutomationStore:
         limit: int = 5,
     ) -> list[dict]:
         lease_until = now + float(self.config.resilience.stale_claim_seconds)
+        fence = self._live(generation)
         claimed: list[dict] = []
         with self.db.connect() as conn:
             rows = conn.execute(
@@ -419,7 +456,7 @@ class AutomationStore:
                 .with_for_update(skip_locked=True)
             ).mappings().all()
             for row in rows:
-                conn.execute(
+                statement = (
                     update(automation_runs)
                     .where(
                         automation_runs.c.id == int(row["id"]),
@@ -435,6 +472,10 @@ class AutomationStore:
                         updated_at=now,
                     )
                 )
+                if fence is not None:
+                    statement = statement.where(fence)
+                if not conn.execute(statement).rowcount:
+                    continue
                 body = dict(row)
                 body.update(
                     status="claimed",
@@ -448,37 +489,72 @@ class AutomationStore:
         return claimed
 
     def reap(self, now: float | None = None) -> int:
-        """A claim from a dead process goes back to the queue; attempts stay counted."""
+        """A claim from a dead process goes back to the queue; attempts stay counted.
+
+        Only `claimed`/`running` rows are touched, and each update repeats the row's own
+        `claimed_by`/`generation`, so a claim another instance took meanwhile is never
+        interrupted or released by this pass (ADR-0012 §4.3).
+        """
         moment = time.time() if now is None else float(now)
-        rows = self.db.fetch_all(
+        stale = self.db.fetch_all(
             select(automation_runs).where(
                 automation_runs.c.status.in_(("claimed", "running")),
                 automation_runs.c.lease_until < moment,
             )
         )
-        for row in rows:
+        fence = self.fence_clause()
+        released = 0
+        for row in stale:
+            where = [
+                automation_runs.c.id == int(row["id"]),
+                automation_runs.c.status.in_(("claimed", "running")),
+                automation_runs.c.claimed_by == str(row["claimed_by"]),
+                automation_runs.c.generation == int(row["generation"]),
+            ]
+            if fence is not None:
+                where.append(fence)
             if int(row["attempts"]) >= int(self.config.retry.max_attempts):
-                self.finish(
-                    row["id"], "failed", "stale claim: attempts exhausted", now=moment
-                )
+                values = {
+                    "status": "failed",
+                    "detail": "stale claim: attempts exhausted",
+                    "finished_at": moment,
+                    "lease_until": 0,
+                    "updated_at": moment,
+                }
             else:
-                with self.db.connect() as conn:
+                values = {"status": "queued", "next_attempt_at": moment, "updated_at": moment}
+            with self.db.connect() as conn:
+                released += int(
                     conn.execute(
-                        update(automation_runs)
-                        .where(automation_runs.c.id == int(row["id"]))
-                        .values(status="queued", next_attempt_at=moment, updated_at=moment)
-                    )
-        if rows:
-            log.info("automation reaper released %d stale claim(s)", len(rows))
-        return len(rows)
+                        update(automation_runs).where(*where).values(**values)
+                    ).rowcount
+                    or 0
+                )
+        if released:
+            log.info("automation reaper released %d stale claim(s)", released)
+        return released
 
-    def interrupt(self, now: float | None = None) -> int:
-        """Clean shutdown: an in-flight run is `interrupted`, not lost and not failed."""
+    def interrupt(self, now: float | None = None, *, worker: str = "", generation: int = 0) -> int:
+        """Clean shutdown: only this instance's in-flight runs are `interrupted`.
+
+        A takeover must not let the deposed instance close the new primary's runs, so the
+        update is scoped by `claimed_by`/`generation` and carries the live lease predicate.
+        """
         moment = time.time() if now is None else float(now)
+        where: list[ColumnElement[bool] | TextClause] = [
+            automation_runs.c.status.in_(("claimed", "running"))
+        ]
+        if worker:
+            where.append(automation_runs.c.claimed_by == str(worker))
+        if generation:
+            where.append(automation_runs.c.generation == int(generation))
+        fence = self._live(generation)
+        if fence is not None:
+            where.append(fence)
         with self.db.connect() as conn:
             outcome = conn.execute(
                 update(automation_runs)
-                .where(automation_runs.c.status.in_(("claimed", "running")))
+                .where(*where)
                 .values(
                     status="interrupted",
                     detail="clean shutdown",
@@ -495,23 +571,26 @@ class AutomationStore:
         rows = self.db.fetch_all(
             select(automation_runs).where(automation_runs.c.status == "interrupted")
         )
+        fence = self.fence_clause()
         resumed = 0
         for row in rows:
             if moment - float(row["scheduled_at"]) <= window:
-                with self.db.connect() as conn:
-                    conn.execute(
-                        update(automation_runs)
-                        .where(automation_runs.c.id == int(row["id"]))
-                        .values(
-                            status="queued",
-                            next_attempt_at=0,
-                            claimed_at=None,
-                            claimed_by="",
-                            lease_until=0,
-                            updated_at=moment,
-                        )
+                statement = (
+                    update(automation_runs)
+                    .where(automation_runs.c.id == int(row["id"]))
+                    .values(
+                        status="queued",
+                        next_attempt_at=0,
+                        claimed_at=None,
+                        claimed_by="",
+                        lease_until=0,
+                        updated_at=moment,
                     )
-                resumed += 1
+                )
+                if fence is not None:
+                    statement = statement.where(fence)
+                with self.db.connect() as conn:
+                    resumed += int(conn.execute(statement).rowcount or 0)
             else:
                 self.finish(row["id"], "missed", "interrupted: window missed", now=moment)
         return resumed
@@ -532,12 +611,12 @@ class AutomationStore:
             "updated_at": moment,
             "lease_until": 0,
         }
+        statement = update(automation_runs).where(automation_runs.c.id == int(run_id))
+        fence = self.fence_clause()
+        if fence is not None:
+            statement = statement.where(fence)
         with self.db.connect() as conn:
-            conn.execute(
-                update(automation_runs)
-                .where(automation_runs.c.id == int(run_id))
-                .values(**values)
-            )
+            conn.execute(statement.values(**values))
 
     def retry(self, run: dict, error: str, *, now: float | None = None, step: int = -1) -> str:
         """Transient failure: back off, or `failed` once attempts are exhausted."""
@@ -556,18 +635,22 @@ class AutomationStore:
                 delay = max(delay, float(found.group(1)))
         if self.config.retry.jitter:
             delay *= 1.0 + random.uniform(0.0, 0.2)
-        with self.db.connect() as conn:
-            conn.execute(
-                update(automation_runs)
-                .where(automation_runs.c.id == int(run["id"]))
-                .values(
-                    status="queued",
-                    next_attempt_at=moment + delay,
-                    step_index=int(step),
-                    detail=str(error)[:DETAIL_CHARS],
-                    updated_at=moment,
-                )
+        statement = (
+            update(automation_runs)
+            .where(automation_runs.c.id == int(run["id"]))
+            .values(
+                status="queued",
+                next_attempt_at=moment + delay,
+                step_index=int(step),
+                detail=str(error)[:DETAIL_CHARS],
+                updated_at=moment,
             )
+        )
+        fence = self.fence_clause()
+        if fence is not None:
+            statement = statement.where(fence)
+        with self.db.connect() as conn:
+            conn.execute(statement)
         return "retry"
 
     def budget_used(
@@ -621,12 +704,16 @@ class AutomationStore:
     def mark_apologized(self, run_id: int | str, *, now: float | None = None) -> None:
         """The apology is a timestamp, not a new reason: `detail` keeps why it was missed."""
         moment = time.time() if now is None else float(now)
+        statement = (
+            update(automation_runs)
+            .where(automation_runs.c.id == int(run_id))
+            .values(apology_sent_at=moment, updated_at=moment)
+        )
+        fence = self.fence_clause()
+        if fence is not None:
+            statement = statement.where(fence)
         with self.db.connect() as conn:
-            conn.execute(
-                update(automation_runs)
-                .where(automation_runs.c.id == int(run_id))
-                .values(apology_sent_at=moment, updated_at=moment)
-            )
+            conn.execute(statement)
 
     def missed_apologies(self, limit: int = 50) -> list[dict]:
         return self.db.fetch_all(

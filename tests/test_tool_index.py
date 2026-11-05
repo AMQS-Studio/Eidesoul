@@ -56,12 +56,12 @@ def test_a_bare_name_resolves_this_body_then_core(tmp_path) -> None:
 
 
 def test_a_body_tool_is_not_in_the_core_registry(tmp_path) -> None:
-    gateway = FakeGateway(name="a", tools=[handler("send")])
+    gateway = FakeGateway(name="a", tools=[handler("probe_tool")])
     env = make_agent(tmp_path, gateway=gateway)
 
-    assert env.agent.tools.get("send") is None
-    assert "send" in env.agent.tool_index.names("a")
-    assert "send" not in env.agent.tool_index.names("b")
+    assert env.agent.tools.get("probe_tool") is None
+    assert "probe_tool" in env.agent.tool_index.names("a")
+    assert "probe_tool" not in env.agent.tool_index.names("b")
 
 
 def test_a_duplicate_inside_one_body_is_a_boot_failure(tmp_path) -> None:

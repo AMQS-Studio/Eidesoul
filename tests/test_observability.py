@@ -17,6 +17,7 @@ from monoagens.engine.llm import LLM
 from monoagens.engine.memory.store import MemoryStore
 from monoagens.engine.schema import llm_calls, messages, turns
 from monoagens.engine.soul import Soul
+from monoagens.engine.stores.turns import turn_identity
 from monoagens.engine.turn import observability
 
 
@@ -49,7 +50,7 @@ def captured(fmt: str = "json") -> Capture:
 def test_json_lines_have_the_mandatory_fields() -> None:
     handler = captured("json")
     try:
-        with observability.bind(turn_id="t-1", thread_id="th-1", gateway="cli"):
+        with observability.bind(turn_id="t-1", thread_id="th-1", gateway="console"):
             logging.getLogger("monoagens.test").info(
                 "turn done", extra={"event": "turn.done", "duration_ms": 12}
             )
@@ -62,7 +63,7 @@ def test_json_lines_have_the_mandatory_fields() -> None:
     assert found["logger"] == "monoagens.test"
     assert found["turn_id"] == "t-1"
     assert found["thread_id"] == "th-1"
-    assert found["gateway"] == "cli"
+    assert found["gateway"] == "console"
     assert found["duration_ms"] == 12
     assert "prompt" not in json.dumps(found)
 
@@ -111,7 +112,7 @@ def test_a_turn_logs_and_cost_rows_share_one_turn_id(tmp_path, monkeypatch) -> N
     finally:
         logging.getLogger().removeHandler(handler)
 
-    turn_id = inbound.payload.id
+    turn_id = turn_identity(env.gateway.name, inbound.thread, inbound.payload.id)
     turn_lines = [line for line in lines if line.get("turn_id") == turn_id]
     assert turn_lines, "the turn must log with its turn id"
     assert all(line["event"] and line["level"] and line["ts"] for line in turn_lines)

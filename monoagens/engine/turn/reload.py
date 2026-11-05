@@ -31,7 +31,6 @@ def restart_tokens(config: Config) -> dict[str, object]:
         "llm.api_key_env": config.llm.api_key_env,
         "memory.collection": memory.collection,
         "memory.extraction_model": memory.extraction_model,
-        "voice.enabled": config.soul.voice.enabled,
         "voice.affect.enabled": config.soul.voice.affect.enabled,
         "voice.style.enabled": config.soul.voice.style.enabled,
         "voice.sampling": config.soul.voice.sampling,

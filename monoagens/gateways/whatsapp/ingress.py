@@ -2,7 +2,7 @@
 
 
 import logging
-from datetime import datetime
+import time
 
 from neonize.proto.waE2E.WAWebProtobufsE2E_pb2 import ProtocolMessage
 
@@ -154,7 +154,7 @@ def event_to_inbound(ev, gateway) -> Percept | None:
         mapped = mapped or directory.pn_jid(gateway.db, sender)
     sender_address = mapped or sender
     sender_digits = normalize_jid(mapped or source.Sender.User or source.Sender.RawAgent)
-    message_id = ev.Info.ID or f"tmp-{datetime.now().timestamp()}"
+    message_id = ev.Info.ID or f"tmp-{time.time_ns()}"
     text = message_text(ev.Message)
     media = describe_media(ev.Message, message_id)
     if not text.strip() and media is None:

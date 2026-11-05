@@ -244,3 +244,76 @@ def test_a_stale_fail_does_not_requeue_under_a_new_generation(tmp_path) -> None:
     )
     assert row["status"] == "claimed"
     assert row["result_ref"] == ""
+
+
+class SlowLLM(FakeLLM):
+    """One model call slower than a claim lease, to prove the heartbeat keeps it alive."""
+
+    async def complete(self, system, user, **kwargs):
+        await asyncio.sleep(0.4)
+        return await super().complete(system, user, **kwargs)
+
+
+def claim_lease_left(db) -> float:
+    found = db.fetch_one(
+        sql(
+            "SELECT lease_until - EXTRACT(EPOCH FROM clock_timestamp()) AS left "
+            "FROM cognition_jobs"
+        )
+    )
+    return float(found["left"])
+
+
+def claim_lease_deadline(db) -> float:
+    found = db.fetch_one(sql("SELECT lease_until FROM cognition_jobs"))
+    return float(found["lease_until"])
+
+
+def test_a_claim_lease_covers_one_llm_call_plus_a_minute(tmp_path) -> None:
+    """ADR-0003 §6: a lease shorter than the model timeout invites a double run."""
+    db = database()
+    config = build_config(tmp_path)
+    queue = CognitionQueue(db, config)
+    assert queue.lease_floor() == float(config.llm.timeout_seconds) + 60.0
+    assert queue.enqueue_job("audit", "global", key="audit:floor") is True
+
+    queue.claim(worker="a", limit=1, lease_seconds=1.0)
+
+    assert claim_lease_left(db) >= float(config.llm.timeout_seconds) + 59.0
+
+
+def test_the_heartbeat_renews_the_claim_during_a_slow_call(tmp_path) -> None:
+    """ADR-0003 §6/ADR-0012 §4.4: a slow call must not lose its lease to the reaper."""
+    db = database()
+    config = build_config(tmp_path)
+    queue = CognitionQueue(db, config)
+    lease = Lease(db, instance_id="worker-a", host="host-a", pid=1)
+    assert lease.acquire() is not None
+    llm = SlowLLM()
+    worker = CognitionWorker(db, config, MemoryStore(db, config), llm=llm, lease=lease)
+    worker.heartbeat_seconds = 0.05
+    beats: list[float] = []
+    renew = lease.renew
+
+    def counted() -> bool:
+        beats.append(time.time())
+        return renew()
+
+    lease.renew = counted
+    seen: list[float] = []
+
+    async def slow(job) -> str:
+        seen.append(claim_lease_deadline(db))
+        await llm.complete("system", "{}")
+        seen.append(claim_lease_deadline(db))
+        return "slow"
+
+    worker._handle = slow
+    assert queue.enqueue_job("audit", "global", key="audit:beat") is True
+    before = lease.holder().heartbeat_at
+
+    asyncio.run(worker.drain(kind="audit"))
+
+    assert len(beats) >= 2
+    assert seen[1] - seen[0] >= 0.2
+    assert lease.holder().heartbeat_at > before

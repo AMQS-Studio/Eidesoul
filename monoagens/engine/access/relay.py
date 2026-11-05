@@ -167,6 +167,8 @@ class RelayStore:
                     "decided_via": decided_via,
                     "scope_ref": scope_ref,
                     "expires_at": expires_at,
+                    # A re-decision or a new grant clears an earlier revocation.
+                    "revoked_at": None,
                 },
             )
 
@@ -305,6 +307,103 @@ class RelayStore:
         if found is None:  # pragma: no cover - the upsert just wrote the row
             raise RuntimeError("the relay grant could not be read back")
         return found
+
+    def grant(
+        self,
+        *,
+        from_person: str,
+        to_person: str,
+        by: str = "",
+        mode: str = "summary",
+        scope_ref: str = "",
+        task_id: str = "",
+        days: float | None = DEFAULT_EXPIRES_DAYS,
+        now: float | None = None,
+    ) -> RelayGrant:
+        """The content owner allows one target one scope (ADR-0023 §4.5).
+
+        `scope_ref` is the room the forwarded answer may reach; the task key defaults to that
+        scope, so one grant per `(owner, recipient, scope)` is updated in place and expires.
+        """
+        owner = _text(from_person, "from_person")
+        if str(by or "").strip() != owner:
+            raise RelayRefused("only the content owner can grant a relay")
+        recipient = _text(to_person, "to_person")
+        chosen = _mode(mode)
+        scope = str(scope_ref or "").strip()
+        task = str(task_id or "").strip() or f"scope:{scope or recipient}"
+        moment = time.time() if now is None else float(now)
+        deadline = None if days is None else moment + max(0.0, float(days)) * DAY_SECONDS
+        self._upsert(
+            task_id=task,
+            from_person=owner,
+            to_person=recipient,
+            scope_ref=scope,
+            expires_at=deadline,
+            now=moment,
+            mode=chosen,
+            decided_via="command",
+        )
+        found = self.get(task_id=task, from_person=owner, to_person=recipient)
+        if found is None:  # pragma: no cover - the upsert just wrote the row
+            raise RuntimeError("the relay grant could not be read back")
+        return found
+
+    def by_task(
+        self,
+        *,
+        task_id: str,
+        from_person: str = "",
+        active_only: bool = True,
+        now: float | None = None,
+    ) -> list[RelayGrant]:
+        """The active grants of one task (optionally one owner), newest first."""
+        clauses = [relay_grants.c.task_id == str(task_id)]
+        if from_person:
+            clauses.append(relay_grants.c.from_person == str(from_person))
+        moment = time.time() if now is None else float(now)
+        rows = self.db.fetch_all(
+            select(relay_grants)
+            .where(*clauses)
+            .order_by(relay_grants.c.created_at.desc(), relay_grants.c.id.desc())
+        )
+        found = [self._grant(row) for row in rows]
+        if not active_only:
+            return found
+        return [
+            grant
+            for grant in found
+            if grant.revoked_at is None and not grant.expired(moment) and grant.carries_content()
+        ]
+
+    def listing(
+        self,
+        *,
+        from_person: str = "",
+        to_person: str = "",
+        active_only: bool = True,
+        now: float | None = None,
+    ) -> list[RelayGrant]:
+        """Grants by owner and/or recipient; `active_only` drops revoked, expired, and `none`."""
+        clauses = []
+        if from_person:
+            clauses.append(relay_grants.c.from_person == str(from_person))
+        if to_person:
+            clauses.append(relay_grants.c.to_person == str(to_person))
+        rows = self.db.fetch_all(
+            select(relay_grants)
+            .where(*clauses)
+            .order_by(relay_grants.c.created_at.desc(), relay_grants.c.id.desc())
+        )
+        found = [self._grant(row) for row in rows]
+        if not active_only:
+            return found
+        moment = time.time() if now is None else float(now)
+        return [
+            grant
+            for grant in found
+            if grant.revoked_at is None and not grant.expired(moment) and grant.carries_content()
+        ]
 
     def revoke(
         self,

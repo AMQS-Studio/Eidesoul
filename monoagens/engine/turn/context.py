@@ -1,11 +1,13 @@
 """Per-chat conversation context: message window, attachments, and the payload for the LLM."""
+# pyright: reportAttributeAccessIssue=false
+
 
 
 import base64
 import logging
 import re
 import time
-from dataclasses import dataclass, field, replace
+from dataclasses import InitVar, dataclass, field, replace
 from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -129,7 +131,10 @@ class Message:
     sender_id: str
     when: datetime
     text: str
-    media: Media | None = None
+    # The envelope carries every attachment of one message (ADR-0001 §4.2); `media` stays the
+    # single-attachment view (`attachments[0]`) so existing callers keep working.
+    media: InitVar[Media | None] = None
+    attachments: tuple[Media, ...] = ()
     quote: Quote | None = None
     outgoing: bool = False
     sender_address: str = ""
@@ -144,10 +149,17 @@ class Message:
     deleted_admin: bool = False
     notice: str = ""
 
-    def __post_init__(self) -> None:
+    def __post_init__(self, media: Media | None) -> None:
+        if media is not None and not self.attachments:
+            self.attachments = (media,)
+        self.attachments = tuple(item for item in self.attachments if item is not None)
         if self.author not in AUTHORS:
             self.author = AUTHOR_UNKNOWN
         self.visibility = clamp_visibility(self.visibility)
+        # A stamp is always timezone-aware: a naive value would compare and sort wrongly
+        # across bodies and DST boundaries.
+        if self.when.tzinfo is None:
+            object.__setattr__(self, "when", self.when.astimezone())
 
     def mark_deleted(self, by_address: str, by_name: str = "") -> bool:
         if self.deleted:
@@ -160,6 +172,16 @@ class Message:
             and normalize(self.sender_address) != normalize(by_address)
         )
         return True
+
+
+def _first_attachment(message: Message) -> Media | None:
+    """The single-attachment view of the envelope (ADR-0001 §4.2)."""
+    return message.attachments[0] if message.attachments else None
+
+
+# Assigned after the class body: a property declared inside it would become the `InitVar`
+# default, and every message without an explicit `media=` would carry the property object.
+Message.media = property(_first_attachment)  # type: ignore[assignment]
 
 
 class WorkingMemory:
@@ -201,11 +223,13 @@ class WorkingMemory:
             chosen,
             author=new.author if upgrade else old.author,
             visibility=max(old.visibility, new.visibility),
-            media=chosen.media or old.media,
+            # The envelope wins: a later row without attachments never drops the ones already
+            # stored (a text-only edit of an attachment message keeps its files).
+            attachments=chosen.attachments or old.attachments,
             quote=chosen.quote or old.quote,
             text=chosen.text or old.text,
             view_once=old.view_once or new.view_once,
-            unreadable=old.unreadable and not (new.text or new.media),
+            unreadable=old.unreadable and not (new.text or new.attachments),
         )
 
     def append(self, thread_id: str, message: Message, *, persist: bool = True) -> None:
@@ -420,12 +444,19 @@ def _media_key(config: Config, media: Media) -> str:
     return _relative(config, media.path) if media.path is not None else ""
 
 
-def _text_lines(config: Config, thread_id: str, message: Message) -> list[str]:
+def _text_lines(
+    config: Config, thread_id: str, message: Message, *, persist: bool = True
+) -> list[str]:
     body = message.text.rstrip()
     preview, remaining = _clip(body)
     lines = [f"  {line}" for line in preview.splitlines()]
     if remaining:
-        lines.append(_clip_marker(remaining, _save_full(config, thread_id, message.id, body)))
+        path = (
+            _save_full(config, thread_id, message.id, body)
+            if persist
+            else _relative(config, text_path(config, thread_id, message.id))
+        )
+        lines.append(_clip_marker(remaining, path))
     return lines
 
 
@@ -496,7 +527,9 @@ def fallback_content(config: Config, message: Message) -> str:
     return "\n".join(lines)
 
 
-def _quote_lines(config: Config, thread_id: str, quote: Quote) -> list[str]:
+def _quote_lines(
+    config: Config, thread_id: str, quote: Quote, *, persist: bool = True
+) -> list[str]:
     stamp = f"[{quote.when:%Y-%m-%d %H:%M}] " if quote.when else ""
     name = _flatten(quote.sender_name, NAME_LIMIT) or "-"
     ident = quote.sender_id if quote.sender_id and quote.sender_id != quote.sender_name else ""
@@ -507,7 +540,12 @@ def _quote_lines(config: Config, thread_id: str, quote: Quote) -> list[str]:
         lines = [f'  ↳ replying to {stamp}{who}: "{_flatten(preview)}"']
         if remaining:
             quote_id = quote.id or f"quote-{time.time_ns()}"
-            lines.append(_clip_marker(remaining, _save_full(config, thread_id, quote_id, body)))
+            path = (
+                _save_full(config, thread_id, quote_id, body)
+                if persist
+                else _relative(config, text_path(config, thread_id, quote_id))
+            )
+            lines.append(_clip_marker(remaining, path))
         return lines
     if quote.media is not None:
         return [f'  ↳ replying to {stamp}{who}: "(attachment)"']
@@ -606,6 +644,8 @@ def _message_lines(
     entry: Message,
     numbers: dict[str, int],
     current: Message,
+    *,
+    persist: bool = True,
 ) -> list[str]:
     stamp = f"[{entry.when:%Y-%m-%d %H:%M}]"
     tag = entry_tag(entry)
@@ -624,11 +664,11 @@ def _message_lines(
     if note:
         lines.append(f"  {note}")
     elif entry.text.strip():
-        lines.extend(_text_lines(config, thread_id, entry))
+        lines.extend(_text_lines(config, thread_id, entry, persist=persist))
     elif entry.media is not None:
         lines.append("  (no text)")
     if entry.quote is not None and not entry.deleted:
-        lines.extend(_quote_lines(config, thread_id, entry.quote))
+        lines.extend(_quote_lines(config, thread_id, entry.quote, persist=persist))
         if entry.quote.media is not None:
             media = entry.quote.media
             number = numbers.get(_media_key(config, media), 0)

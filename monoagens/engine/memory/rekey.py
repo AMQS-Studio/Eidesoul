@@ -1,6 +1,6 @@
 """Identity rekey on canonical memory: one UPDATE, metadata carried along (ADR-0001).
 
-Mem0 entries are derived; their mapping is dropped so a reindex rebuilds them under the new
+Derived index entries are dropped so a reindex rebuilds them under the new
 identity. Veto, audience, level, confirmed, and the state machine are never touched.
 """
 

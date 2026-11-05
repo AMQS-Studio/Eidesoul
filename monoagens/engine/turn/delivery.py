@@ -2,7 +2,7 @@
 
 ADR-0017 §4.4, ADR-0032 §4.4, ADR-0037 §4.3: every send goes through the door
 (`Agent.dispatch`), is ledgered before it leaves, and never retries on its own. The service never
-imports `agent.py`; the host is the `Agent` it is bound to.
+imports `agent.py`; it is injected with the `TurnRuntime` and the `TurnCoordinator`.
 """
 
 
@@ -11,9 +11,11 @@ import contextlib
 import logging
 import random
 import time
-from datetime import datetime
+from contextvars import ContextVar
 from pathlib import Path
+from uuid import uuid4
 
+from .. import clock
 from ..i18n import t
 from ..inbound import (
     Action,
@@ -25,6 +27,7 @@ from ..inbound import (
     Rich,
     SendRefused,
     StandbyError,
+    tool_action_id,
 )
 from ..runtime import ACTIVE_GENERATION
 from .context import AUTHOR_BOT, TEXT_EXT, Message, clean
@@ -35,6 +38,24 @@ log = logging.getLogger(__name__)
 MAX_TEXT = 10_000
 FILE_TEXT_SIZE = 512 * 1024
 FILE_TEXT_CHARS = 4000
+
+# ADR-0004 §4.2: a delivery names the room that asked for it. The turn binds the room it was
+# asked in once; every delivery inside it passes that address to the door explicitly.
+TURN_ORIGIN: ContextVar[Address | None] = ContextVar("monoagens_turn_origin", default=None)
+
+
+def bind_origin(address: Address):
+    """Bind the origin room for one turn; returns the token `reset_origin` consumes."""
+    return TURN_ORIGIN.set(address)
+
+
+def reset_origin(token) -> None:
+    TURN_ORIGIN.reset(token)
+
+
+def origin_for(address: Address, origin: Address | None = None) -> Address:
+    """The explicit origin, the bound turn origin, or the target room for an internal send."""
+    return origin or TURN_ORIGIN.get() or address
 
 
 def typing_delay(text: str, config, rng=random) -> float:
@@ -68,22 +89,25 @@ def file_fallback_text(path: Path, caption: str, language: str) -> str:
 class Delivery:
     """One chat path for every caller: text, file, sticker, typing, notices, and the turn."""
 
-    def __init__(self, agent) -> None:
-        self.agent = agent
+    def __init__(self, runtime, coordinator) -> None:
+        self.runtime = runtime
+        self.coordinator = coordinator
+        self._shutdown_gateways: dict[str, GatewayCore] = {}
 
-    def __getattr__(self, name: str):
-        """The host is the `Agent`: turn state and policy come from it, never the reverse."""
-        return getattr(self.agent, name)
+    @property
+    def shutdown_gateways(self) -> dict[str, GatewayCore]:
+        """The bodies a drain captured, for the shutdown notices of the same epoch."""
+        return self._shutdown_gateways
 
     def remember(self, thread_id: str, text: str, *, gateway, message_id: str) -> None:
         """The bot's own message joins the window: the next turn reads what it just said."""
-        self.agent.windows.append(
+        self.runtime.windows.append(
             thread_id,
             Message(
                 id=message_id,
-                sender_name=self.agent.soul.name,
+                sender_name=self.runtime.soul.name,
                 sender_id=self._self_sender_id(gateway),
-                when=datetime.now(),
+                when=clock.now(self.runtime.soul.timezone),
                 text=text,
                 outgoing=True,
                 author=AUTHOR_BOT,
@@ -94,15 +118,26 @@ class Delivery:
         return next(iter(sorted(gateway.self_handles())), "")
 
     async def _door(
-        self, action: Action, *, subject: str, origin: Address | None
+        self, action: Action, *, subject: str, origin: Address, reason: str = ""
     ) -> Receipt:
-        """One call to the door; the caller maps the receipt, never retries on its own."""
-        return await self.agent.dispatch(
+        """One call to the door; the origin is never inferred here (ADR-0004 §4.2)."""
+        return await self.runtime.dispatch(
             str(subject or ""),
             action.address,
             action,
-            origin=origin or action.address,
+            origin=origin,
+            reason=str(reason or ""),
         )
+
+    @staticmethod
+    def _action_id() -> dict:
+        """`{"id": …}` when a tool step is bound, so the outbox key is deterministic.
+
+        ADR-0003 §4.3: a resumed turn that reaches the same step derives the same id, and the
+        ledger then answers `sent` instead of dispatching the bubble a second time.
+        """
+        found = tool_action_id()
+        return {"id": found} if found else {}
 
     @staticmethod
     def _reference(receipt: Receipt) -> str:
@@ -127,17 +162,23 @@ class Delivery:
         kind: str = "",
         subject: str = "",
         origin: Address | None = None,
+        reason: str = "",
     ) -> str:
         address = Address(str(gateway.name), str(thread_id))
         action = Action(
-            address=address, capability="send_text", payload=str(text or "")
+            address=address,
+            capability="send_text",
+            payload=str(text or ""),
+            **self._action_id(),
         )
-        receipt = await self._door(action, subject=subject, origin=origin)
+        receipt = await self._door(
+            action, subject=subject, origin=origin_for(address, origin), reason=reason
+        )
         message_id = self._reference(receipt)
         self.remember(thread_id, text, gateway=gateway, message_id=message_id)
         if kind:
             with contextlib.suppress(Exception):
-                self.agent.history.add_notice(thread_id, text, kind=kind, message_id=message_id)
+                self.runtime.history.add_notice(thread_id, text, kind=kind, message_id=message_id)
         return message_id
 
     async def file(
@@ -150,32 +191,43 @@ class Delivery:
         reply: Percept | None = None,
         subject: str = "",
         origin: Address | None = None,
+        reason: str = "",
     ) -> str:
         path = Path(path)
         if not isinstance(gateway, Rich):
-            self.agent.runtime.miss_rich()
+            self.runtime.facts.miss_rich()
             return await self.text(
                 thread_id,
-                file_fallback_text(path, caption, self.agent.soul.language),
+                file_fallback_text(path, caption, self.runtime.soul.language),
                 gateway=gateway,
                 reply=reply,
+                origin=origin,
+                reason=reason,
             )
         address = Address(str(gateway.name), str(thread_id))
         action = Action(
             address=address,
             capability="send_file",
             payload={"path": str(path), "caption": str(caption or "")},
+            **self._action_id(),
         )
-        receipt = await self._door(action, subject=subject, origin=origin)
+        receipt = await self._door(
+            action, subject=subject, origin=origin_for(address, origin), reason=reason
+        )
         message_id = self._reference(receipt)
-        note = f"(file terkirim: {path.name}{f' — {caption}' if caption else ''})"
-        self.agent.windows.append(
+        note = t(
+            "agent.file_sent",
+            self.runtime.soul.language,
+            name=path.name,
+            caption=f" — {caption}" if caption else "",
+        )
+        self.runtime.windows.append(
             thread_id,
             Message(
                 id=message_id,
-                sender_name=self.agent.soul.name,
+                sender_name=self.runtime.soul.name,
                 sender_id=self._self_sender_id(gateway),
-                when=datetime.now(),
+                when=clock.now(self.runtime.soul.timezone),
                 text=note,
                 outgoing=True,
                 author=AUTHOR_BOT,
@@ -194,24 +246,26 @@ class Delivery:
         action_id: str = "",
     ) -> str | None:
         if not isinstance(gateway, Rich):
-            self.agent.runtime.miss_rich()
+            self.runtime.facts.miss_rich()
             return None
         address = Address(str(gateway.name), str(thread_id))
         action = Action(
             address=address,
             capability="send_sticker",
             payload=str(message_id),
-            **({"id": action_id} if action_id else {}),
+            id=action_id or str(self._action_id().get("id") or uuid4().hex),
         )
-        label = self._reference(await self._door(action, subject=subject, origin=origin))
+        label = self._reference(
+            await self._door(action, subject=subject, origin=origin_for(address, origin))
+        )
         if label:
-            self.agent.windows.append(
+            self.runtime.windows.append(
                 thread_id,
                 Message(
                     id=f"sticker-{time.time_ns()}",
-                    sender_name=self.agent.soul.name,
+                    sender_name=self.runtime.soul.name,
                     sender_id=self._self_sender_id(gateway),
-                    when=datetime.now(),
+                    when=clock.now(self.runtime.soul.timezone),
                     text=label,
                     outgoing=True,
                     author=AUTHOR_BOT,
@@ -222,13 +276,13 @@ class Delivery:
     async def typing(self, gateway, thread_id: str, composing: bool) -> None:
         """A body without `Rich` has no presence indicator; skip, never fail."""
         if not isinstance(gateway, Rich):
-            self.agent.runtime.miss_rich()
+            self.runtime.facts.miss_rich()
             return
         await gateway.typing(thread_id, composing)
 
     async def prepare_media(self, gateway, thread_id: str, entry: Message) -> None:
         if not isinstance(gateway, Rich):
-            self.agent.runtime.miss_rich()
+            self.runtime.facts.miss_rich()
             return
         await gateway.prepare_media(thread_id, entry)
 
@@ -240,6 +294,7 @@ class Delivery:
         gateway,
         subject: str = "",
         origin: Address | None = None,
+        reason: str = "",
     ) -> str:
         """Tool-facing: render the gateway dialect, split, send, return ok:/error:."""
         if gateway is None:
@@ -253,7 +308,12 @@ class Delivery:
         try:
             for chunk in chunks:
                 await self.text(
-                    thread_id, chunk, gateway=gateway, subject=subject, origin=origin
+                    thread_id,
+                    chunk,
+                    gateway=gateway,
+                    subject=subject,
+                    origin=origin,
+                    reason=reason,
                 )
         except StandbyError:
             return "error: delivery refused"
@@ -274,12 +334,19 @@ class Delivery:
         gateway,
         subject: str = "",
         origin: Address | None = None,
+        reason: str = "",
     ) -> str:
         if gateway is None:
             return "error: gateway is not available"
         try:
             await self.file(
-                thread_id, Path(path), caption, gateway=gateway, subject=subject, origin=origin
+                thread_id,
+                Path(path),
+                caption,
+                gateway=gateway,
+                subject=subject,
+                origin=origin,
+                reason=reason,
             )
         except StandbyError:
             return "error: delivery refused"
@@ -310,7 +377,7 @@ class Delivery:
         `stop` is "", "failed:<reason>", or "refused:<reason>"; the caller decides what a stop
         means for the turn, never the delivery path.
         """
-        self.agent.turns.plan_sending(turn_id, len(chunks))
+        self.runtime.turns.plan_sending(turn_id, len(chunks))
         sent_ids: list[str] = []
         actions: list[Action] = []
         for index, chunk in enumerate(chunks):
@@ -320,7 +387,7 @@ class Delivery:
                 payload=chunk,
                 id=f"turn:{turn_id}:{index}",
             )
-            state = self.agent.outbox.status(action.id, 0) or ""
+            state = self.runtime.outbox.status(action.id, 0) or ""
             if state == "sent":
                 continue
             if state == "unknown" and partial == "skip":
@@ -328,7 +395,7 @@ class Delivery:
                 continue
             if state == "unknown":
                 # A policy-allowed resend: the unknown row is cleared before the second attempt.
-                self.agent.outbox.retry(action.id, 0)
+                self.runtime.outbox.retry(action.id, 0)
             if pace:
                 await self.typing(gateway, thread_id, True)
                 await asyncio.sleep(typing_delay(chunk, humanize))
@@ -345,7 +412,7 @@ class Delivery:
                 return sent_ids, actions, "failed:delivery is unknown"
             if receipt.state != "sent":
                 return sent_ids, actions, f"refused:{receipt.reason or receipt.state}"
-            self.agent.turns.chunk_sent(turn_id)
+            self.runtime.turns.chunk_sent(turn_id)
             self.remember(thread_id, chunk, gateway=gateway, message_id=receipt.reference)
             sent_ids.append(receipt.reference)
             actions.append(action)
@@ -366,11 +433,11 @@ class Delivery:
         params: dict | None = None,
     ) -> bool:
         """One catalog notice, ledgered with its `kind`; it never marks a turn delivered."""
-        agent = self.agent
-        text = t(key, agent.soul.language, **(params or {}))
-        retry = agent.config.turns.shutdown.notice_retry
+        runtime = self.runtime
+        text = t(key, runtime.soul.language, **(params or {}))
+        retry = runtime.config.turns.shutdown.notice_retry
         try:
-            status = agent.outbox.begin(
+            status = runtime.outbox.begin(
                 scope_key,
                 0,
                 gateway=gateway.name,
@@ -379,7 +446,7 @@ class Delivery:
             )
         except Exception:
             log.exception("failed to open the notice ledger chat=%s kind=%s", thread_id, kind)
-            agent.runtime.fail_notice("notice ledger unavailable")
+            runtime.facts.fail_notice("notice ledger unavailable")
             return False
         if status == "sent":
             return False
@@ -391,33 +458,33 @@ class Delivery:
             try:
                 message_id = await self.text(thread_id, text, gateway=gateway, kind=kind)
             except StandbyError:
-                agent.outbox.forget(scope_key, 0)
+                runtime.outbox.forget(scope_key, 0)
                 return False
             except GatewayError as exc:
-                agent.runtime.fail_notice(f"{type(exc).__name__}: {exc}")
+                runtime.facts.fail_notice(f"{type(exc).__name__}: {exc}")
                 log.warning("notice failed chat=%s kind=%s: %s", thread_id, kind, exc)
                 if attempt < attempts - 1:
                     await asyncio.sleep(
                         min(
                             max(0.0, float(retry.backoff_seconds)),
-                            max(0.0, float(agent.config.llm.retry.retry_after_max_seconds)),
+                            max(0.0, float(runtime.config.llm.retry.retry_after_max_seconds)),
                         )
                     )
                     continue
-                agent.outbox.mark_unknown(scope_key, 0)
+                runtime.outbox.mark_unknown(scope_key, 0)
                 return False
             except Exception as exc:
                 log.exception("notice send failed chat=%s kind=%s", thread_id, kind)
-                agent.runtime.fail_notice(f"{type(exc).__name__}: {exc}")
+                runtime.facts.fail_notice(f"{type(exc).__name__}: {exc}")
                 with contextlib.suppress(Exception):
-                    agent.outbox.mark_unknown(scope_key, 0)
+                    runtime.outbox.mark_unknown(scope_key, 0)
                 return False
-            agent.outbox.mark_sent(scope_key, 0, message_id)
+            runtime.outbox.mark_sent(scope_key, 0, message_id)
             return True
         return False
 
     async def notice_timeout(self, thread_id: str, turn_id: str, gateway) -> None:
-        self.agent.runtime.timeout_turn()
+        self.runtime.facts.timeout_turn()
         await self.notice(
             thread_id,
             gateway,
@@ -440,10 +507,12 @@ class Delivery:
     async def drain(self, seconds: float) -> dict[str, str]:
         """Wait for in-flight turns; return the ones still running after the budget."""
         pending: dict[str, str] = {}
-        tasks: dict[str, asyncio.Task] = dict(self._pending_tasks)
-        tasks.update(self._turn_tasks)
-        items = [(thread, task) for thread, task in tasks.items() if not task.done()]
-        self._shutdown_gateways = dict(self._turn_gateways)
+        items = [
+            (thread, task)
+            for thread, task in self.coordinator.tasks().items()
+            if not task.done()
+        ]
+        self._shutdown_gateways = self.coordinator.gateways()
         if not items:
             return pending
         _done, waiting = await asyncio.wait(
@@ -454,7 +523,7 @@ class Delivery:
             thread = by_task[task]
             turn_id = getattr(task, "_monoagens_turn_id", "")
             if turn_id:
-                self._cancel_reasons[turn_id] = "shutdown"
+                self.coordinator.note(turn_id, "shutdown")
             pending[thread] = turn_id
             task.cancel()
         if waiting:
@@ -463,32 +532,33 @@ class Delivery:
 
     async def shutdown_notices(self, pending: dict[str, str], seconds: float) -> int:
         """One `notice:shutdown` per chat with an unfinished turn, inside its own budget."""
-        self.runtime.phase = "noticed"
+        self.runtime.facts.phase = "noticed"
         if not pending:
             return 0
         sent = 0
         deadline = time.monotonic() + max(0.0, float(seconds))
+        epoch = self.runtime.shutdown_epoch()
         for thread, turn_id in pending.items():
             if time.monotonic() >= deadline:
                 break
-            if sent and not bool(self.config.turns.shutdown.notice_per_chat):
+            if sent and not bool(self.runtime.config.turns.shutdown.notice_per_chat):
                 break
-            gateway = self._shutdown_gateways.get(thread) or self.body_of(thread)
+            gateway = self._shutdown_gateways.get(thread) or self.runtime.body_of(thread)
             if gateway is None:
                 log.warning("shutdown notice skipped: no body owns chat=%s", thread)
                 continue
-            self._interrupt(turn_id, "shutdown", force=True)
-            if await self._notice(
+            await self.coordinator.interrupt(turn_id, "shutdown")
+            if await self.notice(
                 thread,
                 gateway,
                 "turn.notice.shutdown",
-                scope_key=f"notice:{thread}:shutdown:{self.shutdown_epoch}",
+                scope_key=f"notice:{thread}:shutdown:{epoch}",
                 kind="notice:shutdown",
             ):
                 sent += 1
             try:
-                self.turns.stamp_shutdown(turn_id, self.shutdown_epoch)
+                self.runtime.turns.stamp_shutdown(turn_id, epoch)
             except Exception:
                 log.debug("failed to stamp the shutdown epoch turn=%s", turn_id, exc_info=True)
-        self.runtime.phase = "stopped"
+        self.runtime.facts.phase = "stopped"
         return sent

@@ -151,52 +151,62 @@ def test_an_action_round_trips_through_json() -> None:
     assert rebuilt == action
 
 
-def test_strict_mode_creates_one_approval_and_sends_after_it(tmp_path) -> None:
+def test_strict_mode_sends_an_origin_reply_and_parks_a_cross_room_send(tmp_path) -> None:
+    from support import DirectoryFakeGateway
+
     from monoagens.engine.guard import build_safety
 
-    gateway = RecordingGateway()
+    gateway = DirectoryFakeGateway(members={"628111"})
     env = make_agent(tmp_path, gateway=gateway)
     env.agent.config = replace(env.agent.config, approval=ApprovalConfig(mode="strict"))
     env.agent.approvals.configure(env.agent.config.approval)
     env.agent.safety = build_safety(env.agent.config.approval)
-    address = Address("fake", "chat")
+    origin = Address("fake", "chat")
 
-    first = send(env.agent, address, "halo")
+    # ADR-0004 §4.2: a reply to the origin room is consent and never parks.
+    assert send(env.agent, origin, "halo", action_id="a-2").state == "sent"
+
+    first = send(env.agent, Address("fake", "other"), "halo", origin=origin)
 
     assert first.state == "pending"
     row = env.agent.approvals.find_action("a-1")
     assert row is not None
     assert row.kind == "send"
-    assert gateway.actions == []
+    assert (row.origin_gateway, row.origin_thread, row.thread_id) == ("fake", "chat", "other")
+    assert [action.id for action in gateway.dispatched] == ["a-2"]
 
-    again = send(env.agent, address, "halo")
+    again = send(env.agent, Address("fake", "other"), "halo", origin=origin)
     assert again.state == "pending"
-    assert len(env.agent.approvals.find_action("a-1").payload) == 1
+    assert again.reason == first.reason
+    assert env.agent.approvals.count_pending() == 1
 
     env.agent.approvals.mark(row.id, "approved", "628111")
-    delivered = send(env.agent, address, "halo")
+    delivered = send(env.agent, Address("fake", "other"), "halo", origin=origin)
 
     assert delivered.state == "sent"
-    assert len(gateway.actions) == 1
+    assert [text for _, text, _ in gateway.sent] == ["halo", "halo"]
 
 
 def test_a_send_row_records_its_receipt_state(tmp_path) -> None:
-    gateway = RecordingGateway()
+    from support import DirectoryFakeGateway
+
+    from monoagens.engine.guard import build_safety
+
+    gateway = DirectoryFakeGateway(members={"628111"})
     env = make_agent(tmp_path, gateway=gateway)
     store = ApprovalStore(env.db, ApprovalConfig(mode="strict"))
     env.agent.approvals = store
-    from monoagens.engine.guard import build_safety
-
     env.agent.safety = build_safety(store.config)
-    address = Address("fake", "chat")
+    origin = Address("fake", "chat")
+    target = Address("fake", "other")
 
-    settle = send(env.agent, address, "halo")
+    settle = send(env.agent, target, "halo", origin=origin)
     row = store.find_action("a-1")
     assert settle.state == "pending"
     assert row.status == "pending"
 
     store.mark(row.id, "denied", "628111")
-    assert send(env.agent, address, "halo").state == "refused"
+    assert send(env.agent, target, "halo", origin=origin).state == "refused"
 
 
 def test_a_robot_body_with_only_dispatch_meets_the_core(tmp_path) -> None:
@@ -228,6 +238,9 @@ def test_a_robot_body_with_only_dispatch_meets_the_core(tmp_path) -> None:
 
         def chat_name(self, thread):
             return thread
+
+        def normalize_address(self, raw):
+            return str(raw or "")
 
     robot = Robot()
     assert missing_core(robot) == []

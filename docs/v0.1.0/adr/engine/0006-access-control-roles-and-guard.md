@@ -6,7 +6,7 @@
 - **Context:** Re-baselined for v0.1.0; consolidates capability authorization, the protected administrator role, relay consent, role models, identity linking, and sandbox command screening (pre-rebaseline 0007, 0022, 0023, 0036, 0046, 0049, 0052, 0053).
 - **Supersedes:** pre-rebaseline 0007, 0022, 0023, 0036, 0046
 - **Related:** ADR-0001 (sovereign core), ADR-0004 (core tools), ADR-0005 (gateway access enforcement)
-- **Implementation:** partial — RBAC and base sandbox guards exist; `/link` security fixes, `guest` role tightening, wrapper/IPv6 sandbox hardening, and persona `mode` separation are scheduled in Phase P0/P2.
+- **Implementation:** implemented — `/link` rate limits and row locks, role-conflict merge refusal, unlink revocation, shell wrapper/IFS/SAFE_HEADS hardening, IPv6 proxy ACLs, and persona `mode` separated from RBAC roles.
 
 ---
 

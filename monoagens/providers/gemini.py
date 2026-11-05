@@ -178,12 +178,16 @@ def _response(body: dict) -> ProviderResponse:
     raw_parts = content.get("parts")
     parts = raw_parts if isinstance(raw_parts, list) else []
     text_parts: list[str] = []
+    thought_parts: list[str] = []
     calls: list[ProviderToolCall] = []
     for index, part in enumerate(parts):
         if not isinstance(part, dict):
             continue
         if isinstance(part.get("text"), str):
-            text_parts.append(part["text"])
+            if part.get("thought") is True:
+                thought_parts.append(part["text"])
+            else:
+                text_parts.append(part["text"])
         function = part.get("functionCall")
         if isinstance(function, dict):
             calls.append(
@@ -223,6 +227,7 @@ def _response(body: dict) -> ProviderResponse:
         normalized = "blocked"
     return ProviderResponse(
         text="".join(text_parts).strip(),
+        thinking="\n\n".join(part.strip() for part in thought_parts if part.strip()),
         tool_calls=tuple(calls),
         usage=_usage(body),
         finish_reason=normalized,

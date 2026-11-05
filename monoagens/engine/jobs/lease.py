@@ -11,15 +11,31 @@ import logging
 import os
 import socket
 import uuid
+from collections.abc import Mapping
 from dataclasses import dataclass
 
-from sqlalchemy import text
+from sqlalchemy import Select, Table, literal, select, text
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from ..db import Database
 
 log = logging.getLogger(__name__)
 
 TTL = 30.0
+
+# The one fence every canonical write carries (ADR-0012 §4.3): the row is written only while
+# the calling instance still holds the live generation, judged by the database clock.
+FENCE_SQL = (
+    "EXISTS (SELECT 1 FROM engine_lease WHERE id = 1 AND instance_id = :fence_owner "
+    "AND generation = :fence_gen "
+    "AND heartbeat_at >= EXTRACT(EPOCH FROM clock_timestamp()) - :fence_ttl)"
+)
+
+# The live generation of the database, or NULL when the heartbeat is stale (no live primary).
+LIVE_SQL = (
+    "(SELECT generation FROM engine_lease WHERE id = 1 "
+    "AND heartbeat_at >= EXTRACT(EPOCH FROM clock_timestamp()) - :fence_ttl)"
+)
 
 _INSERT = text(
     """
@@ -165,10 +181,16 @@ class Lease:
             },
         )
 
+    def _control_one(self, statement, params=None) -> dict | None:
+        """Heartbeat/gate reads ride the control pool so turn load cannot starve them."""
+        with self.db.control() as conn:
+            row = conn.execute(statement, params or {}).mappings().first()
+            return dict(row) if row is not None else None
+
     def current_generation(self) -> int | None:
         """The live generation in the database, or `None` when it cannot answer."""
         try:
-            found = self.db.fetch_one(text("SELECT generation FROM engine_lease WHERE id = 1"))
+            found = self._control_one(text("SELECT generation FROM engine_lease WHERE id = 1"))
         except Exception as exc:  # a DB error is a lease failure, not a crash (ADR-0012 §4.5)
             log.warning("lease read failed: %s: %s", type(exc).__name__, exc)
             return None
@@ -234,7 +256,7 @@ class Lease:
     def renew(self) -> bool:
         """Fresh heartbeat only for the current (instance_id, generation); `False` on any doubt."""
         try:
-            with self.db.connect() as conn:
+            with self.db.control() as conn:
                 found = conn.execute(
                     _RENEW,
                     {"instance_id": self.instance_id, "generation": self.generation},
@@ -318,6 +340,129 @@ class LeaseGuard:
                 f"lease generation moved on: held {self.lease.generation}, live {live}"
             )
         return live
+
+
+@dataclass(frozen=True)
+class Fence:
+    """The (instance, generation) pair a canonical write is allowed to run under."""
+
+    owner: str
+    generation: int
+    ttl: float = TTL
+
+    @property
+    def bound(self) -> bool:
+        return int(self.generation) > 0
+
+    def params(self) -> dict:
+        return {
+            "fence_owner": str(self.owner or ""),
+            "fence_gen": int(self.generation),
+            "fence_ttl": float(self.ttl),
+        }
+
+    def clause(self):
+        """The shared `EXISTS (...)` predicate, or `None` when no generation is bound."""
+        if not self.bound:
+            return None
+        return text(FENCE_SQL).bindparams(**self.params())
+
+
+def fence_clause(instance_id, generation, ttl: float = TTL):
+    """The atomic lease predicate for a canonical mutation (ADR-0012 §4.3).
+
+    A store with no bound generation (CLI, admin, a test database) gets `None`, so its
+    statement carries no predicate at all: the fence is omitted, never faked.
+    """
+    return Fence(str(instance_id or ""), int(generation or 0), float(ttl)).clause()
+
+
+def row_clause(column: str, *, ttl: float = TTL, unclaimed: bool = False):
+    """Fence a row that records the generation it was claimed under.
+
+    `turns` and `automation_runs` already store the claim generation, so the mutation can
+    compare that column with the live generation instead of carrying a bound pair. A deposed
+    instance's rows fail the comparison; a database with no lease row is not fenced at all.
+    """
+    extra = f" OR {column} = 0" if unclaimed else ""
+    statement = (
+        f"({column} = {LIVE_SQL}{extra} "
+        "OR NOT EXISTS (SELECT 1 FROM engine_lease WHERE id = 1))"
+    )
+    return text(statement).bindparams(fence_ttl=float(ttl))
+
+
+def caller_clause(generation: int, *, ttl: float = TTL):
+    """Fence a caller that knows its generation but not its instance (a worker id)."""
+    if not int(generation or 0):
+        return None
+    return text(f":fence_gen = {LIVE_SQL}").bindparams(
+        fence_gen=int(generation), fence_ttl=float(ttl)
+    )
+
+
+def fenced_insert(table: Table, row: Mapping, fence):
+    """`INSERT ... SELECT ... WHERE <fence>`: exactly one row, only under a live lease.
+
+    SQL has no `INSERT ... WHERE`, so the values are selected and the predicate gates the
+    select; a refused fence inserts nothing. An `INSERT ... SELECT` reports no rowcount, so
+    the caller chains `.returning(<column>)` and treats a missing row as the refusal.
+    """
+    columns = [table.c[name] for name in row]
+    selected = select(
+        *[literal(row[name], type_=table.c[name].type).label(name) for name in row]
+    )
+    return pg_insert(table).from_select(columns, _where(selected, fence))
+
+
+def _where(statement: Select, fence):
+    return statement if fence is None else statement.where(fence)
+
+
+class FencedStore:
+    """A store whose canonical mutations carry the live lease predicate once bound.
+
+    Binding holds the `Lease` itself, so a store wired while the instance was a standby starts
+    fencing the moment that process wins the lease. An unbound store (CLI, admin, tests) writes
+    without a predicate.
+    """
+
+    _lease = None
+
+    def bind_lease(self, lease) -> None:
+        self._lease = lease
+
+    @property
+    def fence(self) -> Fence | None:
+        lease = self._lease
+        generation = int(getattr(lease, "generation", 0) or 0)
+        if generation <= 0:
+            return None
+        return Fence(str(getattr(lease, "instance_id", "") or ""), generation)
+
+    def fence_clause(self):
+        found = self.fence
+        return found.clause() if found is not None else None
+
+    def guard_clause(self, generation: int = 0, *, ttl: float = TTL):
+        """The bound predicate, else the caller's own generation against the live row."""
+        bound = self.fence_clause()
+        return bound if bound is not None else caller_clause(generation, ttl=ttl)
+
+
+def bind_stores(agent) -> None:
+    """Wire every store of one agent to its lease: one primary, one generation (ADR-0012).
+
+    Called once the supervisor has attached the lease; a standby's generation is 0 until it
+    wins, so binding early is safe and no store needs a second constructor.
+    """
+    lease = getattr(agent, "lease", None)
+    if int(getattr(lease, "generation", 0) or 0) <= 0:
+        return
+    for name in ("memory", "turns", "skills", "affect", "approvals"):
+        bind = getattr(getattr(agent, name, None), "bind_lease", None)
+        if callable(bind):
+            bind(lease)
 
 
 def lock_data_dir(path) -> object | None:

@@ -6,7 +6,7 @@
 - **Context:** Re-baselined for v0.1.0; consolidates crash safety, lease management, turn lifecycle, prompt budgets, and async concurrency (pre-rebaseline 0011, 0012, 0013, 0017, 0037, 0045, 0049, 0053).
 - **Supersedes:** pre-rebaseline 0011, 0012, 0013, 0017, 0045, 0049, 0053
 - **Related:** ADR-0001 (sovereign invariants), ADR-0002 (memory), ADR-0004 (tools), ADR-0008 (turn pipeline)
-- **Implementation:** partial — base turn checkpoints and lease exist; phantom identity fix, review ordering, atomic fencing across all stores, and async offloading are scheduled in Phase P0/P1.
+- **Implementation:** implemented — checkpointed turn lifecycle, atomic SQL lease fencing across stores, review before the `reviewed` checkpoint, non-blocking loop with progress streams, and idempotent resume with deterministic action ids.
 
 ---
 

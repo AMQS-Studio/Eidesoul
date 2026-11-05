@@ -1,4 +1,4 @@
-"""Memory tool: one door to person/thread/global memory through Mem0 (async, cross-thread)."""
+"""Memory tool: one door to person/thread/global memory (async, cross-thread)."""
 
 
 from ..memory import MemoryHit

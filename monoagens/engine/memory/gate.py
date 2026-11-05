@@ -1,10 +1,11 @@
 """ADR-0002 capture gate: the deterministic structural stage and the MiniLM novelty stage.
 
-Stage 1 never calls a model and never reads a word list: the rules are length, provenance,
-duplication, and the hard exclusion that already guards storage (credentials, crisis,
-injection). Stage 2 reuses the shared 384-d embedder to decide "already known" before any
-assess call is made; when the embedder is unavailable it degrades to exact-text equality
-instead of guessing a similarity.
+Stage 1 never calls a model: the rules are length, provenance, duplication, and the hard
+exclusion that already guards storage (a shaped credential, crisis, injection). The credential
+check reads the language's safety pack and requires a value shape, so a bare mention of a
+secret word is not a credential. Stage 2 reuses the shared 384-d embedder to decide "already
+known" before any assess call is made; when the embedder is unavailable it degrades to
+exact-text equality instead of guessing a similarity.
 """
 
 
@@ -14,11 +15,14 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 
 from .. import embed
-from ..guard import SENSITIVE, is_crisis, is_injection
+from ..guard import is_crisis, is_injection
+from ..guard.patterns import is_sensitive
 
 MODES = ("off", "conservative", "balanced", "eager")
 MESSAGE_KINDS = ("message",)
 EXCLUDED_KINDS = ("command", "system", "tool", "notice")
+# ADR-0002 §4.4: a credential never survives in the row or in any audit copy of it.
+REDACTED_CREDENTIAL = "[redacted-credential]"
 DIGIT = re.compile(r"\d", re.UNICODE)
 WORD = re.compile(r"\w+", re.UNICODE)
 
@@ -62,7 +66,7 @@ def structural(
     min_chars: int = 8,
     language: str,
 ) -> GateDecision:
-    """Stage 1 of ADR-0002 §4: no model, no per-language vocabulary."""
+    """Stage 1 of ADR-0002 §4: deterministic, no model, shaped credentials from the pack."""
     body = " ".join(str(text or "").split())
     chosen = str(mode or "balanced").strip().lower()
     if chosen not in MODES:
@@ -75,7 +79,7 @@ def structural(
         return GateDecision(False, f"unknown kind: {kind}")
     if not body:
         return GateDecision(False, "empty")
-    if SENSITIVE.search(body):
+    if is_sensitive(body, language):
         return GateDecision(False, "credential")
     if is_crisis(body, language):
         return GateDecision(False, "crisis")

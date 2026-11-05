@@ -38,7 +38,7 @@ def archive_env(tmp_path):
     env = make_agent(
         tmp_path,
         gateway=gateway,
-        roles={"owner": role("owner", tools=("chat_history",), commands=("*",))},
+        roles={"owner": role("owner", tools=("thread_history",), commands=("*",))},
         default_role="owner",
     )
     env.history.add(
@@ -67,7 +67,7 @@ def test_cross_room_read_fills_cross_reads(tmp_path) -> None:
     ctx = context(env)
 
     text = asyncio.run(
-        execute(specs(env), "chat_history", {"chat": "budi"}, ctx)
+        execute(specs(env), "thread_history", {"chat": "budi"}, ctx)
     )
 
     assert SPAN in text
@@ -89,7 +89,7 @@ def test_current_chat_read_does_not_fill_cross_reads(tmp_path) -> None:
     )
     ctx = context(env)
 
-    text = asyncio.run(execute(specs(env), "chat_history", {}, ctx))
+    text = asyncio.run(execute(specs(env), "thread_history", {}, ctx))
 
     assert "rapat jam tiga" in text
     assert ctx.cross_reads == []

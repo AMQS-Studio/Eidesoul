@@ -34,14 +34,9 @@ from monoagens.engine.soul import Soul
 
 ENGINE = ROOT / "monoagens" / "engine"
 TOP_LEVEL_CAP = 16
-# ADR-0031 §4.1 caps. The allowlist is the four modules this ADR does not split.
+# ADR-0031 §4.1 caps. No module is allowlisted: every engine module stays under the ceiling.
 LINE_CAPS: dict[str, int] = {}
-OVER_CAP_ALLOWED = {
-    "monoagens/engine/config.py",
-    "monoagens/engine/stores/affect.py",
-    "monoagens/engine/jobs/cognition.py",
-    "monoagens/engine/schema.py",
-}
+OVER_CAP_ALLOWED: set[str] = set()
 MODULE_CAP = 800
 
 

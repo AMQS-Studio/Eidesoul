@@ -42,9 +42,12 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    op.execute(
-        "CREATE OR REPLACE VIEW memories_readable AS "
-        "SELECT * FROM memories WHERE state = 'ok' AND vetoed = false"
-    )
+    # The view was created with `SELECT *`, so it pins both privacy columns; drop it first and
+    # recreate it for revision 0017 after the columns are gone.
+    op.execute("DROP VIEW IF EXISTS memories_readable")
     op.drop_column("memories", "privacy_policy")
     op.drop_column("memories", "privacy_evidence")
+    op.execute(
+        "CREATE VIEW memories_readable AS "
+        "SELECT * FROM memories WHERE state = 'ok' AND vetoed = false"
+    )

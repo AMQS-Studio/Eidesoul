@@ -5,16 +5,34 @@ import ast
 import importlib
 import importlib.util
 import logging
-from dataclasses import dataclass, field
+from collections.abc import Mapping
+from dataclasses import dataclass, field, replace
 from importlib.metadata import entry_points
 from pathlib import Path
 from typing import Any
 
 from ..engine.config import ConfigError
 from ..engine.inbound import capability_report, ensure_core
+from .base import (
+    BaseGateway,
+    GatewayRegistration,
+    register_gateway,
+    registered_gateways,
+)
 from .descriptor import GatewayDescriptor
 
 log = logging.getLogger(__name__)
+
+__all__ = [
+    "BaseGateway",
+    "GatewayInfo",
+    "GatewayRegistration",
+    "build_gateways",
+    "gateway_index",
+    "load_gateway",
+    "register_gateway",
+    "registered_gateways",
+]
 
 
 @dataclass(frozen=True)
@@ -26,6 +44,7 @@ class GatewayInfo:
     attribute: str
     source: str = "builtin"
     descriptor: GatewayDescriptor = field(default_factory=GatewayDescriptor)
+    extra: str = ""
 
     @property
     def can_pair(self) -> bool:
@@ -37,6 +56,34 @@ class GatewayInfo:
             return importlib.util.find_spec(self.module) is not None
         except (ImportError, ModuleNotFoundError, ValueError):
             return False
+
+    @property
+    def gateway_class(self) -> type | None:
+        """The body class, imported lazily; a missing transport extra answers None."""
+        try:
+            module = importlib.import_module(self.module)
+        except ImportError:
+            return None
+        found = getattr(module, self.attribute, None)
+        return found if isinstance(found, type) else None
+
+    def default_settings(self) -> dict[str, object]:
+        """The body's own `gateways.<name>` defaults; empty when it cannot be imported."""
+        hook = getattr(self.gateway_class, "default_settings", None)
+        found = hook() if callable(hook) else None
+        return dict(found) if isinstance(found, Mapping) else {}
+
+    def default_config(self) -> dict[str, object]:
+        """The whole `gateways.<name>` block the body renders, when it declares one."""
+        hook = getattr(self.gateway_class, "default_config", None)
+        found = hook() if callable(hook) else None
+        return dict(found) if isinstance(found, Mapping) else self.default_settings()
+
+    def default_role_policy(self, role_name: str) -> dict[str, object]:
+        """One role's default policy block, owned by the body's own vocabulary."""
+        hook = getattr(self.gateway_class, "default_role_policy", None)
+        found = hook(str(role_name)) if callable(hook) else None
+        return dict(found) if isinstance(found, Mapping) else {}
 
 
 def _class_name(path: Path, gateway_name: str) -> str | None:
@@ -156,11 +203,31 @@ def _entrypoint_index() -> dict[str, GatewayInfo]:
     return found
 
 
+def _registered_index() -> dict[str, GatewayInfo]:
+    """Bodies that called `@register_gateway`, keyed by their registered name."""
+    found: dict[str, GatewayInfo] = {}
+    for name, entry in registered_gateways().items():
+        found[name] = GatewayInfo(
+            name,
+            entry.gateway.__module__,
+            entry.gateway.__qualname__,
+            "registered",
+            extra=entry.extra,
+        )
+    return found
+
+
 def gateway_index() -> dict[str, GatewayInfo]:
-    """Every gateway visible to this install, auto-discovered from packages and entry points."""
+    """Every gateway visible to this install: packages, entry points, registered bodies."""
     found = _builtin_index()
     for name, info in _entrypoint_index().items():
         found.setdefault(name, info)
+    for name, info in _registered_index().items():
+        current = found.get(name)
+        if current is None:
+            found[name] = info
+        elif not current.extra and info.extra:
+            found[name] = replace(current, extra=info.extra)
     return found
 
 

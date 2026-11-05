@@ -9,8 +9,9 @@
 #
 # Both stacks put Postgres in Podman/Docker by default. The installer asks before it installs
 # a missing runtime with sudo; without consent it prints the exact command and stops that
-# stage. Everything is appended to ~/.monoagens/logs/install.log. No secret value is ever
-# logged or printed.
+# stage. It also installs the global `monoagens` wrapper in ~/.local/bin and puts that folder
+# on the shell profile PATH once. Everything is appended to ~/.monoagens/logs/install.log.
+# No secret value is ever logged or printed.
 #
 # Repository: https://github.com/AMQStudio/MonoAgens
 # Decision:   docs/v0.1.0/adr/0030-install-and-init.md
@@ -57,9 +58,11 @@ provider=""
 model=""
 database_url=""
 label=""
-voice_layer=""
 websearch=""
 websearch_url=""
+websearch_key_env=""
+approval_mode=""
+natural_confirm=""
 tools=""
 gateways=()
 voice_parts=""
@@ -71,6 +74,9 @@ python_bin=""
 source_root=""
 arch=""
 ui_root=""
+PROVIDER_CHOICES=()
+WEBSEARCH_CHOICES=()
+GATEWAY_CHOICES=()
 COMPOSE=()
 TMP_DIRS=()
 
@@ -125,27 +131,35 @@ Usage: bash install.sh [options]
   --install-runtime      allow installing Podman/Docker and compose with sudo when missing
   --dry-run              print every action and write nothing
   --non-interactive      never prompt; fail when a required value is missing
-  --provider NAME        provider for `monoagens init`
+  --provider NAME        provider for `monoagens init` (catalog: providers.PROVIDERS)
   --model ID             model id for `monoagens init` (optional)
   --database-url URL     external Postgres URL; implies --database external in native mode
   --label TEXT           label for the first administrator (roles.yaml)
   --language CODE        language catalog for the soul (default: the host locale)
   --locale TAG           locale for the soul (default: the host locale)
   --timezone IANA        IANA timezone for the soul (default: the host zone)
-  --voice-layer on|off   keep emotion, humanize, character (default on) or turn them off
-  --voice-parts LIST     comma-separated voice sub-sections (default: the seed)
-  --gateway NAME         enable a discovered gateway (repeatable)
-  --websearch BACKEND    any indexed search backend or off
+  --web-search NAME      search provider (--websearch is the same flag); the catalog lists
+                         ddgs, searxng, tavily, brave, exa, serper, google, and off
+  --websearch NAME       alias of --web-search
   --websearch-url URL    SearXNG base URL
+  --websearch-key-env V  env variable that will hold the search key in .env
+  --approval-mode MODE   default, yolo, or strict (the wizard asks when omitted)
+  --natural-confirm      a plain chat reply may confirm an approval (default)
+  --no-natural-confirm   only /approve and /deny decide
+  --gateway NAME         enable a discovered gateway (repeatable; catalog: gateway_index())
+  --voice-parts LIST     comma-separated voice parts from VoiceConfig (affect, style, ...)
+  --voice LIST           alias of --voice-parts
   --tools LIST           comma-separated tool names for the member role
   --skip-selftest        skip the closing `monoagens selftest`
   --no-color             plain output (also honoured via NO_COLOR)
   -h, --help             this text
 
+`--voice-layer` was retired: each voice part governs itself, so pass --voice-parts.
 Both stacks use Podman/Docker for Postgres unless --database-url names an external server.
 A missing runtime is detected by name, offered for install, and sudo asks for your password
-in the terminal. The script never runs sudo without that consent. Log:
-~/.monoagens/logs/install.log
+in the terminal. The script never runs sudo without that consent. It installs the global
+`monoagens` wrapper at ~/.local/bin/monoagens and adds ~/.local/bin to the shell profile PATH
+once. Log: ~/.monoagens/logs/install.log
 EOF
     exit "$code"
 }
@@ -172,7 +186,7 @@ log_init() {
     touch -- "$log_file"
     chmod 0600 -- "$log_file" 2>/dev/null || true
     log "== monoagens install $(date -Is) =="
-    log "dir=$dir stack=$stack provider=${provider:-<ask>} model=${model:-<unset>} voice=${voice_layer:-<ask>}"
+    log "dir=$dir stack=$stack provider=${provider:-<ask>} model=${model:-<unset>} voice-parts=${voice_parts:-<ask>}"
 }
 
 # One line describing the init invocation: names only, never the database URL.
@@ -180,7 +194,7 @@ log_init_meta() {
     local url_state="<unset>" label_state="<unset>"
     [[ -n "$database_url" ]] && url_state="<provided>"
     [[ -n "$label" ]] && label_state="<set>"
-    log "init: provider=${provider:-<ask>} model=${model:-<unset>} voice=${voice_layer:-<ask>} database-url=$url_state label=$label_state"
+    log "init: provider=${provider:-<ask>} model=${model:-<unset>} voice-parts=${voice_parts:-<ask>} web-search=${websearch:-<ask>} approval=${approval_mode:-<ask>} database-url=$url_state label=$label_state"
     return 0
 }
 
@@ -243,14 +257,18 @@ parse_args() {
             --locale) [[ $# -ge 2 ]] || usage 2 "missing value for --locale"; locale="$2"; shift 2 ;;
             --timezone) [[ $# -ge 2 ]] || usage 2 "missing value for --timezone"; timezone="$2"; shift 2 ;;
             --voice-parts) [[ $# -ge 2 ]] || usage 2 "missing value for --voice-parts"; voice_parts="$2"; shift 2 ;;
+            --voice) [[ $# -ge 2 ]] || usage 2 "missing value for --voice"; voice_parts="$2"; shift 2 ;;
             --gateway) [[ $# -ge 2 ]] || usage 2 "missing value for --gateway"; gateways+=("$2"); shift 2 ;;
+            --web-search) [[ $# -ge 2 ]] || usage 2 "missing value for --web-search"; websearch="$2"; shift 2 ;;
             --websearch) [[ $# -ge 2 ]] || usage 2 "missing value for --websearch"; websearch="$2"; shift 2 ;;
             --websearch-url) [[ $# -ge 2 ]] || usage 2 "missing value for --websearch-url"; websearch_url="$2"; shift 2 ;;
+            --websearch-key-env) [[ $# -ge 2 ]] || usage 2 "missing value for --websearch-key-env"; websearch_key_env="$2"; shift 2 ;;
+            --approval-mode) [[ $# -ge 2 ]] || usage 2 "missing value for --approval-mode"; approval_mode="$2"; shift 2 ;;
+            --natural-confirm) natural_confirm="true"; shift ;;
+            --no-natural-confirm) natural_confirm="false"; shift ;;
             --tools) [[ $# -ge 2 ]] || usage 2 "missing value for --tools"; tools="$2"; shift 2 ;;
-            --voice-layer)
-                [[ $# -ge 2 ]] || usage 2 "missing value for --voice-layer"
-                voice_layer="$2"
-                shift 2
+            --voice-layer | --voice-layer=*)
+                usage 2 "--voice-layer was retired; each voice part governs itself, so pass --voice-parts affect,style,character,humanize"
                 ;;
             --dir=*) dir="${1#*=}"; dir_set=1; shift ;;
             --stack=*) stack="${1#*=}"; stack_set=1; shift ;;
@@ -277,11 +295,14 @@ parse_args() {
             --locale=*) locale="${1#*=}"; shift ;;
             --timezone=*) timezone="${1#*=}"; shift ;;
             --voice-parts=*) voice_parts="${1#*=}"; shift ;;
+            --voice=*) voice_parts="${1#*=}"; shift ;;
             --gateway=*) gateways+=("${1#*=}"); shift ;;
+            --web-search=*) websearch="${1#*=}"; shift ;;
             --websearch=*) websearch="${1#*=}"; shift ;;
             --websearch-url=*) websearch_url="${1#*=}"; shift ;;
+            --websearch-key-env=*) websearch_key_env="${1#*=}"; shift ;;
+            --approval-mode=*) approval_mode="${1#*=}"; shift ;;
             --tools=*) tools="${1#*=}"; shift ;;
-            --voice-layer=*) voice_layer="${1#*=}"; shift ;;
             --dry-run) dry_run=1; shift ;;
             --non-interactive) non_interactive=1; shift ;;
             --skip-selftest) skip_selftest=1; shift ;;
@@ -290,10 +311,10 @@ parse_args() {
             *) usage 2 "unknown option: $1" ;;
         esac
     done
-    case "$voice_layer" in "" | on | off) ;; *) usage 2 "--voice-layer must be on or off" ;; esac
     case "$stack" in native | compose) ;; *) usage 2 "--stack must be native or compose" ;; esac
     case "$container_engine" in "" | podman | docker) ;; *) usage 2 "--engine must be podman or docker" ;; esac
     case "$database_mode" in container | external) ;; *) usage 2 "--database must be container or external" ;; esac
+    case "$approval_mode" in "" | default | yolo | strict) ;; *) usage 2 "--approval-mode must be default, yolo, or strict" ;; esac
     [[ -n "$dir" ]] || usage 2 "--dir must not be empty"
     dir="${dir/#\~/$HOME}"
     [[ "$dir" = /* ]] || dir="${start_dir}/${dir}"
@@ -303,6 +324,98 @@ parse_args() {
     else
         source_root=""
     fi
+    # A search URL alone means SearXNG, the one provider that reads `base_url`.
+    if [[ -n "$websearch_url" && -z "$websearch" ]]; then
+        websearch="searxng"
+    fi
+}
+
+# --- dynamic catalogs ------------------------------------------------------------------
+#
+# Every provider, search backend, and gateway name comes from Python (`providers.PROVIDERS`,
+# the loader's WEB_SEARCH_PROVIDERS, and `gateways.gateway_index()`), never from a shell list.
+# `monoagens/admin/catalog.py` reads those sources with `ast` when the runtime dependencies are
+# not installed yet, so this works before `uv sync`.
+
+catalog_root() {
+    local candidate
+    for candidate in "$source_root" "$dir" "$ui_root"; do
+        if [[ -n "$candidate" && -f "$candidate/monoagens/admin/catalog.py" ]]; then
+            printf '%s' "$candidate"
+            return 0
+        fi
+    done
+    return 1
+}
+
+catalog_output() {
+    local root python output
+    root="$(catalog_root)" || return 1
+    for python in "$root/.venv/bin/python" "$python_bin" "python3"; do
+        [[ -n "$python" ]] || continue
+        if [[ "$python" == /* ]]; then
+            [[ -x "$python" ]] || continue
+        else
+            command -v "$python" >/dev/null 2>&1 || continue
+        fi
+        output="$(PYTHONPATH="$root" "$python" -m monoagens.admin.catalog choices 2>/dev/null)" || continue
+        [[ "$output" == *"providers="* ]] || continue
+        printf '%s\n' "$output"
+        return 0
+    done
+    return 1
+}
+
+read_catalog() {
+    local output line kind names
+    PROVIDER_CHOICES=()
+    WEBSEARCH_CHOICES=()
+    GATEWAY_CHOICES=()
+    output="$(catalog_output)" || return 1
+    while IFS= read -r line; do
+        kind="${line%%=*}"
+        names="${line#*=}"
+        [[ "$names" != "$line" ]] || continue
+        case "$kind" in
+            providers) IFS=',' read -r -a PROVIDER_CHOICES <<<"$names" ;;
+            websearch) IFS=',' read -r -a WEBSEARCH_CHOICES <<<"$names" ;;
+            gateways) IFS=',' read -r -a GATEWAY_CHOICES <<<"$names" ;;
+        esac
+    done <<<"$output"
+    [[ ${#PROVIDER_CHOICES[@]} -gt 0 && ${#WEBSEARCH_CHOICES[@]} -gt 0 ]]
+}
+
+in_choices() {
+    local needle="$1" item
+    shift
+    for item in "$@"; do
+        [[ "$item" == "$needle" ]] && return 0
+    done
+    return 1
+}
+
+validate_choices() {
+    local name
+    if ! read_catalog; then
+        warn "cannot read the Python catalog from this checkout; the wizard still validates every answer"
+        return 0
+    fi
+    if [[ -n "$provider" ]] && ! in_choices "$provider" "${PROVIDER_CHOICES[@]}"; then
+        usage 2 "unknown provider '$provider'; choose one of: ${PROVIDER_CHOICES[*]}"
+    fi
+    if [[ -n "$websearch" ]] && ! in_choices "$websearch" "${WEBSEARCH_CHOICES[@]}"; then
+        usage 2 "unknown web search provider '$websearch'; choose one of: ${WEBSEARCH_CHOICES[*]}"
+    fi
+    for name in "${gateways[@]:-}"; do
+        [[ -n "$name" ]] || continue
+        if ! in_choices "$name" "${GATEWAY_CHOICES[@]}"; then
+            usage 2 "unknown gateway '$name'; choose one of: ${GATEWAY_CHOICES[*]:-<none>}"
+        fi
+    done
+    if [[ -n "$websearch_key_env" ]] && [[ ! "$websearch_key_env" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]]; then
+        usage 2 "--websearch-key-env must be an environment variable name"
+    fi
+    return 0
 }
 
 # --- installer menus ------------------------------------------------------------------
@@ -529,6 +642,12 @@ ask_engine() {
     local picked="" status_podman="not installed" status_docker="not installed" default="podman" code=0
     [[ "$database_mode" == "external" ]] && return 0
     (( engine_set )) && return 0
+    if (( dry_run )); then
+        container_engine="$default"
+        engine_set=1
+        detail "would detect the container engine (podman, then docker)"
+        return 0
+    fi
     if engine_installed podman; then
         status_podman="installed"
         engine_running podman && status_podman="installed and running"
@@ -725,6 +844,10 @@ refresh_archive_checkout() {
 refresh_existing_checkout() {
     if [[ "$dir" == "$source_root" ]]; then
         detail "using the source checkout as-is"
+        return 0
+    fi
+    if (( dry_run )); then
+        detail "would refresh the code at $dir and keep the host files"
         return 0
     fi
     if [[ -d "$dir/.git" ]] && command -v git >/dev/null 2>&1; then
@@ -957,7 +1080,7 @@ connect_gateways() {
         return 0
     fi
     if [[ "$stack" == "compose" ]]; then
-        detail "connect a gateway inside the stack: ${COMPOSE[*]:-podman compose} exec monoagens monoagens gateway add <name> --connect"
+        detail "connect a gateway inside the stack: $(compose_label) exec monoagens monoagens gateway add <name> --connect"
         return 0
     fi
     mapfile -t found < <(enabled_pairable_gateways 2>/dev/null || true)
@@ -986,9 +1109,8 @@ connect_gateways() {
 
 
 build_init_args() {
-    INIT_ARGS=(init --dir "$dir" --no-location --capabilities)
+    INIT_ARGS=(init --dir "$dir" --no-location)
     (( dir_fresh )) && INIT_ARGS+=(--force)
-    if [[ -n "$voice_layer" ]]; then INIT_ARGS+=(--voice-layer "$voice_layer"); fi
     if [[ -n "$provider" ]]; then INIT_ARGS+=(--provider "$provider"); fi
     if [[ -n "$model" ]]; then INIT_ARGS+=(--model "$model"); fi
     if [[ -n "$database_url" ]]; then INIT_ARGS+=(--database-url "$database_url"); fi
@@ -1023,10 +1145,21 @@ run_init() {
             detail "would stop here: no terminal and no --provider; the flag list is printed instead"
             return 0
         fi
-        die "no terminal and no --provider. Pass --provider <name> (optionally --model, --database-url, --label, --language, --locale, --timezone, --voice-layer), or run with a terminal"
+        die "no terminal and no --provider. Pass --provider <name> (optionally --model, --database-url, --label, --language, --locale, --timezone, --web-search, --gateway), or run with a terminal"
     fi
     if (( dry_run )); then
-        detail "would run: uv run python -m monoagens init --dir $dir (the database URL stays out of this output)"
+        local planned idx
+        local -a shown=("${INIT_ARGS[@]}")
+        for idx in "${!shown[@]}"; do
+            if [[ -n "$database_url" && "${shown[idx]}" == "$database_url" ]]; then
+                shown[idx]="<database-url hidden>"
+            fi
+        done
+        planned="${shown[*]}"
+        detail "would run: uv run python -m monoagens $planned"
+        if [[ -n "$approval_mode" || -n "$natural_confirm" || -n "$websearch_key_env" ]]; then
+            detail "would then apply: ${approval_mode:+engine.approval.mode=$approval_mode }${natural_confirm:+engine.approval.natural_confirm=$natural_confirm }${websearch_key_env:+web_search.api_key_env=$websearch_key_env}"
+        fi
         return 0
     fi
     if (( attached )); then
@@ -1051,6 +1184,27 @@ run_init() {
     fi
     run_logged "write the four host files" "monoagens init --dir $dir --non-interactive" \
         uv_run_in_dir "${INIT_ARGS[@]}"
+}
+
+apply_setting() {
+    local key="$1" value="$2"
+    run_logged "set $key" "monoagens setting set $key $value" \
+        uv_run_in_dir setting set "$key" "$value"
+}
+
+# Flags the wizard cannot receive through `monoagens init` are applied through the same
+# comment-preserving `setting set` path the operator would use; comments stay intact.
+run_post_init_settings() {
+    if [[ -n "$approval_mode" ]]; then
+        apply_setting engine.approval.mode "$approval_mode"
+    fi
+    if [[ -n "$natural_confirm" ]]; then
+        apply_setting engine.approval.natural_confirm "$natural_confirm"
+    fi
+    if [[ -n "$websearch_key_env" ]]; then
+        apply_setting web_search.api_key_env "$websearch_key_env"
+    fi
+    return 0
 }
 
 # --- database and self-test -----------------------------------------------------------
@@ -1180,6 +1334,11 @@ database_env_mode() {
 
 prepare_database_before_init() {
     [[ "$database_mode" == "external" ]] && return 0
+    if (( dry_run )); then
+        stage "prepare the database credentials"
+        detail "would generate MONOAGENS_DATABASE_URL and POSTGRES_PASSWORD in .env (0600)"
+        return 0
+    fi
     if [[ -z "$database_url" ]]; then
         stage "prepare the database credentials"
         # Keep `.env` absent until `init` writes it: the wizard's credential step must
@@ -1206,15 +1365,8 @@ prepare_database_after_init() {
 bootstrap_identity() {
     (( dry_run )) || database_configured || return 0
     run_logged "register the local administrator" \
-        "monoagens people add cli local --role administrator" \
-        uv_run_in_dir people add cli local --role administrator
-}
-
-compose_bootstrap_identity() {
-    (( dry_run )) || database_configured || return 0
-    run_logged "register the local administrator" \
-        "${COMPOSE[*]:-podman compose} exec monoagens monoagens people add cli local --role administrator" \
-        compose_run people add cli local --role administrator
+        "monoagens people add console local --role administrator" \
+        uv_run_in_dir people add console local --role administrator
 }
 
 stage_database() {
@@ -1242,6 +1394,122 @@ stage_selftest() {
         return 0
     fi
     run_soft "self-check (monoagens selftest)" "monoagens selftest" uv_run_in_dir selftest || true
+}
+
+# --- global launcher ------------------------------------------------------------------
+
+
+local_bin_dir() {
+    printf '%s' "${HOME}/.local/bin"
+}
+
+wrapper_target() {
+    printf '%s/monoagens' "$(local_bin_dir)"
+}
+
+shell_profile() {
+    local name candidate
+    name="$(basename -- "${SHELL:-/bin/sh}")"
+    case "$name" in
+        zsh)
+            if [[ -f "$HOME/.zshrc" ]]; then
+                printf '%s' "$HOME/.zshrc"
+            else
+                printf '%s' "$HOME/.zprofile"
+            fi
+            ;;
+        bash)
+            for candidate in "$HOME/.bashrc" "$HOME/.bash_profile" "$HOME/.profile"; do
+                if [[ -f "$candidate" ]]; then
+                    printf '%s' "$candidate"
+                    return 0
+                fi
+            done
+            printf '%s' "$HOME/.profile"
+            ;;
+        *) printf '%s' "$HOME/.profile" ;;
+    esac
+}
+
+wrapper_script() {
+    local engine="${container_engine:-$(selected_engine)}"
+    engine="${engine:-podman}"
+    printf '%s\n' '#!/usr/bin/env bash'
+    printf '%s\n' "# MonoAgens launcher, written by install.sh (stack: $stack; do not hand-edit)."
+    printf '%s\n' 'set -euo pipefail'
+    printf 'cd -- %q\n' "$dir"
+    if [[ "$stack" == "compose" ]]; then
+        printf 'COMPOSE=(%q compose)\n' "$engine"
+        cat <<'LAUNCHER'
+if ! command -v "${COMPOSE[0]}" >/dev/null 2>&1; then
+    for candidate in "podman compose" "docker compose" "podman-compose" "docker-compose"; do
+        read -r -a COMPOSE <<<"$candidate"
+        if command -v "${COMPOSE[0]}" >/dev/null 2>&1; then
+            break
+        fi
+    done
+fi
+if ! command -v "${COMPOSE[0]}" >/dev/null 2>&1; then
+    printf 'monoagens: no Podman or Docker compose command on PATH\n' >&2
+    exit 1
+fi
+tty=()
+if [[ ! -t 0 ]]; then
+    tty=(-T)
+fi
+running="$("${COMPOSE[@]}" ps -q monoagens 2>/dev/null || true)"
+if [[ -n "$running" ]]; then
+    exec "${COMPOSE[@]}" exec "${tty[@]}" monoagens monoagens "$@"
+fi
+exec "${COMPOSE[@]}" run --rm "${tty[@]}" monoagens monoagens "$@"
+LAUNCHER
+    else
+        cat <<'LAUNCHER'
+if [[ -x .venv/bin/python ]]; then
+    exec .venv/bin/python -m monoagens "$@"
+fi
+exec uv run --no-dev python -m monoagens "$@"
+LAUNCHER
+    fi
+}
+
+ensure_path_entry() {
+    local profile="$1" block
+    block='# MonoAgens: put ~/.local/bin on PATH (written once by install.sh)
+case ":$PATH:" in
+    *":$HOME/.local/bin:"*) ;;
+    *) PATH="$HOME/.local/bin:$PATH" ;;
+esac
+export PATH'
+    if [[ -f "$profile" ]] && grep -qF '# MonoAgens: put ~/.local/bin on PATH' "$profile"; then
+        detail "PATH already has the ~/.local/bin entry in $profile"
+        return 0
+    fi
+    mkdir -p -- "$(dirname -- "$profile")"
+    printf '\n%s\n' "$block" >>"$profile"
+    detail "PATH: added ~/.local/bin to $profile (once)"
+}
+
+install_wrapper() {
+    local target profile bin_dir
+    bin_dir="$(local_bin_dir)"
+    target="$(wrapper_target)"
+    profile="$(shell_profile)"
+    if (( dry_run )); then
+        detail "would install the monoagens wrapper at $target (0755, $stack launcher)"
+        detail "would add $bin_dir to PATH in $profile exactly once"
+        return 0
+    fi
+    mkdir -p -- "$bin_dir"
+    wrapper_script >"$target"
+    chmod 0755 -- "$target"
+    detail "wrapper: $target ($stack launcher)"
+    ensure_path_entry "$profile"
+    case ":$PATH:" in
+        *":$bin_dir:"*) ;;
+        *) PATH="$bin_dir:$PATH" ;;
+    esac
+    return 0
 }
 
 # --- compose stack --------------------------------------------------------------------
@@ -1303,6 +1571,16 @@ detect_compose() {
     engine="$(selected_engine)"
     [[ -n "$engine" ]] || return 1
     compose_command "$engine"
+}
+
+# What to print for the compose command; a dry run never probed the engine, so it falls back
+# to the engine the operator selected.
+compose_label() {
+    if ((${#COMPOSE[@]} > 0)); then
+        printf '%s' "${COMPOSE[*]}"
+        return 0
+    fi
+    printf '%s compose' "${container_engine:-podman}"
 }
 
 engine_running() {
@@ -1383,6 +1661,12 @@ install_runtime() {
 
 ensure_compose() {
     local engine
+    if (( dry_run )); then
+        engine="${container_engine:-podman}"
+        container_engine="$engine"
+        detail "would use $engine with compose (no container is started in a dry run)"
+        return 0
+    fi
     engine="$(selected_engine)"
     [[ -n "$engine" ]] || engine="podman"
     container_engine="$engine"
@@ -1398,10 +1682,6 @@ ensure_compose() {
             die "Docker is installed but the daemon is not running; run: sudo systemctl start docker"
         fi
         die "$engine is installed but not working; start it and re-run"
-    fi
-    if (( dry_run )); then
-        detail "would install $engine with compose if missing"
-        return 0
     fi
     if (( install_runtime )); then
         install_runtime
@@ -1443,6 +1723,12 @@ compose_up() {
     ( cd -- "$dir" && exec "${COMPOSE[@]}" up -d "$@" )
 }
 
+# A short-lived container for setup commands; it starts dependencies (Postgres) but never the
+# long-running `monoagens` service, so `db upgrade` and `people add` finish before the daemon.
+compose_one_off() {
+    ( cd -- "$dir" && exec "${COMPOSE[@]}" run --rm monoagens monoagens "$@" )
+}
+
 compose_run() {
     ( cd -- "$dir" && exec "${COMPOSE[@]}" exec -T monoagens monoagens "$@" )
 }
@@ -1465,7 +1751,7 @@ wait_for_postgres() {
 stage_postgres() {
     ensure_compose
     run_logged "start the Postgres container" \
-        "${COMPOSE[*]:-podman compose} up -d postgres" compose_up postgres
+        "$(compose_label) up -d postgres" compose_up postgres
     run_logged "wait for Postgres" "compose exec postgres pg_isready" wait_for_postgres
     check_database_credentials
 }
@@ -1512,6 +1798,7 @@ repair_database_password() {
 }
 
 check_database_credentials() {
+    (( dry_run )) && return 0
     database_configured || return 0
     if probe_database_credentials 2>/dev/null; then
         return 0
@@ -1525,8 +1812,39 @@ check_database_credentials() {
     die "database credentials do not match the running Postgres"
 }
 
+native_plan() {
+    local mode="$database_mode" name index=1
+    local -a selected=("${gateways[@]:-}")
+    say "  native order: schema and identity before anything starts"
+    if [[ "$mode" == "external" ]]; then
+        detail "$index) use the Postgres URL from .env / --database-url"
+    else
+        detail "$index) use ${container_engine:-podman} compose up -d postgres, then wait for pg_isready"
+    fi
+    index=$((index + 1))
+    detail "$index) monoagens db upgrade"
+    index=$((index + 1))
+    detail "$index) monoagens people add console local --role administrator"
+    index=$((index + 1))
+    for name in "${selected[@]:-}"; do
+        [[ -n "$name" ]] || continue
+        detail "$index) monoagens gateway add $name --connect (on this terminal)"
+        index=$((index + 1))
+    done
+    if (( skip_selftest )); then
+        detail "$index) monoagens selftest (skipped by --skip-selftest)"
+    else
+        detail "$index) monoagens selftest"
+    fi
+    return 0
+}
+
 stage_native_database() {
     local mode
+    if (( dry_run )); then
+        native_plan
+        return 0
+    fi
     if [[ "$database_mode" == "external" ]]; then
         stage_database
         bootstrap_identity
@@ -1544,21 +1862,84 @@ stage_native_database() {
     stage_selftest
 }
 
+compose_plan() {
+    local runner="$(compose_label)" name index=1
+    local -a selected=("${gateways[@]:-}")
+    say "  compose order: setup finishes before the daemon starts"
+    detail "$index) $runner up -d postgres"
+    index=$((index + 1))
+    detail "$index) wait until pg_isready answers"
+    index=$((index + 1))
+    detail "$index) $runner run --rm monoagens monoagens db upgrade"
+    index=$((index + 1))
+    detail "$index) $runner run --rm monoagens monoagens people add console local --role administrator"
+    index=$((index + 1))
+    for name in "${selected[@]:-}"; do
+        [[ -n "$name" ]] || continue
+        detail "$index) $runner run --rm monoagens monoagens gateway pair $name (on this terminal)"
+        index=$((index + 1))
+    done
+    detail "$index) $runner up -d monoagens"
+}
+
+compose_pair_gateways() {
+    local name
+    local -a found=("${gateways[@]:-}")
+    if [[ -f "$dir/config.yaml" ]]; then
+        mapfile -t found < <(enabled_pairable_gateways 2>/dev/null || true)
+    elif ((${#gateways[@]} > 0)); then
+        found=("${gateways[@]}")
+    fi
+    if ((${#found[@]} == 0)); then
+        return 0
+    fi
+    if [[ ! -t 0 ]] || (( non_interactive )); then
+        detail "pair a gateway on a terminal: $(compose_label) run --rm monoagens monoagens gateway pair <name>"
+        return 0
+    fi
+    for name in "${found[@]:-}"; do
+        [[ -n "$name" ]] || continue
+        if (( dry_run )); then
+            detail "would pair $name before the daemon starts: $(compose_label) run --rm monoagens monoagens gateway pair $name"
+            continue
+        fi
+        say ""
+        say "  Pair $name now: scan the code with the device's linked-device screen."
+        if ( cd -- "$dir" && "${COMPOSE[@]}" run --rm monoagens monoagens gateway pair "$name" ); then
+            detail "$name paired; the session lives in .monoagens"
+        else
+            warn "pairing $name did not finish; retry before starting the daemon:"
+            warn "  cd $dir && $(compose_label) run --rm monoagens monoagens gateway pair $name"
+        fi
+    done
+    return 0
+}
+
 stage_compose() {
+    if (( dry_run )); then
+        compose_plan
+        return 0
+    fi
     prepare_database_env compose >/dev/null
     ensure_compose
-    run_logged "bring the stack up" "${COMPOSE[*]:-podman compose} up -d" compose_up
+    run_logged "start the Postgres container" \
+        "$(compose_label) up -d postgres" compose_up postgres
     run_logged "wait for Postgres" "compose exec postgres pg_isready" wait_for_postgres
     check_database_credentials
-    run_logged "publish the schema (compose exec)" \
-        "${COMPOSE[*]:-podman compose} exec monoagens monoagens db upgrade" compose_run db upgrade
-    compose_bootstrap_identity
-    connect_gateways
+    run_logged "publish the schema before the daemon starts (one-off container)" \
+        "$(compose_label) run --rm monoagens monoagens db upgrade" \
+        compose_one_off db upgrade
+    run_logged "register the local administrator before the daemon starts" \
+        "$(compose_label) run --rm monoagens monoagens people add console local --role administrator" \
+        compose_one_off people add console local --role administrator
+    compose_pair_gateways
+    run_logged "start the daemon only after setup finished" \
+        "$(compose_label) up -d monoagens" compose_up monoagens
     if (( skip_selftest )); then
         detail "self-check skipped (--skip-selftest)"
     else
         run_soft "self-check (compose exec)" \
-            "${COMPOSE[*]:-podman compose} exec monoagens monoagens selftest" compose_run selftest || true
+            "$(compose_label) exec monoagens monoagens selftest" compose_run selftest || true
     fi
 }
 
@@ -1586,30 +1967,30 @@ panel_available() {
 }
 
 print_cli_steps() {
-    local runner="${COMPOSE[*]:-podman compose}"
+    local runner="$(compose_label)"
     say ""
+    say "  The global launcher is installed: run monoagens from any directory."
     if [[ "$stack" == "compose" ]]; then
-        say "  Stay on the command line inside the stack:"
-        say "    cd $dir"
+        say "  It routes every command into the stack from $dir:"
         if ! postgres_password_set; then
             say "    # fill .env first: POSTGRES_PASSWORD, MONOAGENS_DATABASE_URL, and the provider key"
         fi
-        say "    $runner exec monoagens monoagens db upgrade"
-        say "    $runner exec monoagens monoagens run"
+        say "    monoagens db upgrade"
+        say "    monoagens run"
         say "  Link your own chat address explicitly (a paired account is not an operator):"
-        say "    $runner exec monoagens monoagens people add <gateway> <your address> --role administrator"
-        say "  Run the setup inside the container too: $runner exec monoagens python -m monoagens init --dir ."
+        say "    monoagens people add <gateway> <your address> --role administrator"
+        say "  Pair a gateway on this terminal: monoagens gateway pair <name>"
+        say "  Compose form when the wrapper is off PATH: $runner exec monoagens monoagens <command>"
     else
-        say "  Stay on the command line:"
-        say "    cd $dir"
+        say "  It runs the managed .venv in $dir:"
         if ! database_configured; then
             say "    # fill .env first: MONOAGENS_DATABASE_URL, POSTGRES_PASSWORD, and the provider key"
         fi
-        say "    uv run --no-dev python -m monoagens db upgrade"
-        say "    uv run --no-dev python -m monoagens run"
+        say "    monoagens db upgrade"
+        say "    monoagens run"
         say "  Link your own chat address explicitly (a paired account is not an operator):"
-        say "    uv run --no-dev python -m monoagens people add <gateway> <your address> --role administrator"
-        say "  Run the setup again: uv run --no-dev python -m monoagens init --dir ."
+        say "    monoagens people add <gateway> <your address> --role administrator"
+        say "  Run the setup again: monoagens init --dir ."
     fi
     say ""
     say "  Log: $log_file"
@@ -1685,7 +2066,7 @@ finish() {
         2)
             if [[ "$stack" == "compose" ]]; then
                 run_logged "start the stack in the background" \
-                    "${COMPOSE[*]:-podman compose} up -d" compose_up || true
+                    "$(compose_label) up -d" compose_up || true
                 detail "stack restarts with the container engine (unless-stopped)"
             else
                 install_user_service || print_cli_steps
@@ -1711,6 +2092,7 @@ main() {
     install_traps
     stage_preflight
     stage_uv
+    validate_choices
     bootstrap_ui
     ask_runtime
     ask_directory
@@ -1729,11 +2111,16 @@ main() {
     detail "engine:     $stack"
     detail "database:   $database_mode${container_engine:+ ($container_engine)}"
     detail "directory:  $dir"
-    log "choices: stack=$stack engine=${container_engine:-<external>} database=$database_mode dir=$dir"
+    detail "search:     ${websearch:-<ask>}"
+    detail "provider:   ${provider:-<ask>}"
+    detail "approval:   ${approval_mode:-<ask>}"
+    log "choices: stack=$stack engine=${container_engine:-<external>} database=$database_mode dir=$dir provider=${provider:-<ask>} web-search=${websearch:-<ask>} approval=${approval_mode:-<ask>}"
     prepare_dir
     run_logged "install the locked dependencies (uv sync --locked --no-dev)" "uv sync --locked --no-dev" uv_sync
+    install_wrapper
     prepare_database_before_init
     run_init
+    run_post_init_settings
     sync_gateway_extras
     prepare_database_after_init
     if [[ "$stack" == "compose" ]]; then

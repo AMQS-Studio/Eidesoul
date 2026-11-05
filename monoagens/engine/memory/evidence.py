@@ -16,7 +16,7 @@ import re
 import sys
 from collections.abc import Iterator, Mapping, Sequence
 from contextlib import contextmanager
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from functools import cache
 from pathlib import Path
 from typing import Any
@@ -26,7 +26,7 @@ from .. import embed
 log = logging.getLogger(__name__)
 
 SCHEMA_VERSION = 1
-POLICY_VERSION = "privacy-2026-11-05.1"
+POLICY_VERSION = "privacy-2026-11-05.2"
 POLICY_HASH = hashlib.sha256(POLICY_VERSION.encode("utf-8")).hexdigest()
 MAX_CLASSIFY_CHARS = 4000
 DEFAULT_DIR = Path(__file__).resolve().parents[2] / "library" / "privacy"
@@ -59,6 +59,17 @@ LEVELS = {
     "legal": 3,
 }
 ACTIONS = ("allow", "redact", "block", "ask", "drop")
+
+# A credential is a value shape, never a keyword: a 16-digit NIK, a provider token prefix, or a
+# PEM header. These run for every language, so a pack cannot hide one behind ordinary words.
+VALUE_SHAPES = (
+    (CREDENTIAL, r"(?<!\d)\d{16}(?!\d)"),
+    (CREDENTIAL, r"(?<![A-Za-z0-9])(?:sk-[A-Za-z0-9]{20,}|ghp_[A-Za-z0-9]{20,})(?![A-Za-z0-9])"),
+    (CREDENTIAL, r"-----BEGIN [A-Z ]*PRIVATE KEY-----"),
+)
+_SHAPES = tuple((label, re.compile(pattern)) for label, pattern in VALUE_SHAPES)
+# An ambiguous term needs its context words nearby; the bare word alone is not evidence.
+AMBIGUOUS_WINDOW = 40
 
 
 @dataclass(frozen=True)
@@ -103,6 +114,7 @@ class Pack:
     semantic_floor: float
     semantic_margin: float
     digest: str
+    ambiguous_context: Mapping[str, tuple[str, ...]] = field(default_factory=dict)
     ok: bool = True
 
 
@@ -130,6 +142,7 @@ def load_pack(language: str) -> Pack:
             semantic_floor=_score(body.get("semantic_floor")) or 0.34,
             semantic_margin=_score(body.get("semantic_margin")) or 0.03,
             digest=hashlib.sha256(raw).hexdigest(),
+            ambiguous_context=_context(body.get("ambiguous_context")),
         )
     except (OSError, ValueError, TypeError) as exc:
         log.warning("privacy: no usable pack for %r: %s", code, exc)
@@ -149,6 +162,19 @@ def _score(value: object) -> float:
 
 def _strings(value: object) -> tuple[object, ...]:
     return tuple(value) if isinstance(value, (list, tuple)) else ()
+
+
+def _context(value: object) -> dict[str, tuple[str, ...]]:
+    """`{term: (word, ...)}`; a malformed entry is dropped, never guessed."""
+    if not isinstance(value, dict):
+        return {}
+    found: dict[str, tuple[str, ...]] = {}
+    for term, words in value.items():
+        name = str(term or "").strip().casefold()
+        wanted = tuple(str(item).strip().casefold() for item in _strings(words))
+        if name and wanted:
+            found[name] = tuple(item for item in wanted if item)
+    return found
 
 
 class PatternDetector:
@@ -175,7 +201,10 @@ class PatternDetector:
                 except re.error:
                     log.warning("privacy: invalid pattern for %s", label)
         for term in pack.ambiguous_terms:
+            wanted = pack.ambiguous_context.get(str(term).casefold())
             for match in re.finditer(rf"\b{re.escape(term)}\b", text, re.IGNORECASE):
+                if wanted and not _context_near(text, match, wanted):
+                    continue
                 found.append(
                     Evidence(
                         self.detector,
@@ -186,7 +215,29 @@ class PatternDetector:
                         (match.start(), match.end()),
                     )
                 )
+        for label, pattern in _SHAPES:
+            for match in pattern.finditer(text):
+                found.append(
+                    Evidence(
+                        self.detector,
+                        "value-1",
+                        pack.digest,
+                        label,
+                        1.0,
+                        (match.start(), match.end()),
+                    )
+                )
         return found
+
+
+def _context_near(text: str, match: re.Match, wanted: Sequence[str]) -> bool:
+    """One context word within a small window of the ambiguous term, whole-token only."""
+    window = text[
+        max(0, match.start() - AMBIGUOUS_WINDOW) : match.end() + AMBIGUOUS_WINDOW
+    ]
+    return any(
+        re.search(rf"\b{re.escape(word)}\b", window, re.IGNORECASE) for word in wanted
+    )
 
 
 class PrivacyModelError(RuntimeError):

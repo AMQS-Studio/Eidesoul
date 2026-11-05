@@ -6,7 +6,8 @@ import asyncio
 import pytest
 from support import build_config, role
 
-from monoagens.engine.config import ConfigError, ShellConfig, _shell_config
+from monoagens.engine.config import ConfigError, ShellConfig
+from monoagens.engine.config.sections import _shell_config
 from monoagens.engine.registry import Handler, validate
 from monoagens.engine.tools import (
     ToolContext,

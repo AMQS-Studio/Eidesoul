@@ -1,16 +1,19 @@
-"""Tool web_search: SearXNG when `web_search.base_url` is set, otherwise the ddgs backend."""
+"""Tool web_search: one configured provider plus an ordered fallback chain.
 
+ADR-0004 §4.5: every adapter normalizes its payload into `SearchHit`; the tool, the forced
+research path, and the card builder only ever see that uniform shape.
+"""
 
-import asyncio
 import importlib.util
-import json
 import logging
+import os
 import time
-import urllib.parse
-import urllib.request
 from dataclasses import dataclass
 
-from ..config import Config
+import httpx
+
+from .. import io
+from ..config import WebSearchConfig
 from ..registry import Handler
 from ..turn.research import build_card, render
 from . import ToolContext, _int
@@ -19,14 +22,41 @@ from . import fetch as fetch_tool
 log = logging.getLogger(__name__)
 
 USER_AGENT = "monoagens"
-# The library's auto engine set includes adapters that currently return `None`; yahoo is the
-# adapter that answers in this environment, and it is still an ordinary public result page.
-DDGS_BACKENDS = "yahoo"
 SEARCH_ATTEMPTS = 4
 SEARCH_BACKOFF = 1.5
 SNIPPET_FLOOR = 200
 MAX_FETCHES = 3
 FETCH_CHARS = 4_000
+DDGS_TIMEOUT_SECONDS = 10.0
+HTTP_PROVIDERS = frozenset({"searxng", "tavily", "brave", "exa", "serper", "google"})
+TAVILY_URL = "https://api.tavily.com/search"
+BRAVE_URL = "https://api.search.brave.com/res/v1/web/search"
+EXA_URL = "https://api.exa.ai/search"
+SERPER_URL = "https://google.serper.dev/search"
+GOOGLE_URL = "https://www.googleapis.com/customsearch/v1"
+
+
+@dataclass(frozen=True)
+class SearchHit:
+    """One normalized result; a provider's JSON never leaves its adapter unnormalized."""
+
+    title: str
+    url: str
+    snippet: str = ""
+    published_at: str = ""
+
+    def as_dict(self) -> dict:
+        """The shape `build_card` and `enrich` already consume (title/href/body)."""
+        return {
+            "title": self.title,
+            "href": self.url,
+            "body": self.snippet,
+            "published_at": self.published_at,
+        }
+
+
+class ProviderError(RuntimeError):
+    """A provider cannot run or answered unusably; the message is a structured reason token."""
 
 
 @dataclass(frozen=True)
@@ -44,85 +74,431 @@ def backends() -> list[SearchBackend]:
         found.append(
             SearchBackend("ddgs", "ddgs", "public result pages; no key; can rate-limit", False)
         )
-    found.append(
-        SearchBackend("searxng", "SearXNG", "operator-owned JSON endpoint", True)
-    )
+    found.append(SearchBackend("searxng", "SearXNG", "operator-owned JSON endpoint", True))
     return found
 
 
-def searx_hits(payload: dict, limit: int) -> list[dict]:
-    """SearXNG JSON -> uniform hits (title/href/body); entries without a URL are dropped."""
-    hits: list[dict] = []
+def _text(value: object) -> str:
+    return " ".join(str(value or "").split())
+
+
+def _stamp(value: object) -> str:
+    return str(value or "").strip()
+
+
+def _first(*values: object) -> str:
+    for value in values:
+        stamp = _stamp(value)
+        if stamp:
+            return stamp
+    return ""
+
+
+def searx_hits(payload: dict, limit: int) -> list[SearchHit]:
+    """SearXNG JSON -> `SearchHit`; entries without a URL are dropped."""
+    hits: list[SearchHit] = []
     for item in payload.get("results") or []:
         if not isinstance(item, dict):
             continue
-        url = str(item.get("url") or "")
+        url = _stamp(item.get("url"))
         if not url:
             continue
         hits.append(
-            {
-                "title": str(item.get("title") or ""),
-                "href": url,
-                "body": str(item.get("content") or ""),
-            }
+            SearchHit(
+                title=_text(item.get("title")),
+                url=url,
+                snippet=_text(item.get("content")),
+                published_at=_first(item.get("publishedDate"), item.get("published_date")),
+            )
         )
         if len(hits) >= limit:
             break
     return hits
 
 
-def _searx_sync(base_url: str, query: str, limit: int, timeout: float) -> list[dict]:
-    url = f"{base_url}/search?" + urllib.parse.urlencode({"q": query, "format": "json"})
-    headers = {"User-Agent": USER_AGENT, "Accept": "application/json"}
-    request = urllib.request.Request(url, headers=headers)
-    with urllib.request.urlopen(request, timeout=timeout) as response:
-        return searx_hits(json.load(response), limit)
+def tavily_hits(payload: dict, limit: int) -> list[SearchHit]:
+    """Tavily JSON -> `SearchHit`."""
+    hits: list[SearchHit] = []
+    for item in payload.get("results") or []:
+        if not isinstance(item, dict):
+            continue
+        url = _stamp(item.get("url"))
+        if not url:
+            continue
+        hits.append(
+            SearchHit(
+                title=_text(item.get("title")),
+                url=url,
+                snippet=_text(item.get("content")),
+                published_at=_first(item.get("published_date"), item.get("publishedDate")),
+            )
+        )
+        if len(hits) >= limit:
+            break
+    return hits
 
 
-async def _searx(config: Config, query: str, limit: int) -> list[dict]:
-    base_url = config.web_search.base_url
-    if not base_url:
-        return []
+def brave_hits(payload: dict, limit: int) -> list[SearchHit]:
+    """Brave Web Search JSON -> `SearchHit`."""
+    web = payload.get("web")
+    results = web.get("results") if isinstance(web, dict) else None
+    hits: list[SearchHit] = []
+    for item in results or []:
+        if not isinstance(item, dict):
+            continue
+        url = _stamp(item.get("url"))
+        if not url:
+            continue
+        hits.append(
+            SearchHit(
+                title=_text(item.get("title")),
+                url=url,
+                snippet=_text(item.get("description")),
+                published_at=_first(item.get("page_age"), item.get("age")),
+            )
+        )
+        if len(hits) >= limit:
+            break
+    return hits
+
+
+def exa_hits(payload: dict, limit: int) -> list[SearchHit]:
+    """Exa search JSON -> `SearchHit`."""
+    hits: list[SearchHit] = []
+    for item in payload.get("results") or []:
+        if not isinstance(item, dict):
+            continue
+        url = _stamp(item.get("url"))
+        if not url:
+            continue
+        hits.append(
+            SearchHit(
+                title=_text(item.get("title")),
+                url=url,
+                snippet=_text(item.get("text") or item.get("summary")),
+                published_at=_first(item.get("publishedDate"), item.get("published_date")),
+            )
+        )
+        if len(hits) >= limit:
+            break
+    return hits
+
+
+def serper_hits(payload: dict, limit: int) -> list[SearchHit]:
+    """Serper (Google) JSON -> `SearchHit`."""
+    hits: list[SearchHit] = []
+    for item in payload.get("organic") or []:
+        if not isinstance(item, dict):
+            continue
+        url = _stamp(item.get("link"))
+        if not url:
+            continue
+        hits.append(
+            SearchHit(
+                title=_text(item.get("title")),
+                url=url,
+                snippet=_text(item.get("snippet")),
+                published_at=_stamp(item.get("date")),
+            )
+        )
+        if len(hits) >= limit:
+            break
+    return hits
+
+
+def _google_stamp(item: dict) -> str:
+    """Programmable Search reports dates only through the result's metatags."""
+    pagemap = item.get("pagemap")
+    if not isinstance(pagemap, dict):
+        return ""
+    metatags = pagemap.get("metatags")
+    if not isinstance(metatags, list) or not metatags:
+        return ""
+    first = metatags[0]
+    if not isinstance(first, dict):
+        return ""
+    return _first(
+        first.get("article:published_time"),
+        first.get("date"),
+        first.get("og:updated_time"),
+    )
+
+
+def google_hits(payload: dict, limit: int) -> list[SearchHit]:
+    """Programmable Search JSON -> `SearchHit`."""
+    hits: list[SearchHit] = []
+    for item in payload.get("items") or []:
+        if not isinstance(item, dict):
+            continue
+        url = _stamp(item.get("link"))
+        if not url:
+            continue
+        hits.append(
+            SearchHit(
+                title=_text(item.get("title")),
+                url=url,
+                snippet=_text(item.get("snippet")),
+                published_at=_google_stamp(item),
+            )
+        )
+        if len(hits) >= limit:
+            break
+    return hits
+
+
+def _secret(env_name: str) -> str:
+    name = _stamp(env_name)
+    return os.environ.get(name, "").strip() if name else ""
+
+
+def _required_secret(env_name: str, reason: str) -> str:
+    value = _secret(env_name)
+    if not value:
+        raise ProviderError(reason)
+    return value
+
+
+def _payload(response: httpx.Response) -> dict:
+    response.raise_for_status()
     try:
-        return await asyncio.to_thread(
-            _searx_sync, base_url, query, limit, config.web_search.timeout_seconds
-        )
-    except Exception as exc:  # dead instance/broken JSON: ddgs is the fallback, search continues
-        log.warning(
-            "searxng %s failed (%s: %s); falling back to ddgs", base_url, type(exc).__name__, exc
-        )
-        return []
+        body = response.json()
+    except ValueError as exc:
+        raise ProviderError("invalid_response") from exc
+    if not isinstance(body, dict):
+        raise ProviderError("invalid_response")
+    return body
 
 
-def _search_sync(query: str, limit: int, region: str = "") -> list[dict]:
+async def _get_json(
+    client: httpx.AsyncClient,
+    url: str,
+    *,
+    params: dict | None = None,
+    headers: dict | None = None,
+) -> dict:
+    response = await client.get(url, params=params, headers=headers)
+    return _payload(response)
+
+
+async def _post_json(
+    client: httpx.AsyncClient,
+    url: str,
+    *,
+    body: dict,
+    headers: dict | None = None,
+) -> dict:
+    response = await client.post(url, json=body, headers=headers)
+    return _payload(response)
+
+
+async def _searxng(
+    client: httpx.AsyncClient, config: WebSearchConfig, query: str, limit: int
+) -> list[SearchHit]:
+    base_url = config.base_url
+    if not base_url:
+        raise ProviderError("base_url_missing")
+    payload = await _get_json(
+        client,
+        f"{base_url}/search",
+        params={"q": query, "format": "json"},
+        headers={"Accept": "application/json"},
+    )
+    return searx_hits(payload, limit)
+
+
+async def _tavily(
+    client: httpx.AsyncClient, config: WebSearchConfig, query: str, limit: int
+) -> list[SearchHit]:
+    key = _required_secret(config.api_key_env, "missing_api_key")
+    payload = await _post_json(
+        client,
+        TAVILY_URL,
+        body={"query": query, "max_results": limit},
+        headers={"Authorization": f"Bearer {key}"},
+    )
+    return tavily_hits(payload, limit)
+
+
+async def _brave(
+    client: httpx.AsyncClient, config: WebSearchConfig, query: str, limit: int
+) -> list[SearchHit]:
+    key = _required_secret(config.api_key_env, "missing_api_key")
+    payload = await _get_json(
+        client,
+        BRAVE_URL,
+        params={"q": query, "count": limit},
+        headers={"X-Subscription-Token": key, "Accept": "application/json"},
+    )
+    return brave_hits(payload, limit)
+
+
+async def _exa(
+    client: httpx.AsyncClient, config: WebSearchConfig, query: str, limit: int
+) -> list[SearchHit]:
+    key = _required_secret(config.api_key_env, "missing_api_key")
+    payload = await _post_json(
+        client,
+        EXA_URL,
+        body={
+            "query": query,
+            "numResults": limit,
+            "contents": {"text": {"maxCharacters": 500}},
+        },
+        headers={"x-api-key": key},
+    )
+    return exa_hits(payload, limit)
+
+
+async def _serper(
+    client: httpx.AsyncClient, config: WebSearchConfig, query: str, limit: int
+) -> list[SearchHit]:
+    key = _required_secret(config.api_key_env, "missing_api_key")
+    payload = await _post_json(
+        client,
+        SERPER_URL,
+        body={"q": query, "num": limit},
+        headers={"X-API-KEY": key},
+    )
+    return serper_hits(payload, limit)
+
+
+async def _google(
+    client: httpx.AsyncClient, config: WebSearchConfig, query: str, limit: int
+) -> list[SearchHit]:
+    key = _required_secret(config.api_key_env, "missing_api_key")
+    engine_id = _required_secret(config.engine_id_env, "missing_engine_id")
+    payload = await _get_json(
+        client,
+        GOOGLE_URL,
+        params={"key": key, "cx": engine_id, "q": query, "num": limit},
+    )
+    return google_hits(payload, limit)
+
+
+ADAPTERS = {
+    "searxng": _searxng,
+    "tavily": _tavily,
+    "brave": _brave,
+    "exa": _exa,
+    "serper": _serper,
+    "google": _google,
+}
+
+
+def _ddgs_sync(query: str, limit: int, region: str = "", backend: str = "auto") -> list[SearchHit]:
+    """The blocking ddgs call; only ever reached through `io.run` from the loop."""
     from ddgs import DDGS
 
-    engine = DDGS(timeout=10)
-    hits: list[dict] = []
+    engine = DDGS(timeout=DDGS_TIMEOUT_SECONDS)
+    rows: list[dict] = []
     for attempt in range(SEARCH_ATTEMPTS):
         try:
-            hits = engine.text(
+            rows = engine.text(
                 query,
                 max_results=limit,
                 region=region or None,
-                backend=DDGS_BACKENDS,
+                backend=backend,
             )
         except Exception:  # a blocked or rate-limited engine must not break the search
-            hits = []
-        if hits or attempt == SEARCH_ATTEMPTS - 1:
+            rows = []
+        if rows or attempt == SEARCH_ATTEMPTS - 1:
             break
         time.sleep(SEARCH_BACKOFF)
-    found: list[dict] = []
+    found: list[SearchHit] = []
     seen: set[str] = set()
-    for hit in hits:
-        href = str(hit.get("href") or hit.get("url") or "")
-        if href and href in seen:
+    for row in rows or []:
+        if not isinstance(row, dict):
             continue
-        seen.add(href)
-        found.append(hit)
+        url = _stamp(row.get("href") or row.get("url"))
+        if not url or url in seen:
+            continue
+        seen.add(url)
+        found.append(
+            SearchHit(
+                title=_text(row.get("title")),
+                url=url,
+                snippet=_text(row.get("body") or row.get("snippet")),
+                published_at=_first(row.get("published"), row.get("published_at")),
+            )
+        )
         if len(found) >= limit:
             break
-    return found[:limit]
+    return found
+
+
+async def _ddgs(config: WebSearchConfig, query: str, limit: int) -> list[SearchHit]:
+    try:
+        return await io.run(_ddgs_sync, query, limit, config.region, config.ddgs_backend)
+    except ImportError as exc:
+        raise ProviderError("ddgs_unavailable") from exc
+
+
+def _reason(error: BaseException) -> str:
+    """A parseable reason token; never the provider's message (it may echo the key)."""
+    if isinstance(error, ProviderError):
+        return str(error) or "provider_error"
+    if isinstance(error, httpx.TimeoutException):
+        return "timeout"
+    if isinstance(error, httpx.HTTPStatusError):
+        return f"http_{error.response.status_code}"
+    if isinstance(error, httpx.HTTPError):
+        return "transport_error"
+    name = type(error).__name__.lower()
+    return name or "error"
+
+
+def provider_chain(config: WebSearchConfig) -> tuple[str, ...]:
+    """`provider` first, then each configured fallback once; `off` stops the chain."""
+    if config.provider == "off":
+        return ()
+    chain: list[str] = []
+    for name in (config.provider, *config.fallbacks):
+        if name == "off" or name in chain:
+            continue
+        chain.append(name)
+    return tuple(chain)
+
+
+def _client(timeout: float) -> httpx.AsyncClient:
+    return httpx.AsyncClient(
+        timeout=timeout,
+        headers={"User-Agent": USER_AGENT},
+        follow_redirects=True,
+    )
+
+
+async def _attempt(
+    name: str,
+    client: httpx.AsyncClient | None,
+    config: WebSearchConfig,
+    query: str,
+    limit: int,
+) -> list[SearchHit]:
+    if name == "ddgs":
+        return await _ddgs(config, query, limit)
+    adapter = ADAPTERS.get(name)
+    if adapter is None:
+        raise ProviderError("unknown_provider")
+    if client is None:
+        raise ProviderError("client_missing")
+    return await adapter(client, config, query, limit)
+
+
+async def _search_chain(
+    config: WebSearchConfig,
+    client: httpx.AsyncClient | None,
+    query: str,
+    limit: int,
+) -> list[SearchHit]:
+    for name in provider_chain(config):
+        try:
+            hits = await _attempt(name, client, config, query, limit)
+        except Exception as exc:  # one provider's failure moves to the next, never aborts
+            log.warning("search provider=%s status=failed reason=%s", name, _reason(exc))
+            continue
+        log.info("search provider=%s status=ok reason=results_%d", name, len(hits))
+        return hits
+    return []
 
 
 async def search(ctx: ToolContext, query: str, limit: int) -> list[dict]:
@@ -130,13 +506,17 @@ async def search(ctx: ToolContext, query: str, limit: int) -> list[dict]:
     text = str(query or "").strip()
     if not text:
         return []
+    config = ctx.config.web_search
+    chain = provider_chain(config)
+    if not chain:
+        return []
     count = min(10, max(1, int(limit)))
-    results = await _searx(ctx.config, text, count)
-    if not results:
-        results = await asyncio.to_thread(
-            _search_sync, text, count, ctx.config.web_search.region
-        )
-    return results
+    if any(name in HTTP_PROVIDERS for name in chain):
+        async with _client(config.timeout_seconds) as client:
+            hits = await _search_chain(config, client, text, count)
+    else:
+        hits = await _search_chain(config, None, text, count)
+    return [hit.as_dict() for hit in hits]
 
 
 def _quote(hit: dict) -> str:

@@ -182,7 +182,12 @@ async def recover(agent) -> int:
     for row in selected:
         thread = str(row["thread_id"])
         turn_id = str(row["id"])
-        message = await io.run(agent.history.find, thread, turn_id)
+        # ADR-0001 §4.3: `turns.id` is namespaced; the archive row is keyed by the raw id
+        # `turns.message_id` keeps beside it.
+        message_id = str(row.get("message_id") or "") or await io.run(
+            agent.turns.message_id, turn_id
+        )
+        message = await io.run(agent.history.find, thread, message_id)
         if message is None:
             agent.turns.expire(turn_id, "resume: message missing")
             continue
@@ -222,7 +227,8 @@ async def recover(agent) -> int:
             actor=str(row.get("person_id") or ""),
             kind=MESSAGE,
             payload=message,
-            hints={},
+            # ADR-0001/ADR-0003: a resumed turn keeps the body's original percept hints.
+            hints=dict(row.get("hints") or {}),
         )
         agent._resume_times.append(time.time())
         agent.spawn(agent.handle(inbound, gateway, claimed=row))
@@ -273,7 +279,11 @@ class Supervisor:
             lease=lease,
             ask_dispute=getattr(getattr(agent, "privacy", None), "ask_dispute", None),
             propose=(
-                self.automations.store.propose if self.automations is not None else None
+                lambda manifest, thread: self.automations.store.propose(
+                    agent, manifest, thread_id=thread
+                )
+                if self.automations is not None
+                else None
             ),
         )
         self.agent.cognition = self.cognition
@@ -330,6 +340,11 @@ class Supervisor:
     async def activate(self, holder) -> None:
         self.agent.draining = False
         self.agent.mode = "primary"
+        # ADR-0008 §4.3: only the primary mirrors the soul's rules; a standby boot writes nothing.
+        try:
+            self.agent._sync_soul_rules()
+        except Exception:
+            log.exception("soul rule sync failed; continuing")
         runtime = self.agent.runtime
         runtime.mode = "primary"
         runtime.phase = "running"

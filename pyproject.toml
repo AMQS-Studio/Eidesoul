@@ -16,7 +16,6 @@ dependencies = [
   "mcp>=2.3,<3",
   "PyYAML>=6",
   "ddgs>=9",
-  "mem0ai>=2.2,<3",
   "sentence-transformers>=5.2,<6",
   # ADR-0038 §4.1/§5.1: local entity layer. spaCy model packages are not on PyPI, so the
   # verified multilingual model is a direct wheel; the fragment pins its sha256.
@@ -58,13 +57,18 @@ include = ["monoagens*"]
 [tool.setuptools.package-data]
 monoagens = ["lang/*.yaml", "library/affect/*.json", "library/privacy/*.json", "library/safety/*.json", "library/style/*.json", "library/lexicon/*.json", "library/intent/*.json"]
 
+# The Alembic chain ships as data: a wheel install can run `monoagens db upgrade` without a
+# checkout. `engine.db` locates the chain beside the installed package.
+[tool.setuptools.data-files]
+"migrations" = ["migrations/env.py", "migrations/baseline.py", "migrations/script.py.mako"]
+"migrations/versions" = ["migrations/versions/*.py"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 
 [tool.ruff]
 line-length = 100
 target-version = "py314"
-extend-exclude = ["monoagens/vendor"]
 
 [tool.ruff.lint]
 select = [
@@ -94,8 +98,6 @@ max-complexity = 12
 "**/decision.py" = ["E501"]
 # Regex literals cannot be wrapped without changing the pattern.
 "**/patterns.py" = ["E501"]
-# Spreadsheet XML parts are literal content.
-"scripts/xlsx.py" = ["E501"]
 # `scripts/` puts the repo on sys.path before importing the package it enables.
 "scripts/**" = ["E402"]
 "migrations/env.py" = ["E402"]
@@ -104,7 +106,7 @@ max-complexity = 12
 # The list is per file on purpose, so a new module is still held to the rule. ADR-0037 §4.3
 # moved `Agent._run_turn`/`Agent._handle_message` verbatim into `turn/loop.py` and
 # `turn/intake.py`: the debt follows the function, not the file it used to sit in.
-"monoagens/__main__.py" = ["C901", "PLR0912", "PLR0915"]
+"monoagens/cli.py" = ["C901", "PLR0912", "PLR0915"]
 "monoagens/engine/agent.py" = ["C901", "PLR0912", "PLR0915"]
 "monoagens/engine/turn/loop.py" = ["C901", "PLR0912", "PLR0915"]
 "monoagens/engine/turn/intake.py" = ["C901", "PLR0912", "PLR0915"]
@@ -112,11 +114,10 @@ max-complexity = 12
 "monoagens/engine/commands/approve.py" = ["C901", "PLR0912", "PLR0915"]
 "monoagens/engine/commands/help.py" = ["C901", "PLR0912"]
 "monoagens/engine/commands/memory.py" = ["C901", "PLR0912"]
-"monoagens/engine/config.py" = ["C901", "PLR0912", "PLR0915"]
+"monoagens/engine/config/load_config.py" = ["C901", "PLR0912", "PLR0915"]
 "monoagens/engine/registry.py" = ["C901", "PLR0912"]
-"monoagens/engine/plugins.py" = ["C901", "PLR0912"]
+"monoagens/engine/plugins/manifest.py" = ["C901", "PLR0912"]
 "monoagens/gateways/whatsapp/cli.py" = ["PLR0915"]
-"scripts/neutral.py" = ["C901", "PLR0912"]
 "monoagens/engine/turn/reply.py" = ["C901"]
 "monoagens/engine/stores/affect.py" = ["C901", "PLR0912", "PLR0915"]
 "monoagens/engine/stores/recipes.py" = ["C901", "PLR0912"]
@@ -129,8 +130,6 @@ max-complexity = 12
 "monoagens/gateways/whatsapp/gateway.py" = ["C901", "PLR0915"]
 "monoagens/gateways/whatsapp/tools/chat_history.py" = ["C901", "PLR0912"]
 "monoagens/gateways/whatsapp/tools/send_to.py" = ["C901", "PLR0912"]
-"scripts/ablate.py" = ["PLR0915"]
-"scripts/ablate_engine.py" = ["PLR0915"]
 
 [tool.coverage.run]
 branch = true
@@ -138,15 +137,15 @@ source = ["monoagens"]
 
 [tool.pyright]
 include = ["monoagens", "scripts"]
-exclude = ["monoagens/vendor", "**/__pycache__"]
+exclude = ["**/__pycache__"]
 typeCheckingMode = "basic"
 pythonVersion = "3.14"
 venvPath = "."
 venv = ".venv"
 
 [tool.uv]
-# Mem0 pins protobuf<7 while Neonize needs >=6.32.1; both are core-adjacent installs, so one
-# protobuf that satisfies Neonize is forced instead of letting the cap win.
+# Neonize needs protobuf>=6.32.1; one version that satisfies it is forced instead of letting
+# an older transitive cap win.
 override-dependencies = ["protobuf>=7"]
 
 [[tool.uv.index]]

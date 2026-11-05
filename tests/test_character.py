@@ -6,7 +6,12 @@ from dataclasses import replace
 
 from support import build_config
 
-from monoagens.engine.character.character import needs_polish, polish, unwrap_quotes
+from monoagens.engine.character.character import (
+    _numeric_signature,
+    needs_polish,
+    polish,
+    unwrap_quotes,
+)
 from monoagens.engine.soul import CharacterConfig
 
 NATURAL = "capeknya di bagian mana?"
@@ -37,7 +42,7 @@ def test_wrapped_quotes_are_unwrapped_without_backtracking() -> None:
 def config_with(tmp_path, **character):
     settings = CharacterConfig(enabled=True, **character)
     config = build_config(tmp_path)
-    voice = replace(config.soul.voice, enabled=True, character=settings)
+    voice = replace(config.soul.voice, character=settings)
     return replace(config, soul=replace(config.soul, voice=voice))
 
 
@@ -123,3 +128,46 @@ def test_fenced_draft_is_never_rewritten(tmp_path) -> None:
 
     assert run_polish(config_with(tmp_path), llm, draft) == draft
     assert llm.calls == 0
+
+
+def test_numeric_signature_collects_numbers_times_dates_and_amounts() -> None:
+    signature = _numeric_signature(
+        "Rapat 2026-11-05 jam 14:30, biaya Rp50.000 naik 2,5% untuk 3 orang."
+    )
+
+    assert signature == ("14:30", "2,5%", "2026-11-05", "3", "rp50.000")
+
+
+def test_a_rewrite_that_moves_a_time_is_discarded(tmp_path) -> None:
+    draft = "Tentu! Rapat kita jam 14:30 di lantai 3, jangan lupa bawa draf."
+    rewrite = "rapat jam 15:30 di lantai 3, jangan lupa bawa draf"
+
+    assert run_polish(config_with(tmp_path), StubLLM(rewrite), draft) == draft
+
+
+def test_a_rewrite_that_turns_a_percentage_into_words_is_discarded(tmp_path) -> None:
+    draft = "Tentu! Diskonnya 50% untuk semua pesanan hari ini ya."
+    rewrite = "diskonnya separuh untuk semua pesanan hari ini ya"
+
+    assert run_polish(config_with(tmp_path), StubLLM(rewrite), draft) == draft
+
+
+def test_a_rewrite_that_drops_a_number_is_discarded(tmp_path) -> None:
+    draft = "Tentu! Aku pesankan 3 kursi untuk acara besok pagi."
+    rewrite = "aku pesankan kursi untuk acara besok pagi"
+
+    assert run_polish(config_with(tmp_path), StubLLM(rewrite), draft) == draft
+
+
+def test_a_rewrite_that_invents_a_number_is_discarded(tmp_path) -> None:
+    draft = "Tentu! Aku pesankan kursi untuk acara besok pagi."
+    rewrite = "aku pesankan 12 kursi untuk acara besok pagi"
+
+    assert run_polish(config_with(tmp_path), StubLLM(rewrite), draft) == draft
+
+
+def test_a_rewrite_that_keeps_every_number_is_accepted(tmp_path) -> None:
+    draft = "Tentu! Rapat jam 14:30, diskon 50% berlaku hari ini."
+    rewrite = "rapat jam 14:30 ya, diskon 50% berlaku hari ini"
+
+    assert run_polish(config_with(tmp_path), StubLLM(rewrite), draft) == rewrite

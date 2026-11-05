@@ -6,7 +6,7 @@
 - **Context:** Re-baselined for v0.1.0; consolidates foundational architectural invariants, intra-deployment namespace isolation, and configuration authority (pre-rebaseline 0000, 0035, 0040, 0048, 0053).
 - **Supersedes:** pre-rebaseline 0000, 0035, 0040, 0048
 - **Related:** ADR-0002 (memory), ADR-0003 (turn lifecycle), ADR-0004 (tools)
-- **Implementation:** partial — single lease constraint, gateway isolation, and engine seam are active; intra-deployment turn key namespacing and standby boot fixes are scheduled in Phase P0/P1.
+- **Implementation:** implemented — single-lease constraint and gateway isolation are enforced by tests; standby boot writes zero rows, a resumed `per_…` actor keeps its identity, and turn keys are namespaced per gateway/thread.
 
 ---
 

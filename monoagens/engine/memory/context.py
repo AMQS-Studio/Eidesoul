@@ -1,9 +1,7 @@
 """Cross-chat memory query: global + sender person + active chat, then render the prompt block."""
 
 
-import asyncio
 import logging
-import time
 
 from .. import clock
 from . import MemoryContext
@@ -12,9 +10,6 @@ log = logging.getLogger(__name__)
 
 SCOPES = ("global", "person", "thread")
 HEADER = "Long-term memory (cross-chat):"
-CHAT_BOOST = 0.15
-RECENCY_BOOST = 0.1
-TIMEOUT = 2.5
 
 
 def _dedupe(hits: list) -> list:
@@ -34,17 +29,6 @@ def _dedupe(hits: list) -> list:
     return list(found.values())
 
 
-def _boost(hit, thread_id: str, now: float | None = None) -> float:
-    score = float(getattr(hit, "score", 0.0) or 0.0)
-    if thread_id and getattr(hit, "thread_id", "") == thread_id:
-        score += CHAT_BOOST
-    created = getattr(hit, "created_at", None)
-    if created:
-        age_days = max(0.0, (now or time.time()) - float(created)) / 86400.0
-        score += RECENCY_BOOST / (1.0 + age_days)
-    return score
-
-
 async def gather(
     backend,
     *,
@@ -54,26 +38,19 @@ async def gather(
     limit: int,
     scopes: tuple[str, ...] = SCOPES,
 ) -> list:
-    """Fetch three scopes in parallel; another person's memory is never requested."""
-    calls = []
-    for scope in scopes:
-        if scope == "person" and not person_id:
-            continue
-        if scope == "thread" and not thread_id:
-            continue
-        calls.append(backend._search_scope(scope, query, person_id, thread_id, limit))
-    if not calls:
+    """One hybrid retrieval for the three legal audiences; another person is never requested."""
+    try:
+        hits = await backend.search(
+            query,
+            person_id=person_id,
+            thread_id=thread_id,
+            limit=limit,
+            scopes=scopes,
+        )
+    except Exception as exc:  # a memory read never fails the turn
+        log.debug("memory search failed: %s", exc)
         return []
-    results = await asyncio.gather(*calls, return_exceptions=True)
-    hits: list = []
-    for result in results:
-        if isinstance(result, BaseException):
-            log.debug("memory scope failed: %s", result)
-            continue
-        hits.extend(result)
-    hits = _dedupe(hits)
-    hits.sort(key=lambda hit: _boost(hit, thread_id), reverse=True)
-    return hits
+    return _dedupe(list(hits))
 
 
 def _date(value, tz: str) -> str:

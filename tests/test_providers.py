@@ -22,7 +22,7 @@ def write_folder(tmp_path, llm: dict) -> None:
         "roles_file": "roles.yaml",
         "soul_file": "soul.yaml",
         "engine": {"llm": llm, "default_role": "guest"},
-        "gateways": {"cli": {"enabled": True, "role": "guest"}},
+        "gateways": {"whatsapp": {"enabled": True, "role": "guest"}},
     }
     (tmp_path / "config.yaml").write_text(yaml.safe_dump(body, sort_keys=False), encoding="utf-8")
     (tmp_path / "roles.yaml").write_text(yaml.safe_dump(ROLES, sort_keys=False), encoding="utf-8")
@@ -57,12 +57,13 @@ def test_partial_override_keeps_the_rest_from_the_provider():
     assert defaults.api_key_env == "AZURE_KEY"
 
 
-def test_anthropic_uses_its_openai_compatibility_layer():
+def test_anthropic_uses_the_native_messages_wire():
     name, defaults = resolve("anthropic", "", "")
 
     assert name == "anthropic"
     assert defaults.base_url == "https://api.anthropic.com/v1/"
     assert defaults.api_key_env == "ANTHROPIC_API_KEY"
+    assert defaults.wire == "anthropic"
 
 
 def test_opencode_lists_models_outside_its_chat_base_url():

@@ -10,7 +10,7 @@ the OpenAI wire stays an entry; a different protocol is selected by `wire` and h
 matching adapter in `engine/llm.py`, never by comparing a provider brand.
 """
 
-from .anthropic import ANTHROPIC
+from .anthropic import ANTHROPIC, AnthropicClient
 from .base import (
     WIRES,
     ProviderDefaults,
@@ -32,6 +32,18 @@ from .openai import (
     message_dict,
     normalize_response,
 )
+from .speech import (
+    REALTIME_PROVIDERS,
+    STT_PROVIDERS,
+    TTS_PROVIDERS,
+    RealtimeVoiceSession,
+    SpeechTarget,
+    STTProvider,
+    TTSProvider,
+    build_realtime,
+    build_stt,
+    build_tts,
+)
 
 PROVIDERS: dict[str, ProviderDefaults] = {
     "opencode": OPENCODE,
@@ -49,18 +61,31 @@ def build_client(wire: str, base_url: str, api_key: str, *, timeout: float):
     """Adapter selected by the wire name; the engine never imports a brand module."""
     if wire == "gemini":
         return GeminiClient(base_url, api_key, timeout=timeout)
+    if wire == "anthropic":
+        return AnthropicClient(base_url, api_key, timeout=timeout)
     raise ValueError(f"no native client for wire '{wire}'")
 
 
 __all__ = [
     "PROVIDERS",
+    "REALTIME_PROVIDERS",
+    "STT_PROVIDERS",
+    "TTS_PROVIDERS",
     "WIRES",
+    "AnthropicClient",
     "GeminiClient",
     "ProviderDefaults",
     "ProviderError",
     "ProviderResponse",
     "ProviderToolCall",
     "ProviderUsage",
+    "RealtimeVoiceSession",
+    "STTProvider",
+    "SpeechTarget",
+    "TTSProvider",
+    "build_realtime",
+    "build_stt",
+    "build_tts",
     "call_parts",
     "message_dict",
     "normalize_response",

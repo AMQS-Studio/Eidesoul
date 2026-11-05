@@ -5,11 +5,13 @@ import time
 from datetime import datetime
 from types import SimpleNamespace
 
-from sqlalchemy import select
+from sqlalchemy import select, text
 from sqlalchemy.dialects import postgresql
+from sqlalchemy.engine import make_url
 from support import database
+from support import test_dsn as store_dsn
 
-from monoagens.engine.db import SCHEMA_VERSION, redact_dsn
+from monoagens.engine.db import SCHEMA_VERSION, Database, redact_dsn
 from monoagens.engine.schema import documents, messages, schema_meta, state
 from monoagens.engine.stores.history import HistoryStore
 
@@ -161,7 +163,7 @@ def test_label_of_the_store_hides_the_password() -> None:
     db = database()
     try:
         assert db.label.startswith("postgresql://")
-        assert "monoagens_test" in db.label
+        assert make_url(store_dsn()).database in db.label
         assert "monoagens:monoagens" not in db.label
     finally:
         db.dispose()
@@ -174,4 +176,36 @@ def test_schema_version_is_recorded(tmp_path) -> None:
     version = db.fetch_one(select(schema_meta).where(schema_meta.c.key == "version"))
     assert version is not None
     assert version["value"] == str(SCHEMA_VERSION)
+
+
+def test_main_pool_uses_the_configured_size_and_overflow() -> None:
+    default = Database(store_dsn())
+    try:
+        assert default.engine.pool._max_overflow == 0
+    finally:
+        default.dispose()
+    db = Database(store_dsn(), pool_size=1, max_overflow=2)
+    try:
+        assert db.engine.pool.size() == 1
+        assert db.engine.pool._max_overflow == 2
+        with db.engine.connect(), db.engine.connect(), db.engine.connect():
+            assert db.engine.pool.overflow() == 2
+    finally:
+        db.dispose()
+
+
+def test_control_pool_is_separate_and_survives_a_saturated_turn_pool() -> None:
+    db = Database(store_dsn(), pool_size=1, max_overflow=0)
+    try:
+        assert db.control_engine is not db.engine
+        assert db.control_engine.pool.size() == 2
+        # The only turn-pool slot is busy; the heartbeat path still gets its own connection.
+        with db.connect() as held, db.control() as control:
+            assert control.execute(text("SELECT 1")).scalar() == 1
+            assert (
+                control.connection.dbapi_connection
+                is not held.connection.dbapi_connection
+            )
+    finally:
+        db.dispose()
 

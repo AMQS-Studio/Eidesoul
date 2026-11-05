@@ -1,7 +1,7 @@
 """Bounded thread executor for the synchronous seams inside the engine (ADR-0017 §4.1).
 
 The event loop renews the lease heartbeat; a synchronous DB query, an embedder call, or a
-blocking Mem0 call on that loop turns latency into a takeover. Everything that blocks is
+blocking memory call on that loop turns latency into a takeover. Everything that blocks is
 submitted here and awaited, never executed inline in an `async def`.
 """
 

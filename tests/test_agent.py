@@ -19,6 +19,7 @@ from support import (
 from monoagens.engine.config import ApprovalConfig
 from monoagens.engine.schema import people, person_links, thread_people, threads
 from monoagens.engine.soul import HumanizeConfig, render_persona
+from monoagens.engine.stores.turns import turn_identity
 from monoagens.engine.tools import execute
 
 DM = "628111@s.whatsapp.net"
@@ -119,7 +120,7 @@ def test_stale_burst_is_not_answered_twice(tmp_path) -> None:
     handle(env, inbound)
 
     assert len(env.gateway.sent) == 1
-    assert env.agent.turns.get("same")["status"] == "delivered"
+    assert env.agent.turns.get(turn_identity(env.gateway.name, DM, "same"))["status"] == "delivered"
 
 
 def test_auto_capture_runs_for_memory_role(tmp_path) -> None:
@@ -232,7 +233,7 @@ def test_shell_requires_approval_then_approve_executes(tmp_path) -> None:
             "owner": role("owner", tools=("*",), commands=("*",)),
             "member": role("member", tools=("shell",), commands=("*",)),
         },
-        approvals=ApprovalConfig(mode="yolo", sensitive_tools=("shell",)),
+        approvals=ApprovalConfig(mode="yolo", sensitive_commands=("*",)),
     )
     env.agent.llm = ToolLLM()
 
@@ -357,7 +358,7 @@ def test_partial_send_leaves_the_turn_resumable(tmp_path) -> None:
     handle(env, inbound)
 
     assert gateway.calls == 2
-    turn = env.agent.turns.get("burst-1")
+    turn = env.agent.turns.get(turn_identity(env.gateway.name, DM, "burst-1"))
     assert turn["status"] == "sending"
     assert turn["delivered_chunks"] == 1
 

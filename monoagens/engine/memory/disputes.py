@@ -5,20 +5,61 @@ Derivation stays in reflection (ADR-0010); functions take the facade first
 """
 
 import logging
+import re
 import time
 from collections.abc import Mapping, Sequence
 
-from sqlalchemy import select
+from sqlalchemy import or_, select
 
 from .. import clock
 from ..guard import SENSITIVE
-from ..schema import memories
+from ..schema import memories, memory_events
 from . import candidates, queries, records
 from .integrity import RULE_MIN_CORROBORATION_DAYS
 from .ledger import ActionLedger
 from .records import DAY, _digest, _flat, _marked_supersede
 
 log = logging.getLogger(__name__)
+
+# `refs` carries `message:<id>` evidence from intake and memory UUIDs from reflection; only the
+# latter is a value of `memories.id`, so one column is never asked to hold both (ADR-0010 §4.8).
+UUID_TEXT = re.compile(
+    r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$", re.IGNORECASE
+)
+
+
+def _evidence_count(store, refs: Sequence[str]) -> int:
+    """`ok` rows behind a staged row's refs (ADR-0010 §4.8).
+
+    A `message:<id>` ref is matched through `memory_events.message_id` and the other rows'
+    `refs`; only a bare 36-character UUID is compared with the `memories.id` column.
+    """
+    ids: list[str] = []
+    messages: list[str] = []
+    for ref in refs:
+        text = str(ref or "").strip()
+        if text.startswith("message:"):
+            message_id = text.split(":", 1)[1].strip()
+            if message_id:
+                messages.append(message_id)
+        elif UUID_TEXT.fullmatch(text):
+            ids.append(text)
+    if not ids and not messages:
+        return 0
+    clauses = []
+    if ids:
+        clauses.append(memories.c.id.in_(ids))
+    if messages:
+        events = select(memory_events.c.memory_id).where(
+            memory_events.c.message_id.in_(messages)
+        )
+        clauses.append(memories.c.id.in_(events))
+        clauses.extend(
+            memories.c.refs.contains([f"message:{item}"]) for item in messages
+        )
+    statement = select(memories.c.id).where(memories.c.state == "ok", or_(*clauses))
+    return len(store.db.fetch_all(statement))
+
 
 def resolve_supersede_candidate(store, memory_id: str, source_id: str) -> bool:
     """The novelty stage said "same topic": the new statement replaces the old row."""
@@ -461,12 +502,7 @@ def promote_staged(store, *, limit: int = 20) -> int:
         refs = [str(item) for item in row.get("refs") or []]
         if len(refs) < 2:
             continue
-        alive = store.db.fetch_all(
-            select(memories.c.id).where(
-                memories.c.id.in_(refs), memories.c.state == "ok"
-            )
-        )
-        if len(alive) < 2:
+        if _evidence_count(store, refs) < 2:
             continue
         if store.transition(str(row["id"]), "ok"):
             promoted += 1

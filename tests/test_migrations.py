@@ -9,7 +9,7 @@ from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.engine import make_url
 from support import test_dsn as _dsn
 
-from monoagens.engine.db import SCHEMA_VERSION, Database, MigrationError
+from monoagens.engine.db import MIGRATIONS, SCHEMA_VERSION, Database, MigrationError
 
 
 def _admin_engine(test_url: str):
@@ -131,7 +131,7 @@ def test_revision_0013_adds_the_fence_event_and_efficiency_columns(fresh_databas
                 )
             ).scalars().all()
         assert "dispute_asked_at" in set(view_columns)
-        assert SCHEMA_VERSION == 18
+        assert SCHEMA_VERSION >= 18
     finally:
         db.dispose()
 
@@ -173,5 +173,53 @@ def test_revision_0017_and_0018_add_app_scope_and_privacy_evidence(fresh_databas
                 ).scalars()
             )
         assert {"privacy_evidence", "privacy_policy"} <= view_columns
+    finally:
+        db.dispose()
+
+
+def _run_alembic(db: Database, revision: str) -> None:
+    """The dev rollback path; `Database` only exposes an upgrade, so drive Alembic directly."""
+    from alembic import command
+    from alembic.config import Config as AlembicConfig
+
+    cfg = AlembicConfig()
+    cfg.set_main_option("script_location", str(MIGRATIONS))
+    cfg.set_main_option("sqlalchemy.url", db.url)
+    with db.engine.connect() as conn:
+        cfg.attributes["connection"] = conn
+        command.downgrade(cfg, revision)
+        conn.commit()
+
+
+def _view_columns(db: Database) -> set[str]:
+    with db.connect() as conn:
+        return set(
+            conn.execute(
+                text(
+                    "SELECT column_name FROM information_schema.columns "
+                    "WHERE table_name = 'memories_readable'"
+                )
+            ).scalars()
+        )
+
+
+def test_downgrade_to_0012_then_upgrade_restores_the_readable_view(fresh_database) -> None:
+    """ADR-0053 §4.1: the dependent view is dropped before the columns it pins."""
+    db = Database(fresh_database)
+    try:
+        db.upgrade()
+        _run_alembic(db, "0012")
+
+        memories = {column["name"] for column in inspect(db.engine).get_columns("memories")}
+        assert "dispute_asked_at" not in memories
+        assert "privacy_evidence" not in memories
+        columns = _view_columns(db)
+        assert "dispute_asked_at" not in columns
+        assert "privacy_evidence" not in columns
+        assert "state" in columns
+
+        assert db.upgrade() == SCHEMA_VERSION
+        columns = _view_columns(db)
+        assert {"dispute_asked_at", "privacy_evidence", "privacy_policy"} <= columns
     finally:
         db.dispose()

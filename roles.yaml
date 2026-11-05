@@ -1,87 +1,106 @@
-roles:
-  administrator:
-    name: administrator
-    label: local
-    protected: true
-    description: Administrator of MonoAgens
-    priority: 100
-    users: []
-    tools:
-    - '*'
-    commands:
-    - '*'
-    memory_admin: true
-    gateways:
-      cli:
-        dm: true
-        groups: all
-        reply_to_bot: true
-    context: 'You are talking to the administrator of MonoAgens, who sets the direction,
-      permissions, and soul.
+# ============================================================================
+# MonoAgens role-based access control (roles.yaml)
+# Authoritative source of permissions; a missing entry denies by default.
+# ============================================================================
 
+# --- ROLE DEFINITIONS ---
+# Role definitions and membership; a missing role denies access.
+roles:
+
+  # --- ROLE: administrator ---
+  # Role block 'administrator'; a missing role denies access.
+  administrator:
+    # Canonical role name; it must match the block key.
+    name: administrator
+    # Optional display label for status lines and logs.
+    label: local
+    # Locked role: it cannot be deleted, renamed, or merged by /link (ADR-0022).
+    protected: true
+    # One line the operator reads in `monoagens people list`.
+    description: Administrator of MonoAgens
+    # Higher wins when one person holds several roles; ties order by name.
+    priority: 100
+    # per_… person ids holding this role; `monoagens people add` fills it.
+    users: []
+    # Tool name patterns this role may call; '*' means every tool.
+    tools:
+      - '*'
+    # Chat command patterns this role may run; '*' means every command.
+    commands:
+      - '*'
+    # Allow memory maintenance across scopes, not only the holder's own.
+    memory_admin: true
+    # Per-gateway access policy; each gateway owns its own keys (ADR-0046).
+    gateways: {}
+    # Extra instructions injected into the prompt when this role speaks.
+    context: |
+      You are talking to the administrator of MonoAgens, who sets the direction, permissions, and soul.
       Allows corrections, config/soul changes, and full reports.
 
-      '
+  # --- ROLE: member ---
+  # Role block 'member'; a missing role denies access.
   member:
+    # Canonical role name; it must match the block key.
     name: member
+    # Optional display label for status lines and logs.
     label: ''
+    # One line the operator reads in `monoagens people list`.
     description: Member of this deployment
+    # Higher wins when one person holds several roles; ties order by name.
     priority: 10
+    # per_… person ids holding this role; `monoagens people add` fills it.
     users: []
+    # Tool name patterns this role may call; '*' means every tool.
     tools:
-    - read
-    - grep
-    - fetch
-    - web_search
-    - chat_history
-    - memory
-    - info
+      - read
+      - grep
+      - fetch
+      - web_search
+      - thread_history
+      - memory
+      - info
+    # Chat command patterns this role may run; '*' means every command.
     commands:
-    - help
-    - ping
-    - link
-    - unlink
-    - whoami
-    - status
-    - tools
+      - help
+      - ping
+      - link
+      - unlink
+      - whoami
+      - status
+      - tools
+    # Allow memory maintenance across scopes, not only the holder's own.
     memory_admin: false
-    gateways:
-      cli:
-        dm: true
-        groups: mention
-        reply_to_bot: true
-    context: 'You are talking to a member. Help with their work without opening new
-      permissions.
+    # Per-gateway access policy; each gateway owns its own keys (ADR-0046).
+    gateways: {}
+    # Extra instructions injected into the prompt when this role speaks.
+    context: |
+      You are talking to a member. Help with their work without opening new permissions.
 
-      '
+  # --- ROLE: guest ---
+  # Role block 'guest'; a missing role denies access.
   guest:
+    # Canonical role name; it must match the block key.
     name: guest
+    # Optional display label for status lines and logs.
     label: ''
+    # One line the operator reads in `monoagens people list`.
     description: Unknown sender
+    # Higher wins when one person holds several roles; ties order by name.
     priority: 0
+    # per_… person ids holding this role; `monoagens people add` fills it.
     users: []
-    tools:
-    - read
-    - grep
-    - fetch
-    - web_search
-    - chat_history
-    - info
+    # Tool name patterns this role may call; '*' means every tool.
+    tools: []
+    # Chat command patterns this role may run; '*' means every command.
     commands:
-    - help
-    - ping
-    - link
-    - unlink
-    - whoami
-    - status
-    - tools
+      - help
+      - ping
+      - link
+      - whoami
+    # Allow memory maintenance across scopes, not only the holder's own.
     memory_admin: false
-    gateways:
-      cli:
-        dm: false
-        groups: none
-        reply_to_bot: false
-    context: 'You do not know this person yet. Stay polite and never open another
-      chat''s data.
-
-      '
+    # Per-gateway access policy; each gateway owns its own keys (ADR-0046).
+    gateways: {}
+    # Extra instructions injected into the prompt when this role speaks.
+    context: |
+      You do not know this person yet. Stay polite and never open another chat's data.

@@ -33,7 +33,11 @@ language: {language}
 locale: {locale}
 timezone: {timezone}
 pronouns: ""
-role: assistant
+mode: assistant
+modes:
+  - assistant
+  - companion
+  - advisor
 
 background: |
   MonoAgens is a persistent agent: it keeps context across conversations, learns from memory,
@@ -44,9 +48,8 @@ persona: |
   Direct, calm, and curious. Says what it knows, names what it does not, and asks before
   acting outside its scope. Helpful without being performative.
 
-# Voice tuning: behavior lives here, not in engine config. The master is off by default.
+# Voice tuning: behavior lives here, not in engine config; each block governs itself.
 voice:
-  enabled: {voice_enabled}
   sampling:
     daily_temperature: 0.9
     professional_temperature: 0.3
@@ -128,10 +131,18 @@ class HumanizeConfig:
 
 
 @dataclass(frozen=True)
-class VoiceConfig:
-    """One section and one master switch; sampling/profanity/safety are request-level."""
+class VoiceSpeechConfig:
+    """P3.4 §2: names only. Endpoints and keys live in `engine.speech`, never in the soul."""
 
     enabled: bool = False
+    stt: str = ""
+    tts: str = ""
+
+
+@dataclass(frozen=True)
+class VoiceConfig:
+    """Each sub-block governs itself; sampling/profanity/safety are request-level."""
+
     sampling: SamplingConfig = field(default_factory=SamplingConfig)
     affect: AffectConfig = field(default_factory=AffectConfig)
     style: StyleConfig = field(default_factory=StyleConfig)
@@ -139,6 +150,9 @@ class VoiceConfig:
     humanize: HumanizeConfig = field(default_factory=HumanizeConfig)
     profanity: str = "avoid"
     safety: str = "inherit"
+    # A plain default, not a factory: the provider seam is no `voice_parts` toggle, and the
+    # catalog indexes only sub-blocks that expose a factory-built `enabled` switch.
+    speech: VoiceSpeechConfig = VoiceSpeechConfig()
 
 
 @dataclass(frozen=True)
@@ -149,8 +163,8 @@ class Soul:
     name: str = "MonoAgens"
     description: str = ""
     pronouns: str = ""
-    role: str = "assistant"
-    roles: tuple[str, ...] = ("assistant",)
+    mode: str = "assistant"
+    modes: tuple[str, ...] = ("assistant",)
     background: str = ""
     persona: str = ""
     voice: VoiceConfig = field(default_factory=VoiceConfig)
@@ -278,6 +292,77 @@ def _section(raw: object) -> Mapping[str, object]:
     return raw if isinstance(raw, Mapping) else {}
 
 
+# ADR-0008 §4.4: a mistyped soul key fails at boot instead of being silently ignored.
+SOUL_SCHEMA: dict[str, object] = {
+    "name": None,
+    "description": None,
+    "language": None,
+    "locale": None,
+    "timezone": None,
+    "pronouns": None,
+    "mode": None,
+    "modes": None,
+    "role": None,
+    "roles": None,
+    "background": None,
+    "persona": None,
+    "examples": None,
+    "rules": None,
+    "voice": {
+        "sampling": {
+            "daily_temperature": None,
+            "professional_temperature": None,
+            "top_p": None,
+            "top_k": None,
+            "min_p": None,
+        },
+        "affect": {
+            "enabled": None,
+            "volatility": None,
+            "grudge_half_life_hours": None,
+            "vibe": {
+                "enabled": None,
+                "attack": None,
+                "baseline_influence": None,
+                "hold_seconds": None,
+                "tick_seconds": None,
+            },
+        },
+        "style": {"enabled": None, "max_chars": None},
+        "character": {"enabled": None, "max_chars": None, "max_tokens": None, "temperature": None},
+        "humanize": {
+            "enabled": None,
+            "cpms": None,
+            "min_delay": None,
+            "max_delay": None,
+            "between_delay": None,
+            "max_bubbles": None,
+            "reaction_stickers": None,
+        },
+        "profanity": None,
+        "safety": None,
+        "speech": {"enabled": None, "stt": None, "tts": None},
+    },
+}
+
+
+def _unknown_keys(mapping: Mapping, schema: Mapping[str, object], label: str, path: str) -> None:
+    """Reject an unknown soul key and name the file; a list entry is not a mapping."""
+    found: list[str] = []
+    for key, value in mapping.items():
+        if key not in schema:
+            found.append(f"{label}.{key}")
+            continue
+        nested = schema[key]
+        if isinstance(nested, dict) and isinstance(value, Mapping):
+            _unknown_keys(value, nested, f"{label}.{key}", path)
+    if found:
+        raise ValueError(
+            f"{path}: unknown soul key(s): {', '.join(sorted(found))}; remove them or fix "
+            "the spelling"
+        )
+
+
 def _sampling(raw: object) -> SamplingConfig:
     body = _section(raw)
     return SamplingConfig(
@@ -373,7 +458,6 @@ def _humanize(raw: object) -> HumanizeConfig:
 def _voice(raw: object) -> VoiceConfig:
     body = _section(raw)
     return VoiceConfig(
-        enabled=_bool(body.get("enabled"), False),
         sampling=_sampling(body.get("sampling")),
         affect=_affect(body.get("affect")),
         style=_style(body.get("style")),
@@ -381,6 +465,17 @@ def _voice(raw: object) -> VoiceConfig:
         humanize=_humanize(body.get("humanize")),
         profanity=_choice(body.get("profanity"), "avoid", PROFANITY, "voice.profanity"),
         safety=_choice(body.get("safety"), "inherit", SAFETY, "voice.safety"),
+        speech=_voice_speech(body.get("speech")),
+    )
+
+
+def _voice_speech(raw: object) -> VoiceSpeechConfig:
+    """Names are normalized here; `engine.config` decides whether they are configured."""
+    body = _section(raw)
+    return VoiceSpeechConfig(
+        enabled=_bool(body.get("enabled"), False),
+        stt=_text(body.get("stt")).lower().replace("-", "_"),
+        tts=_text(body.get("tts")).lower().replace("-", "_"),
     )
 
 
@@ -415,9 +510,9 @@ def render_persona(soul: Soul) -> str:
     lines = [f"# {soul.name}"]
     if soul.description:
         lines.append(soul.description)
-    lines.append(f"Active role: {soul.role}")
-    if len(soul.roles) > 1:
-        lines.append(f"Available roles: {', '.join(soul.roles)}")
+    lines.append(f"Active mode: {soul.mode}")
+    if len(soul.modes) > 1:
+        lines.append(f"Available modes: {', '.join(soul.modes)}")
     if soul.locale:
         lines.append(f"Locale: {soul.locale}")
     if soul.background:
@@ -457,15 +552,25 @@ def load_soul(
     *,
     source_path: Path | None = None,
 ) -> Soul:
-    """Load and validate one soul definition; unknown keys are ignored."""
+    """Load and validate one soul definition; an unknown key is a load error."""
     raw = _mapping(source)
+    _unknown_keys(raw, SOUL_SCHEMA, "soul", str(source_path or "soul.yaml"))
     name = _text(raw.get("name")) or "MonoAgens"
-    role = _text(raw.get("role")) or "assistant"
-    roles = tuple(_text(item) for item in raw.get("roles") or () if _text(item))
-    if not roles:
-        roles = (role,)
-    if role not in roles:
-        roles = (role, *roles)
+    # ADR-0006 §4.1: persona modes are not RBAC roles; `role`/`roles` stay a deprecated alias.
+    legacy = "role" in raw or "roles" in raw
+    mode = _text(raw.get("mode")) or _text(raw.get("role")) or "assistant"
+    modes = tuple(
+        _text(item) for item in (raw.get("modes") or raw.get("roles") or ()) if _text(item)
+    )
+    if legacy and not ("mode" in raw or "modes" in raw):
+        log.warning(
+            "%s: soul.role/soul.roles are deprecated; rename them to mode/modes",
+            source_path or "soul.yaml",
+        )
+    if not modes:
+        modes = (mode,)
+    if mode not in modes:
+        modes = (mode, *modes)
     for key in ("language", "locale", "timezone"):
         if not _text(raw.get(key)):
             raise ValueError(f"soul {key} is required; `monoagens init` writes it")
@@ -474,8 +579,8 @@ def load_soul(
         description=_text(raw.get("description")),
         language=normalize_language(raw.get("language")),
         pronouns=_text(raw.get("pronouns")),
-        role=role,
-        roles=roles,
+        mode=mode,
+        modes=modes,
         locale=_text(raw.get("locale")),
         timezone=_text(raw.get("timezone")),
         background=_text(raw.get("background")),
@@ -490,8 +595,8 @@ def load_soul(
         description=soul.description,
         language=soul.language,
         pronouns=soul.pronouns,
-        role=soul.role,
-        roles=soul.roles,
+        mode=soul.mode,
+        modes=soul.modes,
         locale=soul.locale,
         timezone=soul.timezone,
         background=soul.background,

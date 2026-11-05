@@ -7,6 +7,7 @@ when the run is due.
 """
 
 import time
+from datetime import datetime
 
 from ..config import AutomationConfig, parse_quiet_hours
 from ..schema import AUTOMATION_STEP_KINDS
@@ -31,6 +32,13 @@ class StepError(Exception):
 
 class StepSkipped(Exception):
     """The step asked for consent or the condition was not met: a `skipped` run."""
+
+
+# P3.4 §3: `/task` and the `task` tool speak these three words; the automation event carries
+# the marker so a stored row and a listing agree on what the schedule means.
+TASK_SCHEDULE_KINDS = ("cron", "at", "goal")
+TASK_STEPS: tuple[dict, ...] = ({"kind": "compose"}, {"kind": "send", "to": "owner_dm"})
+INTERVAL_UNITS = {"s": 1, "m": 60, "h": 3600, "d": DAY}
 
 
 def _mapping(value: object) -> dict:
@@ -100,6 +108,11 @@ def _validate_event(raw: object, config: AutomationConfig) -> dict:
         # ADR-0014 §4.3: the sink queues a run per matching message; there is no clock.
         event.update(_message_event(raw))
         return event
+    marker = str(raw.get("schedule_kind") or "").strip().lower()
+    if marker:
+        if marker not in TASK_SCHEDULE_KINDS:
+            raise ManifestError("event.schedule_kind must be 'cron', 'at', or 'goal'")
+        event["schedule_kind"] = marker
     _schedule_event(raw, event, config)
     for field in ("start", "until"):
         found = _date(raw.get(field), field)
@@ -392,6 +405,187 @@ def describe(manifest: dict) -> str:
         f"{when}; {steps}; budget {policy['budget_per_day']}/day; "
         f"quiet {policy['quiet_hours']} ({policy['quiet']}); owner {manifest['owner']}"
     )
+
+
+# P3.4 §3: one `/task` request becomes one ordinary automation manifest. The facade adds no
+# scheduler, no run table, and no delivery: quiet hours, budgets, and the step log stay in the
+# automation engine, and this translation is the only thing a task adds.
+
+
+def task_manifest(
+    spec: object,
+    config: AutomationConfig,
+    *,
+    now: float | None = None,
+    timezone: str = "",
+) -> dict:
+    """Translate one task request into the validated manifest the automation store stores."""
+    if not isinstance(spec, dict):
+        raise ManifestError("the task must be a mapping")
+    kind = str(spec.get("schedule_kind") or "cron").strip().lower()
+    if kind not in TASK_SCHEDULE_KINDS:
+        raise ManifestError("schedule_kind must be 'cron', 'at', or 'goal'")
+    moment = time.time() if now is None else float(now)
+    event = _task_event(kind, spec, config, moment, timezone)
+    return validate_manifest(
+        {
+            "owner": str(spec.get("owner") or "").strip(),
+            "name": str(spec.get("name") or "").strip(),
+            "event": event,
+            "condition": _task_condition(kind, spec.get("condition")),
+            "steps": spec.get("steps") or list(TASK_STEPS),
+            "policy": _task_policy(spec, event, config),
+        },
+        config,
+    )
+
+
+def _task_event(
+    kind: str, spec: dict, config: AutomationConfig, now: float, timezone: str
+) -> dict:
+    event: dict[str, object] = {
+        "kind": "schedule",
+        "tz": str(spec.get("timezone") or timezone or "").strip(),
+        "schedule_kind": kind,
+    }
+    if kind == "at":
+        return _task_once(spec, event, now)
+    if spec.get("at") and spec.get("every"):
+        raise ManifestError("a task takes 'at' times or an 'every' interval, not both")
+    if spec.get("every"):
+        event["every"] = _task_interval(spec.get("every"))
+        _task_days(spec, event)
+        return event
+    if spec.get("at"):
+        return _task_clock(spec, event)
+    if kind == "goal":
+        event["every"] = _default_interval(config)
+        return event
+    raise ManifestError("a cron task needs 'at' times or an 'every' interval")
+
+
+def _task_once(spec: dict, event: dict, now: float) -> dict:
+    """One absolute moment: `start`/`until` pin the day, `count: 1` stops after it."""
+    moment = _task_moment(spec.get("at") or spec.get("on"), event["tz"], now)
+    if moment.timestamp() <= float(now):
+        raise ManifestError("an 'at' task must name a moment in the future")
+    day = moment.date().isoformat()
+    event["start"] = day
+    event["until"] = day
+    event["at"] = [moment.strftime("%H:%M")]
+    event["count"] = 1
+    return event
+
+
+def _task_clock(spec: dict, event: dict) -> dict:
+    times = _task_times(spec.get("at"))
+    if not times:
+        raise ManifestError("a cron task needs at least one HH:MM time")
+    event["at"] = times
+    _task_days(spec, event)
+    return event
+
+
+def _task_days(spec: dict, event: dict) -> None:
+    if spec.get("days") not in (None, ""):
+        event["days"] = spec["days"]
+
+
+def _task_moment(value: object, tz: str, now: float):
+    if isinstance(value, (list, tuple)):
+        if len(value) != 1:
+            raise ManifestError("an 'at' task names exactly one moment")
+        value = value[0]
+    text = str(value or "").strip()
+    if not text:
+        raise ManifestError("an 'at' task needs a date and time")
+    zoneinfo = zone(tz)
+    for pattern in ("%Y-%m-%dT%H:%M", "%Y-%m-%d %H:%M", "%Y-%m-%dT%H:%M:%S"):
+        try:
+            return datetime.strptime(text, pattern).replace(tzinfo=zoneinfo)
+        except ValueError:
+            continue
+    if len(text) == 5 and text[2] == ":":
+        try:
+            hour, minute = int(text[:2]), int(text[3:])
+        except ValueError as exc:
+            raise ManifestError(f"invalid time: {text}") from exc
+        today = datetime.fromtimestamp(float(now), zoneinfo)
+        return today.replace(hour=hour, minute=minute, second=0, microsecond=0)
+    raise ManifestError("the 'at' moment must be YYYY-MM-DD HH:MM")
+
+
+def _task_times(value: object) -> list[str]:
+    if isinstance(value, (list, tuple)):
+        items = [str(item).strip() for item in value]
+    else:
+        items = [part.strip() for part in str(value or "").replace(" ", "").split(",")]
+    return [item for item in items if item]
+
+
+def _task_interval(value: object) -> int:
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        return int(value)
+    text = str(value or "").strip().lower()
+    if not text:
+        raise ManifestError("'every' needs a duration such as 30m, 2h, or 1d")
+    try:
+        return int(float(text))
+    except ValueError:
+        pass
+    unit = INTERVAL_UNITS.get(text[-1])
+    if unit is None:
+        raise ManifestError("'every' needs seconds or a duration such as 30m, 2h, or 1d")
+    try:
+        return int(float(text[:-1]) * unit)
+    except ValueError as exc:
+        raise ManifestError(
+            "'every' needs seconds or a duration such as 30m, 2h, or 1d"
+        ) from exc
+
+
+def _default_interval(config: AutomationConfig) -> float:
+    """A goal checks often enough to be useful, never more often than the config allows."""
+    per_day = max(1, int(config.max_occurrences_per_day))
+    return max(3600, DAY // per_day)
+
+
+def _task_condition(kind: str, raw: object):
+    """A string is a natural-language check; the closed filter mapping passes through."""
+    if raw in (None, ""):
+        if kind == "goal":
+            raise ManifestError(
+                "a goal task needs a condition; use schedule_kind 'cron' otherwise"
+            )
+        return None
+    condition = {"kind": "nl", "text": str(raw).strip()} if isinstance(raw, str) else raw
+    if kind == "goal" and not _condition_present(condition):
+        raise ManifestError("a goal task needs a condition that can be checked")
+    return condition
+
+
+def _condition_present(condition: object) -> bool:
+    if not isinstance(condition, dict) or not condition:
+        return False
+    if set(condition) == {"all"}:
+        return bool(condition.get("all"))
+    if set(condition) == {"any"}:
+        return bool(condition.get("any"))
+    return True
+
+
+def _task_policy(spec: dict, event: dict, config: AutomationConfig) -> dict:
+    policy = dict(spec["policy"]) if isinstance(spec.get("policy"), dict) else {}
+    for key in ("budget_per_day", "quiet_hours", "quiet", "on_error"):
+        if spec.get(key) not in (None, ""):
+            policy[key] = spec[key]
+    if "budget_per_day" not in policy and event.get("every"):
+        per_day = max(1, int(DAY / int(event["every"])))
+        policy["budget_per_day"] = min(
+            int(config.max_occurrences_per_day),
+            max(int(config.default_budget_per_day), per_day),
+        )
+    return policy
 
 
 def evaluate_condition(condition: dict, facts: dict) -> bool:

@@ -33,6 +33,8 @@ LIST_KEYS = (
     "research_high_stakes",
     "research_challenge",
 )
+# ADR-0006 §4.5: the conversational confirmation vocabulary is language data, never a literal.
+OPTIONAL_LIST_KEYS = ("confirm", "reject", "modify", "filler")
 
 
 @dataclass(frozen=True)
@@ -52,6 +54,10 @@ class Lexicon:
     research_source: frozenset[str] = frozenset()
     research_high_stakes: frozenset[str] = frozenset()
     research_challenge: frozenset[str] = frozenset()
+    confirm: frozenset[str] = frozenset()
+    reject: frozenset[str] = frozenset()
+    modify: frozenset[str] = frozenset()
+    filler: frozenset[str] = frozenset()
     privacy_levels: Mapping[str, int] = field(default_factory=dict)
     ok: bool = True
 
@@ -127,6 +133,9 @@ def _pack(code: str, body: object) -> Lexicon:
     if str(body.get("language") or "") != code:
         raise ValueError(f"language must be '{code}'")
     lists = {key: _words(body.get(key), key) for key in LIST_KEYS}
+    extra = {
+        key: _optional_words(body.get(key), key) for key in OPTIONAL_LIST_KEYS
+    }
     levels = _levels(body.get("privacy_levels"))
     return Lexicon(
         language=code,
@@ -142,6 +151,10 @@ def _pack(code: str, body: object) -> Lexicon:
         research_source=lists["research_source"],
         research_high_stakes=lists["research_high_stakes"],
         research_challenge=lists["research_challenge"],
+        confirm=extra["confirm"],
+        reject=extra["reject"],
+        modify=extra["modify"],
+        filler=extra["filler"],
         privacy_levels=levels,
     )
 
@@ -152,6 +165,13 @@ def _words(value: object, key: str) -> frozenset[str]:
     ):
         raise ValueError(f"'{key}' must be a list of non-empty strings")
     return frozenset(item.strip().casefold() for item in value)
+
+
+def _optional_words(value: object, key: str) -> frozenset[str]:
+    """An optional list: a pack that predates the key degrades to empty, never fails."""
+    if value is None:
+        return frozenset()
+    return _words(value, key)
 
 
 def _levels(value: object) -> dict[str, int]:

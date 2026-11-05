@@ -12,6 +12,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pytest
+
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = ROOT / "install.sh"
 UV_DIGESTS = (
@@ -143,7 +145,8 @@ def test_a_stubbed_run_keeps_the_secret_out_of_the_log_and_never_calls_sudo(tmp_
     assert "database-url=<provided>" in text
     assert "monoagens init" in text
     assert "panel: not built in this version" in output
-    assert "uv run --no-dev python -m monoagens run" in output
+    assert "The global launcher is installed" in output
+    assert "monoagens run" in output
     for name, mode in (
         ("config.yaml", 0o644),
         ("roles.yaml", 0o600),
@@ -236,7 +239,7 @@ def test_init_receives_capability_choices(tmp_path):
 MONOAGENS_INSTALL_SOURCED=1
 source "$1/install.sh"
 dir="$2"
-gateways=(cli whatsapp)
+gateways=(whatsapp signal)
 websearch=ddgs
 tools=read,web_search
 voice_parts=affect,style
@@ -254,7 +257,7 @@ printf '%s\n' "${INIT_ARGS[@]}"
 
     assert result.returncode == 0, result.stderr
     args = result.stdout.splitlines()
-    assert "--capabilities" in args
+    assert "--capabilities" not in args
     assert args.count("--gateway") == 2
     assert args[args.index("--websearch") + 1] == "ddgs"
     assert args[args.index("--tools") + 1] == "read,web_search"
@@ -704,3 +707,255 @@ printf '%s\n' "$mode"
     assert external_result.returncode == 0, external_result.stderr
     assert external_result.stdout.strip() == "external"
     assert (external / ".env").read_text(encoding="utf-8") == before
+
+
+# --- dynamic catalogs, wrapper, and ordered compose setup ------------------------------
+
+
+def fake_containers(tmp_path: Path) -> tuple[Path, Path]:
+    """A PATH with Podman/Docker that shout when anything real is invoked."""
+    folder = tmp_path / "containers"
+    folder.mkdir()
+    marker = tmp_path / "container-called"
+    for name in ("podman", "docker", "podman-compose", "docker-compose"):
+        script = folder / name
+        script.write_text(
+            '#!/usr/bin/env bash\nprintf "%s\\n" "$*" >> "$CONTAINER_MARKER"\nexit 0\n',
+            encoding="utf-8",
+        )
+        script.chmod(0o755)
+    return folder, marker
+
+
+@pytest.mark.parametrize("stack", ["native", "compose"])
+def test_dry_run_reads_the_catalogs_and_never_starts_a_container(tmp_path, stack):
+    home = tmp_path / "home"
+    containers, marker = fake_containers(tmp_path)
+    before = listing(tmp_path)
+    env = clean_env(
+        HOME=str(home),
+        SHELL="/bin/bash",
+        PATH=f"{containers}:{os.environ['PATH']}",
+        CONTAINER_MARKER=str(marker),
+    )
+    args = [
+        "--dry-run",
+        "--dir",
+        str(tmp_path / "app"),
+        "--stack",
+        stack,
+        "--engine",
+        "docker",
+        "--provider",
+        "google",
+        "--model",
+        "operator-model",
+        "--web-search",
+        "tavily",
+        "--websearch-key-env",
+        "MY_SEARCH_KEY",
+        "--gateway",
+        "whatsapp",
+        "--approval-mode",
+        "strict",
+        "--voice-parts",
+        "affect,style",
+        "--language",
+        "en",
+        "--timezone",
+        "UTC",
+    ]
+
+    result = run_script(args, env)
+
+    output = result.stdout + result.stderr
+    assert result.returncode == 0, output
+    assert "dry-run: yes" in output
+    assert "uv sync --locked --no-dev" in output
+    assert "--provider google" in output
+    assert "--websearch tavily" in output
+    assert "--gateway whatsapp" in output
+    assert "--voice-parts affect,style" in output
+    assert "engine.approval.mode=strict" in output
+    assert "web_search.api_key_env=MY_SEARCH_KEY" in output
+    target = f"{home}/.local/bin/monoagens"
+    assert output.count(target) == 1
+    assert "would install the monoagens wrapper" in output
+    assert output.count("to PATH in ") == 1
+    assert "exactly once" in output
+    assert not marker.exists(), "a dry run called a container command"
+    assert listing(tmp_path) == before
+
+
+@pytest.mark.parametrize(
+    ("flag", "value", "message"),
+    [
+        ("--provider", "mystery", "unknown provider 'mystery'"),
+        ("--web-search", "bing", "unknown web search provider 'bing'"),
+        ("--gateway", "telegram", "unknown gateway 'telegram'"),
+    ],
+)
+def test_an_unknown_catalog_choice_exits_two(tmp_path, flag, value, message):
+    env = clean_env(HOME=str(tmp_path / "home"))
+
+    result = run_script(
+        ["--dry-run", "--dir", str(tmp_path / "app"), "--stack", "native", flag, value],
+        env,
+    )
+
+    assert result.returncode == 2
+    assert message in result.stderr
+    assert "choose one of" in result.stderr
+    assert listing(tmp_path) == []
+
+
+def test_compose_setup_runs_before_the_daemon_starts(tmp_path):
+    env = clean_env(HOME=str(tmp_path / "home"))
+
+    result = run_script(
+        [
+            "--dry-run",
+            "--dir",
+            str(tmp_path / "app"),
+            "--stack",
+            "compose",
+            "--engine",
+            "docker",
+            "--provider",
+            "openai",
+            "--gateway",
+            "whatsapp",
+        ],
+        env,
+    )
+
+    output = result.stdout
+    assert result.returncode == 0, result.stderr
+    upgrade = output.index("monoagens db upgrade")
+    people = output.index("monoagens people add console local")
+    pair = output.index("monoagens gateway pair whatsapp")
+    daemon = output.index("up -d monoagens")
+    assert upgrade < people < pair < daemon
+    assert "docker compose" in output
+
+
+def test_the_retired_voice_layer_flag_names_its_replacement(tmp_path):
+    result = run_script(["--dry-run", "--voice-layer", "on"], clean_env())
+
+    assert result.returncode == 2
+    assert "retired" in result.stderr
+    assert "--voice-parts" in result.stderr
+
+
+def test_the_voice_and_web_search_aliases_reach_init(tmp_path):
+    code = """
+MONOAGENS_INSTALL_SOURCED=1
+source "$1/install.sh"
+set -- --voice affect,style --web-search brave --approval-mode strict \
+    --natural-confirm --websearch-key-env BRAVE_TOKEN --gateway whatsapp
+parse_args "$@"
+build_init_args
+printf '%s\n' "${INIT_ARGS[@]}"
+printf 'approval=%s natural=%s\\n' "$approval_mode" "$natural_confirm"
+printf 'key-env=%s\\n' "$websearch_key_env"
+"""
+    result = subprocess.run(
+        ["bash", "-c", code, "_", str(ROOT)],
+        env=clean_env(HOME=str(tmp_path / "home")),
+        capture_output=True,
+        text=True,
+        timeout=60,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr
+    lines = result.stdout.splitlines()
+    assert lines[-2:] == ["approval=strict natural=true", "key-env=BRAVE_TOKEN"]
+    assert lines[lines.index("--websearch") + 1] == "brave"
+    assert lines[lines.index("--voice-parts") + 1] == "affect,style"
+    assert lines[lines.index("--gateway") + 1] == "whatsapp"
+
+
+def test_the_wrapper_and_path_entry_land_once(tmp_path):
+    app = tmp_path / "app"
+    app.mkdir()
+    home = tmp_path / "home"
+    code = """
+MONOAGENS_INSTALL_SOURCED=1
+source "$1/install.sh"
+dir="$2/app"
+stack=native
+container_engine=podman
+install_wrapper
+install_wrapper
+"""
+    result = subprocess.run(
+        ["bash", "-c", code, "_", str(ROOT), str(tmp_path)],
+        env=clean_env(HOME=str(home), SHELL="/bin/bash"),
+        capture_output=True,
+        text=True,
+        timeout=60,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr
+    target = home / ".local" / "bin" / "monoagens"
+    assert target.is_file()
+    assert target.stat().st_mode & 0o777 == 0o755
+    body = target.read_text(encoding="utf-8")
+    assert str(app) in body
+    assert ".venv/bin/python" in body
+    profile = home / ".profile"
+    assert profile.read_text(encoding="utf-8").count(
+        "# MonoAgens: put ~/.local/bin on PATH"
+    ) == 1
+    assert "PATH: added ~/.local/bin" in result.stdout
+    assert "PATH already has" in result.stdout
+
+
+def test_the_compose_wrapper_routes_into_the_stack(tmp_path):
+    app = tmp_path / "app"
+    app.mkdir()
+    home = tmp_path / "home"
+    code = """
+MONOAGENS_INSTALL_SOURCED=1
+source "$1/install.sh"
+dir="$2/app"
+stack=compose
+container_engine=docker
+install_wrapper
+"""
+    result = subprocess.run(
+        ["bash", "-c", code, "_", str(ROOT), str(tmp_path)],
+        env=clean_env(HOME=str(home), SHELL="/bin/bash"),
+        capture_output=True,
+        text=True,
+        timeout=60,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr
+    body = (home / ".local" / "bin" / "monoagens").read_text(encoding="utf-8")
+    assert "COMPOSE=(docker compose)" in body
+    assert "run --rm" in body
+    assert 'exec "${COMPOSE[@]}" exec' in body
+    assert str(app) in body
+
+
+def test_the_catalog_command_lists_what_the_shell_validates(tmp_path):
+    result = subprocess.run(
+        [sys.executable, "-m", "monoagens.admin.catalog", "choices"],
+        cwd=ROOT,
+        env=clean_env(PYTHONPATH=str(ROOT)),
+        capture_output=True,
+        text=True,
+        timeout=60,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr
+    kinds = dict(line.split("=", 1) for line in result.stdout.splitlines())
+    assert "google" in kinds["providers"].split(",")
+    assert "tavily" in kinds["websearch"].split(",")
+    assert "off" in kinds["websearch"].split(",")
+    assert "whatsapp" in kinds["gateways"].split(",")

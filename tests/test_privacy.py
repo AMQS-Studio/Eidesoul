@@ -6,14 +6,13 @@ import json
 from datetime import datetime
 from types import SimpleNamespace
 
-from support import FakeLLM, FakeMem0, build_config, database, inbound_message, make_agent
+from support import FakeLLM, build_config, database, inbound_message, make_agent
 
 from monoagens.engine.access.roles import Role
-from monoagens.engine.config import DatabaseConfig, PrivacyConfig
+from monoagens.engine.config import PrivacyConfig
 from monoagens.engine.jobs.cognition import CognitionWorker
 from monoagens.engine.memory import MemoryHit
 from monoagens.engine.memory.assess import assess_budget
-from monoagens.engine.memory.mem0 import Mem0Backend
 from monoagens.engine.memory.privacy import PrivacyPolicy
 from monoagens.engine.memory.store import MemoryStore
 from monoagens.engine.stores.history import HistoryStore
@@ -174,7 +173,12 @@ def test_group_level_3_without_audit_asks(tmp_path) -> None:
     env.agent.llm = ScriptLLM()
     inbound = inbound_message("halo", thread="111@g.us", dm=False)
 
-    result = review(env, inbound, "si budi pernah bilang begitu", [hit(3)])
+    result = review(
+        env,
+        inbound,
+        "si budi pernah bilang begitu",
+        [hit(3, text="si budi pernah bilang begitu")],
+    )
 
     assert result.handled is True
     assert env.gateway.sent
@@ -214,7 +218,7 @@ def test_disclosure_confirmation_sends_the_stored_draft(tmp_path) -> None:
     env = make_agent(tmp_path)
     env.agent.llm = ScriptLLM(answer={"kind": "yes", "level": 0})
     inbound = inbound_message("halo", thread="111@g.us", dm=False)
-    review(env, inbound, "draft rahasia", [hit(3)])
+    review(env, inbound, "draft rahasia", [hit(3, text="draft rahasia")])
 
     handled = asyncio.run(
         env.agent.privacy.handle_pending(
@@ -233,7 +237,7 @@ def test_other_sender_cannot_confirm(tmp_path) -> None:
     env = make_agent(tmp_path)
     env.agent.llm = ScriptLLM(answer={"kind": "yes", "level": 0})
     inbound = inbound_message("halo", thread="111@g.us", dm=False)
-    review(env, inbound, "draft rahasia", [hit(3)])
+    review(env, inbound, "draft rahasia", [hit(3, text="draft rahasia")])
 
     handled = asyncio.run(
         env.agent.privacy.handle_pending(
@@ -300,7 +304,7 @@ def test_privacy_review_does_not_call_the_llm_for_audit(tmp_path) -> None:
     env.agent.llm = ScriptLLM()
     inbound = inbound_message("halo", thread="111@g.us", dm=False)
 
-    review(env, inbound, "draft", [hit(3)])
+    review(env, inbound, "draft", [hit(3, text="draft")])
 
     assert env.agent.llm.decisions == 0
 
@@ -437,7 +441,7 @@ def test_unclear_answer_keeps_pending(tmp_path) -> None:
     env = make_agent(tmp_path)
     env.agent.llm = ScriptLLM(answer={"kind": "unclear", "level": 0})
     inbound = inbound_message("halo", thread="111@g.us", dm=False)
-    review(env, inbound, "draft", [hit(3)])
+    review(env, inbound, "draft", [hit(3, text="draft")])
 
     handled = asyncio.run(
         env.agent.privacy.handle_pending(
@@ -495,7 +499,7 @@ def test_agent_turn_asks_then_sends_after_confirmation(tmp_path) -> None:
     person = env.agent.identity.resolve("fake", "628111")
     env.memory.hits["m3"] = MemoryHit(
         id="m3",
-        text="aib budi",
+        text="halo juga soal aib budi",
         level=3,
         owner_id=person,
         subject_id=person,
@@ -522,14 +526,8 @@ def test_agent_turn_asks_then_sends_after_confirmation(tmp_path) -> None:
 
 
 def test_vetoed_memory_is_excluded_from_context(tmp_path) -> None:
-    config = build_config(
-        tmp_path,
-        database_config=DatabaseConfig(
-            url="postgresql+psycopg://u:p@db:5432/monoagens", url_env=""
-        ),
-    )
-    memory = Mem0Backend(config=config, db=None)
-    memory._memory = FakeMem0()
+    config = build_config(tmp_path)
+    memory = MemoryStore(database(), config)
     memory_id = asyncio.run(
         memory.add("rahasia kecil", scope="person", person_id="1", thread_id="c", level=1)
     )[0]
@@ -550,3 +548,30 @@ def test_capture_raises_visibility_of_the_turn(tmp_path) -> None:
 
     assert env.history.find("628111@s.whatsapp.net", "m-capture").visibility == 3
     assert int(row(env)["level"]) == 3
+
+
+def test_an_unmentioned_private_hit_never_triggers_a_disclosure(tmp_path) -> None:
+    """ADR-0038 §4.4: an unmentioned memory is not a leak, whatever its level."""
+    env = make_agent(tmp_path)
+    env.agent.llm = ScriptLLM()
+    inbound = inbound_message("halo", thread="111@g.us", dm=False)
+
+    result = review(env, inbound, "halo juga", [hit(4, text="aib budi")])
+
+    assert result.handled is False
+    assert result.reply == "halo juga"
+    assert env.gateway.sent == []
+    assert env.agent.approvals.latest("111@g.us", "628111") is None
+
+
+def test_a_credential_that_reaches_the_worker_is_redacted_before_the_drop(tmp_path) -> None:
+    from monoagens.engine.memory.gate import REDACTED_CREDENTIAL
+
+    env = capture_env(tmp_path, [assess(2)])
+
+    capture(env, "nomor ktp aku 1234567890123456")
+
+    found = row(env)
+    assert found["state"] == "not_worth"
+    assert found["text"] == REDACTED_CREDENTIAL
+    assert "1234567890123456" not in str(found["text"])

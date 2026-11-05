@@ -1,7 +1,7 @@
 {
   "version": 1,
-  "name": "canonical lexical recall/precision",
-  "note": "MemoryStore._rows is ILIKE over the readable view: this measures the canonical lexical path, never Mem0 semantic quality. A query matches a row only when every term appears in its text or kind.",
+  "name": "canonical hybrid recall/precision",
+  "note": "MemoryStore.search fuses cosine over `embedding` with ts_rank_cd over `search_tsv` in one query over the readable view. The deterministic embedder keeps the two arms separable: a row qualifies through the vector floor or through an all-term lexical match.",
   "cases": [
     {
       "id": "global-coffee",

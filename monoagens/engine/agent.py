@@ -5,28 +5,35 @@ lifecycle, and the public `handle`/`dispatch` signatures stay here; the turn pha
 `turn/loop.py`, `turn/intake.py`, `turn/delivery.py`, `turn/commands.py`, and `turn/steps.py`.
 """
 
-
 import asyncio
 import contextlib
 import logging
 import time
-from collections import OrderedDict, deque
-from collections.abc import AsyncIterator, Callable
-from contextlib import asynccontextmanager
+from collections import deque
+from collections.abc import Callable, Mapping
 from dataclasses import asdict, replace
-from pathlib import Path
+from functools import partial
 
 from . import io, plugins
 from .access.approvals import ApprovalStore
 from .access.identity import IdentityStore
-from .access.permissions import tool_patterns, tools_for
+from .access.permissions import command_allowed, tool_patterns, tools_for
 from .access.privacy import PrivacyService
 from .access.roles import Role
+from .agent_delivery import DeliveryFacade
+from .agent_guard import CrossRoomGuard
 from .commands import REGISTRY as CORE_COMMANDS
 from .commands import CommandContext
+from .commands.approve import run_approval
 from .config import Config
-from .guard import SafetyPolicy, SandboxGuard, build_safety
-from .guard.policy import ActionRequest, approval_summary, scope_proof
+from .guard import SafetyDecision, SafetyPolicy, SandboxGuard, build_safety
+from .guard.policy import (
+    ActionRequest,
+    approval_summary,
+    scope_granted,
+    scope_proof,
+)
+from .i18n import t
 from .inbound import (
     AUTHORIZATION,
     CONSENT,
@@ -48,21 +55,23 @@ from .memory import evidence as privacy_evidence
 from .memory.ledger import OutboundLedger
 from .registry import Handler, Registry
 from .runtime import ACTIVE_GENERATION, RuntimeFacts
-from .stores.turns import TurnStore
+from .stores.turns import TurnStore, turn_identity
 from .tools import REGISTRY as CORE_TOOLS
 from .tools import ToolContext, ToolIndex
 from .turn import observability
-from .turn.commands import TurnCommands
-from .turn.context import Message, WorkingMemory
+from .turn.commands import TurnCommands, command_body
+from .turn.context import WorkingMemory
+from .turn.coordinator import TurnCoordinator
 from .turn.delivery import Delivery
 from .turn.intake import TurnIntake
 from .turn.loop import TurnRunner
+from .turn.runtime import TurnRuntime
 from .turn.steps import TurnSteps
 
 log = logging.getLogger(__name__)
 
 
-class Agent:
+class Agent(DeliveryFacade, CrossRoomGuard):
     """One process, one heart: every gateway calls the same `handle`."""
 
     def __init__(
@@ -106,7 +115,7 @@ class Agent:
         self.vibe = vibe
         self.gateways = tuple(gateways)
         self.documents = documents
-        self.identity = identity or IdentityStore(db)
+        self.identity = identity or IdentityStore(db, roles=self.config.roles)
         self.approvals = approvals or ApprovalStore(db, config.approval)
         self.safety = safety or build_safety(config.approval)
         self.sandbox_guard = SandboxGuard(
@@ -117,20 +126,8 @@ class Agent:
         self.tasks: set[asyncio.Task] = set()
         self.turns = TurnStore(db)
         self.outbox = OutboundLedger(db)
-        self.delivery = Delivery(self)
-        self.turn_runner = TurnRunner(self)
-        self.intake = TurnIntake(self)
-        self.steps = TurnSteps(self)
-        self.command_dispatch = TurnCommands(self)
         self.backlog: dict[str, int] = {}
-        self._thread_locks: OrderedDict[str, asyncio.Lock] = OrderedDict()
-        self._lock_waiters: dict[str, int] = {}
-        self._turn_tasks: dict[str, asyncio.Task] = {}
-        self._pending_tasks: dict[str, asyncio.Task] = {}
-        self._turn_gateways: dict[str, GatewayCore] = {}
         self._resume_times: deque[float] = deque()
-        self._shutdown_gateways: dict[str, GatewayCore] = {}
-        self._cancel_reasons: dict[str, str] = {}
         self.draining = False
         self.reload_generation = 0
         self.boot_epoch = int(time.time() * 1000)
@@ -153,11 +150,12 @@ class Agent:
         )
         self.plugin_parts = self.plugins.prompts
         self.tools = Registry([*CORE_TOOLS.by_name.values(), *self.plugins.tools], "tool")
-        self.body_tools = {str(item.name): list(item.tools()) for item in self.gateways}
+        self.body_tools = self._body_tools()
         self.tool_index = ToolIndex(self.tools, self.body_tools)
         handlers = [*CORE_COMMANDS.by_name.values(), *gateway_commands, *self.plugins.commands]
         self.commands = Registry(handlers, "command")
-        self._sync_soul_rules()
+        # ADR-0008 §4.3: the soul rules are synced by the primary start path only, so building
+        # a standby Agent writes no rows (Supervisor.activate calls `_sync_soul_rules`).
         self.runtime = runtime or RuntimeFacts(
             db_label=getattr(db, "label", ""), paths=config.paths
         )
@@ -169,8 +167,80 @@ class Agent:
         if config.memory.privacy.enabled:
             privacy_evidence.verify_entities()
         self.privacy = PrivacyService(self)
+        # ADR-0037 §4.3: the turn pipeline reads one typed runtime, and the coordinator owns
+        # the per-thread locks and the in-flight task registry. The Agent stays the facade.
+        self.turn_runtime = TurnRuntime(
+            _live=self,
+            history=self.history,
+            turns=self.turns,
+            memory=self.memory,
+            skills=self.skills,
+            recipes=self.recipes,
+            affect=self.affect,
+            style=self.style,
+            approvals=self.approvals,
+            outbox=self.outbox,
+            windows=self.windows,
+            ledger=self.ledger,
+            identity=self.identity,
+            privacy=self.privacy,
+            tool_index=self.tool_index,
+            commands=self.commands,
+            vibe=self.vibe,
+            ambient=self.ambient,
+            plugin_parts=tuple(self.plugin_parts),
+            facts=self.runtime,
+            backlog=self.backlog,
+            boot_epoch=self.boot_epoch,
+            dispatch=self.dispatch,
+            body_of=self.body_of,
+            lease=lambda: self.lease,
+            clock=time.time,
+            mode=lambda: self.mode,
+            draining=lambda: self.draining,
+            accepting=self._accepting,
+            shutdown_epoch=lambda: self.shutdown_epoch,
+            role_policy=self._role_set,
+            tool_context=self.tool_context,
+            specs=self._specs,
+            command=self._command,
+            approve=partial(run_approval, self),
+        )
+        self.coordinator = TurnCoordinator(self.turn_runtime)
+        self.delivery = Delivery(self.turn_runtime, self.coordinator)
+        self.steps = TurnSteps(self.turns, self.tools)
+        self.turn_runner = TurnRunner(
+            self.turn_runtime, self.coordinator, self.delivery, self.steps
+        )
+        self.intake = TurnIntake(
+            self.turn_runtime, self.coordinator, self.turn_runner, self.delivery
+        )
+        self.command_dispatch = TurnCommands(self)
 
     # ------------------------------------------------------------- util
+
+    def _body_tools(self) -> dict[str, list[Handler]]:
+        """Each body's own tools plus the transport aliases it still answers to.
+
+        An alias is a copy of the canonical core handler under the body's old name, so the
+        engine never carries transport vocabulary while an older prompt keeps resolving.
+        """
+        mapping = {str(item.name): list(item.tools()) for item in self.gateways}
+        for gateway in self.gateways:
+            aliases = getattr(gateway, "tool_aliases", None)
+            if not callable(aliases):
+                continue
+            table = aliases()
+            if not isinstance(table, Mapping):
+                continue
+            for alias, canonical in table.items():
+                spec = self.tools.by_name.get(str(canonical))
+                if spec is None or alias in self.tools.by_name:
+                    continue
+                mapping.setdefault(str(gateway.name), []).append(
+                    replace(spec, name=str(alias), aliases=())
+                )
+        return mapping
 
     def _sync_soul_rules(self) -> str:
         """ADR-0008 §4.3: mirror the soul's rules and promote the ones that earned it.
@@ -225,65 +295,21 @@ class Agent:
     def _accepting(self) -> bool:
         return self.mode == "primary" and not self.draining
 
-    @asynccontextmanager
-    async def _thread_lock(self, thread_id: str) -> AsyncIterator[None]:
-        """One conversation is one sequence; different threads run in parallel (ADR-0017 §4.2)."""
-        lock = self._thread_locks.get(thread_id)
-        if lock is None:
-            lock = asyncio.Lock()
-            self._thread_locks[thread_id] = lock
-        self._thread_locks.move_to_end(thread_id)
-        self._lock_waiters[thread_id] = self._lock_waiters.get(thread_id, 0) + 1
-        self._evict_locks()
-        try:
-            async with lock:
-                yield
-        finally:
-            waiting = self._lock_waiters.get(thread_id, 1) - 1
-            if waiting > 0:
-                self._lock_waiters[thread_id] = waiting
-            else:
-                self._lock_waiters.pop(thread_id, None)
-            self._evict_locks()
-
-    def _evict_locks(self) -> None:
-        limit = max(1, int(self.config.concurrency.max_chat_locks))
-        while len(self._thread_locks) > limit:
-            for key, lock in self._thread_locks.items():
-                if not lock.locked() and not self._lock_waiters.get(key):
-                    del self._thread_locks[key]
-                    break
-            else:
-                return
-
     # ----------------------------------------------------------- turns
 
     async def cancel_turn(self, thread_id: str, *, reason: str = "user_stop") -> bool:
         """Cancel the task running in this thread only (ADR-0013 §7.1)."""
-        task = self._turn_tasks.get(thread_id) or self._pending_tasks.get(thread_id)
-        if task is None or task.done():
-            return False
-        turn_id = getattr(task, "_monoagens_turn_id", "")
-        if turn_id:
-            self._cancel_reasons[turn_id] = reason
-        task.cancel()
-        with contextlib.suppress(BaseException):
-            await task
-        if turn_id:
-            self.turns.interrupt(turn_id, reason, force=True)
-        return True
+        return await self.coordinator.interrupt_thread(thread_id, reason=reason)
 
-    def _interrupt(self, turn_id: str, reason: str, *, force: bool = False) -> None:
-        try:
-            self.turns.interrupt(turn_id, reason, force=force)
-        except Exception:
-            log.exception("failed to mark turn %s interrupted (%s)", turn_id, reason)
+    @property
+    def _turn_gateways(self) -> dict[str, GatewayCore]:
+        """The live body map of in-flight turns; the coordinator owns the writes."""
+        return self.coordinator.gateway_map
 
-    def _finish(self, turn_id: str, *, planned: int = 0) -> None:
-        try:
-            self.turns.finish(turn_id, planned=planned)
-        except Exception:
-            log.exception("failed to mark turn %s delivered", turn_id)
+    @property
+    def _shutdown_gateways(self) -> dict[str, GatewayCore]:
+        """The bodies a drain captured for the shutdown notices of the same epoch."""
+        return self.delivery.shutdown_gateways
 
     def private_thread(self, person_id: str) -> str:
         """Ask the bodies for the one private thread a person holds (ADR-0033 §4.5)."""
@@ -349,7 +375,7 @@ class Agent:
         Membership is proven separately at the door (`refusal`); this only resolves the owner.
         A thread nobody owns is a refusal, never a fallback to the first registered body.
         """
-        found = self._turn_gateways.get(thread_id)
+        found = self.coordinator.gateway_of(thread_id)
         name = str(getattr(found, "name", "") or "")
         if not name:
             lookup = getattr(self.history, "gateway_of", None)
@@ -370,6 +396,7 @@ class Agent:
         except StandbyError:
             return Receipt(action.id, "refused", reason="delivery refused")
         return None
+
     async def dispatch(
         self,
         subject: str,
@@ -408,6 +435,9 @@ class Agent:
                 return Receipt(
                     action.id, "refused", reason="cross_send needs a reason from the requester"
                 )
+            blocked = await self._cross_room_leak(action, origin)
+            if blocked:
+                return Receipt(action.id, "refused", reason=blocked)
         request = ActionRequest(
             tool="send",
             args={
@@ -422,8 +452,13 @@ class Agent:
             roles=tuple(role.name for role in self.config.roles.for_person(subject)),
             workspace=str(self.config.workspace),
             roots=(),
+            declared_class=action.approval_class,
+            door=True,
         )
         decision = self.safety.check(request)
+        if decision.verdict == "pending" and scope_granted(request):
+            # The person just confirmed this exact target; the door does not ask again.
+            decision = SafetyDecision("allow", "the approved scope covers this action")
         if decision.verdict == "pending":
             row = self.approvals.find_action(action.id)
             if row is not None:
@@ -452,6 +487,9 @@ class Agent:
                     summary=approval_summary("send", request, proof),
                     scope_proof=proof,
                     approval_class=approval_class,
+                    action_id=action.id,
+                    origin_gateway=str(origin.gateway),
+                    origin_thread=str(origin.thread),
                 )
                 return Receipt(action.id, "pending", reason=f"approval #{row.id}")
         elif decision.verdict == "deny":
@@ -541,6 +579,7 @@ class Agent:
         person_id: str = "",
         direct: bool = False,
         app: str = "",
+        turn_id: str = "",
     ) -> ToolContext:
         return ToolContext(
             self.config,
@@ -562,6 +601,7 @@ class Agent:
             person_id=person_id,
             direct=direct,
             app=str(app or "").strip().lower(),
+            turn_id=turn_id,
         )
 
     def command_context(
@@ -582,70 +622,6 @@ class Agent:
             specs += self.hub.specs(roles)
         return specs
 
-    async def deliver_text(
-        self,
-        thread_id: str,
-        text: str,
-        *,
-        gateway: GatewayCore,
-        reply: Percept | None = None,
-        kind: str = "",
-    ) -> str:
-        return await self.delivery.text(
-            thread_id, text, gateway=gateway, reply=reply, kind=kind
-        )
-
-    async def deliver_file(
-        self,
-        thread_id: str,
-        path: Path,
-        caption: str = "",
-        *,
-        gateway: GatewayCore,
-        reply: Percept | None = None,
-    ) -> str:
-        return await self.delivery.file(
-            thread_id, path, caption, gateway=gateway, reply=reply
-        )
-
-    async def deliver_sticker(
-        self, thread_id: str, message_id: str, *, gateway: GatewayCore
-    ) -> str | None:
-        return await self.delivery.sticker(thread_id, message_id, gateway=gateway)
-
-    async def _typing(self, gateway: GatewayCore, thread_id: str, composing: bool) -> None:
-        await self.delivery.typing(gateway, thread_id, composing)
-
-    async def _prepare_media(
-        self, gateway: GatewayCore, thread_id: str, entry: Message
-    ) -> None:
-        await self.delivery.prepare_media(gateway, thread_id, entry)
-
-    async def send_text(
-        self,
-        thread_id: str,
-        text: str,
-        *,
-        gateway: GatewayCore | None,
-        subject: str = "",
-    ) -> str:
-        return await self.delivery.send_text(
-            thread_id, text, gateway=gateway, subject=subject
-        )
-
-    async def send_file(
-        self,
-        thread_id: str,
-        path: Path,
-        caption: str = "",
-        *,
-        gateway: GatewayCore | None,
-        subject: str = "",
-    ) -> str:
-        return await self.delivery.send_file(
-            thread_id, path, caption, gateway=gateway, subject=subject
-        )
-
     # ------------------------------------------------------------- turn
 
     async def handle(
@@ -656,13 +632,93 @@ class Agent:
         claimed: dict | None = None,
     ) -> list[Action]:
         """Intake + watchdog with the turn's correlation ids bound (ADR-0019 §4.2)."""
-        token = str(getattr(inbound.payload, "id", "") or "")
+        message_id = str(getattr(inbound.payload, "id", "") or "")
+        token = (
+            turn_identity(
+                getattr(gateway, "name", "") or "", inbound.thread, message_id
+            )
+            if message_id
+            else ""
+        )
         with observability.bind(
             turn_id=token,
             thread_id=inbound.thread,
             gateway=getattr(gateway, "name", "") or "",
         ):
+            if await self._access_refused(inbound, gateway, claimed=claimed):
+                return []
             return await self.intake.receive(inbound, gateway, claimed=claimed)
+
+    def _command_permitted(self, inbound: Percept, gateway: GatewayCore) -> bool:
+        """A command the sender's role may run skips the gateway's conversation policy."""
+        body = command_body(
+            str(getattr(inbound.payload, "text", "") or ""),
+            self.soul.name,
+            gateway.self_handles(),
+        )
+        if not body.startswith("/"):
+            return False
+        name = body[1:].partition(" ")[0].strip().lower()
+        if not name:
+            return False
+        try:
+            person = self.identity.resolve(
+                inbound.source or gateway.name,
+                inbound.actor or self._sender(inbound),
+            )
+        except Exception:
+            log.exception(
+                "identity resolve failed source=%s", inbound.source or gateway.name
+            )
+            return False
+        roles = self.config.roles.for_person(person)
+        handler = self.commands.get(name)
+        if handler is not None and command_allowed(roles, handler.name):
+            return True
+        recipe = self.recipes.get(name) if self.recipes is not None else None
+        return bool(recipe is not None and {role.name for role in roles} & set(recipe.roles))
+
+    async def _access_refused(
+        self,
+        inbound: Percept,
+        gateway: GatewayCore,
+        *,
+        claimed: dict | None,
+    ) -> bool:
+        """One refusal for every body: the gateway decides, the core sends the same reply."""
+        check = getattr(gateway, "access_refusal", None)
+        if claimed is not None or not callable(check):
+            return False
+        message = inbound.payload
+        if getattr(message, "outgoing", False) or bool(inbound.hints.get("self")):
+            return False
+        if self._command_permitted(inbound, gateway):
+            return False
+        try:
+            reason = str(check(inbound) or "")
+        except Exception:
+            log.exception(
+                "access check failed gateway=%s chat=%s; refusing",
+                getattr(gateway, "name", ""),
+                inbound.thread,
+            )
+            reason = "check_failed"
+        if not reason:
+            return False
+        try:
+            await self.delivery.text(
+                inbound.thread,
+                t("agent.access_refused", self.soul.language),
+                gateway=gateway,
+            )
+        except Exception:
+            log.warning(
+                "access refusal notice failed gateway=%s chat=%s",
+                getattr(gateway, "name", ""),
+                inbound.thread,
+                exc_info=True,
+            )
+        return True
 
     async def _run_turn(
         self,

@@ -38,7 +38,8 @@ Minimal body::
 """
 
 
-from collections.abc import Mapping
+from collections.abc import Awaitable, Callable, Mapping
+from contextvars import ContextVar
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Protocol, runtime_checkable
@@ -67,6 +68,37 @@ class SendRefused(RuntimeError):
 
 class StandbyError(RuntimeError):
     """A send was refused because this instance is not the primary (ADR-0017 §4.4)."""
+
+
+# ADR-0003 §4.3: every outbound action a tool emits carries a deterministic id, so a resume
+# that reaches the same step derives the same outbox key and never sends twice. The bind wraps
+# one tool execution; the sequence numbers the actions of that one step.
+TOOL_ACTION: ContextVar[str] = ContextVar("monoagens_tool_action", default="")
+TOOL_ACTION_SEQ: ContextVar[int] = ContextVar("monoagens_tool_action_seq", default=0)
+
+
+def bind_tool_action(base: str):
+    """Bind the deterministic id prefix of one tool step; returns the token to reset."""
+    TOOL_ACTION_SEQ.set(0)
+    return TOOL_ACTION.set(str(base or ""))
+
+
+def reset_tool_action(token) -> None:
+    TOOL_ACTION.reset(token)
+
+
+def tool_action_id() -> str:
+    """The next deterministic id for an action a tool emits; "" outside a tool step.
+
+    The first action of a step is exactly `turn:<turn_id>:tool:<step_seq>`; further actions of the
+    same step (a second bubble, a file after the text) carry `:<n>` so every outbox key is unique.
+    """
+    base = TOOL_ACTION.get()
+    if not base:
+        return ""
+    index = int(TOOL_ACTION_SEQ.get())
+    TOOL_ACTION_SEQ.set(index + 1)
+    return base if index == 0 else f"{base}:{index}"
 
 
 @dataclass(frozen=True, slots=True)
@@ -116,13 +148,20 @@ class Receipt:
 
 @dataclass(frozen=True, slots=True)
 class Action:
-    """One thing the turn did: a capability applied to an address under an approval class."""
+    """One thing the turn did: a capability applied to an address under an approval class.
+
+    `stream_id`/`replace_id` name a progressive or edited delivery a body may support; `meta`
+    carries body-specific facts the core never interprets (ADR-0001 §4.2).
+    """
 
     address: Address
     capability: str
     payload: object = None
     approval_class: str = CONSENT
     id: str = field(default_factory=lambda: uuid4().hex)
+    stream_id: str = ""
+    replace_id: str = ""
+    meta: Mapping[str, object] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         if self.approval_class not in APPROVAL_CLASSES:
@@ -144,6 +183,9 @@ def action_json(action: Action) -> dict:
         "capability": action.capability,
         "payload": action.payload,
         "approval_class": action.approval_class,
+        "stream_id": action.stream_id,
+        "replace_id": action.replace_id,
+        "meta": dict(action.meta),
     }
 
 
@@ -152,6 +194,7 @@ def action_from_json(data: Mapping) -> Action:
     address = data.get("address") or {}
     if not isinstance(address, Mapping):
         raise ValueError("action.address must be an object")
+    meta = data.get("meta")
     return Action(
         address=Address(
             gateway=str(address.get("gateway") or ""),
@@ -162,6 +205,9 @@ def action_from_json(data: Mapping) -> Action:
         payload=data.get("payload"),
         approval_class=str(data.get("approval_class") or CONSENT),
         id=str(data.get("id") or uuid4().hex),
+        stream_id=str(data.get("stream_id") or ""),
+        replace_id=str(data.get("replace_id") or ""),
+        meta=dict(meta) if isinstance(meta, Mapping) else {},
     )
 
 
@@ -178,6 +224,10 @@ class CoreDefaults:
     def prompt_section(self) -> str:
         """Body-specific prompt facts; empty by default (ADR-0033 §4.5)."""
         return ""
+
+    def normalize_address(self, raw: str) -> str:
+        """Default address form: the trimmed string; a body overrides it with its own rule."""
+        return str(raw or "").strip()
 
 
 @runtime_checkable
@@ -201,6 +251,10 @@ class GatewayCore(Protocol):
     def chat_name(self, thread: str) -> str:
         """Default: the thread id, when a body has no label for it."""
         return thread
+
+    def normalize_address(self, raw: str) -> str:
+        """The canonical form of one address for this body (ADR-0001 §4.2)."""
+        return str(raw or "").strip()
 
 
 PROMPT_SECTION_MAX = 1200
@@ -261,6 +315,13 @@ class Directory(Protocol):
     def participants(self, thread: str) -> set[str] | None: ...
 
 
+@runtime_checkable
+class Abortable(Protocol):
+    """Optional body surface: stop whatever the body is still streaming in one thread."""
+
+    async def abort(self, thread: str) -> None: ...
+
+
 CORE_MEMBERS = (
     "name",
     "tools",
@@ -271,6 +332,7 @@ CORE_MEMBERS = (
     "prompt_section",
     "self_handles",
     "chat_name",
+    "normalize_address",
 )
 
 
@@ -299,11 +361,21 @@ def capabilities(gateway: object) -> dict[str, bool]:
         "rich": isinstance(gateway, Rich),
         "directory": isinstance(gateway, Directory),
         "private_thread": isinstance(gateway, PrivateThread),
+        "abort": isinstance(gateway, Abortable),
     }
 
 
 def capability_report(gateways) -> dict[str, dict[str, bool]]:
     return {str(gateway.name): capabilities(gateway) for gateway in gateways}
+
+
+async def abort(gateway, thread: str) -> bool:
+    """Stop one thread's in-flight work when the body supports it; False when it cannot."""
+    grab: Callable[[str], Awaitable[object]] | None = getattr(gateway, "abort", None)
+    if not callable(grab):
+        return False
+    await grab(str(thread))
+    return True
 
 
 def directory_refusal(gateway) -> str:

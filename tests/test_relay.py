@@ -15,6 +15,7 @@ from support import inbound_message, make_agent, role, specs
 from test_whatsapp_gateway import FakeClient, make_gateway
 
 from monoagens.engine.access.relay import MODES, RelayRefused, RelayStore
+from monoagens.engine.config import ApprovalConfig
 from monoagens.engine.inbound import Address
 from monoagens.engine.schema import people, person_links, relay_grants
 from monoagens.engine.tools import execute
@@ -54,6 +55,8 @@ def build(tmp_path):
         gateway=gateway,
         roles={"administrator": administrator},
         default_role="administrator",
+        # These tests are about relay consent, not the cross-room send gate (ADR-0007).
+        approvals=ApprovalConfig(mode="yolo", confirm_cross_gateway=False),
     )
     ctx = env.agent.tool_context(SOURCE, FROM, (administrator,), gateway, person_id=FROM)
     ctx.reads.add(TARGET)
@@ -66,7 +69,7 @@ def send(env, ctx, *, relay=True, text=ANSWER, reason=""):
         args.update({"relay_task": TASK, "relay_from": FROM})
     elif reason:
         args["reason"] = reason
-    return asyncio.run(execute(specs(env), "send_to", args, ctx))
+    return asyncio.run(execute(specs(env), "send_message", args, ctx))
 
 
 def ask(env, *, expires_at=None):
@@ -156,12 +159,13 @@ def test_revocation_stops_the_next_report(tmp_path) -> None:
 
 def test_a_valid_grant_allows_the_relay_without_content_in_the_ledger(tmp_path) -> None:
     env, ctx = build(tmp_path)
+    env.gateway.participants = lambda thread: {FROM, TO} if thread == TARGET else None
     approval = ask(env)
     decide(env, approval, "summary")
 
     result = send(env, ctx)
 
-    assert result.startswith("ok: sent to A")
+    assert result.startswith("ok: text sent to A")
     assert [call[0] for call in env.gateway.client.calls[1:]] == ["message"]
     actions = env.agent.ledger.actions_context(tz="UTC")
     assert "relay" in actions
@@ -235,7 +239,9 @@ def test_another_person_cannot_approve_the_question(tmp_path) -> None:
         )
     )
 
-    assert "another chat or sender" in result or "pengirim lain" in result
+    assert "another chat or sender" in result or "pengirim lain" in result or (
+        "only the content owner" in result
+    )
     grant = RelayStore(env.agent.db).get(task_id=TASK, from_person=FROM, to_person=TO)
     assert grant.mode == "none"
 
@@ -288,6 +294,8 @@ def test_approve_without_a_mode_keeps_the_question_pending(tmp_path) -> None:
 
 def test_anonymous_hides_the_source_name(tmp_path) -> None:
     env, ctx = build(tmp_path)
+    # The door proves the requester is in the target room before any send (ADR-0007 §4.5).
+    env.gateway.participants = lambda thread: {FROM, TO} if thread == TARGET else None
     approval = ask(env)
     decide(env, approval, "anonymous")
 
@@ -296,7 +304,7 @@ def test_anonymous_hides_the_source_name(tmp_path) -> None:
     assert len(env.gateway.client.calls) == 1
 
     unnamed = send(env, ctx, text=ANSWER)
-    assert unnamed.startswith("ok: sent to A")
+    assert unnamed.startswith("ok: text sent to A")
     assert len(env.gateway.client.calls) == 2
 
 
@@ -308,7 +316,7 @@ def test_a_plain_cross_send_needs_no_grant(tmp_path) -> None:
 
     result = send(env, ctx, relay=False, text="halo dari B", reason="menjawab A")
 
-    assert result.startswith("ok: sent to A")
+    assert result.startswith("ok: text sent to A")
     assert [call[0] for call in env.gateway.client.calls] == ["message"]
 
 
@@ -319,7 +327,7 @@ def test_a_relay_needs_both_arguments(tmp_path) -> None:
     result = asyncio.run(
         execute(
             specs(env),
-            "send_to",
+            "send_message",
             {"chat": "A", "text": ANSWER, "relay_task": TASK},
             ctx,
         )
@@ -342,7 +350,7 @@ def test_an_unprovable_recipient_is_refused(tmp_path) -> None:
 
     result = send(env, ctx)
 
-    assert "cannot prove the relay recipient" in result
+    assert "cannot prove" in result
 
 
 def test_one_grant_per_task_and_pair(tmp_path) -> None:

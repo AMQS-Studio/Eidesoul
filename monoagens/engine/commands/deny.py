@@ -4,6 +4,7 @@
 from ..i18n import t
 from ..registry import Handler
 from . import CommandContext
+from .approve import decision_refusal
 
 
 async def _deny(ctx: CommandContext) -> str:
@@ -17,7 +18,9 @@ async def _deny(ctx: CommandContext) -> str:
         approval = agent.approvals.get(key.lstrip("#"))
     if approval is None:
         return t("command.deny.none", lang)
-    if approval.thread_id != ctx.thread_id or approval.sender != ctx.sender:
+    if decision_refusal(
+        approval, thread_id=ctx.thread_id, sender=ctx.sender, roles=ctx.roles
+    ):
         return t("command.deny.foreign", lang)
     if approval.status != "pending":
         return t("command.deny.already", lang, id=approval.id, status=approval.status)

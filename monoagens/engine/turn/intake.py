@@ -1,8 +1,8 @@
 """Intake: identity, the forget intent, and the watchdog around one turn task.
 
 ADR-0013 §7, ADR-0017 §4.3, ADR-0037 §4.3: the body hands in a percept, the core assigns the
-person id, and the turn runs under a deadline. The service never imports `agent.py`; the host is
-the `Agent` it is bound to.
+person id, and the turn runs under a deadline. The service never imports `agent.py`; it is
+injected with the `TurnRuntime`, the `TurnCoordinator`, the runner, and the delivery path.
 """
 
 
@@ -18,7 +18,9 @@ from ..inbound import Action, GatewayCore, Percept
 from ..llm import DeadlineExceeded
 from ..memory import intent
 from ..stores.history import RouteConflict
+from ..stores.turns import turn_identity
 from .commands import command_body
+from .state import sender_of
 
 log = logging.getLogger(__name__)
 
@@ -28,11 +30,11 @@ TERMINAL_TURN = frozenset({"delivered", "interrupted", "expired"})
 class TurnIntake:
     """The one door's intake: identity, the forget intent, the turn task, and its watchdog."""
 
-    def __init__(self, agent) -> None:
-        self.agent = agent
-
-    def __getattr__(self, name: str):
-        return getattr(self.agent, name)
+    def __init__(self, runtime, coordinator, runner, delivery) -> None:
+        self.runtime = runtime
+        self.coordinator = coordinator
+        self.runner = runner
+        self.delivery = delivery
 
     def identify(self, inbound: Percept, gateway: GatewayCore) -> Percept:
         """Core-owned identity: the body hands in an address, the core assigns the id."""
@@ -40,11 +42,14 @@ class TurnIntake:
             inbound.actor
             or inbound.payload.sender_id
             or inbound.payload.sender_address
-            or self._sender(inbound)
+            or sender_of(inbound)
         )
         source = inbound.source or gateway.name
         try:
-            return replace(inbound, actor=self.identity.resolve(source, raw))
+            # ADR-0001 §4.1: a resume carries an existing `per_…` id; keep it as-is.
+            if str(raw).startswith("per_") and self.runtime.identity.person(str(raw)) is not None:
+                return replace(inbound, actor=str(raw))
+            return replace(inbound, actor=self.runtime.identity.resolve(source, raw))
         except Exception:
             log.exception("identity resolve failed source=%s", source)
             return replace(inbound, actor=inbound.actor or raw)
@@ -55,13 +60,16 @@ class TurnIntake:
         The deterministic veto+forget path runs before the turn, so the ordinary reply can
         confirm it. Ambiguity deletes nothing and the turn continues unchanged.
         """
-        settings = getattr(self.config.memory, "intent", None)
+        settings = getattr(self.runtime.config.memory, "intent", None)
         kind = await io.run(
-            intent.classify, str(message.text or ""), self.soul.language, settings
+            intent.classify,
+            str(message.text or ""),
+            self.runtime.soul.language,
+            settings,
         )
         if kind != "forget":
             return
-        forget = getattr(self.memory, "forget_by_intent", None)
+        forget = getattr(self.runtime.memory, "forget_by_intent", None)
         if not isinstance(forget, Callable):
             return
         try:
@@ -92,36 +100,39 @@ class TurnIntake:
         message = inbound.payload
         thread_id = inbound.thread
         if message.outgoing or bool(inbound.hints.get("self")):
-            self.windows.append(thread_id, message)
-            if self.ambient is not None:
-                self.ambient.note(thread_id, message)
+            self.runtime.windows.append(thread_id, message)
+            if self.runtime.ambient is not None:
+                self.runtime.ambient.note(thread_id, message)
             return []
-        if not self._accepting():
+        if not self.runtime.accepting():
             # A standby instance refuses intake and sends nothing (ADR-0017 §4.4).
-            self.runtime.refuse_standby()
+            self.runtime.facts.refuse_standby()
             log.info(
                 "intake refused chat=%s mode=%s draining=%s",
                 thread_id,
-                self.mode,
-                self.draining,
+                self.runtime.mode(),
+                self.runtime.draining(),
             )
             return []
         inbound = self.identify(inbound, gateway)
-        turn_id = str(message.id or "")
-        if not turn_id:
+        message_id = str(message.id or "")
+        if not message_id:
             log.warning("message without an id cannot become a turn chat=%s", thread_id)
             return []
+        # ADR-0001 §4.3: the turn identity is namespaced, so two bodies never share a turn key.
+        turn_id = turn_identity(gateway.name, thread_id, message_id)
         try:
-            self.history.intake(
+            self.runtime.history.intake(
                 thread_id,
                 message,
                 inbound.actor,
-                language=str(self.soul.language),
+                language=str(self.runtime.soul.language),
                 audience="private" if bool(inbound.hints.get("dm")) else "group",
                 # ADR-0013 §11: the body marks a single-action turn; the backlog never folds it.
                 category="action" if inbound.hints.get("action") is True else "chat",
                 gateway=getattr(gateway, "name", "") or "",
                 app=str(inbound.hints.get("app") or ""),
+                hints=dict(inbound.hints),
             )
         except RouteConflict as conflict:
             log.warning(
@@ -136,32 +147,32 @@ class TurnIntake:
                 "intake failed chat=%s id=%s: the turn is not processed", thread_id, turn_id
             )
             raise
-        self.windows.append(thread_id, message, persist=False)
-        if self.ambient is not None:
-            self.ambient.note(thread_id, message)
+        self.runtime.windows.append(thread_id, message, persist=False)
+        if self.runtime.ambient is not None:
+            self.runtime.ambient.note(thread_id, message)
         await self.forget_intent(inbound, message)
-        existing = self.turns.get(turn_id)
+        existing = self.runtime.turns.get(turn_id)
         if existing is not None and str(existing["status"]) in TERMINAL_TURN:
             log.info("turn %s already %s; no repeat", turn_id, existing["status"])
             return []
         age = time.time() - message.when.timestamp()
         backlog = float(getattr(gateway, "backlog_seconds", 0.0) or 0.0)
         if claimed is None and backlog > 0 and age > backlog:
-            self.backlog[thread_id] = self.backlog.get(thread_id, 0) + 1
+            self.runtime.backlog[thread_id] = self.runtime.backlog.get(thread_id, 0) + 1
             try:
-                self.turns.expire(turn_id, "backlog")
+                self.runtime.turns.expire(turn_id, "backlog")
             except Exception:
                 log.exception("failed to expire the backlog turn %s", turn_id)
             log.info("old message chat=%s age=%.0fs: archive only", thread_id, age)
             return []
 
         text = message.text
-        body = command_body(text, self.soul.name, gateway.self_handles())
+        body = command_body(text, self.runtime.soul.name, gateway.self_handles())
         is_command = body.startswith("/")
-        timeout = float(self.config.turns.timeout_seconds)
+        timeout = float(self.runtime.config.turns.timeout_seconds)
         deadline = time.monotonic() + timeout
         task = asyncio.create_task(
-            self._run_turn(
+            self.runner.run(
                 inbound,
                 gateway,
                 turn_id,
@@ -173,35 +184,33 @@ class TurnIntake:
         )
         setattr(task, "_monoagens_turn_id", turn_id)  # noqa: B010 — a dynamic task attribute
         if not is_command:
-            self._pending_tasks[thread_id] = task
+            self.coordinator.register(thread_id, task, gateway, active=False)
         try:
             return await asyncio.wait_for(task, timeout=timeout)
         except TimeoutError:
             task.cancel()
             with contextlib.suppress(BaseException):
                 await task
-            self._interrupt(turn_id, "timeout", force=True)
+            await self.coordinator.interrupt(turn_id, "timeout")
             if not is_command:
-                await self._notice_timeout(thread_id, turn_id, gateway)
+                await self.delivery.notice_timeout(thread_id, turn_id, gateway)
             return []
         except DeadlineExceeded:
-            self._interrupt(turn_id, "timeout", force=True)
+            await self.coordinator.interrupt(turn_id, "timeout")
             if not is_command:
-                await self._notice_timeout(thread_id, turn_id, gateway)
+                await self.delivery.notice_timeout(thread_id, turn_id, gateway)
             return []
         except asyncio.CancelledError:
             current = asyncio.current_task()
             external = current is not None and current.cancelling()
             if task.cancelled() and not external:
-                reason = self._cancel_reasons.get(turn_id, "cancelled")
-                self._interrupt(turn_id, reason, force=True)
+                reason = self.coordinator.reason(turn_id)
+                await self.coordinator.interrupt(turn_id, reason)
                 return []
-            self._cancel_reasons[turn_id] = "cancelled"
+            self.coordinator.note(turn_id, "cancelled")
             task.cancel()
             raise
         finally:
             if not is_command:
-                if self._pending_tasks.get(thread_id) is task:
-                    self._pending_tasks.pop(thread_id, None)
-                self._cancel_reasons.pop(turn_id, None)
-
+                self.coordinator.release(thread_id, task, active=False)
+                self.coordinator.forget(turn_id)

@@ -393,8 +393,8 @@ async def decide(
     identity = soul
     system = (
         f"You are {identity.name}, a soul in chat. "
-        f"Active role: {identity.role}. "
-        f"Available roles: {', '.join(identity.roles) or identity.role}.\n"
+        f"Active mode: {identity.mode}. "
+        f"Available modes: {', '.join(identity.modes) or identity.mode}.\n"
         + decision_prompt(feelings)
     )
     if identity.persona:

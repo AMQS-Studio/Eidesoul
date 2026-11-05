@@ -193,7 +193,8 @@ def quote_from_proto(message, message_id: str) -> Quote | None:
 
 
 def event_time(timestamp: int):
-    from datetime import datetime
+    """A transport epoch (seconds or milliseconds) as an aware local datetime."""
+    from datetime import UTC, datetime
 
     try:
         value = int(timestamp or 0)
@@ -202,11 +203,11 @@ def event_time(timestamp: int):
     if value > 10**12:
         value //= 1000
     if value <= 0:
-        return datetime.now().replace(microsecond=0)
+        return datetime.now(UTC).astimezone().replace(microsecond=0)
     try:
-        return datetime.fromtimestamp(value)
+        return datetime.fromtimestamp(value, UTC).astimezone()
     except (OverflowError, OSError, ValueError):
-        return datetime.now().replace(microsecond=0)
+        return datetime.now(UTC).astimezone().replace(microsecond=0)
 
 
 def _relative(config: Config, path: Path) -> str:

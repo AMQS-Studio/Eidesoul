@@ -3,12 +3,15 @@
 
 import pytest
 
-from monoagens.engine.config import DEFAULT_SENSITIVE_COMMANDS, ApprovalConfig
+from monoagens.engine.config import (
+    DEFAULT_SENSITIVE_COMMANDS,
+    ApprovalConfig,
+    ConfigError,
+)
 from monoagens.engine.guard import (
     ActionRequest,
     ApprovalPolicy,
     approval_class,
-    build_safety,
     credential_read,
     recheck_scope,
     scan_command,
@@ -121,39 +124,49 @@ BLOCKED_SHELL = [
 
 @pytest.mark.parametrize("command", ALLOWED_SHELL)
 def test_ordinary_shell_command_runs_without_approval(command: str) -> None:
-    assert verdict(ApprovalConfig(), "shell", command=command) == "allow"
+    assert verdict(ApprovalConfig(mode="yolo"), "shell", command=command) == "allow"
 
 
 @pytest.mark.parametrize("command", BLOCKED_SHELL)
 def test_destructive_shell_command_waits_for_approval(command: str) -> None:
-    assert verdict(ApprovalConfig(), "shell", command=command) == "pending"
+    assert verdict(ApprovalConfig(mode="yolo"), "shell", command=command) == "pending"
 
 
-def test_sensitive_tool_gates_every_call() -> None:
-    assert verdict(ApprovalConfig(sensitive_tools=("shell",)), "shell", command="ls") == "pending"
-
-
-def test_strict_mode_gates_everything_but_read_only() -> None:
+def test_strict_mode_gates_every_tool_call() -> None:
     config = ApprovalConfig(mode="strict")
-    assert verdict(config, "read", file="a.txt") == "allow"
+    assert verdict(config, "read", file="a.txt") == "pending"
     assert verdict(config, "shell", command="ls") == "pending"
 
 
-def test_mode_off_bypasses_command_classifier() -> None:
-    policy = build_safety(ApprovalConfig(mode="off"))
-    assert policy.check(request("shell", command="rm -rf x")).verdict == "allow"
+def test_mode_off_is_gone_and_points_at_yolo() -> None:
+    with pytest.raises(ConfigError, match="use 'yolo'"):
+        ApprovalConfig(mode="off")
 
 
-def test_destructive_internal_actions_wait_for_approval() -> None:
-    config = ApprovalConfig()
-    assert verdict(config, "memory", action="forget") == "pending"
-    assert verdict(config, "memory", action="add", text="a") == "allow"
-    assert verdict(config, "recipe", action="remove", name="x") == "pending"
+def test_default_mode_pauses_state_changes_and_runs_reads() -> None:
+    config = ApprovalConfig(mode="default")
+    assert verdict(config, "read", file="a.txt") == "allow"
+    assert verdict(config, "memory", action="search", query="x") == "allow"
+    assert verdict(config, "memory", action="add", text="a") == "pending"
+    assert verdict(config, "memory", action="forget", query="x") == "pending"
     assert verdict(config, "recipe", action="list") == "allow"
+    assert verdict(config, "recipe", action="remove", name="x") == "pending"
+    assert verdict(config, "write", path="/w/scratch/c/a.txt") == "pending"
+
+
+def test_yolo_mode_trusts_ordinary_tools_but_not_sensitive_ones() -> None:
+    config = ApprovalConfig(mode="yolo")
+    assert verdict(config, "memory", action="forget") == "allow"
+    assert verdict(config, "recipe", action="remove", name="x") == "allow"
+    assert verdict(config, "shell", command="ls") == "allow"
+    assert verdict(config, "shell", command="rm -rf x") == "pending"
 
 
 def test_empty_sensitive_commands_disables_command_gate() -> None:
-    assert verdict(ApprovalConfig(sensitive_commands=()), "shell", command="rm -rf x") == "allow"
+    assert (
+        verdict(ApprovalConfig(mode="yolo", sensitive_commands=()), "shell", command="rm -rf x")
+        == "allow"
+    )
 
 
 def test_scan_command_is_the_shared_scanner() -> None:

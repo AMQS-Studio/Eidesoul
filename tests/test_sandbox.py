@@ -9,7 +9,7 @@ from types import SimpleNamespace
 import pytest
 
 from monoagens.engine.config import ConfigError, SandboxConfig, load_config
-from monoagens.engine.tools import sandbox
+from monoagens.engine.tools import safe_chat, sandbox
 
 
 class FakeProc:
@@ -84,7 +84,7 @@ def test_podman_argv_has_keep_id_and_selinux_suffix(tmp_path: Path, monkeypatch)
     assert "--user" not in argv
     assert mounts == [
         f"{workspace / 'public'}:/work/public:ro,Z",
-        f"{workspace / 'scratch' / 'chat1'}:/work/scratch:Z",
+        f"{workspace / 'scratch' / safe_chat('chat1')}:/work/scratch:Z",
     ]
     assert argv[argv.index("-w") + 1] == "/work/scratch"
     assert argv[argv.index("--network") + 1] == "monoagens-sandbox"

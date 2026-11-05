@@ -42,6 +42,7 @@ class ProviderResponse:
     """The one response shape the turn loop consumes (ADR-0044 §4.2)."""
 
     text: str = ""
+    thinking: str = ""
     tool_calls: tuple[ProviderToolCall, ...] = ()
     usage: ProviderUsage | None = None
     finish_reason: str = ""
@@ -49,6 +50,30 @@ class ProviderResponse:
     blocked: bool = False
     message: object | None = None
     native: dict = field(default_factory=dict)
+
+
+def thinking_blocks(content: object) -> str:
+    """Reasoning text from a content-block list: Claude `thinking`, Gemini `thought` parts.
+
+    The blocks are data, not answer text; every wire keeps them out of `ProviderResponse.text`
+    so a gateway that shows thinking never duplicates them in the reply bubble.
+    """
+    if not isinstance(content, list):
+        return ""
+    texts: list[str] = []
+    for part in content:
+        if not isinstance(part, dict):
+            continue
+        if part.get("type") in {"thinking", "redacted_thinking"}:
+            text = part.get("thinking") or part.get("text") or ""
+        elif part.get("thought") is True:
+            text = part.get("text") or ""
+        else:
+            continue
+        text = str(text or "").strip()
+        if text:
+            texts.append(text)
+    return "\n\n".join(texts)
 
 
 class ProviderError(RuntimeError):

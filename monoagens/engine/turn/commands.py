@@ -41,9 +41,6 @@ class TurnCommands:
     def __init__(self, agent) -> None:
         self.agent = agent
 
-    def __getattr__(self, name: str):
-        return getattr(self.agent, name)
-
     async def run(
         self,
         name: str,
@@ -54,19 +51,20 @@ class TurnCommands:
         gateway: GatewayCore,
         inbound: Percept,
     ) -> str:
+        agent = self.agent
         if not name:
-            return t("agent.help_hint", self.soul.language)
-        handler = self.commands.get(name)
+            return t("agent.help_hint", agent.soul.language)
+        handler = agent.commands.get(name)
         recipe = None
-        if handler is None and self.recipes is not None:
+        if handler is None and agent.recipes is not None:
             with contextlib.suppress(Exception):
-                recipe = self.recipes.get(name)
+                recipe = agent.recipes.get(name)
         if handler is None and recipe is None:
-            return t("agent.unknown_command", self.soul.language, name=name)
+            return t("agent.unknown_command", agent.soul.language, name=name)
         names = {role.name for role in roles}
         denied = t(
             "agent.command_denied",
-            self.soul.language,
+            agent.soul.language,
             name=name,
             roles=", ".join(sorted(names)),
         )
@@ -77,28 +75,28 @@ class TurnCommands:
         if recipe is not None:
             from ..stores.recipes import run_recipe
 
-            ctx = self.tool_context(thread_id, sender, roles, gateway, request=args)
+            ctx = agent.tool_context(thread_id, sender, roles, gateway, request=args)
             if recipe.kind == "recipe":
                 return await run_recipe(recipe, args, ctx)
-            if self.llm is None:
-                return t("agent.no_llm", self.soul.language)
-            specs = self._specs(roles, gateway)
+            if agent.llm is None:
+                return t("agent.no_llm", agent.soul.language)
+            specs = agent._specs(roles, gateway)
             prompt_context = PromptContext(
-                config=self.config,
+                config=agent.config,
                 roles=roles,
-                runtime=self.runtime,
+                runtime=agent.runtime,
                 body_section=prompt_section(gateway),
-                tools=self.tool_index.registry(gateway.name),
-                commands=self.commands,
-                bodies=self.tool_index.other_bodies(gateway.name),
+                tools=agent.tool_index.registry(gateway.name),
+                commands=agent.commands,
+                bodies=agent.tool_index.other_bodies(gateway.name),
                 mode="professional",
             )
-            return await self.llm.run(
+            return await agent.llm.run(
                 system_prompt(
-                    self.config,
+                    agent.config,
                     roles,
                     context=prompt_context,
-                    parts=(*CORE_PARTS, *self.plugin_parts),
+                    parts=(*CORE_PARTS, *agent.plugin_parts),
                 ),
                 f"{recipe.prompt}\n\nArguments: {args}".strip(),
                 specs,
@@ -107,7 +105,7 @@ class TurnCommands:
             )
         ctx = self.context(thread_id, sender, roles, gateway, args, inbound)
         if handler is None or handler.fn is None:  # pragma: no cover - a command is callable
-            return t("agent.unknown_command", self.soul.language, name=name)
+            return t("agent.unknown_command", agent.soul.language, name=name)
         return await handler.fn(ctx)
 
 
@@ -120,19 +118,20 @@ class TurnCommands:
         args: str = "",
         inbound: Percept | None = None,
     ) -> CommandContext:
+        agent = self.agent
         registry = gateway.name if gateway is not None else ""
-        specs = tools_for(self.tool_index.registry(registry), roles) + (
-            self.hub.specs(roles) if self.hub else []
+        specs = tools_for(agent.tool_index.registry(registry), roles) + (
+            agent.hub.specs(roles) if agent.hub else []
         )
         return CommandContext(
-            agent=self,
+            agent=agent,
             gateway=gateway,
             roles=roles,
             thread_id=thread_id,
             sender=sender,
             direct=bool(inbound.hints.get("dm", False)) if inbound is not None else True,
             args=args,
-            commands=tuple(commands_for(self.commands, roles)),
+            commands=tuple(commands_for(agent.commands, roles)),
             tools=tuple(specs),
             inbound=inbound,
         )

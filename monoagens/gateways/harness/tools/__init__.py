@@ -1,1 +1,0 @@
-"""Harness tool package."""

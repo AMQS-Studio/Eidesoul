@@ -30,10 +30,10 @@ def _soul(case: dict) -> Soul:
 
 def _section(case: dict) -> str:
     source = case.get("section_from")
-    if source == "cli":
-        from monoagens.gateways.cli.gateway import CliGateway
+    if source == "console":
+        from monoagens.admin.console import Console
 
-        return CliGateway.prompt_section(None)
+        return Console().prompt_section()
     return str(case.get("section") or "")
 
 
@@ -94,11 +94,11 @@ def test_the_section_cap_is_enforced() -> None:
         prompt_section(Huge())
 
 
-def test_the_cli_section_is_static_and_under_the_cap() -> None:
-    from monoagens.gateways.cli.gateway import CliGateway
+def test_the_console_section_is_static_and_under_the_cap() -> None:
+    from monoagens.admin.console import Console
 
-    first = CliGateway.prompt_section(None)
-    second = CliGateway.prompt_section(None)
+    first = Console().prompt_section()
+    second = Console().prompt_section()
     assert first == second
     assert 0 < len(first) <= PROMPT_SECTION_MAX
 
@@ -162,3 +162,70 @@ def test_stable_parts_are_pure_across_per_turn_contexts(tmp_path) -> None:
 
     assert first.stable == second.stable
     assert prompt_prefix_hash(first.stable, []) == prompt_prefix_hash(second.stable, [])
+
+
+def test_safety_and_a_research_card_survive_an_aggressive_budget(tmp_path) -> None:
+    """ADR-0003 §4.2: crisis instructions and a research card are never dropped for budget."""
+    from dataclasses import replace
+
+    from monoagens.engine.turn.prompts import CRISIS_SAFETY
+    from monoagens.engine.turn.research import build_card, render
+
+    card = build_card(
+        "harga emas hari ini",
+        [
+            {
+                "title": "Harga emas hari ini",
+                "url": "https://example.com/gold",
+                "body": "Harga emas naik tipis pada perdagangan pagi ini.",
+            }
+        ],
+        timezone="UTC",
+        reason="numeric",
+    )
+    research = render(card)
+    base = build_config(tmp_path)
+    config = replace(base, prompt=replace(base.prompt, max_chars=50))
+    context = PromptContext(
+        config=config,
+        roles=(Role("member"),),
+        language="id",
+        safety=CRISIS_SAFETY,
+        research=research,
+    )
+
+    text = str(system_prompt(config, (Role("member"),), context=context))
+
+    assert CRISIS_SAFETY in text
+    assert research in text
+
+
+def test_a_block_named_in_pinned_blocks_defeats_the_budget(tmp_path) -> None:
+    """`config.prompt.pinned_blocks` pins extension blocks without editing their producer."""
+    from dataclasses import replace
+
+    config = build_config(tmp_path)
+    tight_prompt = replace(config.prompt, max_chars=50)
+    context = PromptContext(
+        config=config, roles=(Role("member"),), language="id", memory="MEMORY " * 100
+    )
+    loose_config = replace(config, prompt=tight_prompt)
+    pinned = replace(config, prompt=replace(tight_prompt, pinned_blocks=("memory",)))
+
+    loose = str(
+        system_prompt(
+            loose_config,
+            (Role("member"),),
+            context=replace(context, config=loose_config),
+        )
+    )
+    tight = str(
+        system_prompt(
+            pinned,
+            (Role("member"),),
+            context=replace(context, config=pinned),
+        )
+    )
+
+    assert "MEMORY" not in loose
+    assert "MEMORY" in tight
