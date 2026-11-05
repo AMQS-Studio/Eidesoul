@@ -5,8 +5,8 @@
 <h1 align="center">MonoAgens</h1>
 
 <p align="center">
-  <strong>A sovereign, persistent mono-agent harness.</strong><br>
-  <em>One continuous identity, native hybrid memory, and deterministic safety across every surface and embodiment.</em>
+  <em>persistent mono agent — always remembering, always learning, the same person wherever it lives.</em><br>
+  <sub>One continuous Soul, native hybrid memory, and deterministic authority across text, voice calls, and physical embodiments.</sub>
 </p>
 
 <p align="center">
@@ -37,6 +37,11 @@
 Most agent frameworks treat state as a disposable chat session and personality as a system prompt pasted into a context window. When the window fills, history is compacted away; when you switch from a terminal to a messaging app or a voice interface, you talk to a stranger.
 
 **MonoAgens** is built around a different invariant: **one deployment is one continuous self (`Soul`) backed by one canonical PostgreSQL store.**
+
+- **One self** — one identity and one memory per Soul, never an ephemeral session. Restart the process or switch surfaces: the exact same self continues.
+- **Always remembering** — facts about people, episodes, and decisions are persisted in PostgreSQL (`pgvector` + `tsvector`) with layered privacy (`L0–L4`) and subject veto. Forgetting is a governed retention policy, never a context-window accident.
+- **Always learning** — finished episodes distill into reusable procedural memories and per-person relationship/style adaptation, while never mutating core behavioral rules, persona, or permissions.
+- **The same person wherever it lives** — a terminal, a messaging app, a live voice call, or a physical robot is a body that carries the turn. A body adds a transport or actuator, never a separate personality.
 
 <table>
 <tr>
