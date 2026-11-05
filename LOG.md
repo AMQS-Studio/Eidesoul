@@ -1,5 +1,12 @@
 # LOG
 
+## 2026-11-05 — Installer deletion paths removed
+
+The installer no longer recursively removes a target directory. A non-empty directory without a
+MonoAgens checkout stops with an explicit message; the operator clears it manually. The archive
+failure path also leaves the target untouched instead of `rm -rf`. `guard_install_dir` refuses
+HOME, its ancestors, system roots, and symlink-resolved equivalents before the plan is printed.
+
 ## 2026-11-05 — Credential validation in `init`
 
 The credential step now checks the entered key against the provider's model-list endpoint. A

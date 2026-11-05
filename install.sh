@@ -362,6 +362,7 @@ ask_directory() {
     [[ -t 0 ]] || return 0
     if picked="$(ui_choice location --default "$default_dir" --here "$here_dir")"; then
         dir="$picked"
+        [[ -n "$dir" ]] || dir="$default_dir"
         dir="$(normalize_directory "$dir")"
         [[ -n "$dir" ]] || usage 2 "install directory must not be empty"
         [[ "$dir" != "/" ]] || usage 2 "refusing to install directly at /"
@@ -676,6 +677,7 @@ guard_install_dir() {
 }
 
 prepare_dir() {
+    guard_install_dir
     stage "install directory: $dir"
     if [[ -f "$dir/pyproject.toml" ]]; then
         refresh_existing_checkout
@@ -687,36 +689,7 @@ prepare_dir() {
         fi
     fi
     if [[ -d "$dir" && -n "$(ls -A -- "$dir" 2>/dev/null)" ]]; then
-        if ! looks_like_monoagens_dir "$dir"; then
-            die "$dir is not empty and is not a MonoAgens checkout; choose an empty directory (refusing to remove it)"
-        fi
-        warn "$dir is not empty and has no pyproject.toml."
-        warn "This is usually a partial checkout from an interrupted install."
-        if (( dry_run )); then
-            detail "would ask before removing the partial contents"
-            return 0
-        fi
-        if [[ -t 0 ]] && (( ! non_interactive )); then
-            local answer=""
-            read -r -p "  remove the contents and install there? [y/N]: " answer || answer=""
-            case "$answer" in
-                y | Y | yes | YES)
-                    if [[ "$PWD" == "$dir" ]]; then
-                        # Removing the shell's own directory breaks every child's getcwd.
-                        find "$dir" -mindepth 1 -maxdepth 1 -exec rm -rf -- {} +
-                    elif [[ "$PWD" == "$dir"/* ]]; then
-                        die "refusing to remove $dir while the shell is inside it; cd elsewhere first"
-                    else
-                        rm -rf -- "$dir"
-                        mkdir -p -- "$dir"
-                    fi
-                    detail "removed the partial contents"
-                    ;;
-                *) die "install directory is not empty; choose another one or clear it yourself" ;;
-            esac
-        else
-            die "$dir is not empty and has no pyproject.toml; pass --dir at an empty directory"
-        fi
+        die "$dir is not empty and has no pyproject.toml; choose an empty directory or clear it yourself (the installer never removes it)"
     fi
     if [[ -n "$source_root" && -f "$source_root/pyproject.toml" ]]; then
         detail "copy this checkout from $source_root (no .git, .venv, .env, or runtime data)"
@@ -737,8 +710,9 @@ prepare_dir() {
             | tar -xz --strip-components=1 -C "$dir"; then
             return 0
         fi
-        rm -rf -- "$dir"
-        warn "archive download failed; trying git"
+        warn "archive download failed; leaving $dir untouched"
+        die "cannot fetch the checkout; remove $dir and retry, or install git"
+
     fi
     if command -v git >/dev/null 2>&1; then
         detail "clone $REPO_URL into $dir (no local changes exist to protect)"

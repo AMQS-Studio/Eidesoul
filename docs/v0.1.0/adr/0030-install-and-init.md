@@ -69,7 +69,7 @@ form downloads the script first or uses process substitution; `curl | bash` stay
 | Finish | offers a choice (§4.5): open the panel, or stay on the command line |
 | Observation | one status line while a child runs; non-interactive child output is appended to `~/.monoagens/logs/install.log`, while the interactive wizard stays on the terminal (no secret in the log); a failure prints the last lines plus the log path |
 | Signals | `INT`/`TERM`/`HUP` mark the run `interrupted` and are re-raised, so the exit status stays the signal's |
-| Re-run | a repair: an existing checkout is refreshed from `main` while `config.yaml`, `roles.yaml`, `soul.yaml`, `.env`, `.monoagens`, `.venv`, `plugins`, and `panel` stay; a git checkout with local changes is kept; a partial checkout with no `pyproject.toml` is offered for removal before the retry |
+| Re-run | a repair: an existing checkout is refreshed from `main` while `config.yaml`, `roles.yaml`, `soul.yaml`, `.env`, `.monoagens`, `.venv`, `plugins`, and `panel` stay; a git checkout with local changes is kept; a partial checkout with no `pyproject.toml` is refused; the installer never removes a non-empty directory, so the operator clears it manually |
 | Platform | Linux x86_64 and aarch64 in this version; anything else is refused with one line |
 | Preview | `--dry-run` prints every action and writes nothing |
 

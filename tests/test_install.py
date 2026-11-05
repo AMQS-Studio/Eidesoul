@@ -302,6 +302,52 @@ guard_install_dir
     assert "home directory" in result.stderr
 
 
+def test_a_non_checkout_directory_is_never_removed(tmp_path):
+    target = tmp_path / "keep"
+    target.mkdir()
+    marker = target / "important.txt"
+    marker.write_text("do not delete\n", encoding="utf-8")
+    code = """
+MONOAGENS_INSTALL_SOURCED=1
+source "$1/install.sh"
+dir="$2"
+prepare_dir
+"""
+    result = subprocess.run(
+        ["bash", "-c", code, "_", str(ROOT), str(target)],
+        env=clean_env(),
+        capture_output=True,
+        text=True,
+        timeout=60,
+        check=False,
+    )
+    assert result.returncode != 0
+    assert "never removes it" in result.stderr
+    assert marker.read_text(encoding="utf-8") == "do not delete\n"
+
+
+def test_a_partial_checkout_is_not_removed_automatically(tmp_path):
+    target = tmp_path / "partial"
+    target.mkdir()
+    (target / "install.sh").write_text("#!/bin/sh\n", encoding="utf-8")
+    code = """
+MONOAGENS_INSTALL_SOURCED=1
+source "$1/install.sh"
+dir="$2"
+prepare_dir
+"""
+    result = subprocess.run(
+        ["bash", "-c", code, "_", str(ROOT), str(target)],
+        env=clean_env(),
+        capture_output=True,
+        text=True,
+        timeout=60,
+        check=False,
+    )
+    assert result.returncode != 0
+    assert (target / "install.sh").is_file()
+
+
 def test_prepare_database_env_marks_a_container_database(tmp_path):
     env_file = tmp_path / ".env"
     code = """
