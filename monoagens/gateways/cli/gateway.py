@@ -5,6 +5,7 @@ import asyncio
 import getpass
 import logging
 import sys
+import threading
 import time
 from datetime import datetime
 
@@ -36,6 +37,8 @@ class CliGateway(CoreDefaults):
         self.counter = 0
         self.stopped = False
         self.agent = None
+        self._lines: asyncio.Queue[str] | None = None
+        self._stop = asyncio.Event()
 
     def tools(self) -> list[Handler]:
         return []
@@ -59,6 +62,20 @@ class CliGateway(CoreDefaults):
         )
         return reason
 
+    def _pump(self, loop: asyncio.AbstractEventLoop, lines: asyncio.Queue[str]) -> None:
+        """Read the terminal on a daemon thread: a blocked read never holds asyncio shutdown."""
+        while True:
+            try:
+                line = sys.stdin.readline()
+            except (EOFError, KeyboardInterrupt):
+                line = ""
+            try:
+                loop.call_soon_threadsafe(lines.put_nowait, line)
+            except RuntimeError:  # the loop is already closed
+                return
+            if not line:
+                return
+
     async def run(self, agent) -> None:
         self.agent = agent
         print(
@@ -66,13 +83,20 @@ class CliGateway(CoreDefaults):
             "type /help, /quit to exit.",
             flush=True,
         )
+        loop = asyncio.get_running_loop()
+        lines: asyncio.Queue[str] = asyncio.Queue()
+        self._lines = lines
+        threading.Thread(
+            target=self._pump, args=(loop, lines), name="cli-stdin", daemon=True
+        ).start()
         while not self.stopped:
-            try:
-                line = await asyncio.to_thread(sys.stdin.readline)
-            except (EOFError, KeyboardInterrupt):
-                break
+            line = await lines.get()
             if not line:
-                break
+                # A closed stdin (a service, /dev/null, Ctrl-D) leaves the body idle; it must
+                # not end the gateway task, which the supervisor would read as a full stop.
+                log.info("cli: stdin closed; console idle")
+                await self._stop.wait()
+                return
             text = line.rstrip("\n")
             if text.strip() in {"/quit", "/exit"}:
                 break
@@ -105,6 +129,9 @@ class CliGateway(CoreDefaults):
 
     async def stop(self) -> None:
         self.stopped = True
+        self._stop.set()
+        if self._lines is not None:
+            self._lines.put_nowait("")
 
     async def dispatch(self, action: Action) -> str:
         """Message Dispatcher: this body's own verbs, one refusal for anything else."""

@@ -105,3 +105,47 @@ def test_the_cli_is_core_only(tmp_path) -> None:
     for absent in ("send_file", "send_sticker", "typing", "prepare_media", "participants"):
         assert not hasattr(gateway, absent), absent
     assert gateway.chat_name("cli:local") == "Terminal"
+
+
+def test_stop_releases_a_blocked_stdin_reader(tmp_path, monkeypatch) -> None:
+    """A foreground run must exit even while the terminal reader waits for a line."""
+    import threading
+
+    gateway = make_cli(tmp_path)
+    agent = RecordingAgent()
+    gate = threading.Event()
+
+    class BlockingStdin:
+        @staticmethod
+        def readline():
+            gate.wait(10)
+            return ""
+
+    monkeypatch.setattr("sys.stdin", BlockingStdin())
+
+    async def scenario():
+        task = asyncio.create_task(gateway.run(agent))
+        await asyncio.sleep(0.05)
+        await gateway.stop()
+        try:
+            await asyncio.wait_for(task, 0.5)
+        finally:
+            gate.set()
+
+    asyncio.run(scenario())
+
+
+def test_stdin_eof_keeps_the_gateway_alive(tmp_path, monkeypatch) -> None:
+    """A service has /dev/null as stdin; that must not look like a stopped gateway."""
+    gateway = make_cli(tmp_path)
+    agent = RecordingAgent()
+    monkeypatch.setattr("sys.stdin", io.StringIO(""))
+
+    async def scenario():
+        task = asyncio.create_task(gateway.run(agent))
+        await asyncio.sleep(0.1)
+        assert not task.done()
+        await gateway.stop()
+        await asyncio.wait_for(task, 1.0)
+
+    asyncio.run(scenario())
