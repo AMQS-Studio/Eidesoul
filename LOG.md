@@ -1,5 +1,12 @@
 # LOG
 
+## 2026-11-05 — NTFS target and module invocation
+
+A `curl` install into `/mnt/data` (fuseblk NTFS) failed with an import traceback because
+`.venv/bin/monoagens` had no executable bit. `uv_run_in_dir` now runs `python -m monoagens`, and
+`guard_install_dir` probes the target for POSIX `0600` support, refusing NTFS/FAT mounts where
+executable and secret-file modes cannot be preserved.
+
 ## 2026-11-05 — Capability setup and installer dependency scope
 
 The installer now runs `uv sync --locked --no-dev` and exports `UV_NO_DEV=1` for every later

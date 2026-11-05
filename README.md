@@ -239,6 +239,10 @@ bash <(curl -fsSL https://raw.githubusercontent.com/AMQStudio/MonoAgens/main/ins
 A plain `curl ... | bash` has no TTY, so the wizard fails closed; pass `--provider` and the other
 flags for a headless install.
 
+Install into a POSIX filesystem (ext4, btrfs, xfs). NTFS/FAT mounts such as `/mnt/data` drop
+executable and `0600` file modes, so the installer refuses them instead of storing secrets on a
+filesystem that cannot protect them.
+
 From source, the same steps by hand:
 
 ```bash

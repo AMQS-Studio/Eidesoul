@@ -758,7 +758,7 @@ looks_like_monoagens_dir() {
 }
 
 guard_install_dir() {
-    local resolved
+    local resolved probe probe_base mode
     resolved="$(realpath -m -- "$dir" 2>/dev/null || printf '%s' "$dir")"
     case "$resolved" in
         / | /home | /root | /usr | /etc | /var | /opt | /boot | /dev | /proc | /sys | /run | /tmp)
@@ -770,6 +770,19 @@ guard_install_dir() {
     fi
     if [[ -z "$dir" ]]; then
         die "install directory is empty; choose a project directory"
+    fi
+    probe_base="$resolved"
+    while [[ ! -d "$probe_base" && "$probe_base" != "/" ]]; do
+        probe_base="$(dirname -- "$probe_base")"
+    done
+    probe="$(mktemp "${probe_base%/}/.monoagens-mode.XXXXXX" 2>/dev/null || true)"
+    if [[ -n "$probe" ]]; then
+        chmod 600 -- "$probe" 2>/dev/null || true
+        mode="$(stat -c '%a' -- "$probe" 2>/dev/null || true)"
+        rm -f -- "$probe"
+        if [[ -n "$mode" && "$mode" != "600" ]]; then
+            die "filesystem for $resolved does not preserve POSIX permissions; use an ext4/btrfs/xfs path (not NTFS/FAT)"
+        fi
     fi
 }
 
@@ -916,7 +929,7 @@ sync_gateway_extras() {
 }
 
 uv_run_in_dir() {
-    ( cd -- "$dir" && export UV_NO_DEV=1 && exec "$uv" run monoagens "$@" )
+    ( cd -- "$dir" && export UV_NO_DEV=1 && exec "$uv" run python -m monoagens "$@" )
 }
 
 enabled_pairable_gateways() {
@@ -965,7 +978,7 @@ pair_gateways() {
             answer="no"
         fi
         if [[ "$answer" == "yes" ]]; then
-            uv_run_in_dir gateway pair "$name" || warn "pairing $name did not finish; rerun: monoagens gateway pair $name"
+            uv_run_in_dir gateway pair "$name" || warn "pairing $name did not finish; rerun: uv run --no-dev python -m monoagens gateway pair $name"
         else
             detail "pair later: monoagens gateway pair $name"
         fi
@@ -1016,7 +1029,7 @@ run_init() {
         die "no terminal and no --provider. Pass --provider <name> (optionally --model, --database-url, --label, --language, --locale, --timezone, --voice-layer), or run with a terminal"
     fi
     if (( dry_run )); then
-        detail "would run: uv run monoagens init --dir $dir (the database URL stays out of this output)"
+        detail "would run: uv run python -m monoagens init --dir $dir (the database URL stays out of this output)"
         return 0
     fi
     if (( attached )); then
@@ -1529,16 +1542,16 @@ print_cli_steps() {
         fi
         say "    $runner exec monoagens monoagens db upgrade"
         say "    $runner exec monoagens monoagens run"
-        say "  Run the setup inside the container too: $runner exec monoagens monoagens init --dir ."
+        say "  Run the setup inside the container too: $runner exec monoagens python -m monoagens init --dir ."
     else
         say "  Stay on the command line:"
         say "    cd $dir"
         if ! database_configured; then
             say "    # fill .env first: MONOAGENS_DATABASE_URL, POSTGRES_PASSWORD, and the provider key"
         fi
-        say "    uv run --no-dev monoagens db upgrade"
-        say "    uv run --no-dev monoagens run"
-        say "  Run the setup again: uv run --no-dev monoagens init --dir ."
+        say "    uv run --no-dev python -m monoagens db upgrade"
+        say "    uv run --no-dev python -m monoagens run"
+        say "  Run the setup again: uv run --no-dev python -m monoagens init --dir ."
     fi
     say ""
     say "  Log: $log_file"

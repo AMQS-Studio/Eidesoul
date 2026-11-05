@@ -255,6 +255,10 @@ bash <(curl -fsSL https://raw.githubusercontent.com/AMQStudio/MonoAgens/main/ins
 `curl ... | bash` tidak punya TTY, jadi wizard fail-closed; berikan `--provider` dan flag lain
 untuk instalasi headless.
 
+Instal ke filesystem POSIX (ext4, btrfs, xfs). Mount NTFS/FAT seperti `/mnt/data` menghilangkan
+mode executable dan `0600`, jadi installer menolaknya daripada menyimpan secret di filesystem yang
+tidak bisa melindunginya.
+
 Dari source, langkah yang sama secara manual:
 
 ```bash

@@ -49,8 +49,9 @@ def run_script(args: list[str], env: dict[str, str]) -> subprocess.CompletedProc
 def stub_bin(tmp_path: Path) -> tuple[Path, Path]:
     """A PATH with a no-op uv, a Python 3.14, and a sudo that shouts when it is called.
 
-    `uv run monoagens init` is delegated to the interpreter in `STUB_MONOAGENS_PYTHON` so the
-    end-to-end test exercises the real init; every other child exits 0.
+    `uv run python -m monoagens init` is delegated to the interpreter in
+    `STUB_MONOAGENS_PYTHON` so the end-to-end test exercises the real init; every other
+    child exits 0.
     """
     folder = tmp_path / "bin"
     folder.mkdir()
@@ -58,9 +59,10 @@ def stub_bin(tmp_path: Path) -> tuple[Path, Path]:
     uv.write_text(
         '#!/usr/bin/env bash\n'
         'if [[ "${1:-}" == "--version" ]]; then echo "uv 0.13.7 (fake)"; exit 0; fi\n'
-        'if [[ "${1:-}" == "run" && "${2:-}" == "monoagens" && "${3:-}" == "init" '
+        'if [[ "${1:-}" == "run" && "${2:-}" == "python" && "${3:-}" == "-m" '
+        '&& "${4:-}" == "monoagens" && "${5:-}" == "init" '
         '&& -n "${STUB_MONOAGENS_PYTHON:-}" ]]; then\n'
-        '    shift 3\n'
+        '    shift 5\n'
         '    exec "$STUB_MONOAGENS_PYTHON" -m monoagens init "$@"\n'
         'fi\n'
         "exit 0\n",
@@ -93,7 +95,7 @@ def test_dry_run_prints_the_plan_and_writes_nothing(tmp_path):
     assert result.returncode == 0, result.stderr
     assert "dry-run: yes" in result.stdout
     assert "would run: uv sync --locked --no-dev" in result.stdout
-    assert "would run: uv run monoagens init" in result.stdout
+    assert "would run: uv run python -m monoagens init" in result.stdout
     assert "\x1b[" not in result.stdout
     assert listing(tmp_path) == before == []
 
@@ -141,7 +143,7 @@ def test_a_stubbed_run_keeps_the_secret_out_of_the_log_and_never_calls_sudo(tmp_
     assert "database-url=<provided>" in text
     assert "monoagens init" in text
     assert "panel: not built in this version" in output
-    assert "uv run --no-dev monoagens run" in output
+    assert "uv run --no-dev python -m monoagens run" in output
     for name, mode in (
         ("config.yaml", 0o644),
         ("roles.yaml", 0o600),
