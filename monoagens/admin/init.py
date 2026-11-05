@@ -145,6 +145,26 @@ def model_ids(provider: str, api_key: str = "") -> list[str]:
     return admin_models.list_models(_probe(provider, api_key), timeout=5.0)
 
 
+def validate_credential(provider: str, api_key: str = "") -> str | None:
+    """Reject a key the provider answers with 401/403; other list failures are not auth errors."""
+    key = api_key.strip()
+    if not key or provider not in PROVIDERS:
+        return None
+    defaults = PROVIDERS[provider]
+    if defaults.api_key_optional or not defaults.api_key_env:
+        return None
+    try:
+        model_ids(provider, key)
+    except ConfigError as exc:
+        text = str(exc).casefold()
+        markers = ("401", "403", "unauthorized", "forbidden", "invalid api key", "invalid_api_key")
+        if any(marker in text for marker in markers):
+            return f"{provider} rejected this key: {exc}"
+    except (KeyError, ValueError, OSError):
+        return None
+    return None
+
+
 def validate_model(provider: str, model: str, api_key: str = "") -> str | None:
     """A model outside the provider's reachable list; an unreachable list is not an error."""
     if not model.strip() or provider not in PROVIDERS:

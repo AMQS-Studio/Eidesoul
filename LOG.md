@@ -1,5 +1,12 @@
 # LOG
 
+## 2026-11-05 — Credential validation in `init`
+
+The credential step now checks the entered key against the provider's model-list endpoint. A
+401/403 is reported immediately as "rejected this key" and the step asks again; a blank key still
+defers to `.env`. Network failures and providers without a list endpoint do not block setup. The
+model step reuses the same credential, so a valid key leads directly to the selector.
+
 ## 2026-11-05 — Installer menus, engine choice, and usable defaults
 
 `install.sh` now uses the same curses layer as `monoagens init` for every installer decision:

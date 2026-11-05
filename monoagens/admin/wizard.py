@@ -25,6 +25,7 @@ from .init import (
     mode_of,
     model_ids,
     report,
+    validate_credential,
     validate_database_url,
     validate_model,
     voice_enabled,
@@ -159,18 +160,24 @@ def _ask_credential(state: Answers, stdin: TextIO, stdout: TextIO, color: bool =
         state.api_key = ""
         return
     optional = " (optional for this provider)" if defaults.api_key_optional else ""
-    state.api_key = terminal.text(
-        stdin=stdin,
-        stdout=stdout,
-        title=f"{key_env}{optional}",
-        default=state.api_key,
-        header=_menu_header(STEP_INDEX["credential"], color),
-        detail=["blank leaves it in .env to fill later"],
-        secret=True,
-        allow_back=True,
-        color=color,
-        plain=not color,
-    )
+    while True:
+        key = terminal.text(
+            stdin=stdin,
+            stdout=stdout,
+            title=f"{key_env}{optional}",
+            default=state.api_key,
+            header=_menu_header(STEP_INDEX["credential"], color),
+            detail=["blank leaves it in .env to fill later"],
+            secret=True,
+            allow_back=True,
+            color=color,
+            plain=not color,
+        )
+        error = validate_credential(state.provider, key)
+        if error is None:
+            state.api_key = key
+            return
+        _say(stdout, f"  {error}; try again or leave it blank")
 
 
 def _ask_model(state: Answers, stdin: TextIO, stdout: TextIO, color: bool = False) -> None:

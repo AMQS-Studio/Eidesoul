@@ -101,9 +101,9 @@ The interactive setup is designed here, not borrowed. What it borrows from the r
   as the non-interactive path already does (`monoagens/admin/init.py:14-20`).
 - Every value it writes comes from `monoagens/admin/templates.py` plus the operator's answers — the
   wizard owns no default of its own.
-- Validation happens before writing: an unknown provider name, a model that is not in the provider's
-  list when that list is reachable, or an unusable database URL is reported at the step that asked for
-  it, not after the files are on disk.
+- Validation happens before writing: an unknown provider name, a key the provider rejects with
+  401/403, a model that is not in the provider's list when that list is reachable, or an unusable
+  database URL is reported at the step that asked for it, not after the files are on disk.
 - Files are written only after the whole wizard succeeds (write-then-rename), so an interrupted run
   cannot leave a half-configured host.
 

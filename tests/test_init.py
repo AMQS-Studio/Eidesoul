@@ -66,6 +66,28 @@ def test_non_interactive_writes_the_four_files_with_modes(tmp_path):
     assert (tmp_path / ".monoagens" / "workspace").is_dir()
 
 
+def test_a_rejected_key_is_reported_at_the_credential_step(monkeypatch):
+    from monoagens.admin import wizard as admin_wizard
+
+    seen: list[str] = []
+
+    def fake_model_ids(provider, api_key=""):
+        seen.append(api_key)
+        if api_key == "bad-key":
+            raise admin_init.ConfigError("HTTP Error 401: Unauthorized")
+        return ["model-a"]
+
+    monkeypatch.setattr(admin_init, "model_ids", fake_model_ids)
+    state = admin_init.Answers(provider="openai")
+    stdout = io.StringIO()
+
+    admin_wizard._ask_credential(state, Tty("bad-key\n\n"), stdout)
+
+    assert seen == ["bad-key"]
+    assert state.api_key == ""
+    assert "rejected this key" in stdout.getvalue()
+
+
 def test_model_discovery_uses_the_key_entered_in_the_wizard(monkeypatch):
     from monoagens.admin import models as admin_models
 
