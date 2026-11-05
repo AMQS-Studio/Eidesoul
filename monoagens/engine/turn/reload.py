@@ -100,6 +100,10 @@ def _apply(agent, hot: Config) -> None:
         agent.ambient.config = hot
         agent.ambient.settings = hot.ambient
         agent.ambient.llm = agent.llm
+    for gateway in agent.gateways:
+        # ADR-0046 §4.3: a body reads role policy through its own config; a reload must reach it.
+        if hasattr(gateway, "config"):
+            gateway.config = hot
     agent.runtime.paths = hot.paths
     agent.runtime.memory_status = memory_status(agent.memory)
     agent._sync_soul_rules()

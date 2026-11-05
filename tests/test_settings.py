@@ -198,3 +198,20 @@ def test_the_reload_command_is_private_thread_only(tmp_path, monkeypatch) -> Non
 
     assert "chat pribadi" in reply
     assert env.agent.reload_generation == 0
+
+
+def test_reload_reaches_each_gateway_config(tmp_path, monkeypatch) -> None:
+    """ADR-0046 §4.9: a body gates with its own config, so the swap must reach it."""
+    from types import SimpleNamespace
+
+    env = make_runtime(tmp_path, monkeypatch, settings_approval=False)
+    body = SimpleNamespace(config=env.config)
+    env.agent.gateways = (*env.agent.gateways, body)
+    roles = yaml.safe_load(env.paths.roles.read_text(encoding="utf-8"))
+    roles["roles"]["member"]["tools"] = ["read"]
+    env.paths.roles.write_text(yaml.safe_dump(roles, sort_keys=False), encoding="utf-8")
+
+    asyncio.run(env.agent.reload())
+
+    assert body.config is env.agent.config
+    assert body.config.roles.default_role().tools == ("read",)
