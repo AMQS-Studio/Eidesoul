@@ -12,7 +12,6 @@ from ..providers import (
     ProviderError,
     ProviderResponse,
     build_client,
-    call_parts,
     message_dict,
     normalize_response,
 )
@@ -467,7 +466,10 @@ class LLM:
         lookup_step,
     ):
         for call in calls:
-            call_id, name, raw_arguments = call_parts(call)
+            # ADR-0044 §4.2: the loop consumes ProviderToolCall, already normalized. Parsing the
+            # raw wire shape here would blank the name and arguments.
+            call_id, name = str(call.id or ""), str(call.name or "")
+            raw_arguments = str(call.arguments or "{}")
             log.info("tool: %s", name)
             try:
                 args = json.loads(raw_arguments or "{}")

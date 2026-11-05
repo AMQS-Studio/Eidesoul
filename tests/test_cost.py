@@ -158,3 +158,44 @@ def test_system_prompt_keeps_date_out_of_the_stable_part(tmp_path) -> None:
     assert isinstance(prompt, Prompt)
     assert "Date:" not in prompt.stable
     assert "Date:" in prompt.volatile
+
+
+def test_normalized_tool_calls_keep_their_name_and_arguments(tmp_path, monkeypatch) -> None:
+    """ADR-0044 §4.2: the loop consumes ProviderToolCall, not the raw SDK shape."""
+    monkeypatch.setenv("K", "x")
+    config = build_config(tmp_path)
+    db = database()
+    llm = LLM(config, db=db)
+    seen: dict = {}
+
+    async def probe(args, ctx):
+        seen.update(args)
+        return "ok"
+
+    spec = Handler(
+        name="probe",
+        description="p",
+        fn=probe,
+        family="read",
+        parameters={"type": "object", "properties": {"path": {"type": "string"}}},
+    )
+    llm.client = FakeClient([tool_response("probe", {"path": "a"}), text_response("done")])
+    ctx = ToolContext(config, (Role("member", tools=("*",)),), ("*",))
+    steps: list[tuple] = []
+
+    answer = asyncio.run(
+        llm.run(
+            "system",
+            "user",
+            [spec],
+            ctx,
+            on_step=lambda name, args, result, *_: steps.append((name, args, result)),
+        )
+    )
+
+    assert answer == "done"
+    assert seen == {"path": "a"}
+    assert steps == [("probe", {"path": "a"}, "ok")]
+    tool = [item for item in llm.client.calls[1]["messages"] if item["role"] == "tool"][-1]
+    assert tool["tool_call_id"] == "call-1"
+    assert tool["content"] == "ok"
