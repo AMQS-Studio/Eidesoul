@@ -81,11 +81,26 @@ def test_a_rejected_key_is_reported_at_the_credential_step(monkeypatch):
     state = admin_init.Answers(provider="openai")
     stdout = io.StringIO()
 
-    admin_wizard._ask_credential(state, Tty("bad-key\n\n"), stdout)
+    admin_wizard._ask_credential(state, Tty("bad-key\n3\n"), stdout)
 
     assert seen == ["bad-key"]
     assert state.api_key == ""
     assert "rejected this key" in stdout.getvalue()
+    assert "what now?" in stdout.getvalue()
+
+
+def test_a_rejected_key_can_be_kept_for_later(monkeypatch):
+    from monoagens.admin import wizard as admin_wizard
+
+    def fake_model_ids(provider, api_key=""):
+        raise admin_init.ConfigError("HTTP Error 401: Unauthorized")
+
+    monkeypatch.setattr(admin_init, "model_ids", fake_model_ids)
+    state = admin_init.Answers(provider="openai")
+
+    admin_wizard._ask_credential(state, Tty("bad-key\n2\n"), io.StringIO())
+
+    assert state.api_key == "bad-key"
 
 
 def test_model_discovery_uses_the_key_entered_in_the_wizard(monkeypatch):

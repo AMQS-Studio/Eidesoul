@@ -1,4 +1,4 @@
-> Terjemahan turunan — jangan sunting; sumber: 0030-install-and-init.md (sha256: 56684ae9e33c)
+> Terjemahan turunan — jangan sunting; sumber: 0030-install-and-init.md (sha256: ea4166c90076)
 > Ditulis tangan (bukan mesin), mengikuti sumber English baris demi baris.
 
 # ADR-0030: Install On-Machine dan Init Interaktif — Wizard Kita Sendiri, Satu Installer, Dua Runtime
@@ -94,7 +94,7 @@ Setup interaktif dirancang di sini, bukan dipinjam. Yang dipinjam dari referensi
 - Di luar terminal (pipa, CI, `--non-interactive`), ia **gagal tertutup**: ia menyebut flag yang dibutuhkan alih-alih menunggu input yang tak mungkin datang.
 - Rahasia tidak pernah masuk YAML: wizard menulis **nama** env dan menaruh nilainya di `.env` (`0600`), tepat seperti jalur non-interaktif sekarang (`monoagens/admin/init.py:14-20`).
 - Setiap nilai yang ditulisnya berasal dari `monoagens/admin/templates.py` plus jawaban operator — wizard tidak memiliki default sendiri.
-- Validasi terjadi sebelum menulis: nama provider yang tak dikenal, kunci yang ditolak provider dengan 401/403, model yang tidak ada di daftar provider saat daftar itu terjangkau, atau URL database yang tak bisa dipakai dilaporkan di langkah yang menanyakannya, bukan setelah berkas ada di disk.
+- Validasi terjadi sebelum menulis: nama provider yang tak dikenal, kunci yang ditolak provider dengan 401/403, model yang tidak ada di daftar provider saat daftar itu terjangkau, atau URL database yang tak bisa dipakai dilaporkan di langkah yang menanyakannya, bukan setelah berkas ada di disk. Kunci yang ditolak menawarkan **coba lagi**, **tetap simpan**, atau **kosongkan** agar operator tidak terjebak di loop retry.
 - Berkas ditulis hanya setelah seluruh wizard berhasil (tulis-lalu-rename), sehingga jalannya yang terputus tak bisa meninggalkan host setengah terkonfigurasi.
 
 ### 4.4 Apa yang ditulis wizard, dan apa yang tidak pernah disentuhnya

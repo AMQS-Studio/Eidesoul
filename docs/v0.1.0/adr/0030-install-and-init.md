@@ -103,7 +103,9 @@ The interactive setup is designed here, not borrowed. What it borrows from the r
   wizard owns no default of its own.
 - Validation happens before writing: an unknown provider name, a key the provider rejects with
   401/403, a model that is not in the provider's list when that list is reachable, or an unusable
-  database URL is reported at the step that asked for it, not after the files are on disk.
+  database URL is reported at the step that asked for it, not after the files are on disk. A
+  rejected key offers **try again**, **keep it anyway**, or **leave it blank** instead of trapping
+  the operator in a retry loop.
 - Files are written only after the whole wizard succeeds (write-then-rename), so an interrupted run
   cannot leave a half-configured host.
 

@@ -177,7 +177,29 @@ def _ask_credential(state: Answers, stdin: TextIO, stdout: TextIO, color: bool =
         if error is None:
             state.api_key = key
             return
-        _say(stdout, f"  {error}; try again or leave it blank")
+        _say(stdout, f"  {error}")
+        action = terminal.choose(
+            stdin=stdin,
+            stdout=stdout,
+            title="the provider rejected that key; what now?",
+            choices=[
+                terminal.Choice("Try again", "re-enter the key", "retry"),
+                terminal.Choice("Keep it anyway", "write it to .env and continue", "keep"),
+                terminal.Choice("Leave it blank", "fill .env later", "blank"),
+            ],
+            default=0,
+            header=_menu_header(STEP_INDEX["credential"], color),
+            searchable=False,
+            allow_back=True,
+            color=color,
+            plain=not color,
+        )
+        if action == 1:
+            state.api_key = key
+            return
+        if action == 2:
+            state.api_key = ""
+            return
 
 
 def _ask_model(state: Answers, stdin: TextIO, stdout: TextIO, color: bool = False) -> None:
@@ -214,6 +236,11 @@ def _ask_model(state: Answers, stdin: TextIO, stdout: TextIO, color: bool = Fals
             title="model id (blank leaves it for later; `monoagens models` lists them)",
             default=state.model,
             header=_menu_header(STEP_INDEX["model"], color),
+            detail=(
+                ["the provider did not return a model list; enter an id or leave it blank"]
+                if state.api_key
+                else ["enter an id or leave it blank"]
+            ),
             allow_back=True,
             color=color,
             plain=not color,
