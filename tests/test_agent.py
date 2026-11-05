@@ -240,14 +240,15 @@ def test_shell_requires_approval_then_approve_executes(tmp_path) -> None:
 
     reply = env.gateway.sent[0][1]
     assert "pending approval #1" in reply
-    pending = env.agent.approvals.pending(DM, "628111")
+    person = env.agent.identity.resolve("fake", "628111")
+    pending = env.agent.approvals.pending(DM, person)
     assert len(pending) == 1
 
     from monoagens.engine.commands.approve import COMMAND as APPROVE
 
-    inbound = inbound_message("/approve 1", thread=DM)
+    inbound = inbound_message("/approve 1", thread=DM, person_id=person)
     ctx = env.agent.command_context(
-        DM, "628111", (env.config.roles.get("member"),), env.gateway, "1", inbound
+        DM, person, (env.config.roles.get("member"),), env.gateway, "1", inbound
     )
     result = asyncio.run(APPROVE.fn(ctx))
 
@@ -282,8 +283,9 @@ def test_sensitive_shell_command_waits_then_approve_executes(tmp_path) -> None:
     assert "pending approval #1" in env.gateway.sent[0][1]
     from monoagens.engine.commands.approve import COMMAND as APPROVE
 
+    person = env.agent.identity.resolve("fake", "628111")
     ctx = env.agent.command_context(
-        DM, "628111", (env.config.roles.get("member"),), env.gateway, "1"
+        DM, person, (env.config.roles.get("member"),), env.gateway, "1"
     )
     result = asyncio.run(APPROVE.fn(ctx))
     assert "monoagens-ok" in result

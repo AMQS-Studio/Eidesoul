@@ -43,13 +43,34 @@ DECISION_LINE_CHARS = 500
 
 
 class TurnRunner:
-    """The turn state machine: claim, decide, draft, review, checkpoint, send."""
+    """The turn state machine: claim, decide, draft, review, send."""
 
     def __init__(self, agent) -> None:
         self.agent = agent
 
     def __getattr__(self, name: str):
         return getattr(self.agent, name)
+
+    def _challenged(self, message, thread_id: str) -> bool:
+        """A quote is a challenge only when it answers a bot claim that needed evidence.
+
+        A quoted notice (timeout, interruption, shutdown) is not an answer, and an answer
+        without a current claim has nothing to verify. The cue itself is checked in
+        `trigger_reason`, so a bare quote never forces a search.
+        """
+        quote = message.quote
+        if quote is None or quote.sender_name != self.soul.name:
+            return False
+        quoted = self.history.find(thread_id, quote.id)
+        if quoted is not None and quoted.notice:
+            return False
+        return bool(
+            trigger_reason(
+                quoted.text if quoted is not None else quote.text,
+                language=self.soul.language,
+                mode=self.config.research.mode,
+            )
+        )
 
     async def run(
         self,
@@ -115,9 +136,7 @@ class TurnRunner:
                 text = message.text
                 crisis = guard.is_crisis(text, self.soul.language)
                 roles = self._role_set(inbound)
-                if not is_command and await self.privacy.handle_pending(
-                    inbound, gateway, self._sender(inbound)
-                ):
+                if not is_command and await self.privacy.handle_pending(inbound, gateway):
                     self._finish(turn_id)
                     return actions
                 if not is_command and not crisis and self.llm is None:
@@ -313,7 +332,7 @@ class TurnRunner:
                             name,
                             rest.strip(),
                             thread_id,
-                            self._sender(inbound),
+                            self._actor(inbound),
                             roles,
                             gateway,
                             inbound,
@@ -407,7 +426,7 @@ class TurnRunner:
                             content = fallback_content(self.config, message)
                         tool_ctx = self.tool_context(
                             thread_id,
-                            self._sender(inbound),
+                            self._actor(inbound),
                             roles,
                             gateway,
                             request=message.text,
@@ -415,10 +434,7 @@ class TurnRunner:
                             direct=bool(inbound.hints.get("dm")),
                             app=str(inbound.hints.get("app") or ""),
                         )
-                        challenged = bool(
-                            message.quote
-                            and message.quote.sender_name == self.soul.name
-                        )
+                        challenged = self._challenged(message, thread_id)
                         trigger = trigger_reason(
                             message.text,
                             language=self.soul.language,

@@ -1,4 +1,4 @@
-> Terjemahan turunan — jangan sunting; sumber: engine/0017-turn-isolation-timeout.md (sha256: d6919e41bdc7)
+> Terjemahan turunan — jangan sunting; sumber: engine/0017-turn-isolation-timeout.md (sha256: 0bed5d2bbe0c)
 > Teks ini ditulis manusia; baris yang tidak bisa diterjemahkan mesin disalin apa adanya ke sumber English, jadi sumber bercampur dua bahasa.
 
 # ADR-0017: Isolasi Turn, Batas Waktu, dan Gerbang Primary
@@ -10,7 +10,7 @@
 - **Konteks:** review (`Eidesoul-Review-Arsitektur-2026-11-01.md`) §15 P0-4 — `turn_lock` global, DB/embedder sinkron memblokir event loop yang sama dengan heartbeat lease, dan `agent.mode` tidak pernah dibaca sehingga instance standby masih bisa mengirim
 - **Supersedes:** —
 - **Terkait:** ADR-0011 (shutdown & ledger), ADR-0012 (lease, `generation`), ADR-0013 (`turns`, `notice`), ADR-0003 (worker & executor), ADR-0019 (`turn_id` di log)
-- **Amandemen:** 2026-11-03 — pertanyaan pemilik: "kenapa bukan LLM yang mendaftarkan timeout/budget?" → batas waktu dipecah **dua lapis** (§4.3): timeout per request + retry eksplisit (jalur turn) dan `deadline` turn yang diteruskan sebagai `remaining_seconds`; `run_budget_seconds: 240` dinyatakan **tidak tercapai** di jalur turn dan di-rebase ke pekerjaan latar. **2026-11-03** — §4.6 retry per jalur: `turn_attempts: 1` (hanya HTTP call; tool yang sudah dieksekusi tidak diulang), `worker_attempts: 3` dengan backoff + jitter, `Retry-After` dihormati dengan plafon; kunci `llm.max_retries: 0` diganti blok `llm.retry.*`.
+- **Amandemen:** 2026-11-03 — pertanyaan pemilik: "kenapa bukan LLM yang mendaftarkan timeout/budget?" → batas waktu dipecah **dua lapis** (§4.3): timeout per request + retry eksplisit (jalur turn) dan `deadline` turn yang diteruskan sebagai `remaining_seconds`; `run_budget_seconds: 240` dinyatakan **tidak tercapai** di jalur turn dan di-rebase ke pekerjaan latar. **2026-11-03** — §4.6 retry per jalur: `turn_attempts: 1` (hanya HTTP call; tool yang sudah dieksekusi tidak diulang), `worker_attempts: 3` dengan backoff + jitter, `Retry-After` dihormati dengan plafon; kunci `llm.max_retries: 0` diganti blok `llm.retry.*`. **2026-11-05** — default deadline turn menjadi 300 detik, bukan 90: timeout per panggilan 120 detik dan satu ronde tool butuh panggilan model kedua, sehingga watchdog 90 detik memotong turn dua panggilan yang valid (latensi provider yang teramati: 62 detik per panggilan) sebelum model bisa menjawab.
 - **Catatan lokasi:** ADR hidup di `docs/v0.1.0/adr/engine/`; salinan Indonesia di `docs/v0.1.0/adr/engine/id/0017-turn-isolation-timeout.md`.
 
 ---
@@ -71,10 +71,10 @@ Konsekuensinya bukan teoretis:
 **Lapis 1 — per panggilan (cepat gagal, atribusi jelas):**
 - `engine.llm.timeout_seconds` (sudah ada, 120) berlaku per HTTP request.
 - `engine.llm.max_retries: 0` di jalur turn: 5xx/429 tidak diulang diam-diam, karena retry bawaan library (2) melipatgandakan latensi yang dilihat pengguna. Retry hanya untuk pekerjaan latar (digest/reflect) yang tidak menahan lock percakapan.
-- `engine.llm.run_budget_seconds` **tidak lagi menjadi batas turn**: nilainya (240) lebih besar dari batas turn sehingga tidak pernah tercapai. Ia di-rebase menjadi anggaran pekerjaan latar; jalur turn memakai sisa deadline.
+- `engine.llm.run_budget_seconds` **tidak lagi menjadi batas turn**: ia hanya diperiksa bila tidak ada deadline yang diteruskan (pekerjaan latar), sedangkan jalur turn selalu meneruskan deadline. Ia di-rebase menjadi anggaran pekerjaan latar; jalur turn memakai sisa deadline.
 
 **Lapis 2 — per turn (yang menjumlah):**
-- Di awal `handle()` dibuat satu `deadline = monotonic() + engine.turn.timeout_seconds` (default 90) dan **diteruskan** ke setiap panggilan sebagai `remaining_seconds`.
+- Di awal `handle()` dibuat satu `deadline = monotonic() + engine.turn.timeout_seconds` (default 300) dan **diteruskan** ke setiap panggilan sebagai `remaining_seconds`.
 - Timeout efektif per panggilan = `min(llm.timeout_seconds, remaining_seconds)`.
 - Bila `remaining_seconds < engine.turn.min_call_seconds` (default 5), **tidak ada panggilan LLM baru**: soul menjawab dari yang sudah ada (atau mengakhiri turn dengan `interrupted`), bukan memulai panggilan yang pasti terpotong.
 - `asyncio.wait_for(self.handle(...), timeout)` tetap dipasang sebagai **watchdog**: banyak `await` bukan LLM (DB, mem0, tool, kirim) dan hanya watchdog yang bisa membatalkan yang menggantung di sana.
@@ -111,7 +111,7 @@ Konsekuensinya bukan teoretis:
 ```yaml
 engine:
   turn:
-    timeout_seconds: 90        # batas satu turn (deadline, menjumlah); habis -> interrupted + notice:timeout
+    timeout_seconds: 300       # batas satu turn (deadline, menjumlah); habis -> interrupted + notice:timeout
     min_call_seconds: 5        # sisa di bawah ini -> jangan mulai panggilan LLM baru
   llm:
     timeout_seconds: 120       # sudah ada: batas per HTTP request

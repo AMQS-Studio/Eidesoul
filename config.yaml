@@ -42,7 +42,7 @@ engine:
     utility_temperature: 0.2
   default_role: guest
   turn:
-    timeout_seconds: 90
+    timeout_seconds: 300
     min_call_seconds: 5
   turns:
     resume: true

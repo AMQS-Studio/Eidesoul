@@ -1,5 +1,41 @@
 # LOG
 
+## 2026-11-05 — Durable Task Runner ADR
+
+ADR-0047 defines a durable task row and a bounded worker for work that outgrows a turn: the turn
+queues the task and returns, the worker runs the existing `llm.run` tool loop outside the chat lock
+with a checkpoint after every step, and the result is delivered back to the origin DM exactly once.
+It reuses the lease/generation fence, approvals, `execute`, delivery, and privacy policy; the new
+tables are `tasks`/`task_steps` (migration `0019_tasks.py`, proposed) and the new modules are
+`jobs/task_store.py`, `jobs/task_worker.py`, `tools/task.py`, and `commands/task.py`. The ADR is
+`draft`: no code or table exists yet. The ADR index and the Indonesian copy are updated and stamped.
+
+## 2026-11-05 — Turn deadline and quote-triggered research
+
+Two deterministic paths cut off a normal conversation. A tool-info turn was interrupted at the
+90 s turn watchdog (`turns.last_error='timeout'`) after two model calls of ~62 s each; the `info`
+tool itself ran instantly. The default `engine.turn.timeout_seconds` is now 300 s (and the config
+template and ADR-0017 follow), so the outer watchdog outlasts the 120 s per-call timeout and a
+tool round. Separately, quoting the timeout notice with “kok bisa begini?” forced a web search
+and then replaced the answer with `agent.research_abstain`, because every quote of the bot was
+treated as a challenge. A quote now challenges only a stored bot answer (not a `notice:*`) whose
+own text would have needed evidence, and only when the message carries a challenge cue from the
+new `research_challenge` lexicon list. Tests: `tests/test_research_contract.py` (quoted notice
+does not search), `tests/test_history_store.py` (notice kind is decoded), and
+`tests/test_turn_lifecycle.py` (new default).
+
+## 2026-11-05 — Privacy prompts only from deterministic evidence
+
+A benign admin claim ("sekarang sudah percaya kan aku Admin") triggered "This sounds private.
+How private is it?" because the uncalibrated MiniLM centroid layer scored 0.38 for
+`crime_admission` in the English pack. Short chat text overlaps every centroid: "aku kangen kamu"
+scores 0.69 for `violence`. The policy now records encoder evidence for audit but only the
+deterministic layer sets a level or asks; credential patterns also cover `passwordku hunter2`
+without relying on the encoder. Privacy and disclosure approvals now key on the canonical
+`per_…` person id rather than the transport sender, so an answer is found in the same chat.
+Tests: `tests/test_privacy_layers.py` (policy guard), `tests/test_privacy.py` (canonical answer),
+and `tests/test_agent.py` (`/approve` with a distinct transport id).
+
 ## 2026-11-05 — Stale database detector and full tool details
 
 The installer now verifies the `.env` database URL against the running Postgres after the

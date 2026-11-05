@@ -307,7 +307,7 @@ def test_the_quiet_mechanism_is_gone(tmp_path) -> None:
 def test_turn_config_defaults_match_the_adrs() -> None:
     config = TurnConfig()
 
-    assert config.timeout_seconds == 90
+    assert config.timeout_seconds == 300
     assert config.min_call_seconds == 5
     assert config.partial_delivery == "skip"
     assert config.shutdown.grace_seconds == 25

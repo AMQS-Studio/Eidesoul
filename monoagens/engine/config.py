@@ -113,7 +113,9 @@ class TurnConfig:
     max_resume_per_chat: int = 5
     max_resume_per_minute: int = 10
     backlog_policy: str = "per_message_then_consolidate"
-    timeout_seconds: float = 90.0
+    # The outer deadline must outlast `llm.run_budget_seconds`; otherwise a slow provider is
+    # cut off before the inner budget can end the turn with a controlled notice.
+    timeout_seconds: float = 300.0
     min_call_seconds: float = 5.0
     shutdown: ShutdownConfig = field(default_factory=ShutdownConfig)
 
@@ -1261,7 +1263,7 @@ def _turn_config(raw: Mapping, turn_raw: Mapping) -> TurnConfig:
         max_resume_per_chat=max(1, int(_num(raw.get("max_resume_per_chat"), 5))),
         max_resume_per_minute=max(1, int(_num(raw.get("max_resume_per_minute"), 10))),
         backlog_policy=policy,
-        timeout_seconds=max(1.0, _num(turn_raw.get("timeout_seconds"), 90.0)),
+        timeout_seconds=max(1.0, _num(turn_raw.get("timeout_seconds"), 300.0)),
         min_call_seconds=max(0.0, _num(turn_raw.get("min_call_seconds"), 5.0)),
         shutdown=shutdown,
     )
@@ -1599,6 +1601,14 @@ def load_config(
     rooms_source = str(rooms_raw.get("source") or "gateway_first").strip().lower()
     if rooms_source not in {"gateway_first", "recorded"}:
         raise ConfigError("memory.rooms.source must be 'gateway_first' or 'recorded'")
+    turns = _turn_config(_section(engine, "turns"), _section(engine, "turn"))
+    if turns.timeout_seconds < llm.timeout_seconds:
+        log.warning(
+            "engine.turn.timeout_seconds (%.0fs) is below engine.llm.timeout_seconds "
+            "(%.0fs); one slow model call can be cut off by the turn watchdog",
+            turns.timeout_seconds,
+            llm.timeout_seconds,
+        )
 
     return Config(
         paths=paths,
@@ -1685,7 +1695,7 @@ def load_config(
             credential_patterns=_str_tuple(guard_raw.get("credential_patterns")),
         ),
         language=language,
-        turns=_turn_config(_section(engine, "turns"), _section(engine, "turn")),
+        turns=turns,
         worker=_worker_config(_section(engine, "worker")),
         io=IOConfig(workers=max(1, int(_num(_section(engine, "io").get("workers"), 8)))),
         concurrency=ConcurrencyConfig(

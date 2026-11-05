@@ -499,6 +499,9 @@ class HistoryStore:
         author = str(row.get("author") or AUTHOR_UNKNOWN)
         if author not in AUTHOR_RANK:
             author = AUTHOR_UNKNOWN
+        notice = str(data.get("kind") or "")
+        if not notice.startswith("notice:"):
+            notice = ""
         return Message(
             id=str(row["msg_id"]),
             sender_name=str(row["sender_name"]),
@@ -515,8 +518,9 @@ class HistoryStore:
             view_once=bool(data.get("view_once")),
             unreadable=bool(data.get("unreadable")),
             deleted=bool(row.get("deleted")),
-            deleted_by=str(row.get("deleted_by") or ""),
+            deleted_by=str(row.get("deleted_by")),
             deleted_admin=bool(row.get("deleted_admin")),
+            notice=notice,
         )
 
     def chat_name(self, thread_id: str) -> str:

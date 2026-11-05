@@ -7,7 +7,7 @@
 - **Context:** review (`Eidesoul-Review-Arsitektur-2026-11-01.md`) §15 P0-4: `turn_lock` is global, synchronous DB/mem0 work blocks the same event loop that renews the heartbeat lease, and `agent.mode` is never read, so a standby instance could still send
 - **Supersedes:** —
 - **Related:** ADR-0011 (shutdown & ledger), ADR-0012 (lease, `generation`), ADR-0013 (`turns`, `notice`), ADR-0003 (worker & executor), ADR-0019 (`turn_id` in logs)
-- **Amendments:** 2026-11-03 — owner's question: "why doesn't the LLM register the timeout/budget?" → the deadline is split into **two layers** (§4.3): a per-request timeout plus explicit retry (turn path), and a turn `deadline` forwarded as `remaining_seconds`; `run_budget_seconds: 240` is declared **unreachable** on the turn path and is rebased onto background work. **2026-11-03** — §4.6 retry per path: `turn_attempts: 1` (HTTP call only; an executed tool is not repeated), `worker_attempts: 3` with backoff + jitter, `Retry-After` respected with a ceiling; the key `llm.max_retries: 0` is replaced by the `llm.retry.*` block.
+- **Amendments:** 2026-11-03 — owner's question: "why doesn't the LLM register the timeout/budget?" → the deadline is split into **two layers** (§4.3): a per-request timeout plus explicit retry (turn path), and a turn `deadline` forwarded as `remaining_seconds`; `run_budget_seconds: 240` is declared **unreachable** on the turn path and is rebased onto background work. **2026-11-03** — §4.6 retry per path: `turn_attempts: 1` (HTTP call only; an executed tool is not repeated), `worker_attempts: 3` with backoff + jitter, `Retry-After` respected with a ceiling; the key `llm.max_retries: 0` is replaced by the `llm.retry.*` block. **2026-11-05** — the default turn deadline is 300 s, not 90: the per-call timeout is 120 s, and a tool round needs a second model call, so a 90 s watchdog cut off a valid two-call turn (observed provider latency: 62 s per call) before the model could answer.
 - **Location note:** ADR lives in `docs/v0.1.0/adr/engine/`; the Indonesian copy is `docs/v0.1.0/adr/engine/id/0017-turn-isolation-timeout.md`.
 
 ---
@@ -68,10 +68,10 @@ The consequences are not theoretical:
 **Layer 1 — per call (fail fast, clear error):**
 - `engine.llm.timeout_seconds` (existing, 120) applies per HTTP request.
 - `engine.llm.max_retries: 0` on the turn path: 5xx/429 are not retried silently, because the library default retry (2) doubles the latency the user sees. Retry exists only for background jobs (digest/reflect) that do not hold the conversation lock.
-- `engine.llm.run_budget_seconds` is **no longer a turn limit**: its value (240) is larger than the turn limit, so it is never reached. It is rebased onto the background-job budget; the turn path uses the remainder of the deadline.
+- `engine.llm.run_budget_seconds` is **no longer a turn limit**: it is checked only when no deadline is forwarded (background jobs), while the turn path always forwards one. It is rebased onto the background-job budget; the turn path uses the remainder of the deadline.
 
 **Layer 2 — per turn (accumulating):**
-- At the start of `handle()` one `deadline = monotonic() + engine.turn.timeout_seconds` (default 90) is created and **forwarded** to every call as `remaining_seconds`.
+- At the start of `handle()` one `deadline = monotonic() + engine.turn.timeout_seconds` (default 300) is created and **forwarded** to every call as `remaining_seconds`.
 - Effective timeout per call = `min(llm.timeout_seconds, remaining_seconds)`.
 - If `remaining_seconds < engine.turn.min_call_seconds` (default 5), **no new LLM call is started**: the soul answers from what it already has (or the turn ends as `interrupted`), instead of starting calls that would certainly be truncated.
 - `asyncio.wait_for(self.handle(...), timeout)` remains installed as a **watchdog**: many `await`s are not LLM calls (DB, mem0, tools, send), and only a watchdog can cancel one that hangs.
@@ -106,7 +106,7 @@ The consequences are not theoretical:
 ```yaml
 engine:
  turn:
- timeout_seconds: 90 # one-turn limit (deadline, cumulative); exhausted -> interrupted + notice:timeout
+ timeout_seconds: 300 # one-turn limit (deadline, cumulative); exhausted -> interrupted + notice:timeout
  min_call_seconds: 5 # remaining below this -> do not start a new LLM call
  llm:
  timeout_seconds: 120 # already exists: one limit per HTTP request

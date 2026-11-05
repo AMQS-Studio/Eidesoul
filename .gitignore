@@ -21,3 +21,8 @@ config.bak-*/
 # generated test artifacts
 .coverage
 coverage.xml
+
+docs/
+note.md
+
+

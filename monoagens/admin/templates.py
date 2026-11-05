@@ -140,7 +140,7 @@ ENGINE: dict = {
         },
     },
     "default_role": "guest",
-    "turn": {"timeout_seconds": 90, "min_call_seconds": 5},
+    "turn": {"timeout_seconds": 300, "min_call_seconds": 5},
     "turns": {
         "resume": True,
         "max_attempts": 2,
@@ -445,7 +445,7 @@ COMMENTS: dict[str, str] = {
     "engine.automations": "Scheduled automations and their limits.",
     "engine.default_role": "Role for an unknown sender. Default: guest.",
     "engine.turn": "One-turn deadline.",
-    "engine.turn.timeout_seconds": "Turn deadline. Default: 90.",
+    "engine.turn.timeout_seconds": "Turn deadline. Default: 300.",
     "engine.turn.min_call_seconds": (
         "Do not start a model call below this remaining time. Default: 5."
     ),

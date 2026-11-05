@@ -31,6 +31,7 @@ LIST_KEYS = (
     "research_time",
     "research_source",
     "research_high_stakes",
+    "research_challenge",
 )
 
 
@@ -50,6 +51,7 @@ class Lexicon:
     research_time: frozenset[str] = frozenset()
     research_source: frozenset[str] = frozenset()
     research_high_stakes: frozenset[str] = frozenset()
+    research_challenge: frozenset[str] = frozenset()
     privacy_levels: Mapping[str, int] = field(default_factory=dict)
     ok: bool = True
 
@@ -139,6 +141,7 @@ def _pack(code: str, body: object) -> Lexicon:
         research_time=lists["research_time"],
         research_source=lists["research_source"],
         research_high_stakes=lists["research_high_stakes"],
+        research_challenge=lists["research_challenge"],
         privacy_levels=levels,
     )
 

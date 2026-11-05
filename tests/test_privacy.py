@@ -220,7 +220,6 @@ def test_disclosure_confirmation_sends_the_stored_draft(tmp_path) -> None:
         env.agent.privacy.handle_pending(
             inbound_message("ya", thread="111@g.us", dm=False),
             env.gateway,
-            "628111",
         )
     )
 
@@ -242,7 +241,6 @@ def test_other_sender_cannot_confirm(tmp_path) -> None:
                 "ya", thread="111@g.us", dm=False, sender="628999", person_id="628999"
             ),
             env.gateway,
-            "628999",
         )
     )
 
@@ -389,7 +387,6 @@ def test_privacy_confirmation_sets_level_and_confirmation(tmp_path) -> None:
         env.agent.privacy.handle_pending(
             inbound_message("rahasia", thread="628111@s.whatsapp.net"),
             env.gateway,
-            "628111",
         )
     )
 
@@ -398,6 +395,42 @@ def test_privacy_confirmation_sets_level_and_confirmation(tmp_path) -> None:
     assert hit_after.level == 4
     assert hit_after.confirmed is True
     assert env.agent.approvals.get(approval.id).status == "approved"
+
+
+def test_privacy_answer_uses_the_canonical_person_not_the_transport_id(tmp_path) -> None:
+    env = make_agent(tmp_path)
+    env.agent.llm = ScriptLLM(answer={"kind": "level", "level": 4})
+    person = "per_x7wfg5ej77"
+    approval = asyncio.run(
+        env.agent.approvals.create(
+            kind="privacy",
+            thread_id="628111@s.whatsapp.net",
+            sender=person,
+            tool="memory",
+            args={"memory_ids": ["m1"]},
+            payload={"level": 4, "question": "seberapa rahasia?"},
+            summary="seberapa rahasia?",
+        )
+    )
+    env.memory.hits["m1"] = MemoryHit(
+        id="m1", text="hal memalukan", level=4, owner_id=person, confirmed=False
+    )
+
+    handled = asyncio.run(
+        env.agent.privacy.handle_pending(
+            inbound_message(
+                "rahasia",
+                thread="628111@s.whatsapp.net",
+                sender="628111",
+                person_id=person,
+            ),
+            env.gateway,
+        )
+    )
+
+    assert handled is True
+    assert env.agent.approvals.get(approval.id).status == "approved"
+    assert env.memory.hits["m1"].confirmed is True
 
 
 def test_unclear_answer_keeps_pending(tmp_path) -> None:
@@ -410,7 +443,6 @@ def test_unclear_answer_keeps_pending(tmp_path) -> None:
         env.agent.privacy.handle_pending(
             inbound_message("hmm gimana ya", thread="111@g.us", dm=False),
             env.gateway,
-            "628111",
         )
     )
 
@@ -478,7 +510,7 @@ def test_agent_turn_asks_then_sends_after_confirmation(tmp_path) -> None:
     assert env.gateway.sent[-1][1] == (
         "Itu menyentuh hal privat. Boleh aku sebutkan di sini? Balas ya atau tidak."
     )
-    approval = env.agent.approvals.latest("111@g.us", "628111")
+    approval = env.agent.approvals.latest("111@g.us", person)
     assert approval.kind == "disclosure"
 
     asyncio.run(

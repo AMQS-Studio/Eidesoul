@@ -142,6 +142,7 @@ class Message:
     deleted: bool = False
     deleted_by: str = ""
     deleted_admin: bool = False
+    notice: str = ""
 
     def __post_init__(self) -> None:
         if self.author not in AUTHORS:

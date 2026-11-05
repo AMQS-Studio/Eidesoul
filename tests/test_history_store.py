@@ -58,6 +58,16 @@ def test_recent_order_and_find(tmp_path) -> None:
     assert store.find("chat", "hilang") is None
 
 
+def test_find_exposes_the_notice_kind(tmp_path) -> None:
+    store = HistoryStore(database())
+    store.add_notice("chat", "timeout", kind="notice:timeout", message_id="n1")
+
+    found = store.find("chat", "n1")
+
+    assert found is not None
+    assert found.notice == "notice:timeout"
+
+
 def test_upsert_keeps_richer_fields(tmp_path) -> None:
     store = HistoryStore(database())
     media = Media(

@@ -41,6 +41,19 @@ def test_ambiguous_text_goes_to_review_instead_of_a_guessed_level() -> None:
     assert decision.needs_review is True
 
 
+def test_uncalibrated_model_evidence_cannot_set_a_level_or_ask() -> None:
+    from monoagens.engine.memory.evidence import Evidence
+
+    decision = decide(
+        [Evidence("encoder", "centroid-1", "digest", "crime_admission", 0.99)]
+    )
+
+    assert decision.level == 2
+    assert decision.label == "none"
+    assert decision.ask is False
+    assert decision.action == "allow"
+
+
 def test_policy_cannot_lower_a_deterministic_floor() -> None:
     from monoagens.engine.memory.evidence import Evidence
 

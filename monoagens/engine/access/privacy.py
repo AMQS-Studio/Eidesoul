@@ -72,7 +72,7 @@ class PrivacyService:
             verdict="ask"
         )
         selected = [hit for hit in hits if hit.id in audit.mentions] or risky
-        requester = inbound.actor or self.agent._sender(inbound)
+        requester = self.agent._actor(inbound)
         verdicts = [
             self.policy.disclose(hit, requester=requester, direct=direct) for hit in selected
         ]
@@ -84,7 +84,7 @@ class PrivacyService:
             approval = await self.agent.approvals.create(
                 kind="disclosure",
                 thread_id=inbound.thread,
-                sender=self.agent._sender(inbound),
+                sender=requester,
                 gateway=getattr(gateway, "name", "") or "",
                 tool="disclosure",
                 args={"memory_ids": [hit.id for hit in selected]},
@@ -205,7 +205,8 @@ class PrivacyService:
 
     # ------------------------------------------------------------- pending
 
-    async def handle_pending(self, inbound, gateway, sender: str) -> bool:
+    async def handle_pending(self, inbound, gateway) -> bool:
+        sender = self.agent._actor(inbound)
         pending = self.agent.approvals.latest(inbound.thread, sender)
         if pending is None or pending.kind not in KINDS:
             return False

@@ -26,7 +26,7 @@ from .. import embed
 log = logging.getLogger(__name__)
 
 SCHEMA_VERSION = 1
-POLICY_VERSION = "privacy-2026-11-04.1"
+POLICY_VERSION = "privacy-2026-11-05.1"
 POLICY_HASH = hashlib.sha256(POLICY_VERSION.encode("utf-8")).hexdigest()
 MAX_CLASSIFY_CHARS = 4000
 DEFAULT_DIR = Path(__file__).resolve().parents[2] / "library" / "privacy"
@@ -418,6 +418,12 @@ class SemanticDetector:
 
 DETECTORS = (PatternDetector(), EntityDetector(), SemanticDetector())
 
+# ADR-0038 §4.3: a model may raise a level or abstain. The nearest-centroid layer is still
+# uncalibrated short-text evidence (ADR-0038 status: the linear head and production calibration
+# are the remaining work), so it is recorded for audit but may not set a level or ask the sender
+# until that calibration exists. Only the deterministic layer owns the verdict.
+POLICY_DETECTORS = ("regex",)
+
 
 def collect(text: str, language: str) -> tuple[list[Evidence], Pack]:
     pack = load_pack(language)
@@ -438,8 +444,8 @@ def collect(text: str, language: str) -> tuple[list[Evidence], Pack]:
 
 
 def decide(evidence: Sequence[Evidence]) -> PrivacyDecision:
-    """The only level writer: max evidence level, credentials drop, ambiguity asks."""
-    labels = [item.label for item in evidence]
+    """The only level writer: max policy evidence level, credentials drop, ambiguity asks."""
+    labels = [item.label for item in evidence if item.detector in POLICY_DETECTORS]
     if CREDENTIAL in labels:
         return PrivacyDecision(
             level=LEVELS[CREDENTIAL],

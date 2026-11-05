@@ -5,6 +5,7 @@
     "credential": {
       "level": 5,
       "patterns": [
+        "(?i)\\b(password\\w{0,2}|passwd|kata\\s+sandi)\\b\\s*(?:[:=]\\s*)?\\S+",
         "(?i)\\b(password|passwd|kata\\s+sandi|sandi|api[\\s_-]?key|kunci\\s+api|token|secret|rahasia)\\b\\s*[:=]\\s*\\S+",
         "(?i)\\b(-----BEGIN [A-Z ]+PRIVATE KEY-----)"
       ],

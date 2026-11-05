@@ -83,10 +83,10 @@ def trigger_reason(
         return ""
     if mode == "always":
         return "mode:always"
-    if challenged:
-        return "challenge"
     body = str(text or "").casefold()
     pack = lexicon.load(language)
+    if challenged and any(word and word in body for word in pack.research_challenge):
+        return "challenge"
     for reason, words in (
         ("time", pack.research_time),
         ("source", pack.research_source),

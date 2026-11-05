@@ -523,6 +523,11 @@ class Agent:
         payload = inbound.payload
         return payload.sender_id or payload.sender_address or inbound.thread
 
+    @staticmethod
+    def _actor(inbound: Percept) -> str:
+        """The canonical person id; approvals and memory key on it, never a transport id."""
+        return str(inbound.actor or Agent._sender(inbound))
+
     def tool_context(
         self,
         thread_id: str,

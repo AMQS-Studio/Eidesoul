@@ -26,7 +26,8 @@ def test_current_source_and_exact_claims_force_a_search() -> None:
 
 def test_mode_and_challenge_widen_the_trigger() -> None:
     assert trigger_reason("apa kabar", language="id", mode="always") == "mode:always"
-    assert trigger_reason("apa kabar", language="id", challenged=True) == "challenge"
+    assert trigger_reason("kok bisa gitu", language="id", challenged=True) == "challenge"
+    assert trigger_reason("apa kabar", language="id", challenged=True) == ""
     assert trigger_reason("harga emas hari ini", language="id", mode="off") == ""
 
 
@@ -166,6 +167,51 @@ def test_a_failed_required_fetch_marks_the_research_card_failed(tmp_path, monkey
 
     assert failed is True
     assert hits[0]["body"] == ""
+
+
+def test_a_quoted_timeout_notice_is_not_a_research_challenge(tmp_path, monkeypatch) -> None:
+    import asyncio
+    from dataclasses import replace
+
+    from support import inbound_message, make_agent, role
+
+    from monoagens.engine.turn.context import Quote
+
+    queries: list[str] = []
+
+    async def fake_collect(ctx, query, limit):
+        queries.append(query)
+        return [], False
+
+    monkeypatch.setattr("monoagens.engine.turn.loop.collect", fake_collect)
+    env = make_agent(
+        tmp_path, roles={"member": role("member", tools=("web_search", "read"))}
+    )
+    thread = "628111@s.whatsapp.net"
+    env.history.add_notice(
+        thread,
+        "Harga emas hari ini naik; sumbernya belum dicek.",
+        kind="notice:timeout",
+        message_id="n1",
+    )
+    inbound = inbound_message("kok bisa begini?", thread=thread)
+    inbound = replace(
+        inbound,
+        payload=replace(
+            inbound.payload,
+            quote=Quote(
+                "n1",
+                env.agent.soul.name,
+                "628567770837",
+                "Harga emas hari ini naik; sumbernya belum dicek.",
+            ),
+        ),
+    )
+
+    asyncio.run(env.agent.handle(inbound, env.gateway))
+
+    assert queries == []
+    assert "Research (untrusted data" not in env.llm.system
 
 
 def test_quote_window_prefers_the_query_region() -> None:
