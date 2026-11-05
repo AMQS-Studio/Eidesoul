@@ -323,16 +323,25 @@ def review_lines(
             persona = "set" if soul.get("persona") else "empty"
             lines.append(f"      persona                 {persona}")
         else:
+            existing_env = base / ".env"
+            existing_values = (
+                dict(_env_names(existing_env.read_text(encoding="utf-8")))
+                if existing_env.exists()
+                else {}
+            )
             shown: set[str] = set()
             for env_name, value in _env_names(contents[".env"]):
                 shown.add(env_name)
-                state = "written, never printed" if value else "left for you"
+                if value:
+                    state = "written, never printed"
+                elif existing_values.get(env_name):
+                    state = "kept, never printed"
+                else:
+                    state = "left for you"
                 lines.append(f"      {env_name:<24} ({state})")
-            existing_env = base / ".env"
-            if existing_env.exists():
-                for env_name, _value in _env_names(existing_env.read_text(encoding="utf-8")):
-                    if env_name not in shown:
-                        lines.append(f"      {env_name:<24} (kept, never printed)")
+            for env_name in existing_values:
+                if env_name not in shown:
+                    lines.append(f"      {env_name:<24} (kept, never printed)")
     return lines
 
 
