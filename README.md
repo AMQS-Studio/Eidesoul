@@ -19,6 +19,8 @@
 
 <p align="center">
   <a href="#overview">Overview</a> ·
+  <a href="#what-it-solves-in-everyday-life">Everyday Use Cases</a> ·
+  <a href="#how-it-compares-to-other-agent-harnesses">Comparison</a> ·
   <a href="#key-capabilities">Capabilities</a> ·
   <a href="#architecture">Architecture</a> ·
   <a href="#quickstart">Quickstart</a> ·
@@ -40,13 +42,49 @@ Most agent frameworks treat state as a disposable chat session and personality a
 - **One person across every body.** Gateways (WhatsApp, Discord, Telegram, voice calls, or physical robotics) are pure transport and actuator pipes. They normalize inbound events into `Percept` envelopes and dispatch outbound `Action` receipts—never owning memory, persona, or authorization.
 - **Deterministic privacy and authority.** Privacy classification (`L0–L4`), secret refusal (`L5`), cross-thread isolation, role-based access control (`roles.yaml`), and command guarding execute deterministically in Python before any language model sees the data or runs a tool.
 
-| Dimension | Session Chatbots & Wrappers | Task / Coding Harnesses | **MonoAgens** |
+---
+
+## What It Solves in Everyday Life
+
+### 1. Private DMs vs. Group Chats Without Memory Leaks
+- **The Problem:** If an agent stores everything in a flat `MEMORY.md` file or a single shared vector index, anything you tell it in private can accidentally surface when someone else talks to it in a group chat.
+- **In MonoAgens:** You tell your agent in a private DM about a medical appointment or a confidential contract (`L3`/`L4` privacy). Five minutes later, a coworker tags the agent in a group chat: *"Is @you free Thursday afternoon, and what is he working on?"* Because group turns deterministically cap memory retrieval to `L0–L1` in SQL/Python before the LLM is called, your private facts never even enter the model's context window—and if the agent ever remembers a personal fact you dislike, you hold direct subject veto power to erase it.
+
+### 2. Switching Surfaces Mid-Workflow (Terminal $\rightarrow$ WhatsApp $\rightarrow$ Voice Call $\rightarrow$ Robot)
+- **The Problem:** You brainstorm a document in your terminal CLI, leave your desk, and message your bot on WhatsApp—only to find the WhatsApp bot has no idea what you were just doing on your laptop.
+- **In MonoAgens:** Your CLI console, WhatsApp account, Discord user, and voice call number are linked to one opaque identity (`per_…`). You can draft a report in `monoagens cli` on your laptop, walk out the door, and send a WhatsApp voice note: *"Send the PDF we just finished to the engineering group."* The same Soul recalls the exact turn, asks for natural confirmation in chat (*"Ready to send `q4-report.pdf` to Engineering Group—should I proceed?"*), and delivers it as soon as you reply *"Yes, send it."*
+
+### 3. Long-Horizon Recall Without "Compaction Amnesia"
+- **The Problem:** Standard harnesses summarize and discard older messages once the context window fills up. Details mentioned months ago vanish permanently.
+- **In MonoAgens:** Months ago, you casually mentioned that your mother is allergic to shellfish and prefers morning flights. When you ask today, *"Help me plan dinner and flights for mom's visit next week,"* hybrid PostgreSQL retrieval (`MiniLM` 384-d HNSW vectors + `tsvector` full-text search + importance scoring) surfaces those exact facts into this turn's working set—even after thousands of intervening conversations.
+
+### 4. Believable Presence Instead of Robotic Replies
+- **The Problem:** Most bots reply instantly with walls of markdown bullet points and reset their tone on every message.
+- **In MonoAgens:** An internal Pleasure-Arousal-Dominance (PAD) affect engine tracks emotional state with natural decay between turns, adapts to each person's linguistic style and relationship stage, and paces delivery into natural chat bubbles (`humanize`). When connected to voice notes, live phone calls, or a physical robot, it speaks with the exact same vocal timbre (`voice.speech`)—powered by ElevenLabs, OpenAI, or your own local/custom cloned voice model (GPT-SoVITS, F5-TTS, Kokoro, Piper).
+
+### 5. Autonomous Routines That Respect Boundaries
+- **The Problem:** Cron-based agent scripts run blindly at 3 AM, repeat failed side effects after a server reboot, or execute unsafe shell commands on the host.
+- **In MonoAgens:** Scheduled routines (`cron` / `at`) and autonomous goals check `quiet_hours`, enforce daily execution budgets, run untrusted code inside an isolated container sandbox behind an SSRF-blocking egress proxy, and record step-level checkpoints in PostgreSQL so a restart never double-sends a message.
+
+---
+
+## How It Compares to Other Agent Harnesses
+
+Modern AI agent harnesses generally fall into three architectural categories:
+
+1. **Developer & Coding Harnesses** *(e.g., Claude Code, Codex CLI, OpenHands, Aider)* — Engineered to read a git repository, edit code, and run tests in a local terminal session.
+2. **Workspace & Skill-Driven Personal Agents** *(e.g., Hermes Agent, OpenClaw)* — Designed around flat workspace markdown files (`MEMORY.md`, `USER.md`, `SOUL.md`), local SQLite FTS logs, and self-generated skill scripts across messaging channels.
+3. **MonoAgens (Sovereign Persistent Mono-Agent Harness)** — Engineered around a single relational + vector database (`PostgreSQL + pgvector`), deterministic multi-party privacy (`L0–L4`), continuous emotional/vocal identity, and ACID turn durability.
+
+| Capability / Architecture | Coding Harnesses<br/>*(Claude Code, Codex CLI)* | File/Skill Personal Agents<br/>*(Hermes Agent, OpenClaw)* | **MonoAgens** |
 | :--- | :--- | :--- | :--- |
-| **Primary Unit of State** | Ephemeral chat thread | Workspace files & task history | **One persistent Soul** in PostgreSQL + `pgvector` |
-| **Memory Architecture** | Context window / naive RAG | File tree & compacted transcript | **Native hybrid retrieval** (HNSW vector + GIN FTS + decay + privacy levels) |
-| **Identity Across Surfaces** | Isolated per app or channel | Bound to local terminal/IDE | **Unified `per_…` identity** across chat, voice calls, and physical bodies |
-| **Emotional & Vocal State** | Static system prompt | None | **Continuous PAD affect engine**, relationship stages, and unified vocal timbre |
-| **Authorization & Safety** | All-or-nothing API keys | Manual Y/N prompt per shell call | **RBAC (`roles.yaml`)**, smart conversational confirmation, and isolated container sandbox |
+| **Primary Goal** | Software engineering & repo tasks | Autonomous skill loops & personal tasks | **One continuous, believable digital person (`Soul`) across every surface & body** |
+| **Canonical State Store** | Git tree + `CLAUDE.md` + session log | Flat workspace files (`MEMORY.md`, `USER.md`) + SQLite FTS | **PostgreSQL + `pgvector`** (single ACID store for transcripts, HNSW vectors, FTS, affect, and leases) |
+| **Multi-User & Group Privacy** | Single local developer | Shared workspace memory across prompts | **Row-level `L0–L4` privacy**, `L5` secret refusal, room-level caps, and **subject veto** enforced before LLM calls |
+| **Cross-Surface Identity** | Terminal / IDE bound | Per-platform or single-owner profile | **Unified `per_…` identity** linking CLI, WhatsApp, Discord, Voice Calls, and Robotics with per-role RBAC |
+| **Affect, Pacing, & Voice** | None (developer utility) | Static persona prompt (`SOUL.md`) | **Dynamic PAD affect engine**, per-person relationship stages, bubble pacing, and unified Cloud/Local voice seam |
+| **Turn Durability & HA** | Process-bound terminal session | Process-bound runtime loop | **PostgreSQL single-primary lease (`engine_lease`)** + step-level turn checkpoints (zero duplicate side effects on crash) |
+| **Approval & Command Safety** | Interactive terminal Y/N prompt | Configurable command allowlists / sandboxes | **3-tier action policy (`default`/`yolo`/`strict`)**, **natural chat confirmation**, 2-stage guard, & egress-proxied container sandbox |
 
 ---
 
