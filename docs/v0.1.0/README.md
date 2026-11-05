@@ -73,6 +73,7 @@ re-stamp the hash. No machine translator ships with the repo.
 | [0043](adr/engine/0043-research-contract.md) | Research Contract — Model Prior, Websearch, and the Ephemeral ResearchCard | engine | implemented |
 | [0044](adr/engine/0044-provider-wire-adapters.md) | Provider Wire Adapters — Native Gemini First, One Seam | engine | implemented |
 | [0045](adr/engine/0045-character-without-local-packs.md) | Character Without Local Packs — Soul, Exemplars, No Gender Gate, No Level Table | engine | implemented |
+| [0046](adr/0046-gateway-access-and-onboarding.md) | Gateway Authorization in Roles, Gateway-Owned Onboarding, and the Post-Install Start Choice | root | draft |
 | [0033](adr/0033-neutral-core.md) | Neutral Core, Specialized Edges — No Culture, Transport, or Vendor in Mechanism | root | implemented |
 
 ADRs are grouped by folder: cross-cutting decisions at the `adr/` root, engine decisions under
@@ -85,7 +86,7 @@ Indonesian copies in its own `id/` subfolder.
 
 ```
 python scripts/adr.py --check
-OK: 46/46 ADR lolos check; folder root=10, engine=36, web=0; implemented=42 partial=4 draft=0; sinonim digerbang=119 baris prosa=44
+OK: 47/47 ADR lolos check; folder root=11, engine=36, web=0; implemented=42 partial=4 draft=1; sinonim digerbang=119 baris prosa=44
 
 python scripts/adr.py --translate-check
 TURUNAN 46 berkas, 0 masalah
