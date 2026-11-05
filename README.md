@@ -38,16 +38,39 @@ Most agent frameworks treat state as a disposable chat session and personality a
 
 **MonoAgens** is built around a different invariant: **one deployment is one continuous self (`Soul`) backed by one canonical PostgreSQL store.**
 
-- **State lives in the store, not the prompt window.** Every turn dynamically assembles its working context from PostgreSQL (`pgvector` semantic similarity + `tsvector` full-text search + relational transcripts), bounded by a strict token budget. Conversations can span months or years without losing factual recall.
-- **One person across every body.** Gateways (WhatsApp, Discord, Telegram, voice calls, or physical robotics) are pure transport and actuator pipes. They normalize inbound events into `Percept` envelopes and dispatch outbound `Action` receipts—never owning memory, persona, or authorization.
-- **Deterministic privacy and authority.** Privacy classification (`L0–L4`), secret refusal (`L5`), cross-thread isolation, role-based access control (`roles.yaml`), and command guarding execute deterministically in Python before any language model sees the data or runs a tool.
+<table>
+<tr>
+  <td><b>One Soul, Any Archetype</b></td>
+  <td>Not locked into a generic "assistant" mold. Shape <code>soul.yaml</code> into a <b>Strategic Advisor</b>, <b>Periodic Sysadmin</b>, <b>Senior Developer</b>, <b>Companion</b>, or <b>Embodied Robot</b>—with continuous PAD emotional state, humanized bubble pacing, and one unified voice (Cloud or Local custom TTS/STT) across every surface.</td>
+</tr>
+<tr>
+  <td><b>Hybrid Semantic + Lexical Memory</b></td>
+  <td>No session compaction amnesia or frozen flat-file caps. Every turn dynamically queries <b>PostgreSQL + <code>pgvector</code></b> (384-d multilingual HNSW vectors + <code>tsvector</code> GIN full-text search + importance & recency decay) to assemble an exact working set under a strict token budget.</td>
+</tr>
+<tr>
+  <td><b>Multi-User RBAC & Layered Privacy</b></td>
+  <td>Built to live safely among many people across DMs and group chats. <code>roles.yaml</code> enforces strict per-role tool, command, and workspace permissions over opaque <code>per_…</code> identities, while deterministic <code>L0–L4</code> privacy caps, <code>L5</code> secret refusal, and <b>subject veto</b> run before any LLM sees the prompt.</td>
+</tr>
+<tr>
+  <td><b>Condition-Aware Autonomy</b></td>
+  <td>More than a blind cron job. Scheduled routines (<code>cron</code>, <code>at</code>) and autonomous <code>goal</code> loops evaluate context first (<i>"check server health; only message me if disk &gt; 85% or errors appear"</i>), honoring <code>quiet_hours</code>, daily budgets, and kill switches.</td>
+</tr>
+<tr>
+  <td><b>Crash-Safe & Single-Primary</b></td>
+  <td>A PostgreSQL <code>engine_lease</code> guarantees two instances never speak with two mouths. Atomic turn enqueueing and step-level checkpoints ensure a mid-turn restart resumes cleanly without repeating non-idempotent side effects or double-sending replies.</td>
+</tr>
+<tr>
+  <td><b>Unpoisonable Rules & Cited Research</b></td>
+  <td>Behavioral rules and permissions live in authoritative host YAML files that untrusted chat or web inputs can never overwrite. Live facts enter only through pluggable multi-provider <code>web_search</code> as cited <code>ResearchCard</code> evidence (<code>[R1]</code>).</td>
+</tr>
+</table>
 
 ---
 
 ## What It Solves in Everyday Life
 
 ### 1. One Agent for You, Your Team, and Your Groups—Without Giving Everyone Root Access
-- **The Problem:** Autonomous agents like OpenClaw or Hermes Agent are built for a single operator on a single system—anyone allowed to message the agent effectively inherits its full toolset, shell access, and flat `MEMORY.md` file. Putting them in a family group or office channel is a security and privacy hazard.
+- **The Problem:** Most autonomous agents assume a single operator on a single system—anyone allowed to message the agent effectively inherits its full toolset, shell access, and shared memory pool. Putting them in a family group or office channel is a security and privacy hazard.
 - **In MonoAgens:** First-class **Role-Based Access Control (`roles.yaml`)** and **layered privacy (`L0–L4`)** let one Soul safely interact with dozens of people across WhatsApp, Discord, Telegram, and CLI at the same time:
   - **You (`administrator`):** Full access to `shell`, `sandbox`, `write`, `settings`, and private `L3–L4` memories in DM.
   - **Teammates or Family (`member` / custom roles):** Can chat with the same Soul in group rooms or DMs using safe tools (`web_search`, `read` on shared folders) without ever being able to run your shell tools, read your scratch files, or leak your private `L3–L4` memories into a group chat.
@@ -56,9 +79,9 @@ Most agent frameworks treat state as a disposable chat session and personality a
 - **The Problem:** Conventional harnesses bind state to a local session transcript. If you brainstorm a deployment plan in your terminal CLI, leave your desk, and message your bot on WhatsApp, you are talking to a separate session that lacks context.
 - **In MonoAgens:** Your CLI console, WhatsApp account, Discord handle, and phone number map to one canonical identity (`per_…`). Start an investigation in `monoagens cli` on your laptop, walk out the door, and send a WhatsApp voice note: *"Send the summary PDF we just drafted to the engineering group."* The same Soul recalls the turn, asks naturally in chat (*"Ready to send `infra-summary.pdf` to Engineering Group—should I proceed?"*), and dispatches it when you reply *"Yes, send it."*
 
-### 3. True Semantic + Lexical Recall Instead of Flat `MEMORY.md` Files
-- **The Problem:** Many persistent agents rely on flat Markdown files (`MEMORY.md`, `USER.md`) capped at a few thousand characters and frozen at session start, paired with keyword-only search (`SQLite FTS5`) and session compaction. Once a file hits its character cap or you phrase a question using different words than the log, recall fails.
-- **In MonoAgens:** There are no frozen session snapshots or tiny Markdown caps. Every turn queries **PostgreSQL + `pgvector`** combining **384-d multilingual semantic vectors (`HNSW`)** + **full-text search (`tsvector` `GIN`)** + **importance & recency decay**. Ask *"Help me plan dinner and flights for mom's visit"* and it semantically retrieves a note from six months ago about her shellfish allergy and morning flight preference—even though those exact keywords weren't in your question.
+### 3. True Semantic + Lexical Recall Without Session Compaction Amnesia
+- **The Problem:** Session-centric memory engines rely on curated profile notes (capped by character limits and frozen at session start) plus keyword search (`FTS5`) and LLM session summarization. When older turns are compacted away or you phrase a question using different words than the original log, recall fails.
+- **In MonoAgens:** The PostgreSQL archive is the permanent record and the prompt window is only this turn's working set. Every turn runs hybrid **384-d semantic vector (`pgvector` HNSW)** + **full-text (`tsvector` GIN)** retrieval. Ask *"Help me plan dinner and flights for mom's visit"* and it semantically retrieves a note from six months ago about her shellfish allergy and morning flight preference—even though those exact keywords weren't in your question.
 
 ### 4. Condition-Aware Autonomous Routines (*"Check First, Only Notify Me If Needed"*)
 - **The Problem:** Standard scheduled jobs act like dumb crontabs—firing a prompt at a fixed interval and spamming your chat even when nothing happened.
@@ -74,21 +97,22 @@ Most agent frameworks treat state as a disposable chat session and personality a
 
 Modern AI agent harnesses generally fall into three architectural categories:
 
-1. **Developer & Coding Harnesses** *(e.g., Claude Code, Codex CLI, OpenHands, Aider)* — Engineered for single-developer software engineering inside a local git repository and terminal session.
-2. **Single-Operator Autonomous Agents** *(e.g., Hermes Agent, OpenClaw)* — Persistent personal agents that store state in flat workspace Markdown files (`MEMORY.md`, `USER.md`, `SOUL.md`) + conventional session logs (`SQLite FTS5`). While effective for a single user on one machine, their memory is non-semantic (keyword + tiny capped Markdown files frozen per session), and they lack multi-user role isolation—meaning anyone who can talk to the agent shares the same tool permissions and memory pool.
+1. **Developer & Repository Harnesses** — Engineered for single-developer software engineering inside a local git repository and terminal session.
+2. **Single-Operator Autonomous Session Agents** — Persistent personal agents built around session transcripts, keyword search (`FTS5`) with LLM session summarization, and curated workspace notes. While effective for one owner on one system, their memory is session-bound rather than native hybrid vector-relational, and they lack multi-user role isolation—meaning anyone allowed to message the agent shares the same tool authority and memory pool.
 3. **MonoAgens (Sovereign Persistent Mono-Agent Harness)** — Engineered from the ground up for a **single continuous Soul** that can safely serve **one operator or many people simultaneously across apps, voice calls, and physical bodies**, backed by native semantic + lexical PostgreSQL storage, strict RBAC (`roles.yaml`), and row-level privacy (`L0–L4`).
 
-| Capability / Architecture | Coding Harnesses<br/>*(Claude Code, Codex CLI)* | Single-Operator Autonomous Agents<br/>*(Hermes Agent, OpenClaw)* | **MonoAgens** |
+| Capability / Architecture | Developer & Repo Harnesses | Single-Operator Session Agents | **MonoAgens** |
 | :--- | :--- | :--- | :--- |
 | **Role & Archetype Flexibility** | Fixed coding & repo utility | General personal assistant / skill runner | **Fully customizable archetype** (*Advisor, Companion, Periodic Sysadmin, Developer, Robot*) via `soul.yaml` |
-| **Memory Architecture** | `CLAUDE.md` + compacted session window | **Non-semantic:** Capped `MEMORY.md` / `USER.md` files (frozen per session) + `SQLite FTS5` keyword logs | **Native Hybrid Semantic + Lexical:** PostgreSQL `pgvector` (384-d HNSW) + `tsvector` (GIN) + decay & importance rebuilt every turn |
-| **Session vs. Continuous State** | Ephemeral terminal session with compaction | Conventional session transcripts + background file dreaming/compaction | **Sessionless working set:** Store is the canonical memory; every turn dynamically assembles context from PostgreSQL |
-| **Multi-User & Role System (`RBAC`)** | Single local developer (none) | **No native RBAC:** Shared agent means shared tools, files, and credentials across callers | **Strict `roles.yaml` RBAC:** Per-role tools, commands, workspace mounts, and gateway policies (`dm`, `groups`) |
-| **Group Chat & Multi-Party Privacy** | N/A (local terminal) | Flat `MEMORY.md` loaded globally; risk of cross-room context bleed | **Row-level `L0–L4` privacy**, `L5` secret refusal, room caps, and **subject veto** enforced in SQL/Python before LLM calls |
-| **Cross-App Identity** | Terminal / IDE only | Per-channel session or single owner profile | **Unified `per_…` identity** linking CLI, WhatsApp, Discord, Voice Calls, and Robotics |
-| **Autonomous Scheduling** | Manual interactive loop | Heartbeat / cron triggers running static prompts | **Condition-aware routines (`cron`/`at`) & `goal` loops** (*"check first, notify only if X"*), `quiet_hours`, & budgets |
-| **Affect, Pacing, & Voice** | None | Static text prompt (`SOUL.md`) | **Continuous PAD affect engine**, per-person style adaptation, bubble pacing, and unified Cloud/Local voice seam |
-| **Turn Durability & High Availability** | Process-bound terminal | Local process + filesystem lock | **PostgreSQL single-primary lease (`engine_lease`)** + step-level ACID checkpoints (zero duplicate side effects on crash) |
+| **Memory Engine** | Repo context files + compacted session window | Curated profile notes (frozen per session) + `FTS5` keyword search & LLM session summaries | **Native Hybrid Vector + Lexical:** PostgreSQL `pgvector` (384-d HNSW) + `tsvector` (GIN) + decay & importance rebuilt every turn |
+| **Session vs. Continuous State** | Ephemeral terminal session with compaction | Session transcripts with `/reset` or `/compress` compaction | **Sessionless working set:** Store is the canonical memory; every turn dynamically assembles context from PostgreSQL |
+| **Multi-User & Role System (`RBAC`)** | Single local developer (none) | **Single-owner trust model:** Shared agent means shared tools, files, and credentials across callers | **Strict `roles.yaml` RBAC:** Per-role tools, commands, workspace mounts (`shared`/`scratch`), and gateway policies |
+| **Group Chat & Multi-Party Privacy** | N/A (local terminal) | Shared global memory notes; risk of cross-room context bleed | **Row-level `L0–L4` privacy**, `L5` secret refusal, room caps, and **subject veto** enforced in SQL/Python before LLM calls |
+| **Rule & Memory Integrity** | Static project instructions | Agent-editable workspace notes susceptible to prompt poisoning | **Host-authoritative rules (`soul.yaml`)**, quarantined memory corroboration, and cited `ResearchCard` web evidence |
+| **Cross-Surface Identity** | Terminal / IDE only | Per-channel session or single owner profile | **Unified `per_…` identity** linking CLI, WhatsApp, Discord, Voice Calls, and Robotics |
+| **Autonomous Scheduling** | Manual interactive loop | Cron triggers running scheduled prompts | **Condition-aware routines (`cron`/`at`) & `goal` loops** (*"check first, notify only if X"*), `quiet_hours`, & budgets |
+| **Affect, Pacing, & Voice** | None | Static text persona prompt | **Continuous PAD affect engine**, per-person style adaptation, bubble pacing, and unified Cloud/Local voice seam |
+| **Turn Durability & High Availability** | Process-bound terminal | Local process + session log | **PostgreSQL single-primary lease (`engine_lease`)** + step-level ACID checkpoints (zero duplicate side effects on crash) |
 
 ---
 
