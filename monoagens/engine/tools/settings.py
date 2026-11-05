@@ -182,6 +182,7 @@ def _current(agent, file: str, role_name: str) -> tuple[str, str]:
 
 
 def _read(agent, file: str, role_name: str) -> tuple[str, str, str]:
+    """ADR-0046 §4.1: the file is read; the cache is never the read source."""
     kind, name = _current(agent, file, role_name)
     if kind == "host":
         text = agent.config.paths.config.read_text(encoding="utf-8")
@@ -189,36 +190,17 @@ def _read(agent, file: str, role_name: str) -> tuple[str, str, str]:
     if kind == "gateway":
         raw = _read_config(agent)
         return kind, name, dump({"gateways": raw.get("gateways") or {}})
-    text = agent.documents.get(name) if agent.documents is not None else None
-    if text is not None:
-        return kind, name, text
     if name == "engine":
         raw = _read_config(agent)
-        body = raw.get(name)
+        body = raw.get("engine")
         return kind, name, dump(body) if isinstance(body, dict) else ""
+    if name == "soul":
+        path = agent.config.paths.soul_yaml
+        text = path.read_text(encoding="utf-8") if path.is_file() else ""
+        return kind, name, text
     roles = _read_roles(agent)
     body = roles.get(name.split(":", 1)[1]) if ":" in name else None
     return kind, name, dump(body) if isinstance(body, dict) else ""
-
-
-class CandidateDocuments:
-    """DB documents plus one candidate, for validating through the loader without writing."""
-
-    def __init__(self, agent, name: str, content: str) -> None:
-        self.agent = agent
-        self.name = name
-        self.content = content
-
-    def get(self, name: str) -> str | None:
-        if name == self.name:
-            return self.content
-        return self.agent.documents.get(name) if self.agent.documents is not None else None
-
-    def names(self, prefix: str = "") -> list[str]:
-        found = set(self.agent.documents.names(prefix)) if self.agent.documents else set()
-        if self.name.startswith(prefix):
-            found.add(self.name)
-        return sorted(found)
 
 
 def _validate(agent, file: str, name: str, text: str) -> None:
@@ -235,9 +217,6 @@ def _validate(agent, file: str, name: str, text: str) -> None:
             for gateway_name, value in (gateways or {}).items():
                 if value is not None and not isinstance(value, dict):
                     raise ValueError(f"gateway '{gateway_name}' must be a mapping")
-                role = (value or {}).get("role") if isinstance(value, dict) else None
-                if role is not None and agent.config.roles.get(str(role)) is None:
-                    raise ValueError(f"gateway '{gateway_name}': role '{role}' does not exist")
         else:
             if not isinstance(body.get("database"), dict) and not body.get("workspace"):
                 raise ValueError("host config needs database/workspace")
@@ -245,13 +224,38 @@ def _validate(agent, file: str, name: str, text: str) -> None:
                 if key in body and not isinstance(body.get(key), dict):
                     raise ValueError(f"host section '{key}' must stay a mapping")
         return
-    documents = CandidateDocuments(agent, name, text)
-    loaded = load_config(
-        agent.config.paths.config, documents=documents, require_key=False, require_gateway=False
-    )
-    if file == "role" and loaded.default_role not in loaded.roles.by_name:
-        raise ValueError("default_role must still exist")
-    if file == "engine" and not loaded.roles.get(loaded.default_role):
+    body = yaml.safe_load(text)
+    if body is None:
+        body = {}
+    if not isinstance(body, dict):
+        raise ValueError(f"{name} must be a YAML mapping")
+    try:
+        if file == "engine":
+            loaded = load_config(
+                agent.config.paths.config,
+                engine_override=body,
+                require_key=False,
+                require_model=False,
+            )
+        elif file == "soul":
+            loaded = load_config(
+                agent.config.paths.config,
+                soul_override=body,
+                require_key=False,
+                require_model=False,
+            )
+        else:
+            roles = dict(_read_roles(agent))
+            roles[name.split(":", 1)[1]] = body
+            loaded = load_config(
+                agent.config.paths.config,
+                roles_override=roles,
+                require_key=False,
+                require_model=False,
+            )
+    except ConfigError as exc:
+        raise ValueError(str(exc)) from exc
+    if not loaded.roles.get(loaded.default_role):
         raise ValueError("default_role must still exist")
 
 
@@ -287,6 +291,7 @@ def _atomic(path: Path, text: str) -> None:
 
 
 async def _commit(agent, file: str, name: str, text: str, actor: str) -> None:
+    """ADR-0046 §4.1: write the operator file first, then refresh its cache row."""
     if file == "host":
         _write_config(agent, yaml.safe_load(text) or {})
         return
@@ -296,13 +301,23 @@ async def _commit(agent, file: str, name: str, text: str, actor: str) -> None:
         raw["gateways"] = body.get("gateways") or {}
         _write_config(agent, raw)
         return
-    if agent.documents is None:
-        raise ValueError("DB documents are not available")
     mirror = _mirror(agent, file)
     if mirror is not None:
         _backup(mirror)
-    agent.documents.put(name, text, actor=actor)
-    agent.documents.export_to_files()
+    if file == "engine":
+        raw = _read_config(agent)
+        raw["engine"] = yaml.safe_load(text) or {}
+        _write_config(agent, raw)
+    elif file == "soul":
+        _atomic(agent.config.paths.soul_yaml, text)
+    elif file == "role":
+        roles = dict(_read_roles(agent))
+        roles[name.split(":", 1)[1]] = yaml.safe_load(text) or {}
+        _write_roles(agent, roles)
+    else:
+        raise ValueError(f"file must be one of: {', '.join(FILES)}")
+    if agent.documents is not None:
+        agent.documents.put(name, text, actor=actor)
 
 
 # ------------------------------------------------------------------ actions
@@ -502,10 +517,9 @@ TOOL = Handler(
     description=(
         "Read or change MonoAgens's own config/soul/roles. Actions: schema, get, set, unset, "
         "write, reload. Files: engine, host, gateway, soul, role:<name>. Engine lives in the "
-        "`engine` section of config.yaml and the `engine` DB document; the soul is the whole "
-        "soul.yaml and the `soul` DB document; roles live in roles.yaml and DB `role:<name>` "
-        "documents; host is the whole config.yaml. Sensitive changes wait for /approve when "
-        "approval.settings is true."
+        "`engine` section of config.yaml, the soul is the whole soul.yaml, roles live in "
+        "roles.yaml; the DB documents are a derived cache. Host is the whole config.yaml. "
+        "Sensitive changes wait for /approve when approval.settings is true."
     ),
     fn=_settings,
     parameters={

@@ -1,4 +1,4 @@
-> Terjemahan turunan — jangan sunting; sumber: 0046-gateway-access-and-onboarding.md (sha256: 9d0088183e35)
+> Terjemahan turunan — jangan sunting; sumber: 0046-gateway-access-and-onboarding.md (sha256: 788a875ec8ae)
 
 # ADR-0046: Otorisasi Gateway di Role, Onboarding Milik Gateway, dan Pilihan Start Setelah Instalasi
 

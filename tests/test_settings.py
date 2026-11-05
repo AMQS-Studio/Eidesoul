@@ -145,3 +145,56 @@ def test_host_rejects_reserved_sections(tmp_path, monkeypatch) -> None:
 def test_registry_has_settings_tool(tmp_path, monkeypatch) -> None:
     env = make_runtime(tmp_path, monkeypatch)
     assert "settings" in env.agent.tools.names()
+
+
+def test_reload_reads_the_files_and_refreshes_the_cache(tmp_path, monkeypatch) -> None:
+    env = make_runtime(tmp_path, monkeypatch, settings_approval=False)
+    roles = yaml.safe_load(env.paths.roles.read_text(encoding="utf-8"))
+    roles["roles"]["member"]["tools"] = ["read"]
+    env.paths.roles.write_text(yaml.safe_dump(roles, sort_keys=False), encoding="utf-8")
+    assert env.agent.config.roles.default_role().tools == ("*",)
+
+    summary = asyncio.run(env.agent.reload())
+
+    assert env.agent.config.roles.default_role().tools == ("read",)
+    assert "read" in env.documents.get("role:member")
+    assert "reloaded" in summary
+    assert env.agent.reload_generation == 1
+
+
+def test_reload_with_an_invalid_file_keeps_the_old_runtime(tmp_path, monkeypatch) -> None:
+    import pytest
+
+    from monoagens.engine.config import ConfigError
+
+    env = make_runtime(tmp_path, monkeypatch, settings_approval=False)
+    old_language = env.agent.soul.language
+    env.paths.soul_yaml.write_text("name: MonoAgens\n", encoding="utf-8")
+
+    with pytest.raises(ConfigError):
+        asyncio.run(env.agent.reload())
+
+    assert env.agent.soul.language == old_language
+    assert env.agent.reload_generation == 0
+
+
+def test_the_reload_command_is_private_thread_only(tmp_path, monkeypatch) -> None:
+    from monoagens.engine.commands import CommandContext
+    from monoagens.engine.commands.reload import reload
+
+    env = make_runtime(tmp_path, monkeypatch, settings_approval=False)
+    ctx = CommandContext(
+        agent=env.agent,
+        gateway=env.gateway,
+        roles=(env.config.roles.default_role(),),
+        thread_id=CHAT,
+        args="",
+        commands=(),
+        tools=(),
+        direct=False,
+    )
+
+    reply = asyncio.run(reload(ctx))
+
+    assert "chat pribadi" in reply
+    assert env.agent.reload_generation == 0

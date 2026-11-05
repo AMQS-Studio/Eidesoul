@@ -275,6 +275,32 @@ CONFIG: dict = {
     "gateways": GATEWAY["gateways"],
 }
 
+# ADR-0046 §4.4: the seed matrix is data, not a runtime exception. A newer role gets the
+# closed default; the owner may edit any block in roles.yaml.
+GATEWAY_POLICY: dict[str, dict[str, object]] = {
+    "administrator": {"dm": True, "groups": "all", "reply_to_bot": True},
+    "member": {"dm": True, "groups": "mention", "reply_to_bot": True},
+    "guest": {"dm": False, "groups": "none", "reply_to_bot": False},
+}
+CLOSED_GATEWAY_POLICY: dict[str, object] = {
+    "dm": False,
+    "groups": "none",
+    "reply_to_bot": False,
+}
+
+
+def seed_gateway_policies(roles: dict[str, dict], gateways) -> None:
+    """Give every role an explicit block for every selected gateway (ADR-0046 §4.4)."""
+    names = [str(name) for name in gateways]
+    for role_name, body in roles.items():
+        if not isinstance(body, dict):
+            continue
+        body["gateways"] = {
+            name: copy.deepcopy(GATEWAY_POLICY.get(str(role_name), CLOSED_GATEWAY_POLICY))
+            for name in names
+        }
+
+
 ROLES: dict[str, dict] = {
     "administrator": {
         "name": "administrator",
@@ -588,6 +614,7 @@ def files(
             for name in gateways
         }
     roles = copy.deepcopy(ROLES)
+    seed_gateway_policies(roles, config["gateways"])
     if tools is not None:
         roles["member"]["tools"] = list(tools)
     return {

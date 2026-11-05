@@ -152,7 +152,8 @@ Three layers, one direction of dependency.
   They are discovered by name, and a deployment enables only the ones it wants.
 - **State** — one database holds one soul: transcripts per conversation, semantic memory with a
   privacy level, affect, approvals, and the single-primary lease. The host files
-  (`config.yaml`, `roles.yaml`, `soul.yaml`) are seeds and mirrors of what the database holds.
+  (`config.yaml`, `roles.yaml`, `soul.yaml`) are the operator's source of truth; the database keeps
+  a derived cache of them (ADR-0046).
 
 ```mermaid
 flowchart LR
@@ -310,11 +311,12 @@ when enabled (see Optional integrations).
 
 ## soul.yaml
 
-One database is one soul, and `soul.yaml` is where that soul is written down. After the first
-`db upgrade` the stored soul is authoritative and `soul.yaml` is its seed and mirror. Normal edits
-apply on the next start: the engine compares file and DB hashes and imports the file when only the
-file changed; a DB-side change wins a conflict and rewrites the mirror. `monoagens config import`
-and `monoagens config export` remain for a forced direction.
+One database is one soul, and `soul.yaml` is where that soul is written down. The host files are the
+operator's source of truth (ADR-0046): `config.yaml` (the `engine` section), `soul.yaml`, and
+`roles.yaml` are read at start and by `/reload`, and the matching database rows are a cache keyed by
+content hash. A command writes the file first, then refreshes the cache; a file wins every
+disagreement and a missing or stale cache is rebuilt from the files. `monoagens config import`
+refreshes the cache after a manual edit, and the cache can be deleted at any time.
 
 ```yaml
 name: MonoAgens
@@ -418,7 +420,8 @@ This is the whole list; nowhere else in the docs enumerates gateways.
 - **CLI** — built in. The default config enables it, and it is how `monoagens run` and
   `monoagens console` talk to a soul without any network transport.
 - **WhatsApp** — an optional extra. `monoagens gateway add whatsapp` installs its declared
-  extra and enables it; pair with `monoagens gateway pair whatsapp`. Omit both and it does not
+  extra and enables it; `monoagens gateway add whatsapp --connect` installs, enables, seeds the
+  role policy, and pairs in this terminal. Omit both and it does not
   exist for this deployment. The core never imports it, and the default member role never
   receives its `send` tool.
 - **Your own embodiment** — a robot, a voice loop, a device, or a private HTTP endpoint is just
@@ -427,8 +430,9 @@ This is the whole list; nowhere else in the docs enumerates gateways.
 
 ```bash
 monoagens gateway list
-monoagens gateway add whatsapp
-monoagens gateway pair whatsapp
+monoagens gateway add whatsapp            # enable and seed the role policy
+monoagens gateway add whatsapp --connect  # install, enable, seed, then pair here
+monoagens gateway doctor --fix            # write missing role policy blocks
 monoagens gateway disable whatsapp
 ```
 
@@ -436,11 +440,28 @@ A gateway is a transport, not a brain. It normalizes input, delivers replies, an
 body-specific tool modules it wants to expose. Gateway-owned tools are granted to roles explicitly,
 exactly like core tools.
 
+Gateway authorization is role data, never transport config:
+
+```yaml
+roles:
+  member:
+    gateways:
+      whatsapp:
+        dm: true            # direct messages may enter a turn
+        groups: mention     # none | mention | reply | both | all
+        reply_to_bot: true  # a reply to a bot message counts as addressed
+```
+
+The highest-priority role decides; a lower role never grants access, and a missing or malformed
+block denies before history, memory, and the model. `monoagens gateway doctor` reports missing
+blocks.
+
 ## Roles and permissions
 
 Permissions come only from roles. Every role lists its own `tools` and `commands`; no handler
 carries a default, so a role that omits a section is denied everything in it. One `roles.yaml` holds
-all roles, and the stored role is authoritative with the file as its mirror.
+every role, its membership list, and its gateway policy; the file is authoritative and the database
+keeps a derived `role:<name>` cache (ADR-0046).
 
 ```yaml
 roles:
@@ -473,8 +494,8 @@ roles:
   its own scratch area, and the sandbox mirrors that with read-only shared mounts and one writable
   scratch mount.
 
-Hand-editing `roles.yaml` is supported: run `monoagens config import` afterwards so the database sees
-it.
+Hand-editing `roles.yaml` is supported: run `/reload` (private chat, administrator) or restart so
+the runtime reads it; `monoagens config import` only refreshes the cache.
 
 ## Safety
 

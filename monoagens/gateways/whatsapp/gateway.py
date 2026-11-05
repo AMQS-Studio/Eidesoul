@@ -21,12 +21,13 @@ from neonize.proto.waE2E.WAWebProtobufsE2E_pb2 import ContextInfo, ExtendedTextM
 from neonize.utils.enum import ChatPresence, ChatPresenceMedia
 from neonize.utils.jid import build_jid
 
+from ...engine.access.identity import IdentityStore
 from ...engine.config import Config, GatewaySettings, secure_db
 from ...engine.inbound import Action, GatewayError, Percept
 from ...engine.registry import Handler, discover
 from ...engine.turn.context import Message, human_size
 from ...engine.turn.reply import FENCE, clean_prose, strip_blocks
-from . import directory, history_sync, ingress
+from . import directory, history_sync, ingress, policy
 from .config import WhatsAppSettings
 from .media import download_media, send_kind
 
@@ -89,6 +90,30 @@ class WhatsAppGateway:
     def commands(self) -> list[Handler]:
         return list(self._commands)
 
+    def access_refusal(self, inbound: Percept) -> str:
+        """ADR-0046 §4.3: the highest-priority role decides; no lower role can grant access."""
+        person = IdentityStore(self.db).resolve(self.name, inbound.actor)
+        role, block = self.config.roles.policy_for(person, self.name)
+        access = policy.Access.parse(block)
+        if access is None:
+            log.info(
+                "gateway_policy_missing gateway=%s role=%s chat=%s",
+                self.name,
+                role.name,
+                inbound.thread,
+            )
+            return "policy_missing"
+        reason = access.refusal(inbound.hints)
+        if reason:
+            log.info(
+                "gateway_policy_denied gateway=%s role=%s chat=%s reason=%s",
+                self.name,
+                role.name,
+                inbound.thread,
+                reason,
+            )
+        return reason
+
     # ------------------------------------------------------------ lifecycle
 
     async def run(self, agent) -> None:
@@ -123,6 +148,12 @@ class WhatsAppGateway:
                     return
                 inbound = ingress.event_to_inbound(ev, self)
                 if inbound is None:
+                    return
+                if (
+                    not inbound.payload.outgoing
+                    and not bool(inbound.hints.get("self"))
+                    and self.access_refusal(inbound)
+                ):
                     return
                 await agent.handle(inbound, self)
             except Exception:

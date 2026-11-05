@@ -5,13 +5,14 @@ import ast
 import importlib
 import importlib.util
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from importlib.metadata import entry_points
 from pathlib import Path
 from typing import Any
 
 from ..engine.config import ConfigError
 from ..engine.inbound import capability_report, ensure_core
+from .descriptor import GatewayDescriptor
 
 log = logging.getLogger(__name__)
 
@@ -24,7 +25,11 @@ class GatewayInfo:
     module: str
     attribute: str
     source: str = "builtin"
-    can_pair: bool = False
+    descriptor: GatewayDescriptor = field(default_factory=GatewayDescriptor)
+
+    @property
+    def can_pair(self) -> bool:
+        return bool(self.descriptor.onboarding)
 
     @property
     def installed(self) -> bool:
@@ -66,6 +71,58 @@ def _has_pair(path: Path) -> bool:
     )
 
 
+def _capabilities(folder: Path) -> tuple[str, ...]:
+    """Tool names declared by `TOOL = Handler(name=...)` in the gateway's own package."""
+    found: list[str] = []
+    tool_dir = folder / "tools"
+    if not tool_dir.is_dir():
+        return ()
+    for path in sorted(tool_dir.glob("*.py")):
+        try:
+            tree = ast.parse(path.read_text(encoding="utf-8"))
+        except (OSError, SyntaxError):
+            continue
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.Assign) or not isinstance(node.value, ast.Call):
+                continue
+            if not any(isinstance(t, ast.Name) and t.id == "TOOL" for t in node.targets):
+                continue
+            name = next(
+                (
+                    kw.value.value
+                    for kw in node.value.keywords
+                    if kw.arg == "name" and isinstance(kw.value, ast.Constant)
+                ),
+                None,
+            )
+            if isinstance(name, str) and name not in found:
+                found.append(name)
+    return tuple(found)
+
+
+def _descriptor(folder: Path) -> GatewayDescriptor:
+    """The package's own `descriptor.py`, with derived fallbacks for older gateways."""
+    try:
+        module = importlib.import_module(f"{__name__}.{folder.name}.descriptor")
+    except ImportError:
+        module = None
+    found = getattr(module, "GATEWAY", None) if module is not None else None
+    if isinstance(found, GatewayDescriptor):
+        return found
+    onboarding = "pair" if _has_pair(folder / "cli.py") else ""
+    schema = (
+        f"{__name__}.{folder.name}.schema"
+        if (folder / "schema.py").is_file()
+        else ""
+    )
+    return GatewayDescriptor(
+        name=folder.name,
+        onboarding=onboarding,
+        schema=schema,
+        capabilities=_capabilities(folder),
+    )
+
+
 def _builtin_index() -> dict[str, GatewayInfo]:
     found: dict[str, GatewayInfo] = {}
     root = Path(__file__).parent
@@ -80,7 +137,7 @@ def _builtin_index() -> dict[str, GatewayInfo]:
             folder.name,
             f"{__name__}.{folder.name}.gateway",
             attribute,
-            can_pair=_has_pair(folder / "cli.py"),
+            descriptor=_descriptor(folder),
         )
     return found
 

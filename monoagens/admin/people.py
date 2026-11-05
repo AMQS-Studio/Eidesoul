@@ -2,6 +2,7 @@
 
 
 import logging
+import os
 import time
 
 import yaml
@@ -10,7 +11,7 @@ from sqlalchemy import select
 from ..engine.access.identity import IdentityStore, new_person_id
 from ..engine.access.roles import PROTECTED, parse_role
 from ..engine.db import Database
-from ..engine.schema import config_changes, documents, people, person_links
+from ..engine.schema import config_changes, people, person_links
 from ..engine.stores.documents import DocumentStore
 
 log = logging.getLogger(__name__)
@@ -49,6 +50,29 @@ def unlink(db: Database, person_id: str, gateway: str) -> bool:
     return IdentityStore(db).unlink(person_id, gateway)
 
 
+def _read_roles(paths) -> dict:
+    if not paths.roles.is_file():
+        raise ValueError(f"no roles found: {paths.roles} (run `monoagens init`)")
+    try:
+        raw = yaml.safe_load(paths.roles.read_text(encoding="utf-8")) or {}
+    except (OSError, yaml.YAMLError) as exc:
+        raise ValueError(f"roles.yaml is invalid: {exc}") from exc
+    roles = raw.get("roles") if isinstance(raw, dict) else None
+    if not isinstance(roles, dict):
+        raise ValueError(f"roles.yaml must contain a 'roles' mapping: {paths.roles}")
+    return roles
+
+
+def _write_roles(paths, roles: dict) -> None:
+    """ADR-0046 §4.1: the operator file is written first, then the cache follows."""
+    path = paths.roles
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_suffix(path.suffix + ".tmp")
+    tmp.write_text(yaml.safe_dump({"roles": roles}, sort_keys=False), encoding="utf-8")
+    os.chmod(tmp, 0o600)
+    os.replace(tmp, path)
+
+
 def add(
     db: Database,
     paths,
@@ -58,11 +82,10 @@ def add(
     *,
     name: str = "",
 ) -> str:
-    """ADR-0036 §4.6: create/link the first identity and append it to one role, one commit.
+    """ADR-0036 §4.6: create/link the first identity and append it to one role.
 
-    The address is resolved first: an already-linked person is reused (the console user is a
-    normal identity), a new one gets a fresh ``per_…`` id. The role document is the source of
-    truth; ``roles.yaml`` is rewritten after the commit as its mirror.
+    ADR-0046 §4.1: roles.yaml holds the definitions and the membership list; the DB keeps the
+    identity/link records and a derived `role:<name>` cache row.
     """
     from ..engine.memory.ledger import ActionLedger
 
@@ -71,13 +94,11 @@ def add(
     role_name = str(role or "").strip().lower()
     if not gateway or not address:
         raise ValueError("gateway and address are required")
-    store = DocumentStore(db, paths, sync=True)
-    store.seed()
     document = f"role:{role_name}"
-    raw = store.get(document)
-    if raw is None:
+    roles = _read_roles(paths)
+    body = roles.get(role_name)
+    if not isinstance(body, dict):
         raise ValueError(f"role '{role_name}' does not exist")
-    body = yaml.safe_load(raw) or {}
     parsed = parse_role(role_name, body, document)
     if not parsed.users and role_name != PROTECTED:
         raise ValueError(f"the first user must be '{PROTECTED}'")
@@ -116,25 +137,24 @@ def add(
         users = list(parsed.users)
         if person_id not in users:
             users.append(person_id)
-        new_body = dict(body)
-        new_body["users"] = users
-        conn.execute(
-            documents.update()
-            .where(documents.c.name == document)
-            .values(content=yaml.safe_dump(new_body, sort_keys=False), updated_at=now)
-        )
-        conn.execute(
-            config_changes.insert().values(
-                ts=now,
-                actor="people add",
-                file="roles.yaml",
-                path=f"roles.{role_name}.users",
-                old=", ".join(parsed.users),
-                new=", ".join(users),
-            )
-        )
+        config_changes_row = {
+            "ts": now,
+            "actor": "people add",
+            "file": "roles.yaml",
+            "path": f"roles.{role_name}.users",
+            "old": ", ".join(parsed.users),
+            "new": ", ".join(users),
+        }
+    new_body = dict(body)
+    new_body["users"] = users
+    roles[role_name] = new_body
+    _write_roles(paths, roles)
+    with db.connect() as conn:
+        conn.execute(config_changes.insert().values(config_changes_row))
+    DocumentStore(db, paths, sync=True).put(
+        document, yaml.safe_dump(new_body, sort_keys=False), actor="people add"
+    )
     ActionLedger(db).log_action(
         "person", person_id, "config", f"people add {gateway}:{address} role={role_name}"
     )
-    store.export_to_files()
     return person_id

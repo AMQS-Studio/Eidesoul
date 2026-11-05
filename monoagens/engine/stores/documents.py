@@ -1,8 +1,9 @@
-"""Engine/soul/role documents in the DB, mirrored into config.yaml, soul.yaml, roles.yaml.
+"""Operator files are the source of truth; DB documents are a derived cache (ADR-0046 §4.1).
 
-The DB is the source of truth; files are seeds plus mirrors. The `soul` document holds the
-whole soul.yaml body, the `engine` document holds the engine section of config.yaml, and
-every role lives in roles.yaml, so one config folder holds the whole soul.
+`config.yaml` (its `engine` section), `soul.yaml`, and `roles.yaml` are read, diffable, and
+recoverable. The cache is keyed by content hash, refreshed from the files on start and by
+`/reload`, and rebuilt from the files whenever it is missing or stale. A cache row never wins a
+conflict and never becomes a fallback for an invalid file.
 """
 
 
@@ -29,6 +30,8 @@ SYNC_ENGINE = "sync:engine"
 SYNC_SOUL = "sync:soul"
 SYNC_ROLE_PREFIX = "sync:role:"
 
+_MISSING = object()
+
 
 def _dump(body: object) -> str:
     return yaml.safe_dump(body, sort_keys=False, allow_unicode=True)
@@ -48,17 +51,21 @@ def _hash(value: str | None) -> str | None:
     return hashlib.sha256(str(value).encode("utf-8")).hexdigest() if value is not None else None
 
 
-def _canonical(body: object) -> str:
-    return yaml.safe_dump(body, sort_keys=True, allow_unicode=True)
-
-
-def _yaml_dict(text: str, label: str) -> dict:
+def _read_yaml(path: Path, label: str) -> object:
+    """The file body, `_MISSING` when absent, or None when it is not a YAML mapping."""
+    if not path.is_file():
+        return _MISSING
     try:
-        body = yaml.safe_load(text)
-    except yaml.YAMLError as exc:
-        log.warning("%s is not valid YAML: %s", label, exc)
+        body = yaml.safe_load(path.read_text(encoding="utf-8"))
+    except (OSError, yaml.YAMLError) as exc:
+        log.warning("%s is not valid YAML; the cache is left untouched: %s", label, exc)
+        return None
+    if body is None:
         return {}
-    return body if isinstance(body, dict) else {}
+    if not isinstance(body, dict):
+        log.warning("%s must be a mapping; the cache is left untouched", label)
+        return None
+    return body
 
 
 class DocumentStore:
@@ -67,7 +74,7 @@ class DocumentStore:
         self.paths = paths
         self.enabled = sync
 
-    # ---------------------------------------------------------- documents
+    # ---------------------------------------------------------- cache
 
     def get(self, name: str) -> str | None:
         row = self.db.fetch_one(select(documents).where(documents.c.name == name))
@@ -88,60 +95,56 @@ class DocumentStore:
         with self.db.connect() as conn:
             conn.execute(documents.delete().where(documents.c.name == name))
 
-    # ---------------------------------------------------------- seed/sync
+    # ---------------------------------------------------------- files
 
-    def _config(self) -> dict:
-        path = self.paths.config
-        if not path.is_file():
-            return {}
-        try:
-            return _yaml_dict(path.read_text(encoding="utf-8"), "config.yaml")
-        except OSError:
-            log.warning("failed to read %s", path, exc_info=True)
-            return {}
+    def _config(self) -> object:
+        return _read_yaml(self.paths.config, "config.yaml")
 
-    def _soul_file(self) -> str | None:
+    def _soul_file(self) -> object:
         path = self.paths.soul_yaml
         if not path.is_file():
-            return None
+            return _MISSING
         try:
             return path.read_text(encoding="utf-8")
         except OSError:
             log.warning("failed to read %s", path, exc_info=True)
             return None
 
-    def _roles_file(self) -> dict:
-        path = self.paths.roles
-        if not path.is_file():
-            return {}
-        try:
-            body = _yaml_dict(path.read_text(encoding="utf-8"), "roles.yaml")
-        except OSError:
-            log.warning("failed to read %s", path, exc_info=True)
-            return {}
+    def _roles_file(self) -> object:
+        body = _read_yaml(self.paths.roles, "roles.yaml")
+        if not isinstance(body, dict):
+            return body
         roles = body.get("roles")
-        return roles if isinstance(roles, dict) else {}
+        if not isinstance(roles, dict):
+            log.warning("roles.yaml must contain a 'roles' mapping; the cache is left untouched")
+            return None
+        return roles
+
+    # ---------------------------------------------------------- seed/sync
 
     def seed(self) -> int:
-        """Fill missing documents from files; existing documents are left untouched."""
+        """Fill missing cache rows from files; an existing cache row is replaced by `sync`."""
         if not self.enabled:
             return 0
         existing = set(self.names())
         saved = 0
-        engine = self._config().get("engine")
+        config = self._config()
+        engine = config.get("engine") if isinstance(config, dict) else None
         if "engine" not in existing and isinstance(engine, dict):
             self.put("engine", _dump(engine), actor="seed")
             saved += 1
         soul = self._soul_file()
-        if "soul" not in existing and soul:
+        if "soul" not in existing and isinstance(soul, str):
             self.put("soul", soul, actor="seed")
             saved += 1
-        for name, body in self._roles_file().items():
-            document = f"{ROLES_PREFIX}{name}"
-            if document in existing:
-                continue
-            self.put(document, _dump(body), actor="seed")
-            saved += 1
+        roles = self._roles_file()
+        if isinstance(roles, dict):
+            for name, body in roles.items():
+                document = f"{ROLES_PREFIX}{name}"
+                if document in existing:
+                    continue
+                self.put(document, _dump(body), actor="seed")
+                saved += 1
         if saved:
             log.info("documents seeded from files: %d", saved)
         return saved
@@ -177,72 +180,31 @@ class DocumentStore:
             ["name"],
         )
 
-    def _sync_one(
-        self,
-        conn,
-        *,
-        key: str,
-        file_text: str | None,
-        db_text: str | None,
-        label: str,
-        export: list[str],
-    ) -> str | None:
-        """Four-case table plus missing sides; DB wins every conflict (ADR-0042 §4.1)."""
-        file_hash = _hash(file_text)
-        db_hash = _hash(db_text)
-        last = self._state(conn, key)
-        action = ""
-        if file_text is None and db_text is None:
-            return None
-        if file_text is None:
-            action = "export"
-        elif db_text is None:
-            action = "import"
-        elif last is None:
-            action = "conflict-first"
-        elif file_hash == last and db_hash == last:
-            return last
-        elif file_hash != last and db_hash == last:
-            action = "import"
-        elif db_hash != last and file_hash == last:
-            action = "export"
-        elif file_hash != db_hash:
-            action = "conflict"
-        else:
-            action = "same"
-        if action == "import":
-            assert file_text is not None
-            if key == SYNC_ENGINE:
-                body = _yaml_dict(file_text, label)
-                content = _dump(body)
-            else:
-                content = file_text
-            self._put_document(conn, "engine" if key == SYNC_ENGINE else label, content)
-            self._set_state(conn, key, _hash(content) or "")
-            log.info("document sync import key=%s hash=%s", key, (_hash(content) or "")[:12])
-            return _hash(content)
-        if action in {"export", "conflict", "conflict-first", "same"}:
-            if action in {"conflict", "conflict-first"}:
-                log.warning(
-                    "document sync conflict key=%s; database wins, mirror exported", key
-                )
-            if db_text is not None:
-                self._set_state(conn, key, db_hash or "")
-                export.append(label if key != SYNC_ENGINE else "engine")
-            return db_hash
-        return db_hash
+    def _cache(self, conn, name: str, key: str, content: str) -> int:
+        """Cache one file value; return 1 only when the stored row actually changed."""
+        digest = _hash(content)
+        current = self._get_with(conn, name)
+        if current == content and self._state(conn, key) == digest:
+            return 0
+        self._put_document(conn, name, content)
+        self._set_state(conn, key, digest or "")
+        log.info("document cache refreshed name=%s hash=%s", name, (digest or "")[:12])
+        return 1
+
+    def _restore(self, conn, name: str, key: str, path: Path, mode: int | None = None) -> int:
+        """A missing file is rebuilt from the cache, never the other way around."""
+        content = self._get_with(conn, name)
+        if content is None:
+            return 0
+        _atomic_write(path, content, mode)
+        self._set_state(conn, key, _hash(content) or "")
+        log.warning("file rebuilt from the cache: %s", path)
+        return 1
 
     def sync(self) -> int:
-        """Apply changed host files on start; hashes only, one writer, no resolver."""
+        """Refresh the cache from the operator files; files always win (ADR-0046 §4.1)."""
         if not self.enabled:
             return 0
-        config = self._config()
-        engine = config.get("engine")
-        file_engine = _canonical(engine) if isinstance(engine, dict) else None
-        file_soul = self._soul_file()
-        file_roles = self._roles_file()
-        exported: list[str] = []
-        changed = 0
         with self.db.engine.connect() as conn:
             acquired = conn.execute(
                 text("SELECT pg_try_advisory_lock(:key)"), {"key": SYNC_LOCK_KEY}
@@ -251,93 +213,71 @@ class DocumentStore:
                 log.info("document sync skipped: another instance holds the lock")
                 return 0
             try:
-                db_engine = self._get_with(conn, "engine")
-                db_soul = self._get_with(conn, "soul")
-                if self._sync_one(
-                    conn,
-                    key=SYNC_ENGINE,
-                    file_text=file_engine,
-                    db_text=db_engine,
-                    label="engine",
-                    export=exported,
-                ) is not None:
-                    changed += 1
-                if self._sync_one(
-                    conn,
-                    key=SYNC_SOUL,
-                    file_text=file_soul,
-                    db_text=db_soul,
-                    label="soul",
-                    export=exported,
-                ) is not None:
-                    changed += 1
-                names = sorted(set(file_roles) | {
-                    name.split(":", 1)[1]
-                    for name in self._names_with(conn, ROLES_PREFIX)
-                    if ":" in name
-                })
-                for name in names:
-                    body = file_roles.get(name)
-                    file_text = _canonical(body) if isinstance(body, dict) else None
-                    db_text = self._get_with(conn, f"{ROLES_PREFIX}{name}")
-                    if self._sync_one(
-                        conn,
-                        key=f"{SYNC_ROLE_PREFIX}{name}",
-                        file_text=file_text,
-                        db_text=db_text,
-                        label=f"{ROLES_PREFIX}{name}",
-                        export=exported,
-                    ) is not None:
-                        changed += 1
+                changed = self._refresh(conn)
                 conn.commit()
+                return changed
             finally:
                 conn.execute(text("SELECT pg_advisory_unlock(:key)"), {"key": SYNC_LOCK_KEY})
                 conn.commit()
-        if exported:
-            self.export_to_files()
+
+    def _refresh(self, conn) -> int:
+        changed = 0
+        config = self._config()
+        if isinstance(config, dict):
+            engine = config.get("engine")
+            if isinstance(engine, dict):
+                changed += self._cache(conn, "engine", SYNC_ENGINE, _dump(engine))
+            else:
+                log.warning("config.yaml has no 'engine' mapping; the cache is left untouched")
+        elif config is _MISSING:
+            log.warning("config.yaml is missing; the cache is left untouched")
+
+        soul = self._soul_file()
+        if isinstance(soul, str):
+            changed += self._cache(conn, "soul", SYNC_SOUL, soul)
+        elif soul is _MISSING:
+            changed += self._restore(conn, "soul", SYNC_SOUL, self.paths.soul_yaml)
+
+        roles = self._roles_file()
+        if isinstance(roles, dict):
+            for name, body in roles.items():
+                changed += self._cache(
+                    conn, f"{ROLES_PREFIX}{name}", f"{SYNC_ROLE_PREFIX}{name}", _dump(body)
+                )
+            existing = {
+                name.split(":", 1)[1]
+                for name in self._names_with(conn, ROLES_PREFIX)
+                if ":" in name
+            }
+            for stale in sorted(existing - set(roles)):
+                document = f"{ROLES_PREFIX}{stale}"
+                conn.execute(documents.delete().where(documents.c.name == document))
+                changed += 1
+                log.info("stale role cache row removed name=%s", document)
+        elif roles is _MISSING:
+            changed += self._restore_roles(conn)
         return changed
 
-    def export_to_files(self) -> int:
-        """Write file mirrors from DB documents (`monoagens config export` and settings tool)."""
-        if not self.enabled:
-            return 0
-        saved = 0
-        raw = self._config()
-        engine = self.get("engine")
-        if engine is not None:
-            raw["engine"] = _yaml_dict(engine, "document engine")
-            _atomic_write(self.paths.config, _dump(raw))
-            saved += 1
-        soul = self.get("soul")
-        if soul is not None:
-            _atomic_write(self.paths.soul_yaml, soul)
-            saved += 1
-        roles = {
-            name.split(":", 1)[1]: _yaml_dict(self.get(name) or "", name)
-            for name in self.names(ROLES_PREFIX)
+    def _restore_roles(self, conn) -> int:
+        rows = {
+            name.split(":", 1)[1]: yaml.safe_load(self._get_with(conn, name) or "") or {}
+            for name in self._names_with(conn, ROLES_PREFIX)
             if ":" in name
         }
-        if roles:
-            _atomic_write(self.paths.roles, _dump({"roles": roles}), mode=ROLE_MODE)
-            saved += 1
-        return saved
+        if not rows:
+            return 0
+        _atomic_write(self.paths.roles, _dump({"roles": rows}), mode=ROLE_MODE)
+        log.warning("roles.yaml rebuilt from the cache")
+        return 1
 
     def import_from_files(self) -> int:
-        """Read host files and upsert documents (`monoagens config import`)."""
+        """Read host files and refresh every cache row (`monoagens config import`)."""
         if not self.enabled:
             return 0
-        saved = 0
-        engine = self._config().get("engine")
-        if isinstance(engine, dict):
-            self.put("engine", _dump(engine), actor="import")
-            saved += 1
-        soul = self._soul_file()
-        if soul:
-            self.put("soul", soul, actor="import")
-            saved += 1
-        for name, body in self._roles_file().items():
-            self.put(f"{ROLES_PREFIX}{name}", _dump(body), actor="import")
-            saved += 1
+        with self.db.engine.connect() as conn:
+            changed = self._refresh(conn)
+            conn.commit()
         if "persona" in set(self.names()):
             self.delete("persona")
-        return saved
+            changed += 1
+        return changed

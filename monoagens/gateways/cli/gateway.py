@@ -8,9 +8,11 @@ import sys
 import time
 from datetime import datetime
 
+from ...engine.access.identity import IdentityStore
 from ...engine.inbound import MESSAGE, Action, CoreDefaults, GatewayError, Percept
 from ...engine.registry import Handler
 from ...engine.turn.context import Message
+from . import policy
 from .config import CliSettings
 
 log = logging.getLogger(__name__)
@@ -40,6 +42,22 @@ class CliGateway(CoreDefaults):
 
     def commands(self) -> list[Handler]:
         return []
+
+    def access_refusal(self, user: str) -> str:
+        """ADR-0046 §4.3: a role enters the terminal only with its own `gateways.cli` block."""
+        person = IdentityStore(self.db).resolve(self.name, user)
+        role, block = self.config.roles.policy_for(person, self.name)
+        if policy.allowed(block):
+            return ""
+        reason = "policy_missing" if block is None else "denied"
+        log.info(
+            "gateway_policy_%s gateway=%s role=%s user=%s",
+            "missing" if reason == "policy_missing" else "denied",
+            self.name,
+            role.name,
+            user,
+        )
+        return reason
 
     async def run(self, agent) -> None:
         self.agent = agent
@@ -79,6 +97,8 @@ class CliGateway(CoreDefaults):
                 hints=hints,
             )
             try:
+                if self.access_refusal(user):
+                    continue
                 await agent.handle(inbound, self)
             except Exception:
                 log.exception("console turn failed")

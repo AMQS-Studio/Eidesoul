@@ -62,6 +62,67 @@ def test_load_role_mapping_and_union() -> None:
     assert registry.for_person("628111@s.whatsapp.net")[0].name == "guest"
 
 
+def test_gateway_policy_comes_only_from_the_highest_priority_role() -> None:
+    source = {
+        "administrator": (
+            f"name: administrator\npriority: 100\nusers: ['{PERSON}']\n"
+            "tools: ['*']\ncommands: ['*']\n"
+            "gateways:\n  whatsapp:\n    dm: true\n    groups: all\n    reply_to_bot: true\n"
+        ),
+        "member": (
+            f"name: member\npriority: 10\nusers: ['{PERSON}']\n"
+            "gateways:\n  whatsapp:\n    dm: true\n    groups: mention\n    reply_to_bot: true\n"
+        ),
+        "guest": "name: guest\n",
+    }
+
+    registry = load_roles(source, "guest")
+
+    role, block = registry.policy_for(PERSON, "whatsapp")
+    assert role.name == "administrator"
+    assert block == {"dm": True, "groups": "all", "reply_to_bot": True}
+
+
+def test_a_lower_role_never_grants_a_missing_policy() -> None:
+    source = {
+        "administrator": (
+            f"name: administrator\npriority: 100\nusers: ['{PERSON}']\ntools: ['*']\n"
+            "commands: ['*']\n"
+        ),
+        "member": (
+            f"name: member\npriority: 10\nusers: ['{PERSON}']\n"
+            "gateways:\n  whatsapp:\n    dm: true\n"
+        ),
+        "guest": "name: guest\n",
+    }
+
+    role, block = load_roles(source, "guest").policy_for(PERSON, "whatsapp")
+
+    assert role.name == "administrator"
+    assert block is None
+
+
+def test_unlinked_sender_uses_the_default_role_policy() -> None:
+    source = {
+        "guest": (
+            "name: guest\n"
+            "gateways:\n  whatsapp:\n    dm: false\n    groups: none\n    reply_to_bot: false\n"
+        )
+    }
+
+    role, block = load_roles(source, "guest").policy_for(OTHER, "whatsapp")
+
+    assert role.name == "guest"
+    assert block["dm"] is False
+
+
+def test_malformed_gateway_map_is_a_load_error() -> None:
+    with pytest.raises(RoleError, match="gateways"):
+        load_roles({"guest": "name: guest\ngateways: [whatsapp]\n"}, "guest")
+    with pytest.raises(RoleError, match=r"gateways\.whatsapp"):
+        load_roles({"guest": "name: guest\ngateways:\n  whatsapp: yes\n"}, "guest")
+
+
 def test_name_must_match_key() -> None:
     with pytest.raises(RoleError, match="does not match"):
         load_roles({"member": "name: other\ntools: []\n"}, "member")
@@ -278,12 +339,17 @@ def test_people_add_bootstraps_an_administrator_and_writes_the_mirror(tmp_path) 
     config = build_config(tmp_path)
     db = database()
     docs = DocumentStore(db, config.paths)
-    docs.put(
-        "role:administrator",
-        "name: administrator\nusers: []\ntools: ['*']\ncommands: ['*']\n"
-        "memory_admin: true\n",
-    )
     config.paths.roles.parent.mkdir(parents=True, exist_ok=True)
+    config.paths.roles.write_text(
+        "roles:\n"
+        "  administrator:\n"
+        "    name: administrator\n"
+        "    users: []\n"
+        "    tools: ['*']\n"
+        "    commands: ['*']\n"
+        "    memory_admin: true\n",
+        encoding="utf-8",
+    )
 
     person = admin_people.add(db, config.paths, "cli", "local", "administrator", name="Boss")
 
@@ -300,8 +366,10 @@ def test_people_add_refuses_a_non_administrator_first_user(tmp_path) -> None:
 
     config = build_config(tmp_path)
     db = database()
-    docs = DocumentStore(db, config.paths)
-    docs.put("role:member", 'name: member\ntools: ["read"]\n')
+    config.paths.roles.parent.mkdir(parents=True, exist_ok=True)
+    config.paths.roles.write_text(
+        "roles:\n  member:\n    name: member\n    tools: ['read']\n", encoding="utf-8"
+    )
 
     with pytest.raises(ValueError, match="first user"):
         admin_people.add(db, config.paths, "cli", "local", "member")

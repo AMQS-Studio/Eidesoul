@@ -1,4 +1,4 @@
-> Terjemahan turunan — jangan sunting; sumber: engine/0042-sync-on-start.md (sha256: ce25ca46ed17)
+> Terjemahan turunan — jangan sunting; sumber: engine/0042-sync-on-start.md (sha256: 3f0c7d586896)
 
 # ADR-0042: Sync saat Start — Perubahan File Berlaku Tanpa CLI
 

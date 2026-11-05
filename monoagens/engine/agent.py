@@ -27,7 +27,6 @@ from .commands import CommandContext
 from .config import Config
 from .guard import SafetyPolicy, SandboxGuard, build_safety
 from .guard.policy import ActionRequest, approval_summary, scope_proof
-from .i18n import reload_catalogs
 from .inbound import (
     AUTHORIZATION,
     CONSENT,
@@ -133,6 +132,7 @@ class Agent:
         self._shutdown_gateways: dict[str, GatewayCore] = {}
         self._cancel_reasons: dict[str, str] = {}
         self.draining = False
+        self.reload_generation = 0
         self.boot_epoch = int(time.time() * 1000)
         self.shutdown_epoch = 0
         self._reaper_task: asyncio.Task | None = None
@@ -699,68 +699,11 @@ class Agent:
         if self.lease is not None:
             self.lease.request_freeze(self.lease.instance_id)
 
-    def _restart_tokens(self, config: Config) -> dict[str, object]:
-        memory = config.memory
-        return {
-            "workspace": config.workspace,
-            "gateways": config.gateways,
-            "sandbox": config.sandbox,
-            "web_search": config.web_search,
-            "mcp": config.mcp,
-            "database": config.database,
-            "paths": config.paths,
-            "llm.api_key_env": config.llm.api_key_env,
-            "memory.collection": memory.collection,
-            "memory.extraction_model": memory.extraction_model,
-            "voice.enabled": config.soul.voice.enabled,
-            "voice.affect.enabled": config.soul.voice.affect.enabled,
-            "voice.style.enabled": config.soul.voice.style.enabled,
-            "voice.sampling": config.soul.voice.sampling,
-            "voice.safety": config.soul.voice.safety,
-            "ambient.enabled": config.ambient.enabled,
-        }
-
     async def reload(self) -> str:
-        """Reload config/soul/role; reject changes that need a restart."""
-        from .config import ConfigError, load_config
+        """ADR-0046 §4.9: validate the three files, swap the hot runtime, report the rest."""
+        from .turn.reload import reload_runtime
 
-        reload_catalogs()
-        loaded = load_config(self.config.paths.config, documents=self.documents, require_key=False)
-        before = self._restart_tokens(self.config)
-        after = self._restart_tokens(loaded)
-        changed = [key for key in before if before[key] != after[key]]
-        if changed:
-            raise ConfigError("restart required: " + ", ".join(changed))
-        old_llm = self.config.llm
-        self.config = loaded
-        self.soul = loaded.soul
-        if self.llm is not None and loaded.llm != old_llm:
-            self.llm = LLM(loaded, db=self.db)
-        if self.skills is not None:
-            self.skills.config = loaded.skills
-        if self.style is not None:
-            self.style.config = loaded.soul.voice.style
-        if self.affect is not None:
-            self.affect.config = loaded.soul.voice.affect
-        if self.vibe is not None:
-            self.vibe.config = loaded.soul.voice.affect.vibe
-        configure = getattr(self.memory, "configure_limits", None)
-        if callable(configure):
-            configure(loaded.memory)
-        self.approvals.configure(loaded.approval)
-        self.safety = build_safety(loaded.approval)
-        self.sandbox_guard = SandboxGuard(
-            loaded.guard, loaded.approval.sensitive_commands, self.llm
-        )
-        self.privacy.configure(loaded.memory.privacy)
-        if self.ambient is not None:
-            self.ambient.config = loaded
-            self.ambient.settings = loaded.ambient
-            self.ambient.llm = self.llm
-        self.runtime.paths = loaded.paths
-        self.runtime.memory_status = memory_status(self.memory)
-        self._sync_soul_rules()
-        return "config/soul/roles reloaded"
+        return await reload_runtime(self)
 
     async def apply_settings_payload(self, payload: dict) -> str:
         from .tools.settings import apply_payload

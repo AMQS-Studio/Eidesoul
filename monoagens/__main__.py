@@ -83,7 +83,7 @@ async def build_runtime(config_path: str | None, *, console: bool = False):
     documents = DocumentStore(db, paths, sync=host.sync_documents)
     documents.seed()
     documents.sync()
-    config = load_config(paths.config, documents=documents, require_gateway=True)
+    config = load_config(paths.config, require_gateway=True)
     from .engine.turn import observability
 
     observability.configure(config.logging)
@@ -216,7 +216,11 @@ def gateway_command(args: argparse.Namespace) -> int:
     if command == "enable":
         return admin_gateway.set_enabled(args.config, args.name, True)
     if command == "add":
+        if getattr(args, "connect", False):
+            return admin_gateway.connect(args.config, args.name)
         return admin_gateway.add(args.config, args.name)
+    if command == "doctor":
+        return admin_gateway.doctor(args.config, fix=args.fix)
     if command in ("disable", "remove"):
         return admin_gateway.set_enabled(args.config, args.name, False)
     if command == "pair":
@@ -570,24 +574,10 @@ def _doc_store(args: argparse.Namespace):
     return DocumentStore(db, paths, sync=True), db
 
 
-def _config_export(args: argparse.Namespace) -> int:
-    docs, db = _doc_store(args)
-    try:
-        count = docs.export_to_files()
-    finally:
-        db.dispose()
-    print(f"config export: {count} documents to files", flush=True)
-    return 0
-
-
 def _config_import(args: argparse.Namespace) -> int:
-    from .engine.access.roles import RoleError
-
     docs, db = _doc_store(args)
     try:
         count = docs.import_from_files()
-    except RoleError as exc:
-        raise ConfigError(str(exc)) from exc
     finally:
         db.dispose()
     print(f"config import: {count} documents from files", flush=True)
@@ -885,19 +875,32 @@ def build_parser() -> argparse.ArgumentParser:
     console.add_argument(
         "--no-takeover", action="store_true", help="do not take the lease; exit when it is held"
     )
-    gateway = sub.add_parser("gateway", help="list, enable, disable, or pair a gateway")
+    gateway = sub.add_parser(
+        "gateway", help="list, add, enable, disable, pair, or doctor a gateway"
+    )
     gateway_sub = gateway.add_subparsers(dest="gateway_command", required=True)
     gateway_list = gateway_sub.add_parser("list", help="show discovered gateways and state")
     gateway_list.set_defaults(gateway_command="list")
-    for name, verb in (
-        ("enable", "enable a discovered gateway"),
-        ("add", "alias for enable"),
-        ("disable", "disable a gateway"),
-        ("remove", "alias for disable"),
-    ):
-        item = gateway_sub.add_parser(name, help=verb)
-        item.add_argument("name", help="gateway name from `gateway list`")
-        item.set_defaults(gateway_command=name)
+    add = gateway_sub.add_parser("add", help="enable a gateway and seed its role policy")
+    add.add_argument("name", help="gateway name from `gateway list`")
+    add.add_argument(
+        "--connect",
+        action="store_true",
+        help="install the extra, enable, seed roles.yaml, and run the gateway's onboarding",
+    )
+    add.set_defaults(gateway_command="add")
+    enable = gateway_sub.add_parser("enable", help="enable a discovered gateway")
+    enable.add_argument("name", help="gateway name from `gateway list`")
+    enable.set_defaults(gateway_command="enable")
+    disable = gateway_sub.add_parser("disable", help="disable a gateway")
+    disable.add_argument("name", help="gateway name from `gateway list`")
+    disable.set_defaults(gateway_command="disable")
+    remove = gateway_sub.add_parser("remove", help="alias for disable")
+    remove.add_argument("name", help="gateway name from `gateway list`")
+    remove.set_defaults(gateway_command="remove")
+    doctor = gateway_sub.add_parser("doctor", help="report missing role gateway policies")
+    doctor.add_argument("--fix", action="store_true", help="write the missing seed blocks")
+    doctor.set_defaults(gateway_command="doctor")
     pair = gateway_sub.add_parser("pair", help="pair the gateway in this terminal")
     pair.add_argument("name", help="gateway name from `gateway list`")
     pair.set_defaults(gateway_command="pair")
@@ -977,8 +980,7 @@ def build_parser() -> argparse.ArgumentParser:
     sub.add_parser("models", help="list the model ids the configured provider serves")
     config = sub.add_parser("config", help="config operations")
     config_sub = config.add_subparsers(dest="config_command")
-    config_sub.add_parser("export", help="write the file mirrors from the DB documents")
-    config_sub.add_parser("import", help="upsert the DB documents from host files")
+    config_sub.add_parser("import", help="refresh the DB cache from the host files")
     database = sub.add_parser("db", help="database operations")
     database_sub = database.add_subparsers(dest="db_command")
     database_sub.add_parser("upgrade", help="create and seed the database schema")
@@ -1042,8 +1044,6 @@ def main(argv: list[str] | None = None) -> int:
             return gateway_command(args)
         if args.command == "models":
             return _models(args)
-        if args.command == "config" and args.config_command == "export":
-            return _config_export(args)
         if args.command == "config" and args.config_command == "import":
             return _config_import(args)
         dispatch = {

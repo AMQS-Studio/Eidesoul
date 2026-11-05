@@ -948,16 +948,16 @@ for name, value in (raw.get("gateways") or {}).items():
 PY
 }
 
-pair_gateways() {
+connect_gateways() {
     local found=() name answer="no" code=0
     (( non_interactive )) && return 0
     database_configured || return 0
     if (( dry_run )); then
-        detail "would offer to pair enabled gateways that support it"
+        detail "would offer to connect enabled gateways through: monoagens gateway add <name> --connect"
         return 0
     fi
     if [[ "$stack" == "compose" ]]; then
-        detail "pair a gateway inside the running stack: ${COMPOSE[*]:-podman compose} exec monoagens monoagens gateway pair <name>"
+        detail "connect a gateway inside the stack: ${COMPOSE[*]:-podman compose} exec monoagens monoagens gateway add <name> --connect"
         return 0
     fi
     mapfile -t found < <(enabled_pairable_gateways 2>/dev/null || true)
@@ -965,11 +965,7 @@ pair_gateways() {
         return 0
     fi
     for name in "${found[@]}"; do
-        if (( dry_run )); then
-            detail "would offer to pair gateway: $name"
-            continue
-        fi
-        if answer="$(ui_choice confirm --title "Pair gateway $name now?" \
+        if answer="$(ui_choice confirm --title "Connect gateway $name now?" \
             --detail "scan the code with the device's linked-device screen" --default yes)"; then
             :
         else
@@ -978,9 +974,10 @@ pair_gateways() {
             answer="no"
         fi
         if [[ "$answer" == "yes" ]]; then
-            uv_run_in_dir gateway pair "$name" || warn "pairing $name did not finish; rerun: uv run --no-dev python -m monoagens gateway pair $name"
+            # The gateway owns the QR, the session, and its role policy seed (ADR-0046 §4.5).
+            uv_run_in_dir gateway add "$name" --connect || warn "connecting $name did not finish; rerun: uv run --no-dev python -m monoagens gateway add $name --connect"
         else
-            detail "pair later: monoagens gateway pair $name"
+            detail "connect later: monoagens gateway add $name --connect"
         fi
     done
 }
@@ -1533,7 +1530,7 @@ stage_native_database() {
     if [[ "$database_mode" == "external" ]]; then
         stage_database
         bootstrap_identity
-        pair_gateways
+        connect_gateways
         stage_selftest
         return 0
     fi
@@ -1543,7 +1540,7 @@ stage_native_database() {
     fi
     stage_database
     bootstrap_identity
-    pair_gateways
+    connect_gateways
     stage_selftest
 }
 
@@ -1556,7 +1553,7 @@ stage_compose() {
     run_logged "publish the schema (compose exec)" \
         "${COMPOSE[*]:-podman compose} exec monoagens monoagens db upgrade" compose_run db upgrade
     compose_bootstrap_identity
-    pair_gateways
+    connect_gateways
     if (( skip_selftest )); then
         detail "self-check skipped (--skip-selftest)"
     else
@@ -1599,6 +1596,8 @@ print_cli_steps() {
         fi
         say "    $runner exec monoagens monoagens db upgrade"
         say "    $runner exec monoagens monoagens run"
+        say "  Link your own chat address explicitly (a paired account is not an operator):"
+        say "    $runner exec monoagens monoagens people add <gateway> <your address> --role administrator"
         say "  Run the setup inside the container too: $runner exec monoagens python -m monoagens init --dir ."
     else
         say "  Stay on the command line:"
@@ -1608,41 +1607,92 @@ print_cli_steps() {
         fi
         say "    uv run --no-dev python -m monoagens db upgrade"
         say "    uv run --no-dev python -m monoagens run"
+        say "  Link your own chat address explicitly (a paired account is not an operator):"
+        say "    uv run --no-dev python -m monoagens people add <gateway> <your address> --role administrator"
         say "  Run the setup again: uv run --no-dev python -m monoagens init --dir ."
     fi
     say ""
     say "  Log: $log_file"
 }
 
-open_panel() {
-    if (( dry_run )); then
-        detail "would start the panel: (cd $dir && uv run --project panel monoagens-panel)"
+start_foreground() {
+    if [[ "$stack" == "compose" ]]; then
+        say "  starting the stack; Ctrl-C stops it"
+        ( cd -- "$dir" && exec "${COMPOSE[@]}" up )
         return 0
     fi
-    say "  starting the panel; Ctrl-C stops it"
-    ( cd -- "$dir" && exec "$uv" run --project panel monoagens-panel )
+    say "  starting MonoAgens; Ctrl-C stops it"
+    ( cd -- "$dir" && export UV_NO_DEV=1 && exec "$uv" run --no-dev python -m monoagens run )
+}
+
+install_user_service() {
+    local unit_dir="${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user"
+    local unit="$unit_dir/monoagens.service"
+    if ! command -v systemctl >/dev/null 2>&1; then
+        warn "systemctl not found; start with: (cd $dir && uv run --no-dev python -m monoagens run)"
+        return 1
+    fi
+    mkdir -p -- "$unit_dir"
+    cat >"$unit" <<EOF
+[Unit]
+Description=MonoAgens primary
+After=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=$dir
+ExecStart=$uv run --no-dev python -m monoagens run
+Environment=PYTHONUNBUFFERED=1
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=default.target
+EOF
+    run_soft "reload the user systemd manager" "systemctl --user daemon-reload" \
+        systemctl --user daemon-reload || return 1
+    if run_soft "start the MonoAgens user service" "systemctl --user enable --now monoagens.service" \
+        systemctl --user enable --now monoagens.service; then
+        detail "user service: $unit (Restart=on-failure)"
+        detail "status: systemctl --user status monoagens"
+        return 0
+    fi
+    warn "the user service did not start; start with: (cd $dir && uv run --no-dev python -m monoagens run)"
+    return 1
 }
 
 finish() {
     stage "what next"
     if panel_available; then
         detail "panel: available in $dir/panel (web.enabled is true)"
-        if [[ -t 0 ]] && (( ! non_interactive )); then
-            say "  1) open the panel"
-            say "  2) stay on the command line"
-            local answer=""
-            read -r -p "  choice [2]: " answer || answer="2"
-            if [[ "$answer" == "1" ]]; then
-                open_panel
-                return 0
-            fi
-        else
-            detail "start it with: (cd $dir && uv run --project panel monoagens-panel)"
-        fi
+        detail "panel command: (cd $dir && uv run --project panel monoagens-panel)"
     else
         detail "panel: not built in this version, so the command line is the only path."
     fi
-    print_cli_steps
+    if [[ ! -t 0 ]] || (( non_interactive )) || ! database_configured; then
+        print_cli_steps
+        return 0
+    fi
+    say ""
+    say "  1) start now in this terminal"
+    say "  2) install and start a user service (auto restart)"
+    say "  3) exit"
+    local answer=""
+    read -r -p "  choice [1]: " answer || answer="3"
+    answer="${answer:-1}"
+    case "$answer" in
+        1) start_foreground ;;
+        2)
+            if [[ "$stack" == "compose" ]]; then
+                run_logged "start the stack in the background" \
+                    "${COMPOSE[*]:-podman compose} up -d" compose_up || true
+                detail "stack restarts with the container engine (unless-stopped)"
+            else
+                install_user_service || print_cli_steps
+            fi
+            ;;
+        *) print_cli_steps ;;
+    esac
 }
 
 # --- main -----------------------------------------------------------------------------

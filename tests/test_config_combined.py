@@ -1,4 +1,4 @@
-"""Combined config contract: one config.yaml plus roles.yaml, DB documents override seeds."""
+"""Combined config contract: one config.yaml plus roles.yaml and soul.yaml; files are authority."""
 
 
 import os
@@ -43,7 +43,7 @@ BASE = {
         },
     },
     "soul_file": "soul.yaml",
-    "gateways": {"cli": {"enabled": True, "role": "guest", "thread_id": "cli:local"}},
+    "gateways": {"cli": {"enabled": True, "thread_id": "cli:local"}},
 }
 
 SOUL = "name: MonoAgens\nlanguage: en\nlocale: en-US\ntimezone: UTC\npronouns: aku\n"
@@ -92,7 +92,7 @@ def test_load_config_reads_all_sections(tmp_path, monkeypatch) -> None:
     assert config.memory.privacy.auditor is False
 
 
-def test_documents_override_config_sections(tmp_path, monkeypatch) -> None:
+def test_files_win_over_a_changed_cache(tmp_path, monkeypatch) -> None:
     monkeypatch.setenv("MONOAGENS_TEST_KEY", "x")
     write_folder(tmp_path)
     docs = DocumentStore(database(), load_host(tmp_path / "config.yaml")[1])
@@ -108,14 +108,25 @@ def test_documents_override_config_sections(tmp_path, monkeypatch) -> None:
     )
     docs.put("role:guest", "name: guest\ntools: []\n")
 
-    config = load_config(tmp_path / "config.yaml", documents=docs, require_key=False)
+    config = load_config(tmp_path / "config.yaml", require_key=False)
 
-    assert config.llm.model == "doc-model"
-    assert config.soul.language == "id"
-    assert config.default_role == "administrator"
+    assert config.llm.model == "seed-model"
+    assert config.soul.language == "en"
+    assert config.default_role == "guest"
     assert config.roles.names() == ["administrator", "guest"]
-    assert config.roles.get("guest").tools == ()
+    assert config.roles.get("guest").tools == ("read",)
     assert config.roles.get("administrator").memory_admin is True
+
+
+def test_editing_roles_yaml_changes_access_without_an_import(tmp_path, monkeypatch) -> None:
+    monkeypatch.setenv("MONOAGENS_TEST_KEY", "x")
+    roles = yaml.safe_load(yaml.safe_dump(ROLES))
+    roles["roles"]["guest"]["tools"] = ["grep"]
+    write_folder(tmp_path, roles=roles)
+
+    config = load_config(tmp_path / "config.yaml", require_key=False)
+
+    assert config.roles.get("guest").tools == ("grep",)
 
 
 def test_roles_file_needs_the_wrapper(tmp_path, monkeypatch) -> None:

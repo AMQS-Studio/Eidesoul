@@ -2,6 +2,7 @@
 
 
 import asyncio
+import logging
 import time
 from pathlib import Path
 from types import SimpleNamespace
@@ -45,8 +46,12 @@ class FakeClient:
         return SimpleNamespace(ID="doc-1")
 
 
-def make_gateway(tmp_path) -> WhatsAppGateway:
-    config = build_config(tmp_path)
+def make_gateway(tmp_path, *, gateways=None) -> WhatsAppGateway:
+    from monoagens.engine.access.roles import Role
+
+    config = build_config(
+        tmp_path, roles={"member": Role("member", gateways=gateways or {})}
+    )
     db = database()
     history = HistoryStore(db)
     windows = WorkingMemory(store=history)
@@ -524,3 +529,65 @@ def test_participants_proves_a_linked_dm_and_refuses_a_group(tmp_path) -> None:
     assert gateway.participants("628999999999@s.whatsapp.net") == {person}
     assert gateway.participants("628111@s.whatsapp.net") is None
     assert gateway.participants("111@g.us") is None
+
+
+def test_policy_matrix_reads_only_its_own_vocabulary() -> None:
+    from monoagens.gateways.whatsapp import policy
+
+    assert policy.Access.parse(None) is None
+    assert policy.Access.parse({"dm": "yes"}) is None
+    assert policy.Access.parse({"dm": True, "groups": "everyone", "reply_to_bot": True}) is None
+    access = policy.Access.parse({"dm": True, "groups": "mention", "reply_to_bot": True})
+    assert access is not None
+    assert access.refusal({"dm": True}) == ""
+    assert access.refusal({"group": True}) == "group_mention"
+    assert access.refusal({"group": True, "mention": True}) == ""
+    assert access.refusal({"group": True, "reply": True}) == "group_mention"
+    assert policy.Access.parse(
+        {"dm": False, "groups": "reply", "reply_to_bot": True}
+    ).refusal({"group": True, "reply": True}) == ""
+    assert policy.Access.parse(
+        {"dm": False, "groups": "reply", "reply_to_bot": False}
+    ).refusal({"group": True, "reply": True}) == "group_reply"
+    assert policy.Access.parse(
+        {"dm": False, "groups": "all", "reply_to_bot": False}
+    ).refusal({"group": True}) == ""
+
+
+def test_access_refusal_names_the_role_and_reason(tmp_path, caplog) -> None:
+    caplog.set_level(logging.INFO)
+    gateway = make_gateway(
+        tmp_path,
+        gateways={"whatsapp": {"dm": True, "groups": "mention", "reply_to_bot": True}},
+    )
+    inbound = ingress.event_to_inbound(group_event("halo"), gateway)
+
+    assert gateway.access_refusal(inbound) == "group_mention"
+    assert "gateway_policy_denied" in caplog.text
+    assert "role=member" in caplog.text
+
+
+def test_access_refusal_allows_a_dm_and_denies_guest(tmp_path, caplog) -> None:
+    caplog.set_level(logging.INFO)
+    gateway = make_gateway(
+        tmp_path,
+        gateways={"whatsapp": {"dm": True, "groups": "mention", "reply_to_bot": True}},
+    )
+    dm = ingress.event_to_inbound(
+        group_event("halo", chat="628222222222@s.whatsapp.net"), gateway
+    )
+    assert gateway.access_refusal(dm) == ""
+
+    denied = make_gateway(tmp_path)
+    inbound = ingress.event_to_inbound(
+        group_event("halo", chat="628222222222@s.whatsapp.net"), denied
+    )
+    assert denied.access_refusal(inbound) == "policy_missing"
+    assert "gateway_policy_missing" in caplog.text
+
+
+def test_transport_config_rejects_authorization_keys() -> None:
+    from monoagens.gateways.whatsapp.config import WhatsAppSettings
+
+    with pytest.raises(ValueError, match=r"roles\.yaml"):
+        WhatsAppSettings.from_mapping(True, {"dm": True}, Path("."))

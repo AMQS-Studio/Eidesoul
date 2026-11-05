@@ -6,7 +6,7 @@
 - **Context:** follows ADR-0018 (gateway contract), ADR-0022 (the protected administrator), ADR-0027 (clean by default), ADR-0030 (install and init), ADR-0031 (engine structure), ADR-0033 (neutral core), ADR-0036 (role model), ADR-0039 (setup terminal), ADR-0040 (naming), and ADR-0042 (sync on start).
 - **Supersedes:** the database-wins rule for `config.yaml`, `soul.yaml`, and `roles.yaml` in ADR-0042 §4.1; the rest of ADR-0042 stays.
 - **Related:** ADR-0007 (authorization), ADR-0018 (gateway contract), ADR-0022 (administrator), ADR-0027 (distribution), ADR-0030 (installer), ADR-0033 (neutral core), ADR-0036 (role model), ADR-0039 (init), ADR-0042 (sync), ADR-0043 (research)
-- **Implementation:** draft — this ADR fixes the contract; no role-policy, onboarding-hook, start-prompt, or catalog extraction code has landed yet.
+- **Implementation:** implemented — the role policy, file-first cache, `/reload`, gateway onboarding, and installer start choice landed with the same commit; the Indonesian copy is stamped to this text.
 - **Location note:** the decision crosses the role core, the gateway seam, and the installer, so it sits at the root of the ADR home. The Indonesian copy is `docs/v0.1.0/adr/id/0046-gateway-access-and-onboarding.md`.
 
 ---
@@ -343,23 +343,23 @@ chat-visible string is hard-coded in the command.
 
 ## 7. Acceptance criteria
 
-- [ ] `Role` accepts a `gateways` mapping without knowing any gateway name.
-- [ ] The first role returned by `for_person` is the only policy source; a lower role cannot grant access.
-- [ ] `guest` seeded policy denies DM, groups, and reply-to-bot.
-- [ ] A denied message is dropped before history, memory, LLM, and tool dispatch; the diagnostic names the role and gateway.
-- [ ] `init --capabilities` writes the seed gateway policies to `roles.yaml`.
-- [ ] `gateway add --connect` writes missing policies to `roles.yaml` and calls the gateway's onboarding hook.
-- [ ] A missing policy at runtime denies and is reported by `gateway doctor`; it is not auto-written by the running gateway.
-- [ ] The installer does not render QR; the gateway prints it.
-- [ ] After a successful install, the operator sees start-now, user-service, and exit choices.
-- [ ] The user service restarts on failure and never runs a second primary.
-- [ ] The capability catalog shows the real description of `chat_history`, `send`, and `send_to`.
-- [ ] `config.yaml`, `soul.yaml`, and `roles.yaml` are the write targets for operator changes; the DB cache can be deleted and rebuilt.
-- [ ] `roles.yaml` contains both the role definitions and the role membership list; the DB only caches them.
-- [ ] `/reload` is a core command granted by `commands: ["reload"]`, private-thread only, and subject to the gateway policy.
-- [ ] `/reload` reports success and restart-required fields; invalid YAML leaves the old runtime running.
-- [ ] `AGENTS.md`'s file/DB authority paragraph is amended in the implementation commit, pointing to this ADR.
-- [ ] Existing ADR gates and the full test suite pass.
+- [x] `Role` accepts a `gateways` mapping without knowing any gateway name.
+- [x] The first role returned by `for_person` is the only policy source; a lower role cannot grant access.
+- [x] `guest` seeded policy denies DM, groups, and reply-to-bot.
+- [x] A denied message is dropped before history, memory, LLM, and tool dispatch; the diagnostic names the role and gateway.
+- [x] `init --capabilities` writes the seed gateway policies to `roles.yaml`.
+- [x] `gateway add --connect` writes missing policies to `roles.yaml` and calls the gateway's onboarding hook.
+- [x] A missing policy at runtime denies and is reported by `gateway doctor`; it is not auto-written by the running gateway.
+- [x] The installer does not render QR; the gateway prints it.
+- [x] After a successful install, the operator sees start-now, user-service, and exit choices.
+- [x] The user service restarts on failure and never runs a second primary.
+- [x] The capability catalog shows the real description of `chat_history`, `send`, and `send_to`.
+- [x] `config.yaml`, `soul.yaml`, and `roles.yaml` are the write targets for operator changes; the DB cache can be deleted and rebuilt.
+- [x] `roles.yaml` contains both the role definitions and the role membership list; the DB only caches them.
+- [x] `/reload` is a core command granted by `commands: ["reload"]`, private-thread only, and subject to the gateway policy.
+- [x] `/reload` reports success and restart-required fields; invalid YAML leaves the old runtime running.
+- [x] `AGENTS.md`'s file/DB authority paragraph is amended in the implementation commit, pointing to this ADR.
+- [x] Existing ADR gates and the full test suite pass.
 
 ## 8. Risks and mitigations
 

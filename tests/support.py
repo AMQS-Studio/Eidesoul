@@ -130,7 +130,6 @@ def build_config(
             workspace=workspace_path,
         ),
         database=database_config or DatabaseConfig(url=test_dsn(), url_env=""),
-        documents=None,
         llm=LLMConfig(base_url="http://x", model="m", api_key_env="K"),
         workspace=workspace_path,
         approval=approval or ApprovalConfig(),
@@ -710,7 +709,7 @@ def make_runtime(
     db = database()
     documents = DocumentStore(db, paths)
     documents.seed()
-    config = load_config(paths.config, documents=documents, require_key=False)
+    config = load_config(paths.config, require_key=False)
     config.workspace.mkdir(parents=True, exist_ok=True)
     history = HistoryStore(db, config.workspace, search=config.search)
     windows = WorkingMemory(store=history)

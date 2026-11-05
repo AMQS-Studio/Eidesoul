@@ -1,7 +1,7 @@
 """Load .env plus the combined config.yaml (host, engine, gateways, soul) and roles.yaml.
 
-Validation is strict and never touches the filesystem beyond reading; one file is the
-source of truth for the host, and DB documents override its engine/soul/role seeds.
+Validation is strict and never touches the filesystem beyond reading. ADR-0046 §4.1: the
+operator files are authoritative; the DB documents are a derived cache the loader never reads.
 """
 
 
@@ -11,7 +11,6 @@ import os
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Protocol
 
 import yaml
 
@@ -58,12 +57,6 @@ DEFAULT_SENSITIVE_COMMANDS: tuple[str, ...] = (
     "find * -delete*",
     "find * -exec rm*",
 )
-
-
-class Documents(Protocol):
-    def get(self, name: str) -> str | None: ...
-
-    def names(self, prefix: str = "") -> list[str]: ...
 
 
 @dataclass(frozen=True)
@@ -663,7 +656,6 @@ class HostConfig:
 class Config:
     paths: Paths
     database: DatabaseConfig
-    documents: Documents | None
     llm: LLMConfig
     workspace: Path
     approval: ApprovalConfig
@@ -1093,32 +1085,17 @@ def load_host(path: str | Path | None = None) -> tuple[HostConfig, Paths]:
     return host, paths
 
 
-def _engine(raw: Mapping, documents: Documents | None) -> dict:
-    """Engine document wins; otherwise the `engine` section of config.yaml."""
-    text = documents.get("engine") if documents is not None else None
-    if text:
-        try:
-            body = yaml.safe_load(text)
-        except yaml.YAMLError as exc:
-            raise ConfigError(f"engine document is invalid: {exc}") from exc
-        if body is None:
-            return {}
-        if not isinstance(body, dict):
-            raise ConfigError("engine document must be a mapping")
-        return body
-    return _section(raw, "engine")
+def _engine(raw: Mapping, override: Mapping | None = None) -> dict:
+    """ADR-0046 §4.1: the `engine` section of config.yaml is authoritative."""
+    body = override if override is not None else _section(raw, "engine")
+    if not isinstance(body, Mapping):
+        raise ConfigError("config.yaml: 'engine' must be a mapping")
+    return dict(body)
 
 
-def _soul(raw: Mapping, paths: Paths, documents: Documents | None) -> Soul:
-    """The `soul` document wins over soul.yaml; config.yaml carries no soul keys."""
-    text = documents.get("soul") if documents is not None else None
-    source: Path | Mapping[str, object] = paths.soul_yaml
-    if text:
-        try:
-            body = yaml.safe_load(text)
-        except yaml.YAMLError as exc:
-            raise ConfigError(f"soul document is invalid: {exc}") from exc
-        source = body if isinstance(body, Mapping) else {}
+def _soul(raw: Mapping, paths: Paths, override: Mapping | None = None) -> Soul:
+    """ADR-0046 §4.1: soul.yaml is authoritative; config.yaml carries no soul keys."""
+    source: Path | Mapping[str, object] = override if override is not None else paths.soul_yaml
     try:
         return load_soul(source, source_path=paths.soul_yaml)
     except ValueError as exc:
@@ -1126,21 +1103,10 @@ def _soul(raw: Mapping, paths: Paths, documents: Documents | None) -> Soul:
 
 
 def _roles(
-    raw: Mapping, paths: Paths, documents: Documents | None, default_role: str
+    raw: Mapping, paths: Paths, default_role: str, override: Mapping | None = None
 ) -> RoleRegistry:
-    """Role documents win; otherwise read every role from `roles.yaml`."""
-    source: Mapping[str, str | dict] = {}
-    names = documents.names("role:") if documents is not None else []
-    if names and documents is not None:
-        source = {
-            name.split(":", 1)[1]: documents.get(name) or ""
-            for name in names
-            if ":" in name
-        }
-    else:
-        body = _roles_file(paths)
-        if body:
-            source = body
+    """ADR-0046 §4.1: roles.yaml holds the definitions and the membership list."""
+    source: Mapping[str, str | dict] = override if override is not None else _roles_file(paths)
     if not source:
         raise ConfigError(f"no roles found: {paths.roles} (run `monoagens init`)")
     try:
@@ -1516,10 +1482,12 @@ def _validate_voice(llm: LLMConfig, soul: Soul) -> None:
 def load_config(
     path: str | Path | None = None,
     *,
-    documents: Documents | None = None,
     require_key: bool = True,
     require_model: bool = True,
     require_gateway: bool = False,
+    engine_override: Mapping | None = None,
+    soul_override: Mapping | None = None,
+    roles_override: Mapping | None = None,
 ) -> Config:
     host, paths = load_host(path)
     try:
@@ -1527,7 +1495,7 @@ def load_config(
     except (OSError, yaml.YAMLError) as exc:
         raise ConfigError(f"config YAML is invalid: {exc}") from exc
     raw = raw if isinstance(raw, dict) else {}
-    engine = _engine(raw, documents)
+    engine = _engine(raw, engine_override)
     legacy = sorted({"affect", "style", "character", "humanize"} & set(engine))
     if legacy:
         raise ConfigError(
@@ -1543,14 +1511,8 @@ def load_config(
     default_role = str(engine.get("default_role") or "").strip()
     if not default_role:
         raise ConfigError("engine.default_role is required")
-    roles = _roles(raw, paths, documents, default_role)
+    roles = _roles(raw, paths, default_role, roles_override)
     gateways = _gateways(raw, required=require_gateway)
-    for name, settings in gateways.items():
-        if not settings.enabled:
-            continue
-        role = settings.options.get("role")
-        if role is not None and roles.get(str(role)) is None:
-            raise ConfigError(f"gateway '{name}': role '{role}' is not among the loaded roles")
     database = host.database
     url = resolve_database_url(database)
     if not url:
@@ -1621,7 +1583,7 @@ def load_config(
     safety = SafetyConfig(
         allow_degraded=_bool(_section(engine, "safety").get("allow_degraded"), False)
     )
-    soul = _soul(raw, paths, documents)
+    soul = _soul(raw, paths, soul_override)
     _validate_voice(llm, soul)
     from .guard.patterns import has_pack
 
@@ -1641,7 +1603,6 @@ def load_config(
     return Config(
         paths=paths,
         database=database,
-        documents=documents,
         llm=llm,
         workspace=host.workspace,
         approval=ApprovalConfig(

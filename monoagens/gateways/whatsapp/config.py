@@ -4,6 +4,8 @@
 from dataclasses import dataclass
 from pathlib import Path
 
+POLICY_KEYS = frozenset({"dm", "groups", "reply_to_bot"})
+
 
 @dataclass(frozen=True)
 class WhatsAppSettings:
@@ -13,6 +15,12 @@ class WhatsAppSettings:
 
     @classmethod
     def from_mapping(cls, enabled: bool, options: dict, base: Path) -> WhatsAppSettings:
+        mislaid = sorted(POLICY_KEYS.intersection(options))
+        if mislaid:
+            raise ValueError(
+                f"gateway 'whatsapp': {mislaid[0]!r} is role authorization; "
+                "move it to roles.yaml under roles.<role>.gateways.whatsapp (ADR-0046 §5.1)"
+            )
         raw = Path(str(options.get("session_db") or ".monoagens/whatsapp.db")).expanduser()
         session = raw if raw.is_absolute() else Path(base) / raw
         try:

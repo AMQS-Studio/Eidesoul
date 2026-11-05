@@ -23,7 +23,14 @@ ENGINE = ROOT / "monoagens" / "engine"
 
 # The process entry point and the admin CLI build the gateway list; the engine never imports
 # them, so the "no gateway import" rule applies to every other module outside gateways/.
-COMPOSITION = {"monoagens/__main__.py", "monoagens/admin/database.py"}
+COMPOSITION = {
+    "monoagens/__main__.py",
+    "monoagens/admin/database.py",
+    # ADR-0046 §4.5: the admin CLI is a composition root; it indexes gateway descriptors and
+    # runs a gateway-owned onboarding hook, exactly like `__main__.py` composes the bodies.
+    "monoagens/admin/gateway.py",
+    "monoagens/admin/gateway_index.py",
+}
 
 # The only body words the engine may know: the documented `Percept.hints` keys.
 HINT_KEYS = frozenset({"dm", "mention", "reply", "group", "presence", "self", "roles"})

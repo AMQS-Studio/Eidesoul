@@ -30,7 +30,7 @@ Hard rules for changes in this repo.
   `schema.py`, `embed.py`, `i18n.py`, `io.py`, `runtime.py`, `soul.py`, `self_knowledge.py`, `clock.py`, and
   `__init__.py` (a written map, no imports). Everything else lives in the folder that owns its reason
   to change: `turn/` (context, decision, assembly, salience, prompts, reply, research,
-  observability, loop, intake, delivery, commands, steps, plugin_registration), `character/`
+  observability, loop, intake, delivery, commands, steps, reload, plugin_registration), `character/`
   (character, lexicon), `access/` (roles, permissions, identity, privacy, approvals, relay, target),
   `jobs/` (cognition, automation_manifest, automation_store, automation_worker, supervisor, lease,
   ambient, mcp), plus the fixed contracts `memory/`, `stores/`,
@@ -106,11 +106,18 @@ Hard rules for changes in this repo.
 
 ## Config and soul
 
-- `soul.yaml` is the only persona source. The `soul` document in the database is authoritative and
-  `soul.yaml` is seed plus mirror; there is no legacy persona file and no `persona` document.
-- Documents `engine`, `soul`, and `role:<name>` are the source of truth in the database;
-  `config.yaml` (engine section), `soul.yaml`, and `roles.yaml` are seeds plus mirrors.
-  Manual edit → `monoagens config import`. The loader must never create directories.
+- `soul.yaml` is the only persona source; `soul.yaml` is authoritative and the `soul` document is a
+  derived cache (ADR-0046 §4.1). There is no legacy persona file and no `persona` document.
+- `config.yaml` (engine section), `soul.yaml`, and `roles.yaml` are the operator's source of truth
+  (ADR-0046 §4.1); the `engine`, `soul`, and `role:<name>` documents are caches keyed by content
+  hash. A command writes the file first, then refreshes the cache; a file wins every disagreement,
+  and a cache miss is rebuilt from the files. Manual edit → restart or `/reload`; `monoagens config
+  import` only refreshes the cache. The loader must never create directories.
+- Gateway authorization is role data (ADR-0046 §4.2): `roles.<role>.gateways.<gateway>` lives only
+  in `roles.yaml`, the highest-priority role is the only policy source, and the gateway owns its
+  vocabulary and validation. A missing or malformed block denies before history, memory, and the
+  model; `monoagens gateway doctor --fix` writes the seed, never a running gateway.
+  `config.yaml` `gateways` stays transport-only (`enabled`, session, backlog).
 - Config layout: one host-local `config.yaml` holds host keys (`database`, `workspace`, `roles_file`,
   `soul_file`, `sandbox`, `web_search`, `mcp`, `sync_documents`) plus the `engine` and `gateways`
   sections. One `roles.yaml` holds every role. One `soul.yaml` holds the soul. There are no separate

@@ -18,7 +18,21 @@ def test_gateways_are_discovered_from_packages_and_pairing_is_indexed():
     assert {"cli", "whatsapp"} <= names
     from monoagens.gateways import gateway_index
 
-    assert gateway_index()["whatsapp"].can_pair is True
+    info = gateway_index()["whatsapp"]
+    assert info.can_pair is True
+    assert info.descriptor.extra == "whatsapp"
+    assert info.descriptor.onboarding == "pair"
+    assert info.descriptor.schema == "monoagens.gateways.whatsapp.schema"
+    assert info.descriptor.capabilities == ("send", "send_to", "chat_history")
+    assert gateway_index()["cli"].can_pair is False
+
+
+def test_gateway_tools_keep_their_real_description_and_parameters():
+    items = {item.name: item for item in catalog.tools()}
+    for name in ("chat_history", "send", "send_to"):
+        assert items[name].detail
+        assert not items[name].detail.startswith("gateway:")
+        assert items[name].parameters["type"] == "object"
 
 
 def test_voice_parts_come_from_the_voice_config():
@@ -55,6 +69,15 @@ def test_init_applies_capability_choices():
     }
     assert roles["roles"]["member"]["tools"] == ["read", "web_search"]
     assert roles["roles"]["administrator"]["tools"] == ["*"]
+    assert roles["roles"]["guest"]["gateways"] == {
+        "cli": {"dm": False, "groups": "none", "reply_to_bot": False},
+        "whatsapp": {"dm": False, "groups": "none", "reply_to_bot": False},
+    }
+    assert roles["roles"]["administrator"]["gateways"]["whatsapp"] == {
+        "dm": True,
+        "groups": "all",
+        "reply_to_bot": True,
+    }
     assert soul["voice"]["affect"]["enabled"] is True
     assert soul["voice"]["style"]["enabled"] is True
     assert soul["voice"]["character"]["enabled"] is False
@@ -117,6 +140,70 @@ def test_gateway_add_installs_a_declared_extra(monkeypatch, tmp_path):
     assert calls
     assert calls[0][-2:] == ["--extra", "whatsapp"]
     assert "whatsapp:\n    enabled: true" in path.read_text(encoding="utf-8")
+
+
+def test_gateway_add_seeds_missing_role_policies(tmp_path):
+    path = tmp_path / "config.yaml"
+    path.write_text("gateways:\n  cli:\n    enabled: true\n", encoding="utf-8")
+    (tmp_path / "roles.yaml").write_text(
+        "roles:\n"
+        "  administrator:\n    name: administrator\n    tools: ['*']\n"
+        "  member:\n    name: member\n"
+        "  auditor:\n    name: auditor\n",
+        encoding="utf-8",
+    )
+
+    assert gateway.add(str(path), "whatsapp") == 0
+
+    roles = yaml.safe_load((tmp_path / "roles.yaml").read_text(encoding="utf-8"))["roles"]
+    assert roles["administrator"]["gateways"]["whatsapp"] == {
+        "dm": True,
+        "groups": "all",
+        "reply_to_bot": True,
+    }
+    assert roles["member"]["gateways"]["whatsapp"]["groups"] == "mention"
+    assert roles["auditor"]["gateways"]["whatsapp"] == {
+        "dm": False,
+        "groups": "none",
+        "reply_to_bot": False,
+    }
+
+
+def test_gateway_doctor_reports_and_fixes_missing_policies(tmp_path, capsys):
+    path = tmp_path / "config.yaml"
+    path.write_text(
+        "gateways:\n  whatsapp:\n    enabled: true\n", encoding="utf-8"
+    )
+    (tmp_path / "roles.yaml").write_text(
+        "roles:\n  guest:\n    name: guest\n", encoding="utf-8"
+    )
+
+    assert gateway.doctor(str(path)) == 1
+    assert "roles.guest.gateways.whatsapp" in capsys.readouterr().out
+
+    assert gateway.doctor(str(path), fix=True) == 0
+    roles = yaml.safe_load((tmp_path / "roles.yaml").read_text(encoding="utf-8"))["roles"]
+    assert roles["guest"]["gateways"]["whatsapp"]["dm"] is False
+    assert gateway.doctor(str(path)) == 0
+
+
+def test_gateway_add_connect_calls_the_descriptor_onboarding(monkeypatch, tmp_path):
+    path = tmp_path / "config.yaml"
+    path.write_text("gateways:\n  cli:\n    enabled: true\n", encoding="utf-8")
+    (tmp_path / "roles.yaml").write_text(
+        "roles:\n  guest:\n    name: guest\n", encoding="utf-8"
+    )
+    calls: list[tuple] = []
+
+    def onboarding(name, command, config):
+        calls.append((name, command, config))
+        return 0
+
+    monkeypatch.setattr("monoagens.gateways.gateway_cli", onboarding)
+
+    assert gateway.connect(str(path), "whatsapp") == 0
+    assert calls == [("whatsapp", "pair", str(path))]
+    assert "enabled: true" in path.read_text(encoding="utf-8")
 
 
 def test_template_voice_parts_are_explicit():

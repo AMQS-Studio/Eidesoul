@@ -37,6 +37,9 @@ class Role:
     memory_admin: bool = False
     label: str = ""
     protected: bool = False
+    # ADR-0046 §4.2: gateway name -> that gateway's own policy mapping. The core stores the
+    # mapping and never interprets a gateway name or a policy value; the gateway validates it.
+    gateways: Mapping[str, Mapping[str, object]] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -71,6 +74,18 @@ class RoleRegistry:
         if not matched:
             return (self.default_role(),)
         return tuple(sorted(matched, key=lambda role: (-role.priority, role.name)))
+
+    def policy_for(
+        self, person_id: str, gateway: str
+    ) -> tuple[Role, Mapping[str, object] | None]:
+        """ADR-0046 §4.3: the highest-priority role is the only policy source.
+
+        The block is returned raw: the core knows no gateway name and no policy value. An absent
+        block is `None` and stays a denial; a lower role never grants access.
+        """
+        role = self.for_person(person_id)[0]
+        found = role.gateways.get(str(gateway or ""))
+        return role, found
 
     def require_administrator(self) -> Role:
         """Boot gate (ADR-0022 §4.2): the protected role must exist and stay able to approve."""
@@ -151,6 +166,25 @@ def _users(value: object, source: str) -> tuple[str, ...]:
     return users
 
 
+def _gateways(value: object, source: str) -> dict[str, dict[str, object]]:
+    """ADR-0046 §4.2: gateway name -> opaque mapping; only the shape is the core's business."""
+    if value is None:
+        return {}
+    if not isinstance(value, Mapping):
+        raise RoleError(f"{source}: 'gateways' must be a mapping")
+    found: dict[str, dict[str, object]] = {}
+    for name, block in value.items():
+        key = str(name or "").strip()
+        if not key:
+            raise RoleError(f"{source}: 'gateways' keys must be names")
+        if block is None:
+            block = {}
+        if not isinstance(block, Mapping):
+            raise RoleError(f"{source}: gateways.{key} must be a mapping")
+        found[key] = dict(block)
+    return found
+
+
 def _protected(
     declared: str, body: Mapping, tools: tuple[str, ...], commands: tuple[str, ...], source: str
 ) -> bool:
@@ -199,6 +233,7 @@ def parse_role(name: str, body: object, source: str) -> Role:
         memory_admin=_bool(body.get("memory_admin")),
         label=_label(body.get("label"), source),
         protected=protected,
+        gateways=_gateways(body.get("gateways"), source),
     )
 
 

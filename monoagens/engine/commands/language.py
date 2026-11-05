@@ -1,9 +1,12 @@
 """Command /language: switch MonoAgens's reply language to any installed catalog code.
 
-The language lives in the `soul` document, whose mirror is soul.yaml; the catalog in
-`monoagens/lang/<code>.yaml` supplies every chat-visible string.
+The language lives in soul.yaml, the operator file; the `soul` cache row follows the file
+(ADR-0046 §4.1). The catalog in `monoagens/lang/<code>.yaml` supplies every chat-visible string.
 """
 
+
+import contextlib
+import os
 
 import yaml
 
@@ -17,6 +20,15 @@ def _soul_body(text: str) -> dict:
         return {}
     body = yaml.safe_load(text)
     return body if isinstance(body, dict) else {}
+
+
+def _write_soul(path, text: str) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_suffix(path.suffix + ".tmp")
+    tmp.write_text(text, encoding="utf-8")
+    with contextlib.suppress(OSError):
+        tmp.chmod(path.stat().st_mode & 0o777)
+    os.replace(tmp, path)
 
 
 async def language_command(ctx: CommandContext) -> str:
@@ -34,11 +46,12 @@ async def language_command(ctx: CommandContext) -> str:
         return t("command.language.invalid", lang, value=raw, available=codes)
     if agent.documents is None:
         return t("command.language.no_documents", lang)
-    body = _soul_body(agent.documents.get("soul") or "")
+    path = agent.config.paths.soul_yaml
+    body = _soul_body(path.read_text(encoding="utf-8") if path.is_file() else "")
     body["language"] = language
     text = yaml.safe_dump(body, sort_keys=False, allow_unicode=True)
+    _write_soul(path, text)
     agent.documents.put("soul", text, actor=ctx.sender)
-    agent.documents.export_to_files()
     await agent.reload()
     return t("command.language.set", language, language=language)
 

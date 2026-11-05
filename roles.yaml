@@ -11,6 +11,11 @@ roles:
     commands:
     - '*'
     memory_admin: true
+    gateways:
+      cli:
+        dm: true
+        groups: all
+        reply_to_bot: true
     context: 'You are talking to the administrator of MonoAgens, who sets the direction,
       permissions, and soul.
 
@@ -40,6 +45,11 @@ roles:
     - status
     - tools
     memory_admin: false
+    gateways:
+      cli:
+        dm: true
+        groups: mention
+        reply_to_bot: true
     context: 'You are talking to a member. Help with their work without opening new
       permissions.
 
@@ -66,6 +76,11 @@ roles:
     - status
     - tools
     memory_admin: false
+    gateways:
+      cli:
+        dm: false
+        groups: none
+        reply_to_bot: false
     context: 'You do not know this person yet. Stay polite and never open another
       chat''s data.
 

@@ -90,7 +90,7 @@ async def backfill(config_path: str | None) -> int:
     documents = DocumentStore(db, paths, sync=host.sync_documents)
     documents.seed()
     documents.sync()
-    config = load_config(paths.config, documents=documents, require_gateway=True)
+    config = load_config(paths.config, require_gateway=True)
     raw = config.gateways.get("whatsapp")
     if raw is None:
         raise ConfigError("gateway 'whatsapp' is not configured in config.yaml")

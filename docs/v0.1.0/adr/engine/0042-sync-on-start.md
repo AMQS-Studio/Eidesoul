@@ -6,7 +6,8 @@
 - **Context:** follows ADR-0027 (distribution), ADR-0030 (install and init), ADR-0031 (engine structure), ADR-0033 (neutral core), ADR-0039 (setup terminal), ADR-0041 (voice configuration), and ADR-0045 (voice tuning in `soul.yaml`); replaces the manual `config import` step for normal file edits.
 - **Supersedes:** —
 - **Related:** ADR-0027 (distribution), ADR-0030 (install and init), ADR-0031 (module structure), ADR-0033 (neutral core), ADR-0039 (setup terminal), ADR-0041 (voice configuration), ADR-0045 (voice tuning in `soul.yaml`)
-- **Implementation:** implemented — hash sync, advisory lock, DB-wins conflicts, and startup calls are live.
+- **Implementation:** implemented — hash sync, advisory lock, and startup calls are live; ADR-0046 §4.1 reverses the conflict direction for `config.yaml`, `soul.yaml`, and `roles.yaml`.
+- **Amendments:** ADR-0046 §4.1 supersedes the database-wins rule for `config.yaml`, `soul.yaml`, and `roles.yaml`; those files are authoritative and the DB documents are a derived cache. The rest of this ADR stands.
 - **Location note:** the document store binds the engine runtime, so this ADR sits under `adr/engine/`. The Indonesian copy is `docs/v0.1.0/adr/engine/id/0042-sync-on-start.md`.
 
 ---

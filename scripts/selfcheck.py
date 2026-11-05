@@ -81,7 +81,6 @@ def sample_config() -> Config:
             workspace=ROOT / ".monoagens" / "workspace",
         ),
         database=DatabaseConfig(url="postgresql://localhost/monoagens", url_env=""),
-        documents=None,
         llm=LLMConfig(
             provider="custom",
             base_url="http://127.0.0.1:9/v1",

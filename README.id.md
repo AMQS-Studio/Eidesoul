@@ -164,7 +164,7 @@ Tiga lapisan, satu arah ketergantungan.
   yang diinginkannya.
 - **State** — satu database menyimpan satu jiwa: transkrip per percakapan, memori semantik dengan
   tingkat privasi, affect, approval, dan lease primary tunggal. Berkas host (`config.yaml`,
-  `roles.yaml`, `soul.yaml`) adalah seed sekaligus cermin dari apa yang disimpan database.
+  `roles.yaml`, `soul.yaml`) adalah acuan operator; database menyimpan cache turunannya (ADR-0046).
 
 ```mermaid
 flowchart LR
@@ -328,11 +328,12 @@ diverifikasi saat diaktifkan (lihat Integrasi opsional).
 <a id="soulyaml"></a>
 ## soul.yaml
 
-Satu database adalah satu jiwa, dan `soul.yaml` adalah tempat jiwa itu dituliskan. Setelah
-`db upgrade` pertama, jiwa di database menjadi acuan dan `soul.yaml` adalah seed sekaligus
-cerminnya. Edit biasa berlaku saat start berikutnya: engine membandingkan hash berkas dan DB,
-mengimpor bila hanya berkas yang berubah, dan membiarkan DB menang saat keduanya berubah.
-`monoagens config import` dan `monoagens config export` tetap ada untuk arah paksa.
+Satu database adalah satu jiwa, dan `soul.yaml` adalah tempat jiwa itu dituliskan. Berkas host
+adalah acuan operator (ADR-0046): `config.yaml` (bagian `engine`), `soul.yaml`, dan `roles.yaml`
+dibaca saat start dan oleh `/reload`, dan baris database yang cocok hanyalah cache ber-hash konten.
+Command menulis berkas lebih dulu, lalu menyegarkan cache; berkas menang pada setiap perbedaan dan
+cache yang hilang atau basi dibangun ulang dari berkas. `monoagens config import` menyegarkan cache
+setelah edit manual, dan cache boleh dihapus kapan saja.
 
 ```yaml
 name: MonoAgens
@@ -415,7 +416,8 @@ Inilah daftar lengkapnya; tidak ada bagian lain dalam dokumentasi yang mendaftar
 - **CLI** — bawaan. Config default mengaktifkannya, dan inilah cara `monoagens run` serta
   `monoagens console` berbicara dengan sebuah jiwa tanpa transport jaringan.
 - **WhatsApp** — extra opsional. `monoagens gateway add whatsapp` memasang extra yang
-  dideklarasikan dan mengaktifkannya; lakukan pairing dengan `monoagens gateway pair whatsapp`.
+  dideklarasikan dan mengaktifkannya; `monoagens gateway add whatsapp --connect` memasang,
+  mengaktifkan, mengisi kebijakan peran, dan melakukan pairing di terminal ini.
   Hilangkan keduanya dan gateway ini tidak ada untuk deployment tersebut. Core tidak pernah
   mengimpornya, dan peran member default tidak pernah menerima tool `send` miliknya.
 - **Perwujudan Anda sendiri** — robot, loop suara, perangkat, atau endpoint HTTP privat hanyalah
@@ -425,8 +427,9 @@ Inilah daftar lengkapnya; tidak ada bagian lain dalam dokumentasi yang mendaftar
 
 ```bash
 monoagens gateway list
-monoagens gateway add whatsapp
-monoagens gateway pair whatsapp
+monoagens gateway add whatsapp            # aktifkan dan seed kebijakan peran
+monoagens gateway add whatsapp --connect  # pasang, aktifkan, seed, lalu pairing di sini
+monoagens gateway doctor --fix            # tulis blok kebijakan peran yang hilang
 monoagens gateway disable whatsapp
 ```
 
@@ -434,13 +437,29 @@ Gateway adalah transport, bukan otak. Ia menormalkan input, mengantarkan balasan
 tool khas tubuh yang ingin dieksposnya. Tool milik gateway diberikan ke peran secara eksplisit,
 sama seperti tool inti.
 
+Otorisasi gateway adalah data peran, bukan konfigurasi transport:
+
+```yaml
+roles:
+  member:
+    gateways:
+      whatsapp:
+        dm: true            # pesan langsung boleh masuk turn
+        groups: mention     # none | mention | reply | both | all
+        reply_to_bot: true  # balasan ke pesan bot dihitung sebagai disapa
+```
+
+Peran berprioritas tertinggi yang memutuskan; peran lebih rendah tidak pernah memberi akses, dan
+blok yang hilang atau rusak menolak sebelum history, memori, dan model. `monoagens gateway doctor`
+melaporkan blok yang hilang.
+
 <a id="roles-and-permissions"></a>
 ## Peran dan izin
 
 Izin hanya datang dari peran. Setiap peran mendaftar `tools` dan `commands` miliknya sendiri; tidak
 ada handler yang membawa default, jadi peran yang menghilangkan satu bagian ditolak untuk seluruh
-bagian itu. Satu `roles.yaml` menyimpan semua peran, dan peran yang tersimpan di database menjadi
-acuan dengan berkas sebagai cerminnya.
+bagian itu. Satu `roles.yaml` menyimpan semua peran, daftar anggotanya, dan kebijakan gateway-nya;
+berkas itu menjadi acuan dan database menyimpan cache `role:<name>` turunannya (ADR-0046).
 
 ```yaml
 roles:
@@ -473,8 +492,8 @@ roles:
   read-only dan area scratch miliknya, dan sandbox mencerminkan itu dengan mount bersama read-only
   serta satu mount scratch yang bisa ditulis.
 
-Mengedit `roles.yaml` secara manual didukung: jalankan `monoagens config import` setelahnya agar
-database melihatnya.
+Mengedit `roles.yaml` secara manual didukung: jalankan `/reload` (chat pribadi, administrator) atau
+restart agar runtime membacanya; `monoagens config import` hanya menyegarkan cache.
 
 <a id="safety"></a>
 ## Keamanan

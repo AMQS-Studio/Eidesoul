@@ -1,4 +1,4 @@
-"""Document mirror contract: seed from files, export/import, documents win, roles aggregate."""
+"""Document cache contract: files are authoritative, the cache is derived (ADR-0046 §4.1)."""
 
 
 import yaml
@@ -47,57 +47,13 @@ def test_seed_only_missing_documents(tmp_path) -> None:
     assert "persona" not in docs.names()
 
 
-def test_export_and_import_roundtrip(tmp_path) -> None:
-    docs, paths = make_docs(tmp_path)
-    write_config(
-        paths,
-        {"workspace": ".monoagens/workspace", "gateways": {"cli": {"enabled": True}}},
-    )
-    docs.put("engine", "default_role: guest\n")
-    docs.put("soul", SOUL)
-    docs.put("persona", "Persona baru.\n")
-    docs.put("role:guest", "name: guest\ntools: []\n")
-
-    assert docs.export_to_files() == 3
-
-    raw = read_config(paths)
-    assert raw["workspace"] == ".monoagens/workspace"
-    assert raw["gateways"] == {"cli": {"enabled": True}}
-    assert raw["engine"] == {"default_role": "guest"}
-    assert "soul" not in raw
-    assert paths.soul_yaml.read_text(encoding="utf-8") == SOUL
-    roles = yaml.safe_load(paths.roles.read_text(encoding="utf-8"))
-    assert roles["roles"]["guest"] == {"name": "guest", "tools": []}
-
-    write_config(
-        paths,
-        {"workspace": ".monoagens/workspace", "engine": {"default_role": "owner"}},
-    )
-    docs.put("engine", "default_role: guest\n")
-    assert docs.import_from_files() == 3
-    assert "default_role: owner" in docs.get("engine")
-    assert "persona" not in docs.names()
-
-
-def test_import_drops_the_persona_document(tmp_path) -> None:
-    docs, paths = make_docs(tmp_path)
-    write_config(paths, {"workspace": ".monoagens/workspace", "engine": {"default_role": "guest"}})
-    paths.soul_yaml.write_text(SOUL, encoding="utf-8")
-    docs.put("persona", "Persona lama.\n")
-
-    docs.import_from_files()
-
-    assert docs.get("persona") is None
-    assert docs.get("soul") == SOUL
-
-
 def test_sync_false_never_touches_files(tmp_path) -> None:
     docs, paths = make_docs(tmp_path, sync=False)
     write_config(paths, {"workspace": ".monoagens/workspace", "engine": {"default_role": "guest"}})
     assert docs.seed() == 0
     assert docs.get("engine") is None
     docs.put("engine", "x")
-    assert docs.export_to_files() == 0
+    docs.sync()
     assert read_config(paths)["engine"] == {"default_role": "guest"}
 
 
@@ -120,17 +76,18 @@ def test_sync_imports_a_changed_file(tmp_path) -> None:
     assert docs.get("soul") == changed
 
 
-def test_sync_exports_a_db_only_change(tmp_path) -> None:
+def test_sync_exports_a_db_only_change_when_the_file_is_missing(tmp_path) -> None:
     docs, paths = _bootstrap(tmp_path)
     changed = SOUL.replace("language: en", "language: id")
     docs.put("soul", changed)
+    paths.soul_yaml.unlink()
 
     docs.sync()
 
     assert paths.soul_yaml.read_text(encoding="utf-8") == changed
 
 
-def test_sync_conflict_exports_the_database_and_warns(tmp_path, caplog) -> None:
+def test_sync_conflict_keeps_the_file_and_updates_the_cache(tmp_path, caplog) -> None:
     docs, paths = _bootstrap(tmp_path)
     file_version = SOUL.replace("language: en", "language: id")
     db_version = SOUL.replace("language: en", "language: jv")
@@ -139,12 +96,12 @@ def test_sync_conflict_exports_the_database_and_warns(tmp_path, caplog) -> None:
 
     docs.sync()
 
-    assert docs.get("soul") == db_version
-    assert paths.soul_yaml.read_text(encoding="utf-8") == db_version
-    assert "database wins" in caplog.text
+    assert docs.get("soul") == file_version
+    assert paths.soul_yaml.read_text(encoding="utf-8") == file_version
+    assert "database wins" not in caplog.text
 
 
-def test_sync_first_run_uses_the_database(tmp_path, caplog) -> None:
+def test_sync_first_run_uses_the_file(tmp_path, caplog) -> None:
     docs, paths = make_docs(tmp_path)
     db_version = SOUL.replace("language: en", "language: id")
     docs.put("soul", db_version)
@@ -152,9 +109,9 @@ def test_sync_first_run_uses_the_database(tmp_path, caplog) -> None:
 
     docs.sync()
 
-    assert docs.get("soul") == db_version
-    assert paths.soul_yaml.read_text(encoding="utf-8") == db_version
-    assert "database wins" in caplog.text
+    assert docs.get("soul") == SOUL
+    assert paths.soul_yaml.read_text(encoding="utf-8") == SOUL
+    assert "database wins" not in caplog.text
 
 
 def test_sync_missing_side_uses_the_other(tmp_path) -> None:
@@ -169,11 +126,36 @@ def test_sync_missing_side_uses_the_other(tmp_path) -> None:
     assert "language: id" in docs.get("soul")
 
 
-def test_sync_false_touches_nothing(tmp_path) -> None:
-    docs, paths = make_docs(tmp_path, sync=False)
-    write_config(paths, {"workspace": ".monoagens/workspace", "engine": {"default_role": "guest"}})
-    assert docs.sync() == 0
-    assert not paths.soul_yaml.exists()
+def test_roles_file_removes_a_stale_cache_row(tmp_path) -> None:
+    docs, _paths = _bootstrap(tmp_path)
+    docs.put("role:member", "name: member\n")
+
+    docs.sync()
+
+    assert docs.names("role:") == ["role:guest"]
+
+
+def test_import_from_files_refreshes_the_cache(tmp_path) -> None:
+    docs, paths = _bootstrap(tmp_path)
+    write_config(
+        paths,
+        {"workspace": ".monoagens/workspace", "engine": {"default_role": "member"}},
+    )
+    paths.soul_yaml.write_text(SOUL.replace("language: en", "language: id"), encoding="utf-8")
+
+    assert docs.import_from_files() >= 2
+    assert "default_role: member" in docs.get("engine")
+    assert "language: id" in docs.get("soul")
+
+
+def test_invalid_roles_file_leaves_the_cache_untouched(tmp_path) -> None:
+    docs, paths = _bootstrap(tmp_path)
+    before = docs.get("role:guest")
+    paths.roles.write_text("roles: [not-a-mapping]\n", encoding="utf-8")
+
+    docs.sync()
+
+    assert docs.get("role:guest") == before
 
 
 def test_sync_yields_to_another_writer(tmp_path) -> None:

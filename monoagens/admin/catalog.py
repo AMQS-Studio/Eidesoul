@@ -7,7 +7,7 @@ from `VoiceConfig`, and search backends from the search tool's backend record.
 
 import ast
 import importlib.util
-from dataclasses import MISSING, dataclass, fields, is_dataclass
+from dataclasses import MISSING, dataclass, field, fields, is_dataclass
 from pathlib import Path
 
 import yaml
@@ -18,10 +18,22 @@ class CatalogItem:
     name: str
     label: str
     detail: str = ""
+    parameters: dict = field(default_factory=dict)
+
+
+def _literal(call: ast.Call, key: str):
+    for keyword in call.keywords:
+        if keyword.arg != key:
+            continue
+        try:
+            return ast.literal_eval(keyword.value)
+        except (ValueError, SyntaxError):
+            return None
+    return None
 
 
 def _gateway_tools() -> list[CatalogItem]:
-    """Gateway-owned tools discovered from `TOOL = Handler(name=...)`, without importing them."""
+    """Gateway-owned tools discovered from `TOOL = Handler(...)`, without importing them."""
     root = Path(__file__).resolve().parents[1] / "gateways"
     found: list[CatalogItem] = []
     for folder in sorted(root.iterdir()):
@@ -38,16 +50,21 @@ def _gateway_tools() -> list[CatalogItem]:
                     continue
                 if not any(isinstance(t, ast.Name) and t.id == "TOOL" for t in node.targets):
                     continue
-                name = next(
-                    (
-                        kw.value.value
-                        for kw in node.value.keywords
-                        if kw.arg == "name" and isinstance(kw.value, ast.Constant)
-                    ),
-                    None,
+                name = _literal(node.value, "name")
+                if not isinstance(name, str):
+                    continue
+                description = _literal(node.value, "description")
+                parameters = _literal(node.value, "parameters")
+                found.append(
+                    CatalogItem(
+                        name,
+                        name,
+                        description
+                        if isinstance(description, str) and description.strip()
+                        else f"gateway:{folder.name}",
+                        parameters if isinstance(parameters, dict) else {},
+                    )
                 )
-                if isinstance(name, str):
-                    found.append(CatalogItem(name, name, f"gateway:{folder.name}"))
     return found
 
 
@@ -98,13 +115,13 @@ def voice_parts() -> list[CatalogItem]:
     from ..engine.soul import VoiceConfig
 
     found: list[CatalogItem] = []
-    for field in fields(VoiceConfig):
-        factory = field.default_factory
+    for item in fields(VoiceConfig):
+        factory = item.default_factory
         if factory is MISSING or not callable(factory):
             continue
         value = factory()
         if is_dataclass(value) and "enabled" in getattr(value, "__dataclass_fields__", {}):
-            found.append(CatalogItem(field.name, field.name, ""))
+            found.append(CatalogItem(item.name, item.name, ""))
     return found
 
 

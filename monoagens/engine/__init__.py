@@ -14,7 +14,8 @@ reason to change::
     turn/       one message becomes one reply: context, decision, assembly, salience,
                 prompts, reply, research, observability, plus the phases loop (the turn state
                 machine), intake (identity and watchdog), delivery (the outbound path),
-                commands (command dispatch), and steps (step bookkeeping)
+                commands (command dispatch), steps (step bookkeeping), and reload (validating
+                the operator files and swapping the hot runtime)
     character/  character polish and detector lexicon
     access/     who may do what: roles, permissions, identity, privacy, approvals,
                 relay, target
