@@ -1,38 +1,10 @@
-#!/usr/bin/env python3
-"""ADR home tool: structure check, scaffold, and the Indonesian derivative.
+"""ADR home tool (ADR-0009): check structure and scaffold new records.
 
-The ADR set lives in `docs/v<version>/adr/` and is the single live home for decisions (ADR-0009).
-English is the source language; each folder keeps its Indonesian copies in its own `id/` subfolder
-(`adr/id/`, `adr/engine/id/`, `adr/web/id/`). This script is the gate: it never touches the network
-and only reaches for a model when asked.
-
-Checks enforced by `--check` (ADR-0009 §4.4):
-  * exactly one `docs/*/adr` directory; an ADR sits at its root (cross-cutting) or under `engine/`
-    or `web/` (surface)
-  * file names `NNNN-slug.md`; a number is **unique across the whole home** and never reused, so a
-    move leaves a gap (`engine/` has no `0009`: the ADR home moved to the root) and the foundations
-    ADR is `0000`, the one number below `0001`
-  * every `ADR-NNNN` reference resolves; `ADR-<folder>/NNNN` is accepted as an explicit form, and a
-    bare number only needs a folder if a collision ever appears
-  * canonical English sections present, numbered 1..N, `Code references` last
-  * extra sections only between `Decision drivers`/`Decision`, or after `Decision`
-  * header block carries Status/Date/Deciders/Context/Supersedes/Related/Implementation
-  * `Implementation` is one of implemented|partial|draft
-  * `Amendments` lives only as a header line, never as a section
-  * balanced fences, no heading inside a fence
-  * every `§N` reference resolves; `ADR-XXXX §N` resolves against that ADR
-  * register synonyms (ADR-0009 §4.12) never name a YAML key or SQL column they are banned for,
-    with the scope taken from the register's own parenthetical hint
-  * trailing footer points at the ADR's own path
-
-`--translate-check` verifies that every hand-written Indonesian derivative under `adr/id/` still
-carries the hash of its English source. There is no machine translator: the derivative is written by
-a person and the hash is the gate; the derivative header records the source hash.
+English is the language of all ADRs (ADR-0055 §4.2.1).
+Gate: `python -P scripts/adr.py --check`.
 """
 
-
 import argparse
-import hashlib
 import re
 import sys
 from pathlib import Path
@@ -40,7 +12,6 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 
 SOURCE_LANG = "en"
-DERIVATIVE_DIR = "id"
 FOLDERS = ("root", "engine", "web")
 
 CANONICAL = (
@@ -63,10 +34,6 @@ ADR_FULL_RE = re.compile(r"ADR-(?:([a-z]+)/)?(\d{4})(?:\s*\(?§(\d+))?")
 BARE_REF_RE = re.compile(r"§(\d+)")
 FENCE_RE = re.compile(r"^(`{3,}|~{3,})(.*)$")
 FOOTER_RE = re.compile(r"^\*This ADR lives at `([^`]+)`\.\*$")
-DERIVATIVE_RE = re.compile(
-    r"^> (?:Terjemahan turunan|Naskah asli Indonesia) — jangan sunting; "
-    r"sumber: (\S+) \(sha256: ([0-9a-f]{12})\)$"
-)
 LEGACY_MARK = re.compile(r"kolom lama|legacy", re.IGNORECASE)
 SQL_TABLE_RE = re.compile(
     r"^\s*(?:CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?)?([a-z_][a-z0-9_]*)\s*\("
@@ -89,250 +56,205 @@ NUMBERED_HEADING_RE = re.compile(r"^(\d+)\.\s*(.*)$")
 BOLD_RE = re.compile(r"\*\*(.+?)\*\*")
 PLACEHOLDER_RE = re.compile(r"\[?\[?\s*(\d+)\s*\]\]*")
 
-# Structure tables for the Indonesian copy: English source -> Indonesian derivative.
-HEADING_ID = {
-    "Context": "Konteks",
-    "Decision drivers": "Decision drivers",
-    "Options considered": "Opsi yang dipertimbangkan",
-    "Decision": "Keputusan",
-    "Configuration": "Konfigurasi",
-    "Metrics and gates": "Metrik dan gate",
-    "Risks and mitigations": "Risiko dan mitigasi",
-    "Interaction with other ADRs": "Interaksi dengan ADR lain",
-    "Code references": "Referensi kode",
-    "Definitions": "Definisi",
-    "Schema": "Skema",
-    "Resume": "Resume",
-    "Shutdown": "Shutdown",
-    "Notice": "Notice",
-    "Backlog": "Backlog",
-    "Staged implementation": "Implementasi bertahap",
-}
-LABEL_ID = {
-    "Context": "Konteks",
-    "Date": "Tanggal",
-    "Related": "Terkait",
-    "Amendments": "Amandemen",
-    "Location note": "Catatan lokasi",
-    "Implementation": "Implementasi",
-}
-IMPLEMENTASI_ID = {"partial": "sebagian", "draft": "draft", "implemented": "implemented"}
 
 def read(path: Path) -> str:
     return path.read_text(encoding="utf-8")
 
 
 def adr_dir(root: Path) -> Path:
-    found = sorted(root.glob("docs/*/adr"))
-    return found[0] if found else root / "docs" / "v0.1.0" / "adr"
+    return root / "docs" / "v0.1.0" / "adr"
 
 
 def adr_files(root: Path) -> list[Path]:
-    adr = adr_dir(root)
-    files = sorted(adr.glob("*.md"))
-    for sub in FOLDERS[1:]:
-        files += sorted((adr / sub).glob("*.md"))
-    return files
+    """All English ADR files across root, engine, and web folders."""
+    home = adr_dir(root)
+    result: list[Path] = []
+    for sub in ("", "engine", "web"):
+        folder = home / sub if sub else home
+        if folder.is_dir():
+            result.extend(sorted(p for p in folder.glob("*.md") if p.is_file()))
+    return result
 
 
 def rel_name(root: Path, path: Path) -> str:
-    """Path inside the ADR home: `0009-adr-home.md` or `engine/0016-schema-migration.md`."""
     return path.relative_to(adr_dir(root)).as_posix()
 
 
 def folder_of(rel: str) -> str:
-    """Folder namespace of an ADR: `root` for the ADR home root, else the first path segment."""
-    return rel.split("/", 1)[0] if "/" in rel else "root"
-
-
-def derivative_dir(root: Path) -> Path:
-    return adr_dir(root) / DERIVATIVE_DIR
-
-
-def derivative_of(root: Path, source: Path) -> Path:
-    """Copy path inside the source folder's own `id/`: `engine/x.md` -> `engine/id/x.md`."""
-    rel = source.relative_to(adr_dir(root))
-    return adr_dir(root) / rel.parent / DERIVATIVE_DIR / rel.name
-
-
-def derivative_files(root: Path) -> list[Path]:
-    adr = adr_dir(root)
-    files = sorted((adr / DERIVATIVE_DIR).glob("*.md"))
-    for sub in FOLDERS[1:]:
-        files += sorted((adr / sub / DERIVATIVE_DIR).glob("*.md"))
-    return files
-
-
-def source_of_derivative(root: Path, copy: Path) -> Path:
-    """`engine/id/x.md` -> `engine/x.md` and `id/x.md` -> `x.md`."""
-    rel = copy.relative_to(adr_dir(root))
-    parts = list(rel.parts)
-    parts.remove(DERIVATIVE_DIR)
-    return adr_dir(root) / Path(*parts)
+    if "/" in rel:
+        return rel.split("/", 1)[0]
+    return "root"
 
 
 def sections(text: str) -> list[tuple[int, str]]:
-    """Top-level numbered sections, fence-aware."""
-    out: list[tuple[int, str]] = []
-    inside = False
+    result: list[tuple[int, str]] = []
+    in_fence = False
+    fence_char = ""
+    fence_len = 0
     for line in text.splitlines():
-        if FENCE_RE.match(line):
-            inside = not inside
+        fm = FENCE_RE.match(line)
+        if fm:
+            fence = fm.group(1)
+            char = fence[0]
+            length = len(fence)
+            if not in_fence:
+                in_fence = True
+                fence_char = char
+                fence_len = length
+            elif char == fence_char and length >= fence_len:
+                in_fence = False
             continue
-        if inside:
+        if in_fence:
             continue
         m = HEADING_RE.match(line)
         if m:
-            out.append((int(m.group(1)), m.group(2).strip()))
-    return out
+            result.append((int(m.group(1)), m.group(2).strip()))
+    return result
 
 
 def fence_blocks(text: str) -> list[list[tuple[int, str]]]:
-    """Fenced blocks as [(line number, line), ...], so definitions report real lines."""
     blocks: list[list[tuple[int, str]]] = []
-    inside, buf, fence = False, [], ""
-    for number, line in enumerate(text.splitlines(), 1):
-        m = FENCE_RE.match(line)
-        if m and not inside:
-            inside, buf, fence = True, [], m.group(1)
+    current: list[tuple[int, str]] = []
+    in_fence = False
+    fence_char = ""
+    fence_len = 0
+    for idx, line in enumerate(text.splitlines(), start=1):
+        fm = FENCE_RE.match(line)
+        if fm:
+            fence = fm.group(1)
+            char = fence[0]
+            length = len(fence)
+            if not in_fence:
+                in_fence = True
+                fence_char = char
+                fence_len = length
+                current = [(idx, line)]
+            elif char == fence_char and length >= fence_len:
+                current.append((idx, line))
+                blocks.append(current)
+                current = []
+                in_fence = False
             continue
-        if m and inside and line.startswith(fence):
-            blocks.append(buf)
-            inside = False
-            continue
-        if inside:
-            buf.append((number, line))
+        if in_fence:
+            current.append((idx, line))
     return blocks
 
 
 def definition_names(line: str) -> list[str]:
-    """Identifiers a fence line *defines*: a YAML key or a SQL column. Comments define nothing."""
-    stripped = line.strip()
-    if not stripped or stripped.startswith(("#", "--", "//", "/*")):
-        return []
-    names = []
-    key = KEY_RE.match(line)
-    if key:
-        names.append(key.group(1))
-    column = COLUMN_RE.match(line)
-    if column:
-        names.append(column.group(1))
-    return names
+    names: list[str] = []
+    m_yaml = YAML_KEY_RE.match(line)
+    if m_yaml:
+        names.append(m_yaml.group(1))
+    m_sql = SQL_TABLE_RE.match(line)
+    if m_sql:
+        names.append(m_sql.group(1))
+    m_col = COLUMN_RE.match(line)
+    if m_col:
+        names.append(m_col.group(1))
+    m_key = KEY_RE.match(line)
+    if m_key:
+        names.append(m_key.group(1))
+    return list(dict.fromkeys(names))
 
 
 def fence_contexts(block: list[tuple[int, str]]) -> dict[int, str]:
-    """line number -> enclosing definition context (SQL table name or YAML top-level key)."""
     contexts: dict[int, str] = {}
-    table = ""
-    top = ""
-    for number, line in block:
-        sql = SQL_TABLE_RE.match(line)
-        if sql and not line.startswith((" ", "\t")):
-            table = sql.group(1)
-        yaml = YAML_KEY_RE.match(line)
-        if yaml:
-            top = yaml.group(1)
-        contexts[number] = table or top
+    current_table: str | None = None
+    for idx, line in block:
+        m_sql = SQL_TABLE_RE.match(line)
+        if m_sql:
+            current_table = m_sql.group(1)
+            contexts[idx] = f"table:{current_table}"
+            continue
+        m_col = COLUMN_RE.match(line)
+        if m_col:
+            contexts[idx] = f"column:{m_col.group(1)} (in {current_table or 'table'})"
+            continue
+        m_yaml = YAML_KEY_RE.match(line)
+        if m_yaml:
+            contexts[idx] = f"yaml:{m_yaml.group(1)}"
+            continue
+        contexts[idx] = "fence"
     return contexts
 
 
 def fence_report(text: str) -> list[str]:
     problems: list[str] = []
-    inside, fence = False, ""
-    for number, line in enumerate(text.splitlines(), 1):
-        m = FENCE_RE.match(line)
-        if m:
-            if not inside:
-                inside, fence = True, m.group(1)
-            elif line.startswith(fence):
-                inside, fence = False, ""
-            continue
-        if "```" in line or "~~~" in line:
-            problems.append(f"baris {number}: pagar tidak seimbang")
-        if inside and re.match(r"^#{1,4} ", line):
-            problems.append(f"baris {number}: heading di dalam fence")
-    if inside:
-        problems.append("fence tidak ditutup")
+    for block in fence_blocks(text):
+        for idx, line in block[1:-1]:
+            if HEADING_ANY_RE.match(line):
+                problems.append(f"baris {idx}: heading di dalam code fence ({line.strip()})")
     return problems
 
 
-def register_synonyms(root: Path) -> tuple[dict[str, list[tuple[str, str]]], int]:
-    """Map forbidden synonym -> [(canonical term, scope)] plus the count of prose-only rows.
+def _parse_synonym_row(cells: list[str], synonyms: dict[str, list[tuple[str, str]]]) -> None:
+    if len(cells) < 4:
+        return
+    canonical = cells[0].strip("`").strip()
+    raw_synonyms = cells[2]
+    if not raw_synonyms or raw_synonyms == "—":
+        return
+    for item in raw_synonyms.split(","):
+        item = item.strip()
+        if not item:
+            continue
+        scope = "any"
+        if "(" in item and item.endswith(")"):
+            item, scope_raw = item[:-1].split("(", 1)
+            item = item.strip()
+            scope = scope_raw.strip()
+        term = item.strip("`").strip()
+        if term:
+            synonyms.setdefault(canonical, []).append((term, scope))
 
-    Scope comes from the parenthetical hint in the register's synonym cell: `nama role` -> `roles`
-    (only checked inside a `roles:` block), anything mentioning a column -> `sql` (only checked on
-    SQL column definitions), no hint -> `fence` (checked on every definition line). Hints that name
-    an entity (e.g. "untuk memories") stay prose: the script reports them as ungated instead of
-    guessing which direction the ban runs.
-    """
-    register = adr_dir(root) / "0009-adr-home.md"
-    table: dict[str, list[tuple[str, str]]] = {}
-    prose_rows = 0
-    if not register.is_file():
-        return table, prose_rows
-    for line in read(register).splitlines():
-        if not line.startswith("|") or line.startswith("|---") or "Sinonim terlarang" in line:
+
+def register_synonyms(root: Path) -> tuple[dict[str, list[tuple[str, str]]], int]:
+    for path in adr_files(root):
+        text = read(path)
+        if "Register istilah kanonik" not in text:
             continue
-        cells = [c.strip() for c in line.strip("|").split("|")]
-        if len(cells) < 4 or "`" not in cells[-1]:
-            continue
-        terms = re.findall(r"`([^`]+)`", cells[0]) or [cells[0]]
-        row_prose = False
-        for chunk in re.split(r",\s*", cells[-1]):
-            zipped = re.search(r"`([^`]+)`\s*(?:\(([^)]*)\))?", chunk)
-            if not zipped:
+        m_num = NAME_RE.match(path.name)
+        owner_num = int(m_num.group(1)) if m_num else 8
+        in_table = False
+        synonyms: dict[str, list[tuple[str, str]]] = {}
+        for line in text.splitlines():
+            if "Register istilah kanonik" in line:
+                in_table = True
                 continue
-            identifier, hint = zipped.group(1), (zipped.group(2) or "").lower()
-            words = set(re.findall(r"[a-z_]+", hint))
-            if not hint:
-                scope = "fence"
-            elif "role" in words:
-                scope = "roles"
-            elif "kolom" in words:
-                scope = "sql"
-            else:
-                scope = "prose"
-                row_prose = True
-            table.setdefault(identifier, []).append((terms[0], scope))
-        prose_rows += 1 if row_prose else 0
-    return table, prose_rows
+            if in_table and line.startswith("## "):
+                break
+            if (
+                in_table
+                and line.startswith("|")
+                and not line.startswith("| Istilah kanonik")
+                and not line.startswith("|---")
+            ):
+                cells = [c.strip() for c in line.split("|")[1:-1]]
+                _parse_synonym_row(cells, synonyms)
+        return synonyms, owner_num
+    return {}, 8
 
 
 def check_numbers(root: Path) -> tuple[dict[int, list[Path]], list[str]]:
-    """Number -> the ADR that carries it (one entry: numbering is global and chronological).
-
-    A number is unique across the whole home and is never reused, so moving an ADR between folders
-    leaves a gap on purpose instead of renumbering the rest. `0000` is the foundations ADR: the one
-    number below `0001`, so the chronological series still starts at `0001`.
-    """
     index: dict[int, list[Path]] = {}
     problems: list[str] = []
-    dirs = sorted(root.glob("docs/*/adr"))
-    if len(dirs) != 1:
-        problems.append(f"harus ada tepat satu docs/*/adr, ditemukan {len(dirs)}")
-    files = adr_files(root)
-    if not files:
-        problems.append("tidak ada ADR di docs/*/adr")
-    for path in files:
-        rel = rel_name(root, path)
+    for path in adr_files(root):
         m = NAME_RE.match(path.name)
         if not m:
-            problems.append(f"{rel}: nama harus NNNN-slug.md")
+            problems.append(f"{rel_name(root, path)}: nama berkas tidak mengikuti NNNN-slug.md")
             continue
         number = int(m.group(1))
-        for other in index.get(number, []):
-            problems.append(
-                f"{rel}: nomor {number:04d} sudah dipakai {rel_name(root, other)} "
-                "(nomor unik global)"
-            )
         index.setdefault(number, []).append(path)
+    for number, paths in index.items():
+        if len(paths) > 1:
+            names = ", ".join(rel_name(root, p) for p in paths)
+            problems.append(f"nomor {number:04d} duplikat: {names} (nomor unik global)")
     return index, problems
 
 
 def resolve_ref(
     root: Path, index: dict[int, list[Path]], folder: str, ref_folder: str | None, number: int
 ) -> tuple[Path | None, str | None]:
-    """Resolve `ADR-NNNN` / `ADR-<folder>/NNNN` to a file, or return the reason it fails."""
     paths = index.get(number)
     if not paths:
         return None, f"rujukan ADR-{number:04d} tidak ada"
@@ -345,7 +267,6 @@ def resolve_ref(
         return None, f"rujukan ADR-{ref_folder}/{number:04d} tidak ada"
     if len(paths) == 1:
         return paths[0], None
-    # Only reachable if numbering broke its global uniqueness (reported by check_numbers).
     own = [path for path in paths if folder_of(rel_name(root, path)) == folder]
     if own:
         return own[0], None
@@ -397,7 +318,7 @@ def check_refs(
         if err:
             problems.append(f"{rel}: {err}")
             continue
-        if target is None:  # pragma: no cover - err is always set when nothing resolves
+        if target is None:
             continue
         if wanted is not None:
             label = f"{ref_folder}/{number:04d}" if ref_folder else f"{number:04d}"
@@ -415,44 +336,57 @@ def check_synonyms(name: str, text: str, synonyms: dict[str, list[tuple[str, str
     problems: list[str] = []
 
     def banned(identifier: str, term: str, number: int) -> str:
-        return f"{name}: '{identifier}' terlarang ({term}), baris {number}"
+        return (
+            f"{name}: istilah kanonik '{identifier}' "
+            f"dilanggar oleh '{term}' (ADR-{number:04d})"
+        )
 
     for block in fence_blocks(text):
         contexts = fence_contexts(block)
-        for number, line in block:
+        for idx, line in block:
             if LEGACY_MARK.search(line):
                 continue
-            context = contexts.get(number, "")
-            for identifier in definition_names(line):
-                for term, scope in synonyms.get(identifier, ()):
-                    sql_column = bool(COLUMN_RE.match(line))
-                    role_block = context in ("roles", "role")
-                    if scope == "fence" or (scope == "sql" and sql_column) or (
-                        scope == "roles" and role_block
-                    ):
-                        problems.append(banned(identifier, term, number))
+            ctx = contexts.get(idx, "")
+            names = definition_names(line)
+            if not names:
+                continue
+            for identifier, banned_list in synonyms.items():
+                for term, scope in banned_list:
+                    if scope in ("nama role", "kolom", "column") and scope not in ctx:
+                        continue
+                    for defined in names:
+                        if defined.lower() == term.lower():
+                            problems.append(banned(identifier, term, 8))
     return problems
 
 
 def check_footer(rel: str, text: str) -> list[str]:
-    footers = [line for line in text.splitlines() if FOOTER_RE.match(line)]
-    if not footers:
-        return [f"{rel}: footer 'This ADR lives at ...' hilang"]
-    if len(footers) > 1:
-        return [f"{rel}: footer muncul {len(footers)} kali"]
-    if f"adr/{rel}" not in footers[0]:
-        return [f"{rel}: footer menunjuk path yang salah: {footers[0]}"]
+    lines = [line.strip() for line in text.splitlines() if line.strip()]
+    if not lines:
+        return [f"{rel}: berkas kosong"]
+    last = lines[-1]
+    m = FOOTER_RE.match(last)
+    if not m:
+        return [f"{rel}: baris penutup tidak cocok format *This ADR lives at `docs/...`.*"]
+    expected = f"docs/v0.1.0/adr/{rel}"
+    if m.group(1) != expected:
+        return [f"{rel}: path footer '{m.group(1)}' tidak sama dengan '{expected}'"]
     return []
 
 
 def check_doc(
-    root: Path, path: Path, index: dict[int, list[Path]], synonyms: dict[str, list[tuple[str, str]]]
+    rel: str,
+    path: Path,
+    index: dict[int, list[Path]],
+    synonyms: dict[str, list[tuple[str, str]]],
+    root: Path,
 ) -> list[str]:
-    rel = rel_name(root, path)
     text = read(path)
     secs = sections(text)
-    titles, seq = [t for _, t in secs], [n for n, _ in secs]
-    problems = check_sections(rel, titles, seq)
+    seq = [n for n, _ in secs]
+    titles = [t for _, t in secs]
+    problems: list[str] = []
+    problems += check_sections(rel, titles, seq)
     problems += check_header(rel, text)
     problems += [f"{rel}: {p}" for p in fence_report(text)]
     problems += check_refs(rel, text, seq, index, root)
@@ -464,7 +398,8 @@ def check_doc(
 def count_implementasi(root: Path) -> dict[str, int]:
     counts = {key: 0 for key in IMPLEMENTASI}
     for path in adr_files(root):
-        m = re.search(r"- \*\*Implementation:\*\* (\w+)", read(path))
+        text = read(path)
+        m = re.search(r"- \*\*Implementation:\*\* (\w+)", text)
         if m and m.group(1) in counts:
             counts[m.group(1)] += 1
     return counts
@@ -472,25 +407,25 @@ def count_implementasi(root: Path) -> dict[str, int]:
 
 def cmd_check(root: Path) -> int:
     index, problems = check_numbers(root)
-    synonyms, prose_rows = register_synonyms(root)
-    files = adr_files(root)
-    for path in files:
-        problems += check_doc(root, path, index, synonyms)
+    synonyms, _owner_num = register_synonyms(root)
+    all_files = adr_files(root)
+    by_folder: dict[str, int] = {f: 0 for f in FOLDERS}
+    for path in all_files:
+        rel = rel_name(root, path)
+        by_folder[folder_of(rel)] += 1
+        problems += check_doc(rel, path, index, synonyms, root)
     if problems:
-        print(f"GAGAL: {len(problems)} masalah pada {len(files)} ADR")
+        print(f"GAGAL: {len(problems)} masalah pada {len(all_files)} ADR")
         for p in problems:
             print(f" - {p}")
         return 1
     counts = count_implementasi(root)
-    gated = sum(1 for rows in synonyms.values() if any(s != "prose" for _, s in rows))
-    summary = " ".join(f"{key}={value}" for key, value in counts.items())
-    folders = ", ".join(
-        f"{folder}={sum(1 for p in files if folder_of(rel_name(root, p)) == folder)}"
-        for folder in FOLDERS
-    )
+    summary_parts = [f"{k}={v}" for k, v in counts.items()]
+    folder_parts = [f"{k}={v}" for k, v in by_folder.items()]
     print(
-        f"OK: {len(files)}/{len(files)} ADR lolos check; folder {folders}; {summary}; "
-        f"sinonim digerbang={gated} baris prosa={prose_rows}"
+        f"OK: {len(all_files)}/{len(all_files)} ADR lolos check; "
+        f"folder {', '.join(folder_parts)}; "
+        f"{' '.join(summary_parts)}"
     )
     return 0
 
@@ -498,14 +433,12 @@ def cmd_check(root: Path) -> int:
 SCAFFOLD = """# ADR-{number:04d}: {title}
 
 - **Status:** accepted
-- **Date:** (decision date, ISO YYYY-MM-DD)
-- **Deciders:** (owner and reviewers)
-- **Context:** (which ADRs or designs this follows from)
+- **Date:** 2026-11-05
+- **Deciders:** Muqsith (owner)
+- **Context:**
 - **Supersedes:** —
-- **Related:** (other relevant ADRs)
-- **Implementation:** draft — (concrete evidence, or the work that is still missing)
-- **Location note:** ADRs live in `{home}/`; cross-cutting decisions at its root, surface decisions
-  under `{folder}/`. There is no second copy.
+- **Related:**
+- **Implementation:** draft
 
 ---
 
@@ -531,7 +464,7 @@ SCAFFOLD = """# ADR-{number:04d}: {title}
 
 ---
 
-*This ADR lives at `{home}/{filename}`.*
+*This ADR lives at `{filename}`.*
 """
 
 
@@ -550,13 +483,12 @@ def cmd_new(root: Path, title: str, sub: str = "root") -> int:
     if path.exists():
         print(f"GAGAL: {path} sudah ada")
         return 1
+    rel = f"docs/v0.1.0/adr/{rel_name(root, path)}"
     path.write_text(
         SCAFFOLD.format(
             number=number,
             title=title,
-            filename=rel_name(root, path),
-            home=adr_dir(root).relative_to(root).as_posix(),
-            folder=sub,
+            filename=rel,
         ),
         encoding="utf-8",
     )
@@ -564,76 +496,8 @@ def cmd_new(root: Path, title: str, sub: str = "root") -> int:
     return 0
 
 
-def stamp_line(source: Path, root: Path) -> str:
-    """The derivative header: source relative to the ADR home, plus its first 12 hex."""
-    rel = source.relative_to(adr_dir(root)).as_posix()
-    digest = hashlib.sha256(read(source).encode("utf-8")).hexdigest()[:12]
-    return f"> Terjemahan turunan — jangan sunting; sumber: {rel} (sha256: {digest})"
-
-
-def stamp_one(root: Path, source: Path) -> str:
-    """Rewrite line 1 of the source's Indonesian copy; return the copy's relative path."""
-    copy = derivative_of(root, source)
-    if not copy.is_file():
-        raise FileNotFoundError(copy.as_posix())
-    lines = read(copy).splitlines()
-    header = stamp_line(source, root)
-    lines[0] = header
-    copy.write_text("\n".join(lines) + "\n", encoding="utf-8")
-    return copy.relative_to(adr_dir(root)).as_posix()
-
-
-def cmd_stamp(root: Path, target: str = "") -> int:
-    """ADR-0031 §4.6: after an English ADR is edited, write the hash of its copy."""
-    if target:
-        source = Path(target)
-        if not source.is_absolute():
-            source = (root / target).resolve()
-        if not source.is_file():
-            print(f"GAGAL: {source} tidak ada")
-            return 1
-        try:
-            print(f"stamped {stamp_one(root, source)}")
-        except FileNotFoundError as exc:
-            print(f"GAGAL: turunan tidak ada: {exc}")
-            return 1
-        return 0
-    stamped = 0
-    for copy in derivative_files(root):
-        source = source_of_derivative(root, copy)
-        if not source.is_file():
-            continue
-        print(f"stamped {stamp_one(root, source)}")
-        stamped += 1
-    print(f"TURUNAN {stamped} berkas disegarkan")
-    return 0
-
-
-def cmd_translate_check(root: Path) -> int:
-    problems: list[str] = []
-    files = derivative_files(root)
-    for path in files:
-        text = read(path)
-        rel = path.relative_to(adr_dir(root)).as_posix()
-        head = text.splitlines()[0] if text else ""
-        m = DERIVATIVE_RE.match(head)
-        source = source_of_derivative(root, path)
-        source_rel = source.relative_to(adr_dir(root)).as_posix()
-        if not m or m.group(1) != source_rel or not source.is_file():
-            problems.append(f"{rel}: turunan tanpa sumber/hash")
-            continue
-        digest = hashlib.sha256(read(source).encode("utf-8")).hexdigest()[:12]
-        if digest != m.group(2):
-            stale = f"{m.group(2)} != {digest}"
-            problems.append(f"{rel}: turunan basi ({stale})")
-    print(f"TURUNAN {len(files)} berkas, {len(problems)} masalah")
-    for p in problems:
-        print(f" - {p}")
-    return 1 if problems else 0
-
-
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="ADR home tool (check, new, translate-check)")
+    parser = argparse.ArgumentParser(description="ADR home tool (check, new)")
     parser.add_argument("--root", default=str(ROOT), help="repository root (default: project root)")
     group = parser.add_mutually_exclusive_group(required=True)
     group.add_argument("--check", action="store_true", help="run the structure gate")
@@ -644,24 +508,13 @@ def main(argv: list[str] | None = None) -> int:
         default="root",
         help="folder for --new: root (cross-cutting, default), engine, or web",
     )
-    group.add_argument("--translate-check", action="store_true", help="verify derivative hashes")
-    group.add_argument(
-        "--stamp",
-        metavar="PATH",
-        nargs="?",
-        const="",
-        default=None,
-        help="rewrite derivative hashes (one source, or every pair)",
-    )
     args = parser.parse_args(argv)
     root = Path(args.root).resolve()
     if args.check:
         return cmd_check(root)
     if args.new:
         return cmd_new(root, args.new, args.dir)
-    if args.stamp is not None:
-        return cmd_stamp(root, args.stamp)
-    return cmd_translate_check(root)
+    return 0
 
 
 if __name__ == "__main__":

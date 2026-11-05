@@ -1,6 +1,6 @@
 """ADR home gate: `scripts/adr.py` must accept the shipped set and reject real breakage.
 
-The ADR sources are English; `adr/id/` holds the Indonesian copy. The tool is pure text work for
+The ADR sources are English (ADR-0055 §4.2.1). The tool is pure text work for
 `--check` (no model, no network), so these tests are cheap and deterministic. Every check runs
 against a copy of the ADR home so a failure never edits the repository.
 """
@@ -42,21 +42,19 @@ def test_check_passes_on_the_shipped_set():
 
 def test_check_rejects_a_register_synonym_in_a_definition(tmp_path):
     root = _copy_home(tmp_path)
-    target = root / "docs" / "v0.1.0" / "adr" / "engine" / "0016-schema-migration.md"
+    target = root / "docs" / "v0.1.0" / "adr" / "0001-sovereign-agent-and-invariants.md"
     text = target.read_text(encoding="utf-8")
-    broken = text.replace(
-        " kind text not null default 'fact',", " facts text not null default 'fact',", 1
-    )
-    assert broken != text, "fixture did not change; the DDL line moved"
+    broken = text.replace("engine:", "Target:", 1)
+    assert broken != text, "fixture did not change"
     target.write_text(broken, encoding="utf-8")
     result = _run("--check", root=root)
     assert result.returncode == 1
-    assert "terlarang" in result.stdout
+    assert "dilanggar" in result.stdout
 
 
 def test_check_rejects_a_section_that_is_not_the_last(tmp_path):
     root = _copy_home(tmp_path)
-    target = root / "docs" / "v0.1.0" / "adr" / "engine" / "0026-search.md"
+    target = root / "docs" / "v0.1.0" / "adr" / "engine" / "0002-unified-memory-and-privacy.md"
     text = target.read_text(encoding="utf-8")
     target.write_text(text + "\n## 11. Extra note\n", encoding="utf-8")
     result = _run("--check", root=root)
@@ -98,7 +96,10 @@ def test_duplicate_number_is_refused(tmp_path):
     root = _copy_home(tmp_path)
     adr = root / "docs" / "v0.1.0" / "adr"
     (adr / "web").mkdir(exist_ok=True)  # an empty folder is not tracked by git
-    shutil.copy(adr / "engine" / "0026-search.md", adr / "web" / "0026-search.md")
+    shutil.copy(
+        adr / "engine" / "0002-unified-memory-and-privacy.md",
+        adr / "web" / "0002-unified-memory-and-privacy.md",
+    )
     result = _run("--check", root=root)
     assert result.returncode != 0
     assert "nomor unik global" in result.stdout
@@ -127,32 +128,11 @@ def test_folder_qualified_reference_resolves(tmp_path):
     probe = next((adr / "web").glob("*-qualified-probe.md"))
     probe.write_text(
         probe.read_text(encoding="utf-8").replace(
-            "## 1. Context", "## 1. Context\n\nSee ADR-0001 §4.3 and ADR-engine/0016 §4.2.", 1
+            "## 1. Context", "## 1. Context\n\nSee ADR-0001 §4.3 and ADR-engine/0002 §4.1.", 1
         ),
         encoding="utf-8",
     )
     assert _run("--check", root=root).returncode == 0
-
-
-def test_translate_check_detects_a_stale_or_missing_hash(tmp_path):
-    root = _copy_home(tmp_path)
-    source = root / "docs" / "v0.1.0" / "adr" / "engine" / "0026-search.md"
-    derivative = root / "docs" / "v0.1.0" / "adr" / "engine" / "id" / "0026-search.md"
-    import hashlib
-
-    digest = hashlib.sha256(source.read_bytes()).hexdigest()[:12]
-    derivative.parent.mkdir(parents=True, exist_ok=True)
-    derivative.write_text(
-        f"> Terjemahan turunan — jangan sunting; sumber: engine/0026-search.md "
-        f"(sha256: {digest})\n> Ditulis tangan.\n\n## 1. Konteks\n",
-        encoding="utf-8",
-    )
-    assert _run("--translate-check", root=root).returncode == 0
-    derivative.write_text(
-        derivative.read_text(encoding="utf-8").replace(digest, "000000000000", 1),
-        encoding="utf-8",
-    )
-    assert _run("--translate-check", root=root).returncode == 1
 
 
 def test_there_is_no_machine_translator():

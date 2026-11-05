@@ -22,7 +22,9 @@ config.bak-*/
 .coverage
 coverage.xml
 
-docs/
+# docs audit scratch files
+docs/audit*.md
+docs/note.md
 note.md
 
 
