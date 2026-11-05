@@ -3,7 +3,7 @@
 - **Status:** proposed
 - **Date:** 2026-11-05
 - **Deciders:** Muqsith (owner)
-- **Context:** `docs/audit.md` §4.2, §4.3.3, and §4.4 show that adding a gateway touches 8–9 files, that a plugin needs a hand-computed digest for every edit, and that four queue engines are in the making; `docs/note.md` §4.6 asks for a one-file gateway.
+- **Context:** adding a gateway touches 8–9 files, a plugin needs a hand-computed digest for every edit, and four queue engines are in the making; the owner wants a one-file gateway path.
 - **Supersedes:** — (absorbs the former durable-task-runner draft, §4.4)
 - **Related:** ADR-0014 (automation), ADR-0018 (gateway contract), ADR-0028 (plugin model), ADR-0044 (provider wire adapters), ADR-0046 (gateway access), ADR-0050 (cross-gateway), ADR-0053 (addendum)
 - **Implementation:** draft — nothing is built; the owner accepts or trims the proposals before work starts.

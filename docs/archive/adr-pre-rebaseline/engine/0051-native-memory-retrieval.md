@@ -3,7 +3,7 @@
 - **Status:** accepted
 - **Date:** 2026-11-05
 - **Deciders:** Muqsith (owner)
-- **Context:** `docs/audit.md` shows the Mem0 vector collection is written but never read, and recall is an `AND` of `ILIKE` terms; the owner targets a 350–500 MB idle footprint on a small VPS (`docs/note.md` §4).
+- **Context:** the Mem0 vector collection is written but never read, and recall is an `AND` of `ILIKE` terms; the owner targets a 350–500 MB idle footprint on a small server.
 - **Supersedes:** —
 - **Related:** ADR-0001 (memory source of truth), ADR-0004, ADR-0010, ADR-0026 (search), ADR-0048 (single-tenant), ADR-0049 (audit remediation)
 - **Implementation:** draft — the schema column, the query, and the Mem0 removal are not done.

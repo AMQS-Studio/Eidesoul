@@ -3,7 +3,7 @@
 - **Status:** accepted
 - **Date:** 2026-11-05
 - **Deciders:** Muqsith (owner)
-- **Context:** completes ADR-0049 with every defect of `docs/audit.md` (BI-01..BI-20, §1.4, §2.1, §2.3, §4.4) and `docs/audit2.md` (M-01..M-08) that ADR-0049..0052 do not already own; the multi-tenant half is excluded by ADR-0048.
+- **Context:** completes ADR-0049 with every store, job, identity, access, and install defect (`BI-01..BI-20`, `M-01..M-08`) that ADR-0049..0052 do not already own.
 - **Supersedes:** —
 - **Related:** ADR-0011 (crash safety), ADR-0012 (lease safety), ADR-0016 (schema migration), ADR-0022 (administrator role), ADR-0036 (role model), ADR-0046 (gateway access), ADR-0048 (single-tenant), ADR-0049 (audit remediation), ADR-0050 (cross-gateway), ADR-0052 (detector precision)
 - **Implementation:** draft — none of the items below is applied.
@@ -13,9 +13,9 @@
 
 ## 1. Context
 
-ADR-0049 holds the highest-impact defects. The audits list more, and several rows of the SaaS tables
-stay real in a single-tenant deployment because they concern two gateways or two apps inside one
-database, not two tenants. Items already owned elsewhere are not repeated: identity on resume,
+ADR-0049 holds the highest-impact defects. Several intra-deployment key collision items
+stay real in a single deployment because they concern two gateways or two apps inside one
+database. Items already owned elsewhere are not repeated: identity on resume,
 `propose`, `promote_staged`, pinned prompt parts, the exit door, send idempotency, guard wrappers,
 plugin `deps/`, the install path (ADR-0049); cross-gateway tools (ADR-0050); Mem0 and recall (ADR-0051);
 detectors (ADR-0052).

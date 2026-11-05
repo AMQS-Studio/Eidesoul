@@ -3,120 +3,244 @@
 - **Status:** accepted
 - **Date:** 2026-11-05
 - **Deciders:** Muqsith (owner)
-- **Context:** Re-baselined for v0.1.0; consolidates distribution, installation, and terminal wizard interfaces (pre-rebaseline 0027, 0030, 0039) with the container and installation fixes in pre-rebaseline 0049 and 0053.
+- **Context:** Re-baselined for v0.1.0; consolidates distribution, installation, terminal wizard interfaces, container packaging, and CLI administration (pre-rebaseline 0027, 0030, 0039, 0049, 0053, 0055).
 - **Supersedes:** pre-rebaseline 0027, 0030, 0039
-- **Related:** ADR-0001 (sovereign deployment), ADR-0006 (access control)
-- **Implementation:** partial — terminal init wizard and base installer exist; container migration copy and bootstrap ordering fixes are scheduled in Phase P0.
+- **Related:** ADR-0001 (sovereign deployment), ADR-0004 (address normalization), ADR-0006 (access control)
+- **Implementation:** partial — terminal init wizard exists; container migration packaging, compose bootstrap ordering, comment-preserving YAML updates, and CLI admin fixes are scheduled in Phase P0/P2.
 
 ---
 
 ## 1. Context
 
-Setting up a sovereign agent must be fast and foolproof for self-hosters. The audit (`docs/audit.md`
-§1.4.1, §4.2) revealed several distribution and installation breakdowns:
-1. **Broken Compose Installation:** `install.sh --stack compose` failed immediately on fresh machines
-   because `Dockerfile` did not copy `migrations/`, `install.sh` started the container before the admin
-   user was created (triggering a fatal crash loop), and single-file bind mounts in `compose.yaml` caused
-   `os.replace()` to fail with Linux `EBUSY` errors.
-2. **Ghost Web Panel:** Previous documentation promised an operator web panel in a `panel/` directory,
-   leading operators to expect a browser-based setup interface that did not exist in the repository.
-3. **Monolithic Script Duplication:** `install.sh` was an unwieldy 1,753-line script that duplicated
-   configuration scaffolding logic already implemented cleanly in Python by `monoagens init`.
+Installing and administering a self-hosted agent must work cleanly out of the box. End-to-end audits of
+the installer, container manifests, and CLI uncovered several breaking defects:
+1. **Four Compose Installation Failures (`ST-11`):**
+   - **Missing Migrations (`Dockerfile:30-34` & `pyproject.toml:55-59`):** `Dockerfile` only copied
+     `monoagens/` and `plugins/`, omitting `migrations/` (and `pyproject.toml` did not package it), so
+     `monoagens db upgrade` inside the container failed immediately.
+   - **Bootstrap Crash-Loop (`install.sh:1550-1555`):** `install.sh` ran `compose up -d postgres monoagens`
+     *before* running `monoagens people add cli local --role administrator`. Because `roles.yaml` still
+     had `administrator.users: []`, `require_administrator()` crashed the container in a loop and caused
+     subsequent `compose exec` calls to fail.
+   - **Single-File Bind-Mount `EBUSY` (`compose.yaml:44-48`):** Mounting individual files
+     (`./config.yaml:/app/config.yaml:Z`, etc.) caused `os.replace(tmp, path)` in `people.py`, `init.py`,
+     `plugins.py`, and `settings.py` to fail on Linux with `OSError: [Errno 16] Device or resource busy (EBUSY)`.
+   - **Hardcoded Empty `EXTRAS` (`compose.yaml:34-35`):** Even when `--gateway whatsapp` was selected,
+     `compose.yaml` built the image with `EXTRAS: ""`, omitting `neonize`.
+2. **Six CLI & Console Administration Bugs (`ST-18`):**
+   - **Cannot Add First Non-Admin (`admin/people.py:103-104`, `ST-18`):** Validation checked
+     `if not target.get("users") and role != PROTECTED_ROLE:`, which tested whether the *target* role
+     (e.g. `member`) had users rather than whether `administrator` had users—making it impossible to add
+     the first `member` via CLI!
+   - **Raw Unnormalized Addresses in `people add` (`admin/people.py:112-124`):** Running
+     `monoagens people add whatsapp +62812...` stored `+62812...` verbatim in `person_links.address`,
+     which failed to match inbound WhatsApp digit-only actors (`62812...`) and silently demoted the
+     admin to `guest`.
+   - **`people list` Reading Dead Column (`admin/people.py:28`):** Printed the empty `people.role` DB
+     column instead of assigned roles from `roles.yaml`.
+   - **Dead `people adopt` Subcommand (`__main__.py:766-776,1010`):** Registered in `argparse` and
+     documented in `README.md`, but unhandled in `_people_dispatch` (exiting with code 2).
+   - **`monoagens config` Crash Without Subcommand (`__main__.py:1046-1049,1076-1078`):** Fell through
+     to `serve(args.config, takeover=args.takeover)` and crashed with `AttributeError: 'Namespace' object has no attribute 'takeover'`.
+   - **Silent Console Drop on `monoagens run` (`gateways/cli/gateway.py:117-125`):** When `access_refusal`
+     rejected the CLI user, the loop executed `continue` without printing any message, making the
+     terminal appear frozen.
+3. **Destruction of YAML Template Comments & Hardcoded `templates.py` Dictionaries:**
+   - Running `monoagens plugins enable` or the `settings` tool rewrote `config.yaml` with `yaml.safe_dump`,
+     wiping out hundreds of documentation comment lines generated by `admin/templates.py`.
+   - `monoagens/admin/templates.py` derived `HOST` from dataclasses (`host_defaults()`), but hardcoded
+     giant `ENGINE`, `GATEWAY`, and `GATEWAY_POLICY` dictionaries that drifted from `engine/config.py`
+     and gateway packages, and dumped `roles.yaml` with raw comment-free `yaml.safe_dump`.
+4. **Hardcoded `install.sh` Assumptions & Limited Wizard Options:**
+   - `install.sh` (1,753 lines) hardcoded gateway/provider assumptions and obsolete flags (`--voice-layer`),
+     only supported `searxng`/`ddgs` for web search (lacking selectable modern providers and API key
+     prompts), and documentation promised a `panel/` web directory that did not exist in the repository (`M-02`).
 
 ## 2. Decision drivers
 
-1. **One Authoritative Wizard:** `monoagens init` in Python owns all interactive setup logic, question
-   flows, credential masking, and configuration scaffolding.
-2. **Thin Bootstrap Shell:** `install.sh` serves only as a lightweight curl-to-bash bootstrap to verify
-   runtimes (Python/Docker), install `uv`, and invoke `monoagens init`.
-3. **Robust Container Lifecycle:** The Docker image must include all migration files, mount configuration
-   directories rather than individual files, and run database upgrades and admin bootstrap before starting services.
-4. **Clean by Default:** Gateways and plugins remain uninstalled and disabled until explicitly chosen
-   by the operator during setup.
-5. **No Phantom Surfaces:** The web panel is deferred to an independent operator project; core MonoAgens
-   remains terminal and CLI-first.
+1. **One Authoritative Setup Wizard:** `monoagens init` in Python owns interactive configuration,
+   validation, and commented YAML generation; `install.sh` is a thin runtime bootstrap.
+2. **Zero-Friction Container Lifecycle:** Container images package `migrations/`, propagate gateway
+   `EXTRAS`, run `db upgrade` and admin bootstrap *before* starting the daemon, and survive bind mounts.
+3. **Comment-Preserving Config Updates:** CLI and tool config mutations preserve operator comments and
+   handle single-file mount `EBUSY` gracefully.
+4. **Reliable CLI Administration:** Every `monoagens people`, `config`, `plugins`, and `run` command
+   behaves deterministically and normalizes addresses through the target gateway contract.
+5. **No Phantom Surfaces:** The repository documents only surfaces that exist today (terminal/CLI-first).
 
 ## 3. Options considered
 
-**A. Browser-First Web Setup Wizard.** Rejected: requires hosting an HTTP server in the engine or
-bundling a separate web runtime, violating the lightweight self-hosted harness principle.
+**A. Maintain Dual Setup Logic in Bash (`install.sh`) and Python (`monoagens init`).** Rejected:
+causes constant drift between shell flags and Python config schemas.
 
-**B. Pure Shell-Script Installer (`install.sh`).** Rejected: maintaining complex configuration
-generation in Bash is brittle and duplicates Python logic.
+**B. Bundle an Embedded Web Setup Server in Core.** Rejected: adds unnecessary HTTP surface area when
+the terminal wizard is self-contained.
 
-**C. Python Terminal Wizard (`curses`) with Thin Bootstrap.** Selected: provides a polished, interactive
-terminal experience (`monoagens init`) with reliable fallback for headless environments.
+**C. Python Terminal Wizard (`monoagens init`), Thin `install.sh` Bootstrap, and Hardened Container/CLI.** Accepted.
 
 ## 4. Decision
 
-### 4.1 Interactive Terminal Setup Wizard (`monoagens init`)
+### 4.1 Dataclass-Driven Commented Templates (`templates.py`), Interactive Wizard (`monoagens init`), & Comment Preservation
 
-- Driven by `monoagens/admin/terminal.py` (curses UI with numbered fallback for dumb terminals).
-- Step sequence:
-  1. Language and location selection (detects host timezone and locale).
-  2. Database configuration (PostgreSQL connection string validation).
-  3. LLM provider selection and API key configuration (with credential masking).
-  4. Model discovery via provider APIs.
-  5. Voice and persona customization (defaults off).
-  6. First administrator identity creation.
-- Configuration writer outputs fully commented `config.yaml`, `roles.yaml`, `soul.yaml`, and `.env`.
+- **Dataclass- & Registry-Driven `templates.py` (No Hardcoded Drift):**
+  - Both `HOST` and `ENGINE` defaults in `monoagens/admin/templates.py` are derived directly from the
+    typed dataclasses in `monoagens/engine/config.py`, while `gateways` defaults and per-role gateway
+    policies are pulled dynamically from `@register_gateway` (`BaseGateway.default_settings()` and
+    `BaseGateway.default_role_policy(role)`).
+  - All three generated YAML files (`config.yaml`, `roles.yaml`, and `soul.yaml`) are rendered with
+    structured section banners (`# === ... ===`) and human-friendly inline `# ...` comments above every
+    single entry (replacing raw comment-free `yaml.safe_dump` on `roles.yaml` and generic fallback
+    comments on `config.yaml`).
+- **Interactive Setup Wizard (`monoagens init`):**
+  - Driven by `monoagens/admin/terminal.py` (`curses` UI with numbered prompt fallback for non-TTY/dumb
+    terminals), `monoagens/admin/wizard.py`, and `monoagens/admin/init.py`:
+    1. Language, locale, and timezone auto-detection/selection.
+    2. PostgreSQL connection verification and schema migration.
+    3. LLM provider selection, masked API key entry (saved to `.env`), and live model discovery.
+    4. Pluggable **Web Search provider selection** (`ddgs`, `searxng`, `tavily`, `brave`, `exa`,
+       `serper`, `google`, or `off`), prompting for `base_url` (when `searxng`) or masked search API key
+       (written to `.env` and bound to `web_search.api_key_env`, plus `engine_id_env` for `google`).
+    5. **Approval policy mode selection** (`default` | `yolo` | `strict`, defaulting to `default`),
+       persona `mode`, and sub-feature toggles (`affect`, `style`, `character`, `humanize` directly,
+       without the retired `voice.enabled` master switch).
+    6. Dynamic gateway selection (from `@register_gateway`) and first `administrator` identity bootstrap.
+- Programmatic updates to `config.yaml` and `roles.yaml` (in `plugins.py`, `settings.py`, and
+  `people.py`) use targeted/comment-preserving edits rather than raw `yaml.safe_dump` so template
+  comments are never destroyed.
+- Atomic file writers fall back to in-place inode truncation/write when `os.replace(tmp, path)` raises
+  `OSError(errno.EBUSY)` on bind-mounted files.
 
-### 4.2 Lightweight Bootstrap Script (`install.sh`)
+### 4.2 Unified `$PATH` Binary, Full CLI Surface (`update`, `reload`, `setting`, `cli`, `doctor`), and Container Packaging
 
-- `install.sh` is simplified to a thin bootstrap script (<200 lines):
-  - Checks system dependencies (curl, git, Python 3.14+ or Docker/Podman).
-  - Installs `uv` package manager if absent.
-  - Clones or updates the repository.
-  - Launches `monoagens init` to handle configuration.
+- **Global `monoagens` Executable in `$PATH` (Native & Compose Stacks):**
+  - `install.sh` installs the `monoagens` CLI wrapper directly into the operator's `$PATH`
+    (`~/.local/bin/monoagens` or `/usr/local/bin/monoagens`), eliminating fragmented `uv run monoagens ...`
+    or `docker compose exec monoagens ...` invocations.
+  - When the deployment stack is `native`, `monoagens <cmd>` executes against the managed `.venv`; when
+    the stack is `compose` (Docker/Podman), the wrapper transparently routes runtime/admin subcommands
+    to the container and host configuration directory so every command works identically.
+- **Complete Top-Level Operator CLI Surface (`monoagens <command>`):**
+  - **Service & Runtime Control (`start`, `stop`, `restart`, `status`, `logs`, `run`, `cli`, `reload`):**
+    - `monoagens start | stop | restart | status`: Manages and inspects the background service across
+      both `native` and `compose` stacks.
+    - `monoagens logs [-f] [--verbose | --debug | --level <LEVEL>]` & `monoagens run [--verbose | --debug]`:
+      Streams logs or runs the engine in the foreground with on-the-fly verbosity/debug overrides
+      (without requiring edits to `config.yaml`).
+    - `monoagens cli` (alias `console`): Opens a simple, minimal, lightweight terminal chat REPL directly
+      against the core engine (kept intentionally minimal at ~80–100 lines as a lightweight chat client,
+      not a transport gateway).
+    - `monoagens reload`: Explicitly triggers a safe hot-reload of `config.yaml`, `roles.yaml`, and
+      `soul.yaml` on the running primary instance (avoiding fragile `Supervisor` `mtime` polling on
+      half-saved manual file edits, while CLI mutation commands trigger reload automatically upon completion).
+  - **Interactive Settings & Quick Switchers (`setting`, `model`, `provider`, `websearch`):**
+    - `monoagens setting` (alias `settings`): Interactive terminal menu for adjusting configuration
+      (LLM provider/model, `web_search` provider/keys, `approval.mode`, `voice` sub-features, gateways,
+      and tools) without re-running `init`, preserving YAML comments and triggering reload on save.
+    - Direct shortcuts `monoagens model [id]`, `monoagens provider`, and `monoagens websearch` allow
+      1-step switching from the terminal.
+  - **Unified Update, Diagnostics, Backup, & Uninstall (`update`, `doctor`, `backup`, `restore`, `uninstall`):**
+    - `monoagens update` (alias `upgrade`): By default updates Core Engine + DB migrations (`db upgrade`) +
+      all currently installed gateways and non-local plugins in one command, while supporting `--core`
+      and granular `monoagens gateway update [name]` / `monoagens plugins update [name]`.
+    - `monoagens doctor [--fix]` (alias `selftest`): Unified health check covering PostgreSQL + `pgvector`,
+      schema migrations, `.env`/`roles.yaml` `0600` permissions, LLM/websearch connectivity, gateway
+      pairing & role policies, and sandbox readiness.
+    - `monoagens backup --out <archive>` & `monoagens restore <archive>`: Packages and restores a single
+      portable bundle containing the PostgreSQL dump + `config.yaml` + `roles.yaml` + `soul.yaml` +
+      `workspace/public/`.
+    - `monoagens uninstall [--purge]`: Cleanly stops services/containers, removes the `$PATH` wrapper
+      and application code, and preserves data unless `--purge` is confirmed.
+  - **On-Demand Extension Commands (`gateway`, `plugins`, `tools`):**
+    - `monoagens gateway list|enable|disable|pair|unpair|delete|update|doctor`:
+      `enable <name>` downloads/installs code & dependencies on demand and seeds config/roles;
+      `disable <name>` turns it off while keeping code on disk; `pair`/`unpair` manages transport
+      sessions; `delete <name>` removes code, dependencies, sessions, and config entries.
+    - `monoagens plugins list|enable|disable|delete|update|digest`: Same on-demand lifecycle.
+    - `monoagens tools list|enable|disable`: Keeps heavy system tools such as `sandbox` (and its
+      `sandbox-proxy` Squid container) off and unstarted unless explicitly enabled by the operator.
+- **Dynamic Interactive Bootstrap (`install.sh`) & Container Packaging:**
+  - `install.sh` remains interactive, solid, and ergonomic while delegating dynamic catalog discovery
+    (available LLM providers, web search providers, on-demand gateways, and voice parts) and file
+    generation to `monoagens init`.
+  - `install.sh` supports `--websearch <provider>`, `--websearch-url <url>`, `--websearch-key-env <var>`,
+    and `--approval-mode default|yolo|strict` (retiring `--voice-layer`), and dynamically computes
+    container build `EXTRAS` only for the gateways enabled by the operator.
+  - `Dockerfile` copies `migrations/` into `/app/migrations`, and `pyproject.toml` includes `migrations/`
+    in packaged artifacts.
+  - `compose.yaml` mounts the configuration directory cleanly, receives `EXTRAS`, and only starts
+    `sandbox-proxy` when `sandbox` is enabled.
+  - In `install.sh` (and container entrypoint workflows), `monoagens db upgrade` and `monoagens people add ... --role administrator`
+    run via one-off `compose run --rm` *before* `compose up -d monoagens` starts the long-running service (`ST-11`).
+  - All references to a root `panel/` directory are removed from active documentation.
 
-### 4.3 Container Packaging and Lifecycle Fixes
+### 4.3 CLI and Console Administration Fixes
 
-- `Dockerfile` copies `migrations/` into the application image.
-- `compose.yaml` mounts the entire configuration directory (or parent directory) rather than individual
-  file mounts, preventing `EBUSY` when `os.replace()` writes updated configs.
-- Container initialization runs `db upgrade` and `people add` to bootstrap the administrator before
-  launching the main `monoagens` primary process.
-- The web panel promise is removed from documentation; core remains CLI/terminal-driven.
+- **`monoagens people add` First-User Check (`ST-18`):** Checks `roles.get(PROTECTED_ROLE, {}).get("users")`
+  to verify that at least one `administrator` exists before adding a user to a non-admin role (such as
+  `member`), rather than checking `target.get("users")`.
+- **Address Normalization on `people add`:** Runs the provided address through the target gateway's
+  `normalize_address(raw)` method so `+62812...` and `62812...@s.whatsapp.net` canonicalize to `62812...`.
+- **`monoagens people list`:** Reads and displays each person's assigned roles from `RoleRegistry`
+  (`roles.yaml`) rather than the dropped `people.role` column.
+- **`monoagens people adopt`:** Either wired in `_people_dispatch` or removed from `argparse` and
+  `README.md` so no dead subcommand remains.
+- **`monoagens config`:** Running `monoagens config` with no subcommand prints subcommand help and exits
+  with code `2` instead of falling through to `serve()`.
+- **`monoagens run` Refusal Diagnostic:** When `CLIGateway` `access_refusal` rejects the console user,
+  it prints an explicit refusal diagnostic line (and hints how to run `monoagens people add`) instead of
+  silently dropping input lines.
 
 ## 5. Configuration
 
-Output of `monoagens init`:
-- `config.yaml`: Core engine and enabled gateway settings.
-- `roles.yaml`: Initial RBAC configuration with bootstrapped administrator.
-- `soul.yaml`: Persona identity and voice defaults.
-- `.env`: Secret keys (e.g. `OPENAI_API_KEY`, `POSTGRES_PASSWORD`).
+Generated by `monoagens init` (and untracked in Git):
+- `config.yaml`: Engine, database, LLM, and enabled gateway settings.
+- `roles.yaml`: RBAC definitions with bootstrapped `administrator`.
+- `soul.yaml`: Persona identity, language, and `mode` defaults.
+- `.env`: Secret credentials (`OPENAI_API_KEY`, `GEMINI_API_KEY`, `DATABASE_URL`).
 
 ## 6. Metrics and gates
 
-- Automated container test: `docker compose up -d` boots cleanly on a fresh environment.
-- Config writer test: Modifying settings preserves all comments and structural indentation.
-- Terminal fallback test: Running in a non-TTY environment falls back to standard line-input prompts.
+- Fresh container smoke test (`ST-11`): `Dockerfile` build + `db upgrade` + `people add` + `up -d`
+  succeeds without crash loops or `EBUSY` errors.
+- CLI admin test suite (`ST-18`): Verifies adding a `administrator` followed by a `+628...` WhatsApp
+  `member`, listing people with accurate roles, and running `monoagens config` with no arguments.
+- Config writer test: Verifies `settings` and `plugins enable` preserve `#` comment lines in `config.yaml`
+  and succeed when the target file is a bind mount raising `EBUSY` on `os.replace`.
 
 ## 7. Acceptance criteria
 
-- [ ] `Dockerfile` packages `migrations/` and succeeds on container `db upgrade`.
-- [ ] `install.sh` completes installation and administrator bootstrapping without manual file edits.
-- [ ] No references to a root `panel/` directory remain in active documentation.
-- [ ] Configuration writes survive Linux bind-mount updates without `EBUSY` errors.
+- [ ] `Dockerfile` and `pyproject.toml` include `migrations/`, and `compose.yaml` propagates `EXTRAS`.
+- [ ] `install.sh` installs `monoagens` directly into `$PATH` for both `native` and `compose` (Docker/Podman) stacks, and `monoagens update` (alias `upgrade`) upgrades core, DB migrations, and installed extensions cleanly.
+- [ ] `monoagens start|stop|restart|status|logs|reload|setting|cli|doctor|backup|restore|uninstall` and `--verbose`/`--debug` flags on `run` and `logs` work end to end.
+- [ ] `monoagens gateway enable|disable|pair|unpair|delete|update`, `monoagens plugins enable|disable|delete|update|digest`, and `monoagens tools enable|disable` install extensions/tools on demand and delete unselected code/dependencies cleanly.
+- [ ] `templates.py` derives `HOST`, `ENGINE`, and gateway defaults/policies from dataclasses and `@register_gateway`, rendering full section banners and inline comments across `config.yaml`, `roles.yaml`, and `soul.yaml`.
+- [ ] `install.sh` and `monoagens init` dynamically present selectable `web_search` providers (`ddgs`, `searxng`, `tavily`, `brave`, `exa`, `serper`, `google`, `off`), `approval.mode` (`default` | `yolo` | `strict`), and gateways, running `db upgrade` and `people add` before starting the `monoagens` container.
+- [ ] `monoagens people add whatsapp +62812... --role member` succeeds after an administrator exists and normalizes the phone number.
+- [ ] `monoagens people list` prints RBAC roles from `roles.yaml`.
+- [ ] `monoagens config` without a subcommand prints help and exits `2` without `AttributeError`.
+- [ ] `monoagens run` prints a clear refusal message when the CLI user is unauthorized.
+- [ ] Config updates preserve YAML comments and survive `EBUSY` bind mounts.
 
 ## 8. Risks and mitigations
 
 | Risk | Mitigation |
 | --- | --- |
-| Operators want graphical web management | Independent web panel can interact via standard database and CLI interfaces |
-| Non-standard terminal sizes break curses | Automatic fallback to line-based numbered question prompts |
+| Non-interactive CI environments lack a TTY for `curses` | Automatic fallback to numbered line prompts or `--non-interactive` flags |
+| In-place write fallback on `EBUSY` is non-atomic on power loss | Only triggered when `os.replace` raises `errno.EBUSY` on single-file container mounts |
 
 ## 9. Interaction with other ADRs
 
-- **ADR-0001:** Enforces single-tenant deployment invariants during initialization.
-- **ADR-0006:** Bootstraps the initial protected `administrator` account.
+- **ADR-0001:** Enforces untracked host configuration files as the single source of truth.
+- **ADR-0004:** Uses `GatewayCore.normalize_address` in `monoagens people add`.
+- **ADR-0006:** Bootstraps the protected `administrator` role and removes `people.role`.
 
 ## 10. Code references
 
-- `monoagens/admin/terminal.py` — Interactive curses terminal interface.
-- `monoagens/admin/wizard.py` — Step-by-step setup state machine.
-- `monoagens/admin/templates.py` — Fully commented YAML configuration templates.
-- `Dockerfile`, `compose.yaml`, `install.sh` — Packaging and deployment manifests.
+- `Dockerfile`, `compose.yaml`, `pyproject.toml`, `install.sh`
+- `monoagens/__main__.py` — CLI parser and subcommand dispatch.
+- `monoagens/admin/people.py`, `init.py`, `wizard.py`, `terminal.py`, `templates.py`
+- `monoagens/engine/tools/settings.py`, `monoagens/engine/plugins.py`
+- `monoagens/gateways/cli/gateway.py` — console refusal reporting.
 
 ---
 

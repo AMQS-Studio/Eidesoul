@@ -3,7 +3,7 @@
 - **Status:** accepted
 - **Date:** 2026-11-05
 - **Deciders:** Muqsith (owner)
-- **Context:** turns the verified findings of `docs/audit.md` and `docs/audit2.md` into an ordered implementation plan, scoped by ADR-0048 (no multi-tenancy).
+- **Context:** turns verified codebase findings into an ordered implementation plan, scoped by ADR-0048.
 - **Supersedes:** —
 - **Related:** ADR-0011 (crash safety), ADR-0012 (lease safety), ADR-0013 (turn lifecycle), ADR-0014 (automation), ADR-0031 (engine structure), ADR-0048 (single-tenant), ADR-0050 (cross-gateway), ADR-0051 (native memory retrieval), ADR-0052 (detector precision)
 - **Implementation:** draft — nothing below is applied yet; `TASK.md` carries the checklist.
@@ -134,7 +134,7 @@ No new setting. Unknown keys in `config.yaml` become a load error, and the dead 
 
 - `pytest -q`, `ruff`, `python -P scripts/types.py --check`, `python -P scripts/selfcheck.py --check`
   (currently failing), `python -P scripts/adr.py --check`.
-- A chaos test per ST scenario of `docs/audit.md` §3.3 (resume, crash after send, parallel writers).
+- A chaos test per ST scenario (resume, crash after send, parallel writers).
 - `-W error::sqlalchemy.exc.SADeprecationWarning` on the suite.
 
 ## 7. Acceptance criteria
@@ -158,7 +158,7 @@ No new setting. Unknown keys in `config.yaml` become a load error, and the dead 
 
 ADR-0011/0013 keep their contracts; this ADR fixes how the code meets them. ADR-0012 gains the atomic
 predicate in §4.2.3. ADR-0031 and ADR-0037 keep the 800-line cap; the `__getattr__` split is replaced,
-not relaxed. ADR-0048 removes the multi-tenant half of the audits.
+not relaxed.
 
 ## 10. Code references
 
@@ -166,7 +166,6 @@ not relaxed. ADR-0048 removes the multi-tenant half of the audits.
 - `monoagens/engine/jobs/supervisor.py`, `cognition.py`, `automation_store.py`
 - `monoagens/engine/access/identity.py`, `monoagens/engine/stores/turns.py`
 - `monoagens/engine/guard/policy.py`, `sandbox.py`, `monoagens/engine/plugins.py`
-- `docs/audit.md`, `docs/audit2.md` — the evidence.
 
 ---
 

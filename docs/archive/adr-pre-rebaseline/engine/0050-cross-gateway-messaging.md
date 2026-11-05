@@ -3,7 +3,7 @@
 - **Status:** accepted
 - **Date:** 2026-11-05
 - **Deciders:** Muqsith (owner)
-- **Context:** the owner holds several channels (WhatsApp, Discord, Telegram, web, CLI) in one deployment; "from Discord, send this file to my colleague on WhatsApp" must work safely; `docs/audit.md` §2.2 shows it fails at five layers.
+- **Context:** the owner holds several channels (WhatsApp, Discord, Telegram, web, CLI) in one deployment; "from Discord, send this file to my colleague on WhatsApp" must work safely across all five routing layers.
 - **Supersedes:** —
 - **Related:** ADR-0007 (authorization), ADR-0013 (turn lifecycle), ADR-0018 (gateway contract), ADR-0032 (address and command), ADR-0046 (gateway access), ADR-0048 (single-tenant), ADR-0049 (audit remediation)
 - **Implementation:** draft — no layer is changed yet.

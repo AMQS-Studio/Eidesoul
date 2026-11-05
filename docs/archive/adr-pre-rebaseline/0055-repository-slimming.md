@@ -3,7 +3,7 @@
 - **Status:** accepted
 - **Date:** 2026-11-05
 - **Deciders:** Muqsith (owner)
-- **Context:** `docs/audit.md` §4.1 and §4.3 measure 413 files and about 101,000 lines, with governance scripts that the code evades; `docs/audit2.md` §5.1 endorses the cleanup. Several proposals contradict current hard rules in `AGENTS.md`, so the owner decided each one (§4.2).
+- **Context:** repository review measured 413 files and about 101,000 lines, with governance scripts that the code evades. Several proposals touch current hard rules in `AGENTS.md`, so the owner decided each one (§4.2).
 - **Supersedes:** —
 - **Related:** ADR-0009 (ADR home), ADR-0031 (engine structure), ADR-0037 (module budgets), ADR-0049 (audit remediation), ADR-0051 (native memory retrieval), ADR-0054 (extension DX)
 - **Implementation:** draft — the owner decided §4.2 on 2026-11-05; no file has been deleted or rewritten yet.
@@ -100,7 +100,7 @@ acceptance before it starts.
 3. `engine/commands/` merges its one-line wrappers into one declarative module.
 4. `admin/` keeps the CLI and the templates; logo art and brand helpers fold into one module.
 5. The `turn/` helpers become explicit stages (ADR-0049 §4.3.1).
-6. The proposed target tree of `docs/audit.md` §4.3.2 is a direction, not a contract: ADR-0031 §4.3 and
+6. The proposed target tree is a direction, not a contract: ADR-0031 §4.3 and
    ADR-0037 are rewritten only after merges 1–5 prove the shape.
 
 ### 4.4 Fewer ADRs

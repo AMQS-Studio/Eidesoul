@@ -24,7 +24,7 @@ coverage.xml
 
 # docs audit scratch files
 docs/audit*.md
-docs/note.md
+docs/note*.md
 note.md
 
 

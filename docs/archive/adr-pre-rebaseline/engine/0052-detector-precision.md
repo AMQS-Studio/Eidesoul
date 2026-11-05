@@ -3,7 +3,7 @@
 - **Status:** accepted
 - **Date:** 2026-11-05
 - **Deciders:** Muqsith (owner)
-- **Context:** the audits reproduced false detections live on everyday Indonesian and English sentences ("Halo sobat", "lampu mau mati", "token listrik", "ketemu pukul 3"); the owner wants natural conversation without hijacked words (`docs/note.md` §4).
+- **Context:** runtime probes reproduced false detections live on everyday Indonesian and English sentences ("Halo sobat", "lampu mau mati", "token listrik", "ketemu pukul 3"); the owner wants natural conversation without hijacked words.
 - **Supersedes:** —
 - **Related:** ADR-0033 (neutral core), ADR-0038 (privacy layers), ADR-0043 (research contract), ADR-0045 (character without local packs), ADR-0049 (audit remediation)
 - **Implementation:** draft — detectors are unchanged.

@@ -209,16 +209,17 @@ def _parse_synonym_row(cells: list[str], synonyms: dict[str, list[tuple[str, str
 
 
 def register_synonyms(root: Path) -> tuple[dict[str, list[tuple[str, str]]], int]:
+    markers = ("Canonical term register", "Register istilah kanonik")
     for path in adr_files(root):
         text = read(path)
-        if "Register istilah kanonik" not in text:
+        if not any(m in text for m in markers):
             continue
         m_num = NAME_RE.match(path.name)
         owner_num = int(m_num.group(1)) if m_num else 8
         in_table = False
         synonyms: dict[str, list[tuple[str, str]]] = {}
         for line in text.splitlines():
-            if "Register istilah kanonik" in line:
+            if any(m in line for m in markers):
                 in_table = True
                 continue
             if in_table and line.startswith("## "):
@@ -226,6 +227,7 @@ def register_synonyms(root: Path) -> tuple[dict[str, list[tuple[str, str]]], int
             if (
                 in_table
                 and line.startswith("|")
+                and not line.startswith("| Canonical term")
                 and not line.startswith("| Istilah kanonik")
                 and not line.startswith("|---")
             ):
@@ -352,7 +354,15 @@ def check_synonyms(name: str, text: str, synonyms: dict[str, list[tuple[str, str
                 continue
             for identifier, banned_list in synonyms.items():
                 for term, scope in banned_list:
-                    if scope in ("nama role", "kolom", "column") and scope not in ctx:
+                    scoped = (
+                        "nama role",
+                        "role name",
+                        "kolom",
+                        "column",
+                        "in soul.yaml",
+                        "dalam soul.yaml",
+                    )
+                    if scope in scoped and scope not in ctx:
                         continue
                     for defined in names:
                         if defined.lower() == term.lower():

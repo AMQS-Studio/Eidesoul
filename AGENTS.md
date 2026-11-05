@@ -17,7 +17,7 @@ Hard rules and timeless architectural invariants for changes in this repo.
   harness maintaining one continuous identity (soul), persistent memory, and access control.
 - **Strict Gateway Separation:** Core lives in `monoagens/engine/` and must never import
   `monoagens.gateways`, protocol SDKs (e.g. `neonize`), or gateway-specific implementations.
-- **appendage Contract:** Gateways connect via the inbound contracts in `monoagens/engine/inbound.py`
+- **Appendage Contract:** Gateways connect via the inbound contracts in `monoagens/engine/inbound.py`
   (`Percept`, `Address`, `Action`, `Receipt`, `GatewayCore`). Gateways own address normalization
   and transport dispatch; core holds no transport vocabulary or address parsing.
 - **Provider Protocol Seam:** Provider adapters in `monoagens/providers/` handle wire facts
@@ -29,14 +29,13 @@ Hard rules and timeless architectural invariants for changes in this repo.
 - **No Hardcoded Models:** `engine.llm.model` is the operator's choice via configuration.
   Code must never pin or default a specific model ID or force reasoning effort.
 
-## 3. Storage and Single-Tenant Invariants
+## 3. Storage and Process Invariants
 
-- **Sovereign Single-Tenant Architecture:**
+- **Dedicated Sovereign Architecture:**
   1 Deployment = 1 Soul = 1 PostgreSQL Database = 1 Primary Process.
-  The core schema contains no `tenant_id` or multi-tenant row-level security columns. Isolation
-  across tenants is the responsibility of the infrastructure/container layer outside this repo.
+  The core schema stays lightweight and scoped to a single deployment.
 - **Single Primary Process:** Enforced via `engine_lease` in PostgreSQL with `CheckConstraint("id = 1")`.
-  An instance without the lease remains in standby.
+  An instance without the lease remains in standby and writes nothing to the database.
 - **Single System of Record:** PostgreSQL + pgvector is the sole storage engine. Schema migrations
   go exclusively through the Alembic chain in `migrations/`.
 - **Authoritative Configuration:** Host YAML files (`config.yaml`, `roles.yaml`, `soul.yaml`, `.env`)
@@ -55,7 +54,7 @@ Hard rules and timeless architectural invariants for changes in this repo.
 - **Cross-Thread Isolation:** Memory queries are strictly scoped to `global` + `person:<sender>` +
   `thread:<active_thread>`. Private memories of other users or threads must never leak.
 
-## 5. Security, Otorisasi, and Tools
+## 5. Security, Authorization, and Tools
 
 - **Single Outbound Door:** All outbound messages, file deliveries, and side-effecting actions must
   pass through `Agent.dispatch()`.

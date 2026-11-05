@@ -24,11 +24,11 @@ file's own path, and an `Implementation` line (`implemented`, `partial`, or `dra
 
 | ADR | Title | Folder | Implementation |
 |---|---|---|---|
-| [0001](adr/0001-sovereign-agent-and-invariants.md) | Sovereign Agent and Core Invariants — Single Tenant, One Primary, and Hexagonal Seam | root | implemented |
-| [0002](adr/engine/0002-unified-memory-and-privacy.md) | Unified Memory and Layered Privacy — Native PostgreSQL, Hybrid Retrieval, and Mem0 Retired | engine | partial |
-| [0003](adr/engine/0003-turn-lifecycle-lease-and-durability.md) | Turn Lifecycle, Primary Lease, and Crash Safety — Atomic Fencing and Idempotent Resume | engine | partial |
+| [0001](adr/0001-sovereign-agent-and-invariants.md) | Sovereign Agent and Core Invariants — One Soul, One Database, One Primary, and Hexagonal Seam | root | partial |
+| [0002](adr/engine/0002-unified-memory-and-privacy.md) | Unified Memory, Layered Privacy, and Detector Precision — Native PostgreSQL Hybrid Search and Word Boundaries | engine | partial |
+| [0003](adr/engine/0003-turn-lifecycle-lease-and-durability.md) | Turn Lifecycle, Primary Lease, and Crash Safety — Atomic Fencing, Non-Blocking Loop, and Idempotent Resume | engine | partial |
 | [0004](adr/engine/0004-core-tools-and-cross-gateway-messaging.md) | Core Tools and Cross-Gateway Messaging — Universal Delivery, Origin Verification, and Tool Contracts | engine | partial |
 | [0005](adr/engine/0005-unified-job-engine-and-extensions.md) | Unified Job Engine and Extension Architecture — Workflows, Tasks, Plugins, and Provider Adapters | engine | partial |
 | [0006](adr/engine/0006-access-control-roles-and-guard.md) | Access Control, Role-Based Security, and Sandbox Guard — RBAC, Identity Linking, and Command Screening | engine | partial |
 | [0007](adr/0007-distribution-install-and-initialization.md) | Distribution, Installation, and Initialization — Terminal Wizard, Thin Bootstrap, and Container Packaging | root | partial |
-| [0008](adr/0008-modular-architecture-and-code-hygiene.md) | Modular Architecture, Code Hygiene, and Honest Budgets — ADR Home, Typed Pipeline, and Vendor Trimming | root | partial |
+| [0008](adr/0008-modular-architecture-and-code-hygiene.md) | Modular Architecture, Code Hygiene, and Honest Budgets — ADR Home, Typed Pipeline, and Testing Discipline | root | partial |
