@@ -657,7 +657,7 @@ refresh_existing_checkout() {
 }
 
 looks_like_monoagens_dir() {
-    [[ -f "$1/pyproject.toml" || -f "$1/install.sh" || -d "$1/monoagens" || -f "$1/uv.lock" ]]
+    [[ -f "$1/install.sh" || -d "$1/monoagens" || -f "$1/uv.lock" ]]
 }
 
 guard_install_dir() {
@@ -680,6 +680,9 @@ prepare_dir() {
     guard_install_dir
     stage "install directory: $dir"
     if [[ -f "$dir/pyproject.toml" ]]; then
+        if ! looks_like_monoagens_dir "$dir"; then
+            die "$dir has a pyproject.toml but is not a MonoAgens checkout; choose another directory"
+        fi
         refresh_existing_checkout
         return 0
     fi

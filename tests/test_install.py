@@ -348,6 +348,29 @@ prepare_dir
     assert (target / "install.sh").is_file()
 
 
+def test_an_unrelated_project_is_not_refreshed(tmp_path):
+    target = tmp_path / "other"
+    target.mkdir()
+    (target / "pyproject.toml").write_text("[project]\nname = 'other'\n", encoding="utf-8")
+    code = """
+MONOAGENS_INSTALL_SOURCED=1
+source "$1/install.sh"
+dir="$2"
+prepare_dir
+"""
+    result = subprocess.run(
+        ["bash", "-c", code, "_", str(ROOT), str(target)],
+        env=clean_env(),
+        capture_output=True,
+        text=True,
+        timeout=60,
+        check=False,
+    )
+    assert result.returncode != 0
+    assert "not a MonoAgens checkout" in result.stderr
+    assert (target / "pyproject.toml").read_text(encoding="utf-8") == "[project]\nname = 'other'\n"
+
+
 def test_prepare_database_env_marks_a_container_database(tmp_path):
     env_file = tmp_path / ".env"
     code = """
