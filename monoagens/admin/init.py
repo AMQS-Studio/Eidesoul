@@ -44,9 +44,14 @@ class Answers:
     database_url: str = ""
     label: str = ""
     voice_on: bool = False
+    voice_parts: tuple[str, ...] | None = None
     language: str = ""
     locale: str = ""
     timezone: str = ""
+    websearch: str = ""
+    websearch_url: str = ""
+    tools: tuple[str, ...] | None = None
+    gateways: tuple[str, ...] | None = None
 
 
 # --- values -------------------------------------------------------------------------------
@@ -203,7 +208,7 @@ def _set_env(text: str, name: str, value: str) -> str:
     return "\n".join(lines) + "\n"
 
 
-def build(
+def build(  # noqa: C901, PLR0912
     *,
     provider: str,
     api_key: str = "",
@@ -214,6 +219,11 @@ def build(
     language: str = "",
     locale: str = "",
     timezone: str = "",
+    websearch: str = "",
+    websearch_url: str = "",
+    tools: tuple[str, ...] | None = None,
+    gateways: tuple[str, ...] | None = None,
+    voice_parts: tuple[str, ...] | None = None,
 ) -> dict[str, str]:
     """The four files: `templates.files()` plus the operator's answers, nothing else."""
     locale = locale or host_locale()
@@ -224,6 +234,25 @@ def build(
     if not timezone:
         raise ValueError("a timezone is required; pass --timezone <IANA name>")
     clock.zone(timezone)
+    from . import catalog
+
+    backend_names = {item.name for item in catalog.websearch_backends()} | {"off"}
+    if websearch and websearch not in backend_names:
+        raise ValueError(f"unknown websearch backend '{websearch}'")
+    if websearch == "searxng" and not websearch_url.strip():
+        raise ValueError("searxng needs a URL")
+    if tools is not None:
+        unknown = set(tools).difference(catalog.tool_names())
+        if unknown:
+            raise ValueError(f"unknown tool(s): {', '.join(sorted(unknown))}")
+    if gateways is not None:
+        unknown = set(gateways).difference({item.name for item in catalog.gateways()})
+        if unknown:
+            raise ValueError(f"unknown gateway(s): {', '.join(sorted(unknown))}")
+    if voice_parts is not None:
+        unknown = set(voice_parts).difference(templates.VOICE_PARTS)
+        if unknown:
+            raise ValueError(f"unknown voice part(s): {', '.join(sorted(unknown))}")
     contents = templates.files(
         provider=provider,
         model=model,
@@ -231,6 +260,11 @@ def build(
         locale=locale,
         timezone=timezone,
         voice_enabled=voice_enabled(voice),
+        voice_parts=voice_parts,
+        websearch=websearch,
+        websearch_url=websearch_url,
+        tools=tools,
+        gateways=gateways,
     )
     if label.strip():
         roles = yaml.safe_load(contents["roles.yaml"])
@@ -371,9 +405,14 @@ def init(
     database_url: str = "",
     label: str = "",
     voice_layer: str = "off",
+    voice_parts: tuple[str, ...] | None = None,
     language: str = "",
     locale: str = "",
     timezone: str = "",
+    websearch: str = "",
+    websearch_url: str = "",
+    tools: tuple[str, ...] | None = None,
+    gateways: tuple[str, ...] | None = None,
 ) -> tuple[list[Path], list[Path]]:
     """Write the scaffold without prompting; return (written, skipped)."""
     error = validate_provider(provider) or validate_database_url(database_url)
@@ -386,9 +425,14 @@ def init(
         database_url=database_url,
         label=label,
         voice=voice_layer,
+        voice_parts=voice_parts,
         language=language,
         locale=locale,
         timezone=timezone,
+        websearch=websearch,
+        websearch_url=websearch_url,
+        tools=tools,
+        gateways=gateways,
     )
     decisions: dict[str, str] = dict.fromkeys(HOST_FILES, "replace" if force else "new")
     return write_files(folder, contents, decisions)

@@ -32,7 +32,15 @@ from .init import (
     write_files,
 )
 
-STEPS = ("location", "provider", "credential", "model", "database", "identity", "voice layer")
+STEPS = (
+    "location",
+    "provider",
+    "credential",
+    "model",
+    "database",
+    "identity",
+    "voice layer",
+)
 STEP_INDEX = {name: index for index, name in enumerate(STEPS)}
 
 def _rail(step: int, color: bool = False) -> list[str]:
@@ -284,6 +292,96 @@ def _ask_label(state: Answers, stdin: TextIO, stdout: TextIO, color: bool = Fals
     )
 
 
+def _ask_capabilities(state: Answers, stdin: TextIO, stdout: TextIO, color: bool = False) -> None:
+    from . import catalog
+
+    header = [
+        *banner(False),
+        "  capabilities",
+        "  gateways  ·  web search  ·  tools  ·  voice",
+    ]
+    if state.gateways is None:
+        choices = [
+            terminal.Choice(item.name, item.detail, item.name) for item in catalog.gateways()
+        ]
+        if choices:
+            picked = terminal.multi_choose(
+                stdin=stdin,
+                stdout=stdout,
+                title="which gateways should be enabled?",
+                choices=choices,
+                selected=catalog.default_gateways(),
+                header=header,
+                color=color,
+                plain=not color,
+            )
+            state.gateways = tuple(picked)
+    if not state.websearch:
+        backends = catalog.websearch_backends()
+        choices = [
+            terminal.Choice(item.name, item.detail, item.name) for item in backends
+        ]
+        choices.append(terminal.Choice("off", "disable web search and research", "off"))
+        default = 0 if backends else len(choices) - 1
+        picked = terminal.choose(
+            stdin=stdin,
+            stdout=stdout,
+            title="which web search backend?",
+            choices=choices,
+            default=default,
+            header=header,
+            searchable=False,
+            allow_back=False,
+            color=color,
+            plain=not color,
+        )
+        state.websearch = choices[picked].value
+        if state.websearch == "searxng":
+            while not state.websearch_url:
+                state.websearch_url = terminal.text(
+                    stdin=stdin,
+                    stdout=stdout,
+                    title="SearXNG base URL",
+                    header=header,
+                    detail=["JSON endpoint, for example http://127.0.0.1:8888"],
+                    allow_back=False,
+                    color=color,
+                    plain=not color,
+                )
+    if state.tools is None:
+        choices = [
+            terminal.Choice(item.name, item.detail, item.name) for item in catalog.tools()
+        ]
+        if choices:
+            picked = terminal.multi_choose(
+                stdin=stdin,
+                stdout=stdout,
+                title="which tools should the member role receive?",
+                choices=choices,
+                selected=catalog.default_tools(),
+                header=header,
+                color=color,
+                plain=not color,
+            )
+            state.tools = tuple(picked)
+    if state.voice_on and not state.voice_parts:
+        choices = [
+            terminal.Choice(item.name, item.detail, item.name) for item in catalog.voice_parts()
+        ]
+        if choices:
+            picked = terminal.multi_choose(
+                stdin=stdin,
+                stdout=stdout,
+                title="which voice layers should be active?",
+                choices=choices,
+                selected=catalog.default_voice_parts(),
+                header=header,
+                color=color,
+                plain=not color,
+            )
+            state.voice_parts = tuple(picked)
+
+
 def _ask_voice(state: Answers, stdin: TextIO, stdout: TextIO, color: bool = False) -> None:
     default = 1 if state.voice_on else 0
     picked = terminal.choose(
@@ -336,6 +434,10 @@ def review_lines(
                     f"      engine.llm.api_key_env  {llm['api_key_env']}",
                     f"      engine.llm.model        {llm['model'] or '(not set)'}",
                     f"      database.url_env        {config['database']['url_env']}",
+                    "      web_search.base_url     "
+                    f"{config['web_search']['base_url'] or 'ddgs (no URL)'}",
+                    f"      engine.research.mode    {config['engine']['research']['mode']}",
+                    f"      gateways                {', '.join(config['gateways']) or '(none)'}",
                     f"      engine.default_role     {config['engine']['default_role']}",
                     "      defaults                guard on, research auto, memory privacy on",
                 ]
@@ -352,7 +454,13 @@ def review_lines(
             name = soul.get("name")
             language = soul.get("language")
             lines.append(f"      name / language         {name} / {language}")
+            parts = [
+                name
+                for name, value in (soul.get("voice") or {}).items()
+                if isinstance(value, dict) and value.get("enabled") is True
+            ]
             lines.append(f"      soul.voice.enabled      {'on' if enabled else 'off'}")
+            lines.append(f"      soul.voice.parts        {', '.join(parts) or '(none)'}")
             persona = "set" if soul.get("persona") else "empty"
             lines.append(f"      persona                 {persona}")
         else:
@@ -439,7 +547,7 @@ def _choose_step(stdin: TextIO, stdout: TextIO) -> int:
         _say(stdout, f"  enter 1-{len(STEPS)}")
 
 
-def _interactive(  # noqa: C901
+def _interactive(  # noqa: C901, PLR0912
     folder: str | Path,
     *,
     stdin: TextIO,
@@ -448,6 +556,7 @@ def _interactive(  # noqa: C901
     answers: Answers,
     locked: set[int],
     force: bool,
+    ask_capabilities: bool = False,
 ) -> tuple[list[Path], list[Path]]:
     # A line fallback must never print ANSI: if curses cannot run, drop colour too.
     use_curses = terminal.interactive(stdin, stdout, plain=not color)
@@ -473,6 +582,9 @@ def _interactive(  # noqa: C901
                             step -= 1
                         continue
                 step += 1
+            if ask_capabilities:
+                _ask_capabilities(answers, stdin, stdout, color)
+                ask_capabilities = False
             base = Path(answers.location).expanduser().resolve()
             contents = build(
                 provider=answers.provider,
@@ -481,9 +593,14 @@ def _interactive(  # noqa: C901
                 database_url=answers.database_url,
                 label=answers.label,
                 voice=answers.voice_on,
+                voice_parts=answers.voice_parts,
                 language=answers.language,
                 locale=answers.locale,
                 timezone=answers.timezone,
+                websearch=answers.websearch,
+                websearch_url=answers.websearch_url,
+                tools=answers.tools,
+                gateways=answers.gateways,
             )
             if decisions is None:
                 decisions = _decide(base, force, stdin, stdout)
@@ -516,6 +633,12 @@ def wizard(
     language: str | None = None,
     locale: str | None = None,
     timezone: str | None = None,
+    websearch: str | None = None,
+    websearch_url: str | None = None,
+    tools: tuple[str, ...] | None = None,
+    gateways: tuple[str, ...] | None = None,
+    voice_parts: tuple[str, ...] | None = None,
+    ask_capabilities: bool = False,
     force: bool = False,
     ask_location: bool = True,
 ) -> tuple[list[Path], list[Path]]:
@@ -536,6 +659,11 @@ def wizard(
         language=language or "",
         locale=locale or "",
         timezone=timezone or "",
+        websearch=websearch or "",
+        websearch_url=websearch_url or "",
+        tools=tools,
+        gateways=gateways,
+        voice_parts=voice_parts,
     )
     locked: set[int] = set()
     if not ask_location:
@@ -562,6 +690,7 @@ def wizard(
             answers=answers,
             locked=locked,
             force=force,
+            ask_capabilities=ask_capabilities,
         )
     except (KeyboardInterrupt, terminal.Cancelled):
         _say(stream_out, "")

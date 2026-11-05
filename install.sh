@@ -40,6 +40,7 @@ fi
 [[ -n "$start_dir" && -d "$start_dir" ]] || start_dir="${HOME:-/}"
 dir="$default_dir"
 dir_set=0
+dir_fresh=0
 stack="native"
 stack_set=0
 container_engine=""
@@ -57,6 +58,11 @@ model=""
 database_url=""
 label=""
 voice_layer=""
+websearch=""
+websearch_url=""
+tools=""
+gateways=()
+voice_parts=""
 language=""
 locale=""
 timezone=""
@@ -127,6 +133,11 @@ Usage: bash install.sh [options]
   --locale TAG           locale for the soul (default: the host locale)
   --timezone IANA        IANA timezone for the soul (default: the host zone)
   --voice-layer on|off   keep emotion, humanize, character (default on) or turn them off
+  --voice-parts LIST     comma-separated voice sub-sections (default: the seed)
+  --gateway NAME         enable a discovered gateway (repeatable)
+  --websearch BACKEND    any indexed search backend or off
+  --websearch-url URL    SearXNG base URL
+  --tools LIST           comma-separated tool names for the member role
   --skip-selftest        skip the closing `monoagens selftest`
   --no-color             plain output (also honoured via NO_COLOR)
   -h, --help             this text
@@ -231,6 +242,11 @@ parse_args() {
             --language) [[ $# -ge 2 ]] || usage 2 "missing value for --language"; language="$2"; shift 2 ;;
             --locale) [[ $# -ge 2 ]] || usage 2 "missing value for --locale"; locale="$2"; shift 2 ;;
             --timezone) [[ $# -ge 2 ]] || usage 2 "missing value for --timezone"; timezone="$2"; shift 2 ;;
+            --voice-parts) [[ $# -ge 2 ]] || usage 2 "missing value for --voice-parts"; voice_parts="$2"; shift 2 ;;
+            --gateway) [[ $# -ge 2 ]] || usage 2 "missing value for --gateway"; gateways+=("$2"); shift 2 ;;
+            --websearch) [[ $# -ge 2 ]] || usage 2 "missing value for --websearch"; websearch="$2"; shift 2 ;;
+            --websearch-url) [[ $# -ge 2 ]] || usage 2 "missing value for --websearch-url"; websearch_url="$2"; shift 2 ;;
+            --tools) [[ $# -ge 2 ]] || usage 2 "missing value for --tools"; tools="$2"; shift 2 ;;
             --voice-layer)
                 [[ $# -ge 2 ]] || usage 2 "missing value for --voice-layer"
                 voice_layer="$2"
@@ -260,6 +276,11 @@ parse_args() {
             --language=*) language="${1#*=}"; shift ;;
             --locale=*) locale="${1#*=}"; shift ;;
             --timezone=*) timezone="${1#*=}"; shift ;;
+            --voice-parts=*) voice_parts="${1#*=}"; shift ;;
+            --gateway=*) gateways+=("${1#*=}"); shift ;;
+            --websearch=*) websearch="${1#*=}"; shift ;;
+            --websearch-url=*) websearch_url="${1#*=}"; shift ;;
+            --tools=*) tools="${1#*=}"; shift ;;
             --voice-layer=*) voice_layer="${1#*=}"; shift ;;
             --dry-run) dry_run=1; shift ;;
             --non-interactive) non_interactive=1; shift ;;
@@ -754,6 +775,9 @@ guard_install_dir() {
 
 prepare_dir() {
     guard_install_dir
+    if [[ ! -e "$dir" ]] || [[ -z "$(ls -A -- "$dir" 2>/dev/null)" ]]; then
+        dir_fresh=1
+    fi
     stage "install directory: $dir"
     if [[ -f "$dir/pyproject.toml" ]]; then
         if ! looks_like_monoagens_dir "$dir"; then
@@ -846,18 +870,114 @@ run_soft() {
 }
 
 uv_sync() {
-    ( cd -- "$dir" && exec "$uv" sync --locked )
+    ( cd -- "$dir" && export UV_NO_DEV=1 && exec "$uv" sync --locked --no-dev )
+}
+
+uv_python_in_dir() {
+    ( cd -- "$dir" && export UV_NO_DEV=1 && exec "$uv" run python "$@" )
+}
+
+enabled_gateways() {
+    uv_python_in_dir - "$dir" <<'PY'
+import sys
+from pathlib import Path
+import tomllib
+import yaml
+
+base = Path(sys.argv[1])
+raw = yaml.safe_load((base / "config.yaml").read_text(encoding="utf-8")) or {}
+gateways = raw.get("gateways") or {}
+extras = set(
+    (tomllib.loads((base / "pyproject.toml").read_text(encoding="utf-8")).get("project") or {}).get(
+        "optional-dependencies"
+    )
+    or {}
+)
+for name, value in gateways.items():
+    if isinstance(value, dict) and value.get("enabled") is True and name in extras:
+        print(name)
+PY
+}
+
+uv_sync_extra() {
+    ( cd -- "$dir" && export UV_NO_DEV=1 && exec "$uv" sync --locked --no-dev --extra "$1" )
+}
+
+sync_gateway_extras() {
+    local found=() extra
+    mapfile -t found < <(enabled_gateways 2>/dev/null || true)
+    if ((${#found[@]} == 0)); then
+        return 0
+    fi
+    for extra in "${found[@]}"; do
+        run_logged "install the $extra gateway extra" "uv sync --locked --no-dev --extra $extra" \
+            uv_sync_extra "$extra"
+    done
 }
 
 uv_run_in_dir() {
-    ( cd -- "$dir" && exec "$uv" run monoagens "$@" )
+    ( cd -- "$dir" && export UV_NO_DEV=1 && exec "$uv" run monoagens "$@" )
+}
+
+enabled_pairable_gateways() {
+    uv_python_in_dir - "$dir" <<'PY'
+import sys
+from pathlib import Path
+import yaml
+from monoagens.gateways import gateway_index
+
+base = Path(sys.argv[1])
+raw = yaml.safe_load((base / "config.yaml").read_text(encoding="utf-8")) or {}
+for name, value in (raw.get("gateways") or {}).items():
+    info = gateway_index().get(str(name))
+    if isinstance(value, dict) and value.get("enabled") is True and info and info.can_pair:
+        print(name)
+PY
+}
+
+pair_gateways() {
+    local found=() name answer="no" code=0
+    (( non_interactive )) && return 0
+    database_configured || return 0
+    if (( dry_run )); then
+        detail "would offer to pair enabled gateways that support it"
+        return 0
+    fi
+    if [[ "$stack" == "compose" ]]; then
+        detail "pair a gateway inside the running stack: ${COMPOSE[*]:-podman compose} exec monoagens monoagens gateway pair <name>"
+        return 0
+    fi
+    mapfile -t found < <(enabled_pairable_gateways 2>/dev/null || true)
+    if ((${#found[@]} == 0)); then
+        return 0
+    fi
+    for name in "${found[@]}"; do
+        if (( dry_run )); then
+            detail "would offer to pair gateway: $name"
+            continue
+        fi
+        if answer="$(ui_choice confirm --title "Pair gateway $name now?" \
+            --detail "scan the code with the device's linked-device screen" --default yes)"; then
+            :
+        else
+            code=$?
+            ui_cancelled "$code"
+            answer="no"
+        fi
+        if [[ "$answer" == "yes" ]]; then
+            uv_run_in_dir gateway pair "$name" || warn "pairing $name did not finish; rerun: monoagens gateway pair $name"
+        else
+            detail "pair later: monoagens gateway pair $name"
+        fi
+    done
 }
 
 # --- init -----------------------------------------------------------------------------
 
 
 build_init_args() {
-    INIT_ARGS=(init --dir "$dir" --no-location)
+    INIT_ARGS=(init --dir "$dir" --no-location --capabilities)
+    (( dir_fresh )) && INIT_ARGS+=(--force)
     if [[ -n "$voice_layer" ]]; then INIT_ARGS+=(--voice-layer "$voice_layer"); fi
     if [[ -n "$provider" ]]; then INIT_ARGS+=(--provider "$provider"); fi
     if [[ -n "$model" ]]; then INIT_ARGS+=(--model "$model"); fi
@@ -866,6 +986,14 @@ build_init_args() {
     if [[ -n "$language" ]]; then INIT_ARGS+=(--language "$language"); fi
     if [[ -n "$locale" ]]; then INIT_ARGS+=(--locale "$locale"); fi
     if [[ -n "$timezone" ]]; then INIT_ARGS+=(--timezone "$timezone"); fi
+    if [[ -n "$voice_parts" ]]; then INIT_ARGS+=(--voice-parts "$voice_parts"); fi
+    if [[ ${#gateways[@]} -gt 0 ]]; then
+        local gateway
+        for gateway in "${gateways[@]}"; do INIT_ARGS+=(--gateway "$gateway"); done
+    fi
+    if [[ -n "$websearch" ]]; then INIT_ARGS+=(--websearch "$websearch"); fi
+    if [[ -n "$websearch_url" ]]; then INIT_ARGS+=(--websearch-url "$websearch_url"); fi
+    if [[ -n "$tools" ]]; then INIT_ARGS+=(--tools "$tools"); fi
     return 0
 }
 
@@ -1336,6 +1464,7 @@ stage_native_database() {
     if [[ "$database_mode" == "external" ]]; then
         stage_database
         bootstrap_identity
+        pair_gateways
         stage_selftest
         return 0
     fi
@@ -1345,6 +1474,7 @@ stage_native_database() {
     fi
     stage_database
     bootstrap_identity
+    pair_gateways
     stage_selftest
 }
 
@@ -1356,6 +1486,7 @@ stage_compose() {
     run_logged "publish the schema (compose exec)" \
         "${COMPOSE[*]:-podman compose} exec monoagens monoagens db upgrade" compose_run db upgrade
     compose_bootstrap_identity
+    pair_gateways
     if (( skip_selftest )); then
         detail "self-check skipped (--skip-selftest)"
     else
@@ -1405,9 +1536,9 @@ print_cli_steps() {
         if ! database_configured; then
             say "    # fill .env first: MONOAGENS_DATABASE_URL, POSTGRES_PASSWORD, and the provider key"
         fi
-        say "    uv run monoagens db upgrade"
-        say "    uv run monoagens run"
-        say "  Run the setup again: uv run monoagens init --dir ."
+        say "    uv run --no-dev monoagens db upgrade"
+        say "    uv run --no-dev monoagens run"
+        say "  Run the setup again: uv run --no-dev monoagens init --dir ."
     fi
     say ""
     say "  Log: $log_file"
@@ -1480,9 +1611,10 @@ main() {
     detail "directory:  $dir"
     log "choices: stack=$stack engine=${container_engine:-<external>} database=$database_mode dir=$dir"
     prepare_dir
-    run_logged "install the locked dependencies (uv sync --locked)" "uv sync --locked" uv_sync
+    run_logged "install the locked dependencies (uv sync --locked --no-dev)" "uv sync --locked --no-dev" uv_sync
     prepare_database_before_init
     run_init
+    sync_gateway_extras
     prepare_database_after_init
     if [[ "$stack" == "compose" ]]; then
         stage_compose

@@ -1,5 +1,15 @@
 # LOG
 
+## 2026-11-05 — Capability setup and installer dependency scope
+
+The installer now runs `uv sync --locked --no-dev` and exports `UV_NO_DEV=1` for every later
+`uv run`, so test tooling cannot return through an implicit sync. It asks for gateways, web
+search, member tools, and voice parts through auto-indexed catalogs (no hand-written lists),
+installs an optional gateway extra only after `init` enables it, and offers foreground QR
+pairing after the database exists. `monoagens gateway list/add/enable/disable/remove/pair`
+provides the same path after installation. A fresh target is configured with `--force` so
+seed host files cannot silently override the chosen capabilities.
+
 ## 2026-11-05 — Terminal stress pass on the installer
 
 Ran `install.sh` under a fake HOME in tmux at 120x42 and 60x15. Fixed Ctrl-C in the
@@ -7,7 +17,7 @@ installer menus leaking a Python traceback, Escape/`q` falling through to the li
 fallback where an arrow key became an invalid option, and curses text fields ignoring
 Ctrl-U/Ctrl-W. A `C`/`POSIX` host locale now asks for one language instead of failing
 inside `init`; `--language`, `--locale`, and `--timezone` are forwarded to `init`.
-Tests: `tests/test_install.py` (23) and `tests/test_init.py` (41) pass.
+Tests: `tests/test_install.py` (25), `tests/test_init.py` (41), and `tests/test_catalog.py` (9) pass.
 
 ## 2026-11-05 — Installer deletion paths removed
 

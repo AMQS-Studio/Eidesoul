@@ -1,9 +1,13 @@
 """Gateways are appendages: transport in and out of the core, never leaking into the engine."""
 
 
+import ast
 import importlib
+import importlib.util
 import logging
+from dataclasses import dataclass
 from importlib.metadata import entry_points
+from pathlib import Path
 from typing import Any
 
 from ..engine.config import ConfigError
@@ -11,32 +15,122 @@ from ..engine.inbound import capability_report, ensure_core
 
 log = logging.getLogger(__name__)
 
-BUILTIN = {
-    "whatsapp": "monoagens.gateways.whatsapp.gateway:WhatsAppGateway",
-    "cli": "monoagens.gateways.cli.gateway:CliGateway",
-    "harness": "monoagens.gateways.harness.gateway:HarnessGateway",
-}
+
+@dataclass(frozen=True)
+class GatewayInfo:
+    """One discoverable gateway: builtin package or entry point."""
+
+    name: str
+    module: str
+    attribute: str
+    source: str = "builtin"
+    can_pair: bool = False
+
+    @property
+    def installed(self) -> bool:
+        try:
+            return importlib.util.find_spec(self.module) is not None
+        except (ImportError, ModuleNotFoundError, ValueError):
+            return False
+
+
+def _class_name(path: Path, gateway_name: str) -> str | None:
+    """Find the class in a builtin gateway module whose `name` is the directory name."""
+    try:
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+    except (OSError, SyntaxError):
+        return None
+    for node in tree.body:
+        if not isinstance(node, ast.ClassDef):
+            continue
+        for statement in node.body:
+            if not isinstance(statement, (ast.Assign, ast.AnnAssign)):
+                continue
+            targets = statement.targets if isinstance(statement, ast.Assign) else [statement.target]
+            if not any(isinstance(target, ast.Name) and target.id == "name" for target in targets):
+                continue
+            value = statement.value
+            if isinstance(value, ast.Constant) and value.value == gateway_name:
+                return node.name
+    return None
+
+
+def _has_pair(path: Path) -> bool:
+    try:
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+    except (OSError, SyntaxError):
+        return False
+    return any(
+        isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name == "pair"
+        for node in ast.walk(tree)
+    )
+
+
+def _builtin_index() -> dict[str, GatewayInfo]:
+    found: dict[str, GatewayInfo] = {}
+    root = Path(__file__).parent
+    for folder in sorted(root.iterdir()):
+        module_path = folder / "gateway.py"
+        if not folder.is_dir() or not module_path.is_file():
+            continue
+        attribute = _class_name(module_path, folder.name)
+        if attribute is None:
+            continue
+        found[folder.name] = GatewayInfo(
+            folder.name,
+            f"{__name__}.{folder.name}.gateway",
+            attribute,
+            can_pair=_has_pair(folder / "cli.py"),
+        )
+    return found
+
+
+def _entrypoint_index() -> dict[str, GatewayInfo]:
+    found: dict[str, GatewayInfo] = {}
+    try:
+        entries = entry_points(group="monoagens.gateways")
+    except Exception:
+        return found
+    for entry in entries:
+        module, _, attribute = str(entry.value).partition(":")
+        if not module or not attribute or entry.name in found:
+            continue
+        found[str(entry.name)] = GatewayInfo(str(entry.name), module, attribute, "entry point")
+    return found
+
+
+def gateway_index() -> dict[str, GatewayInfo]:
+    """Every gateway visible to this install, auto-discovered from packages and entry points."""
+    found = _builtin_index()
+    for name, info in _entrypoint_index().items():
+        found.setdefault(name, info)
+    return found
 
 
 def ensure_schemas(db) -> list[str]:
-    """Create gateway-specific tables (pure SQLAlchemy, no transport connection)."""
+    """Create gateway-specific tables from each discoverable `<gateway>.schema` module."""
     done: list[str] = []
-    for module_name in ("monoagens.gateways.whatsapp.schema",):
+    for info in gateway_index().values():
+        module_name = f"{info.module.rsplit('.', 1)[0]}.schema"
         try:
             module = importlib.import_module(module_name)
         except ImportError:  # gateway extra is not installed
             continue
-        module.ensure_schema(db)
+        ensure = getattr(module, "ensure_schema", None)
+        if not callable(ensure):
+            continue
+        ensure(db)
         done.append(module_name)
     return done
 
 
 def cli_entry(name: str, *args) -> Any:
     """A transport CLI entry point, looked up by capability so core names no transport."""
-    for module_name in ("monoagens.gateways.whatsapp.cli",):
+    for info in gateway_index().values():
+        module_name = f"{info.module.rsplit('.', 1)[0]}.cli"
         try:
             module = importlib.import_module(module_name)
-        except ImportError:  # the transport extra is not installed
+        except ImportError:
             continue
         function = getattr(module, name, None)
         if callable(function):
@@ -44,28 +138,34 @@ def cli_entry(name: str, *args) -> Any:
     raise ConfigError(f"no gateway provides the '{name}' command; install its extra")
 
 
-def load_gateway(name: str):
-    """Gateway class: builtins first, then the `monoagens.gateways` entry points."""
-    target = BUILTIN.get(str(name))
-    if target is None:
-        try:
-            found = entry_points(group="monoagens.gateways")
-        except Exception:
-            found = []
-        for entry in found:
-            if entry.name == name:
-                target = entry.value
-                break
-    if target is None:
+def gateway_cli(name: str, command: str, *args) -> Any:
+    """Run one command from a named gateway's CLI module; the index supplies the module."""
+    info = gateway_index().get(str(name))
+    if info is None:
         raise ConfigError(f"unknown gateway '{name}'")
-    module_name, _, attribute = target.partition(":")
+    module_name = f"{info.module.rsplit('.', 1)[0]}.cli"
     try:
         module = importlib.import_module(module_name)
     except ImportError as exc:
+        raise ConfigError(f"gateway '{name}' needs its transport extra: {exc}") from exc
+    function = getattr(module, command, None)
+    if not callable(function):
+        raise ConfigError(f"gateway '{name}' does not provide '{command}'")
+    return function(*args)
+
+
+def load_gateway(name: str):
+    """Gateway class from the auto-indexed builtins and entry points."""
+    info = gateway_index().get(str(name))
+    if info is None:
+        raise ConfigError(f"unknown gateway '{name}'")
+    try:
+        module = importlib.import_module(info.module)
+    except ImportError as exc:
         raise ConfigError(
-            f"gateway '{name}' needs the transport extra (pip install -e '.[{name}]'): {exc}"
+            f"gateway '{name}' needs its transport extra: {exc}"
         ) from exc
-    return getattr(module, attribute)
+    return getattr(module, info.attribute)
 
 
 def build_gateways(

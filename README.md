@@ -226,6 +226,7 @@ bash install.sh --stack compose   # engine and Postgres in containers
 bash install.sh --engine docker   # Docker instead of Podman
 bash install.sh --database external --database-url URL
 bash install.sh --language en      # override a C/POSIX host locale
+bash install.sh --gateway whatsapp  # enable WhatsApp and install its extra
 bash install.sh --dry-run         # print every action, write nothing
 ```
 
@@ -288,7 +289,7 @@ export MONOAGENS_TEST_DATABASE_URL='postgresql+psycopg://monoagens:monoagens@127
 pytest -q
 ```
 
-`uv sync` installs the capability spine: Postgres+pgvector storage, Mem0 memory, the multilingual
+`uv sync --no-dev` installs the capability spine: Postgres+pgvector storage, Mem0 memory, the multilingual
 embedder, the affect prototypes, and the guard. Only transport and integrations are extras:
 
 | Extra | Brings | Needed for |
@@ -296,7 +297,7 @@ embedder, the affect prototypes, and the guard. Only transport and integrations 
 | `whatsapp` | Neonize + segno | the WhatsApp gateway |
 
 ```bash
-uv sync --extra whatsapp
+uv sync --locked --no-dev --extra whatsapp
 ```
 
 Every extra is removable: nothing in core imports it eagerly, and without it the affected tool or
@@ -412,12 +413,20 @@ This is the whole list; nowhere else in the docs enumerates gateways.
 
 - **CLI** — built in. The default config enables it, and it is how `monoagens run` and
   `monoagens console` talk to a soul without any network transport.
-- **WhatsApp** — an optional extra. Install it with `uv sync --extra whatsapp` and enable it in the
-  `gateways` section; omit both and it does not exist for this deployment. The core never imports
-  it, and the default member role never receives its `send` tool.
+- **WhatsApp** — an optional extra. `monoagens gateway add whatsapp` installs its declared
+  extra and enables it; pair with `monoagens gateway pair whatsapp`. Omit both and it does not
+  exist for this deployment. The core never imports it, and the default member role never
+  receives its `send` tool.
 - **Your own embodiment** — a robot, a voice loop, a device, or a private HTTP endpoint is just
   another gateway. Implement the inbound envelope and the gateway interface, ship the class as an
   entry point under the `monoagens.gateways` group or enable it by name, and it joins the same soul.
+
+```bash
+monoagens gateway list
+monoagens gateway add whatsapp
+monoagens gateway pair whatsapp
+monoagens gateway disable whatsapp
+```
 
 A gateway is a transport, not a brain. It normalizes input, delivers replies, and owns whatever
 body-specific tool modules it wants to expose. Gateway-owned tools are granted to roles explicitly,

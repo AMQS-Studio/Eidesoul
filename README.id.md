@@ -242,6 +242,7 @@ bash install.sh --stack compose   # engine dan Postgres di container
 bash install.sh --engine docker   # Docker, bukan Podman
 bash install.sh --database external --database-url URL
 bash install.sh --language id      # override locale host C/POSIX
+bash install.sh --gateway whatsapp  # aktifkan WhatsApp dan pasang extra-nya
 bash install.sh --dry-run         # cetak setiap aksi, tulis apa pun
 ```
 
@@ -409,13 +410,21 @@ Inilah daftar lengkapnya; tidak ada bagian lain dalam dokumentasi yang mendaftar
 
 - **CLI** — bawaan. Config default mengaktifkannya, dan inilah cara `monoagens run` serta
   `monoagens console` berbicara dengan sebuah jiwa tanpa transport jaringan.
-- **WhatsApp** — extra opsional. Pasang dengan `uv sync --extra whatsapp` dan aktifkan di bagian
-  `gateways`; hilangkan keduanya dan gateway ini tidak ada untuk deployment tersebut. Core tidak
-  pernah mengimpornya, dan peran member default tidak pernah menerima tool `send` miliknya.
+- **WhatsApp** — extra opsional. `monoagens gateway add whatsapp` memasang extra yang
+  dideklarasikan dan mengaktifkannya; lakukan pairing dengan `monoagens gateway pair whatsapp`.
+  Hilangkan keduanya dan gateway ini tidak ada untuk deployment tersebut. Core tidak pernah
+  mengimpornya, dan peran member default tidak pernah menerima tool `send` miliknya.
 - **Perwujudan Anda sendiri** — robot, loop suara, perangkat, atau endpoint HTTP privat hanyalah
   gateway lain. Implementasikan amplop masuk dan antarmuka gateway, kirim kelasnya sebagai entry
   point di grup `monoagens.gateways` atau aktifkan berdasarkan nama, dan ia bergabung ke jiwa yang
   sama.
+
+```bash
+monoagens gateway list
+monoagens gateway add whatsapp
+monoagens gateway pair whatsapp
+monoagens gateway disable whatsapp
+```
 
 Gateway adalah transport, bukan otak. Ia menormalkan input, mengantarkan balasan, dan memiliki modul
 tool khas tubuh yang ingin dieksposnya. Tool milik gateway diberikan ke peran secara eksplisit,

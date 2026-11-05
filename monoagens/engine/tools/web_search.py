@@ -2,11 +2,13 @@
 
 
 import asyncio
+import importlib.util
 import json
 import logging
 import time
 import urllib.parse
 import urllib.request
+from dataclasses import dataclass
 
 from ..config import Config
 from ..registry import Handler
@@ -25,6 +27,27 @@ SEARCH_BACKOFF = 1.5
 SNIPPET_FLOOR = 200
 MAX_FETCHES = 3
 FETCH_CHARS = 4_000
+
+
+@dataclass(frozen=True)
+class SearchBackend:
+    name: str
+    label: str
+    detail: str
+    needs_url: bool
+
+
+def backends() -> list[SearchBackend]:
+    """Backends this install can run, indexed by whether their dependency is importable."""
+    found: list[SearchBackend] = []
+    if importlib.util.find_spec("ddgs") is not None:
+        found.append(
+            SearchBackend("ddgs", "ddgs", "public result pages; no key; can rate-limit", False)
+        )
+    found.append(
+        SearchBackend("searxng", "SearXNG", "operator-owned JSON endpoint", True)
+    )
+    return found
 
 
 def searx_hits(payload: dict, limit: int) -> list[dict]:

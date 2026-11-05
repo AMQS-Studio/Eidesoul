@@ -4,6 +4,10 @@
 import asyncio
 import contextlib
 import logging
+import sys
+
+import segno
+import yaml
 
 from ...engine.config import (
     ConfigError,
@@ -21,6 +25,54 @@ from . import directory, history_sync, ingress
 from .config import WhatsAppSettings
 
 log = logging.getLogger(__name__)
+
+
+async def pair(config_path: str | None) -> int:
+    """Pair the primary WhatsApp session in the foreground; the QR stays on this terminal."""
+    from neonize.aioze.client import NewAClient
+    from neonize.aioze.events import ConnectedEv
+
+    host, paths = load_host(config_path)
+    url = resolve_database_url(host.database)
+    if not url:
+        raise ConfigError("database URL is empty")
+    db = Database(url, pool_size=host.database.pool_size, pool_timeout=host.database.pool_timeout)
+    db.ensure()
+    ensure_schemas(db)
+    body = yaml.safe_load(paths.config.read_text(encoding="utf-8")) or {}
+    raw = (body.get("gateways") or {}).get("whatsapp") or {}
+    if not isinstance(raw, dict) or raw.get("enabled") is not True:
+        raise ConfigError("gateway 'whatsapp' is not enabled in config.yaml")
+    settings = WhatsAppSettings.from_mapping(True, raw, paths.config.parent)
+    session = settings.session_db
+    done = asyncio.Event()
+    client = NewAClient(str(session), props=history_sync.history_props(False))
+
+    async def on_qr(accepted: NewAClient, data: bytes) -> None:
+        print("\nScan this QR in WhatsApp > Linked devices:\n", flush=True)
+        rendered = segno.make_qr(data).terminal(compact=True)
+        if rendered:
+            print(rendered, flush=True)
+        sys.stdout.flush()
+
+    @client.event(ConnectedEv)
+    async def on_connected(accepted: NewAClient, ev) -> None:
+        secure_db(session)
+        print(f"\nWhatsApp paired: {session}\n", flush=True)
+        done.set()
+
+    client.event.qr(on_qr)
+    try:
+        await client.connect()
+        await asyncio.wait_for(done.wait(), 300)
+    except TimeoutError:
+        print("\nWhatsApp pairing timed out after 300 seconds.\n", file=sys.stderr, flush=True)
+        return 1
+    finally:
+        with contextlib.suppress(Exception):
+            await client.stop()
+        db.dispose()
+    return 0
 
 
 async def backfill(config_path: str | None) -> int:

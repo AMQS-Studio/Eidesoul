@@ -92,7 +92,7 @@ def test_dry_run_prints_the_plan_and_writes_nothing(tmp_path):
 
     assert result.returncode == 0, result.stderr
     assert "dry-run: yes" in result.stdout
-    assert "would run: uv sync --locked" in result.stdout
+    assert "would run: uv sync --locked --no-dev" in result.stdout
     assert "would run: uv run monoagens init" in result.stdout
     assert "\x1b[" not in result.stdout
     assert listing(tmp_path) == before == []
@@ -141,7 +141,7 @@ def test_a_stubbed_run_keeps_the_secret_out_of_the_log_and_never_calls_sudo(tmp_
     assert "database-url=<provided>" in text
     assert "monoagens init" in text
     assert "panel: not built in this version" in output
-    assert "uv run monoagens run" in output
+    assert "uv run --no-dev monoagens run" in output
     for name, mode in (
         ("config.yaml", 0o644),
         ("roles.yaml", 0o600),
@@ -227,6 +227,36 @@ def test_a_line_menu_reprompts_on_an_invalid_choice(tmp_path):
     assert result.returncode == 0, result.stderr
     assert "choose 1-2" in result.stdout
     assert out.read_text(encoding="utf-8").strip() == "compose"
+
+
+def test_init_receives_capability_choices(tmp_path):
+    code = """
+MONOAGENS_INSTALL_SOURCED=1
+source "$1/install.sh"
+dir="$2"
+gateways=(cli whatsapp)
+websearch=ddgs
+tools=read,web_search
+voice_parts=affect,style
+build_init_args
+printf '%s\n' "${INIT_ARGS[@]}"
+"""
+    result = subprocess.run(
+        ["bash", "-c", code, "_", str(ROOT), str(tmp_path / "app")],
+        env=clean_env(),
+        capture_output=True,
+        text=True,
+        timeout=60,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr
+    args = result.stdout.splitlines()
+    assert "--capabilities" in args
+    assert args.count("--gateway") == 2
+    assert args[args.index("--websearch") + 1] == "ddgs"
+    assert args[args.index("--tools") + 1] == "read,web_search"
+    assert args[args.index("--voice-parts") + 1] == "affect,style"
 
 
 def test_the_non_interactive_run_without_provider_prints_the_flag_list(tmp_path):

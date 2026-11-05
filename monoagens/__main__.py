@@ -206,6 +206,26 @@ async def backfill(config_path: str | None) -> int:
     return int(await cli_entry("backfill", config_path))
 
 
+def gateway_command(args: argparse.Namespace) -> int:
+    """Enable/list/pair a discovered gateway; no transport class is imported for config edits."""
+    from .admin import gateway as admin_gateway
+
+    command = args.gateway_command
+    if command == "list":
+        return admin_gateway.list_gateways(args.config)
+    if command == "enable":
+        return admin_gateway.set_enabled(args.config, args.name, True)
+    if command == "add":
+        return admin_gateway.add(args.config, args.name)
+    if command in ("disable", "remove"):
+        return admin_gateway.set_enabled(args.config, args.name, False)
+    if command == "pair":
+        from .gateways import gateway_cli
+
+        return int(asyncio.run(gateway_cli(args.name, "pair", args.config)))
+    raise ValueError(f"unknown gateway command '{command}'")
+
+
 async def selftest(config: Config) -> int:
     """Exercise stores, tools, and the LLM against the configured Postgres store."""
 
@@ -584,7 +604,9 @@ def _init(args: argparse.Namespace) -> int:
             "  pass: --provider <name>  (required)\n"
             "        --model <id> --database-url <url> --label <text> --voice-layer on|off\n"
             "        --api-key-file <path>   (optional; never pass the key itself)\n"
-        "        --language <code> --locale <tag> --timezone <IANA>   (default: the host)\n"
+        "        --language <code> --locale <tag> --timezone <IANA>\n"
+        "        --gateway <name> --websearch <backend> --websearch-url <url>\n"
+        "        --tools <a,b> --voice-parts <a,b>\n"
             "  or run `monoagens init` on a terminal.",
             file=sys.stderr,
             flush=True,
@@ -598,6 +620,17 @@ def _init(args: argparse.Namespace) -> int:
             print(f"monoagens: cannot read --api-key-file: {exc}", file=sys.stderr, flush=True)
             return 2
     color = bool(sys.stdout.isatty() and not args.no_color and not os.environ.get("NO_COLOR"))
+    gateways = tuple(args.gateway) if args.gateway else None
+    tools = (
+        tuple(item for item in (args.tools or "").split(",") if item.strip())
+        if args.tools is not None
+        else None
+    )
+    voice_parts = (
+        tuple(item for item in (args.voice_parts or "").split(",") if item.strip())
+        if args.voice_parts is not None
+        else None
+    )
     try:
         if interactive:
             written, skipped = admin_init.wizard(
@@ -611,6 +644,12 @@ def _init(args: argparse.Namespace) -> int:
                 language=args.language,
                 locale=args.locale,
                 timezone=args.timezone,
+                gateways=gateways,
+                websearch=args.websearch,
+                websearch_url=args.websearch_url,
+                tools=tools,
+                voice_parts=voice_parts,
+                ask_capabilities=args.capabilities,
                 force=args.force,
                 ask_location=not args.no_location,
                 color=color,
@@ -628,6 +667,11 @@ def _init(args: argparse.Namespace) -> int:
                 language=args.language or "",
                 locale=args.locale or "",
                 timezone=args.timezone or "",
+                gateways=gateways,
+                websearch=args.websearch or "",
+                websearch_url=args.websearch_url or "",
+                tools=tools,
+                voice_parts=voice_parts,
             )
     except admin_init.InitCancelled as exc:
         print(f"monoagens: {exc}", file=sys.stderr, flush=True)
@@ -841,6 +885,22 @@ def build_parser() -> argparse.ArgumentParser:
     console.add_argument(
         "--no-takeover", action="store_true", help="do not take the lease; exit when it is held"
     )
+    gateway = sub.add_parser("gateway", help="list, enable, disable, or pair a gateway")
+    gateway_sub = gateway.add_subparsers(dest="gateway_command", required=True)
+    gateway_list = gateway_sub.add_parser("list", help="show discovered gateways and state")
+    gateway_list.set_defaults(gateway_command="list")
+    for name, verb in (
+        ("enable", "enable a discovered gateway"),
+        ("add", "alias for enable"),
+        ("disable", "disable a gateway"),
+        ("remove", "alias for disable"),
+    ):
+        item = gateway_sub.add_parser(name, help=verb)
+        item.add_argument("name", help="gateway name from `gateway list`")
+        item.set_defaults(gateway_command=name)
+    pair = gateway_sub.add_parser("pair", help="pair the gateway in this terminal")
+    pair.add_argument("name", help="gateway name from `gateway list`")
+    pair.set_defaults(gateway_command="pair")
     sub.add_parser("selftest", help="quick check of stores, tools, and the LLM")
     sub.add_parser("backfill", help="pull old history through a throwaway device")
     init = sub.add_parser("init", help="write config.yaml, roles.yaml, soul.yaml, and .env")
@@ -891,6 +951,23 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         help="IANA zone written to soul.timezone (default: the host zone)",
     )
+    init.add_argument(
+        "--capabilities",
+        action="store_true",
+        help="ask for gateway, websearch, tool, and voice-part capabilities",
+    )
+    init.add_argument(
+        "--gateway",
+        action="append",
+        default=None,
+        help="enable a discovered gateway (repeatable; default: the template's CLI)",
+    )
+    init.add_argument("--websearch", default=None, help="search backend or off")
+    init.add_argument("--websearch-url", default=None, help="SearXNG base URL")
+    init.add_argument(
+        "--tools", default=None, help="comma-separated tool names for the member role"
+    )
+    init.add_argument("--voice-parts", default=None, help="comma-separated voice sub-sections")
     init.add_argument(
         "--non-interactive",
         action="store_true",
@@ -961,6 +1038,8 @@ def main(argv: list[str] | None = None) -> int:
     try:
         if args.command == "init":
             return _init(args)
+        if args.command == "gateway":
+            return gateway_command(args)
         if args.command == "models":
             return _models(args)
         if args.command == "config" and args.config_command == "export":

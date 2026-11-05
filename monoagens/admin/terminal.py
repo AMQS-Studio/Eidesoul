@@ -351,6 +351,134 @@ def _draw(
 
 
 
+def multi_choose(
+    *,
+    stdin: TextIO,
+    stdout: TextIO,
+    title: str,
+    choices: Sequence[Choice],
+    selected: Sequence[str] = (),
+    header: Sequence[str] = (),
+    allow_back: bool = True,
+    color: bool = False,
+    plain: bool = False,
+) -> list[str]:
+    """Toggle several choices; Space toggles, Enter continues, Esc/Left cancels/back."""
+    if not choices:
+        raise ValueError("a multi-select needs at least one choice")
+    default = {item.value for item in choices if item.value in set(selected)}
+    if not interactive(stdin, stdout, plain=plain):
+        return _line_multi(stdin, stdout, title, choices, default)
+    return _curses_multi(
+        title=title,
+        choices=choices,
+        selected=default,
+        header=header,
+        allow_back=allow_back,
+        color=color,
+    )
+
+
+def _line_multi(
+    stdin: TextIO,
+    stdout: TextIO,
+    title: str,
+    choices: Sequence[Choice],
+    selected: set[str],
+) -> list[str]:
+    stdout.write(f"  {title}\n")
+    for index, choice in enumerate(choices, start=1):
+        marker = "x" if choice.value in selected else " "
+        detail = f"  {choice.detail}" if choice.detail else ""
+        stdout.write(f"   [{marker}] {index}) {choice.label}{detail}\n")
+    stdout.write("  numbers separated by spaces (blank keeps defaults): ")
+    stdout.flush()
+    line = stdin.readline()
+    if line == "":
+        raise Cancelled("input closed before the multi-select answered")
+    answer = line.strip()
+    if not answer:
+        return [choice.value for choice in choices if choice.value in selected]
+    chosen: set[str] = set()
+    for token in answer.replace(",", " ").split():
+        if not token.isdigit() or not 1 <= int(token) <= len(choices):
+            stdout.write(f"  choose 1-{len(choices)}\n")
+            stdout.flush()
+            return _line_multi(stdin, stdout, title, choices, selected)
+        chosen.add(choices[int(token) - 1].value)
+    return [choice.value for choice in choices if choice.value in chosen]
+
+
+def _curses_multi(  # noqa: C901
+    *,
+    title: str,
+    choices: Sequence[Choice],
+    selected: set[str],
+    header: Sequence[str],
+    allow_back: bool,
+    color: bool,
+) -> list[str]:
+    import curses
+
+    def run(stdscr) -> list[str]:  # noqa: C901, PLR0912
+        _init_colors(color)
+        cursor = 0
+        while True:
+            stdscr.erase()
+            height, width = stdscr.getmaxyx()
+            x = _logo_column(width, height)
+            if x:
+                _draw_logo(stdscr, LOGO_TOP, LOGO_LEFT, color)
+            row = 0
+            for line in header:
+                _put_line(stdscr, row, line, width, x=x)
+                row += 1
+            if row and row < height:
+                row += 1
+            _put_line(stdscr, row, f"  {title}", width, curses.A_BOLD, x=x)
+            row += 1
+            visible = max(1, height - row - 3)
+            start = max(0, cursor - visible + 1)
+            for index in range(start, min(len(choices), start + visible)):
+                item = choices[index]
+                marker = "x" if item.value in selected else " "
+                current = "◆" if index == cursor else "○"
+                detail = f"   {item.detail}" if item.detail else ""
+                attr = curses.A_BOLD if index == cursor else 0
+                _put_line(
+                    stdscr,
+                    row,
+                    f"  {current} [{marker}] {item.label}{detail}",
+                    width,
+                    attr,
+                    x=x,
+                )
+                row += 1
+            footer = "  ↑↓ move   space toggle   enter continue   esc cancel"
+            if allow_back:
+                footer = footer.replace("esc cancel", "← back   esc cancel")
+            _put_line(stdscr, max(0, height - 2), footer, width, curses.A_DIM)
+            stdscr.refresh()
+            key = stdscr.getch()
+            if key in (curses.KEY_UP, ord("k")):
+                cursor = (cursor - 1) % len(choices)
+            elif key in (curses.KEY_DOWN, ord("j")):
+                cursor = (cursor + 1) % len(choices)
+            elif key == ord(" "):
+                value = choices[cursor].value
+                selected.symmetric_difference_update({value})
+            elif key in (curses.KEY_ENTER, 10, 13):
+                return [item.value for item in choices if item.value in selected]
+            elif key in (curses.KEY_LEFT, 27):
+                if allow_back:
+                    raise Back()
+                raise Cancelled("cancelled at the first field")
+            elif key in (ord("q"), 3):
+                raise Cancelled("cancelled by the operator")
+
+    return curses.wrapper(run)
+
+
 def text(
     *,
     stdin: TextIO,

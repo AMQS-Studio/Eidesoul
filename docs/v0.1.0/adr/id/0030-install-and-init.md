@@ -1,4 +1,4 @@
-> Terjemahan turunan — jangan sunting; sumber: 0030-install-and-init.md (sha256: bb120ba43d6a)
+> Terjemahan turunan — jangan sunting; sumber: 0030-install-and-init.md (sha256: 621e177c2a3b)
 > Ditulis tangan (bukan mesin), mengikuti sumber English baris demi baris.
 
 # ADR-0030: Install On-Machine dan Init Interaktif — Wizard Kita Sendiri, Satu Installer, Dua Runtime
@@ -9,9 +9,9 @@
 - **Konteks:** lanjutan ADR-0027 (distribusi & konfigurasi web-first), ADR-0007 (kelas approval), ADR-0016 (migrasi), ADR-0022 (role `administrator` yang dilindungi), ADR-0029 (store tes)
 - **Supersedes:** —
 - **Terkait:** ADR-0009 (rumah dokumen), ADR-0015 (manifest kapabilitas), ADR-0019 (observability), ADR-0028 (plugin)
-- **Implementasi:** partial — ada: `install.sh` (runtime opt-in, digest uv dipin, `--dry-run`, log, signal, dua runtime), menu curses yang sama dengan `monoagens init`, `--label`/`--stack`/`--engine`/`--database`/`--language`/`--locale`/`--timezone`/`--voice-layer`, kredensial database yang dibuat, administrator `cli local` otomatis, `tests/test_init.py`, `tests/test_install.py`; sisa: cabang panel di layar akhir menunggu `panel/` (ADR-0027)
+- **Implementasi:** partial — ada: `install.sh` (runtime opt-in, digest uv dipin, `--dry-run`, log, signal, dua runtime), menu curses yang sama dengan `monoagens init`, `--label`/`--stack`/`--engine`/`--database`/`--language`/`--locale`/`--timezone`/`--gateway`/`--websearch`/`--websearch-url`/`--tools`/`--voice-parts`/`--voice-layer`, kredensial database yang dibuat, administrator `cli local` otomatis, `tests/test_init.py`, `tests/test_install.py`; sisa: cabang panel di layar akhir menunggu `panel/` (ADR-0027)
 - **Catatan lokasi:** ADR ini mengikat semua permukaan (ia menentukan bagaimana sebuah host lahir), jadi ia duduk di akar rumah ADR. Salinan Indonesia di `docs/v0.1.0/adr/id/0030-install-and-init.md`.
-- **Amandemen:** 2026-11-05 — pass stress terminal memperbaiki Ctrl-C yang meninggalkan traceback, Escape/`q` yang jatuh ke menu baris, dan field teks tanpa Ctrl-U/Ctrl-W; locale host `C`/`POSIX` sekarang menanyakan bahasa sekali alih-alih gagal di dalam `init`. 2026-11-05 — installer memakai lapisan curses yang sama dengan `init`, menanyakan native/compose, container/external, dan Podman/Docker dengan deteksi langsung, meminta sudo lewat terminal, menyiapkan database sebelum `init`, dan mendaftarkan administrator lokal. 2026-11-05 — installer menanyakan native versus compose, kedua stack memakai container Postgres secara default, dan pemasangan runtime yang hilang bersifat opt-in dengan `sudo`. 2026-11-03 — versi pertama. 2026-11-03 — wizard menanyakan lapisan suara sekali (jawaban default tetap nyala) dan membawa `--voice-layer on|off` untuk paritas headless (ADR-0027 §4.3). 2026-11-03 — `--label` (alamat administrator) dan `--stack native|compose` masuk tabel flag: aturan §6 "langkah tanpa padanan flag = 0" menuntutnya.
+- **Amandemen:** 2026-11-05 — installer hanya memasang dependency group runtime (`--no-dev`); `uv run` membawa `UV_NO_DEV`, jadi tooling test tidak bisa masuk kembali. Extra gateway dipasang hanya setelah `init` menulis gateway yang enabled. Target baru mendapat `--force` supaya file seed tidak menang diam-diam atas capability yang dipilih. Layar capability di-index otomatis: tool dari engine registry dan modul `TOOL` gateway, gateway dari package/entry point, voice part dari `VoiceConfig`, dan backend search dari modul search. `monoagens gateway list/enable/disable/add/remove/pair` mengedit config dan menyediakan jalur pairing QR. 2026-11-05 — pass stress terminal memperbaiki Ctrl-C yang meninggalkan traceback, Escape/`q` yang jatuh ke menu baris, dan field teks tanpa Ctrl-U/Ctrl-W; locale host `C`/`POSIX` sekarang menanyakan bahasa sekali alih-alih gagal di dalam `init`. 2026-11-05 — installer memakai lapisan curses yang sama dengan `init`, menanyakan native/compose, container/external, dan Podman/Docker dengan deteksi langsung, meminta sudo lewat terminal, menyiapkan database sebelum `init`, dan mendaftarkan administrator lokal. 2026-11-05 — installer menanyakan native versus compose, kedua stack memakai container Postgres secara default, dan pemasangan runtime yang hilang bersifat opt-in dengan `sudo`. 2026-11-03 — versi pertama. 2026-11-03 — wizard menanyakan lapisan suara sekali (jawaban default tetap nyala) dan membawa `--voice-layer on|off` untuk paritas headless (ADR-0027 §4.3). 2026-11-03 — `--label` (alamat administrator) dan `--stack native|compose` masuk tabel flag: aturan §6 "langkah tanpa padanan flag = 0" menuntutnya.
 
 ---
 
@@ -63,7 +63,7 @@ Satu skrip Bash, dipanggil dari klon (`bash install.sh`) atau dari jaringan
 | Izin menyentuh host | **tidak pernah** menjalankan `sudo` tanpa persetujuan eksplisit. Runtime yang hilang ditawarkan untuk dipasang; `sudo -v` meminta password di terminal dan tidak menyimpannya. `--install-runtime` adalah padanan headless. Tidak ada paket sistem lain yang dipasang. |
 | `uv` | kalau absen: unduh rilis yang dipin untuk arsitektur yang berjalan dan verifikasi SHA-256 sebelum dipakai; pin hidup di satu blok berkomentar dengan baris "cara menaikkannya" |
 | Python | menuntut 3.14+ dan melaporkan interpreter yang ia temukan; image container mempertahankan floor 3.14 yang sama — perbedaannya dinyatakan, tidak disembunyikan |
-| Dependency | `uv sync --locked` di dalam direktori instalasi (`--dir`, default `~/.monoagens/app`); tak ada dependency yang dipasang di luarnya |
+| Dependency | `uv sync --locked --no-dev` di dalam direktori instalasi (`--dir`, default `~/.monoagens/app`); extra gateway opsional hanya ditambahkan setelah `init` mengaktifkannya; tak ada dependency yang dipasang di luarnya |
 | Setup | memakai menu curses yang sama dengan `init` untuk runtime, lokasi, database, dan engine, lalu menyerahkan ke `monoagens init` dengan lokasi terkunci (§4.3): interaktif di terminal, digerakkan flag kalau bukan |
 | Database | kedua stack memakai Postgres Podman/Docker secara default. Installer membuat `POSTGRES_PASSWORD` dan `MONOAGENS_DATABASE_URL` **sebelum** `init` supaya review menampilkannya; `--database-url` eksternal yang eksplisit melewati container di mode native |
 | Lanjutan | nyalakan Postgres (atau seluruh stack compose), `monoagens db upgrade`, daftarkan `cli local` sebagai administrator, lalu `monoagens selftest` |
@@ -128,6 +128,10 @@ Banner memesan area logo sekarang supaya mark-nya bisa ditaruh tanpa menyentuh t
 | `--install-runtime` | izinkan pemasangan Podman/Docker dan compose provider dengan `sudo` saat hilang |
 | `--database-url URL` | URL Postgres eksternal; melewati container database di mode native |
 | `--language CODE` / `--locale TAG` / `--timezone IANA` | diteruskan ke `init`; bila locale host `C`/`POSIX` dan language maupun locale tidak diberikan, installer interaktif bertanya sekali, dan run non-interaktif gagal dengan nama flag |
+| `--gateway NAME` | aktifkan gateway yang ditemukan (bisa diulang) |
+| `--websearch BACKEND` / `--websearch-url URL` | pilih backend search yang ter-index, atau `off`; SearXNG butuh URL |
+| `--tools LIST` | nama tool dipisah koma untuk role member; divalidasi lewat katalog otomatis |
+| `--voice-parts LIST` | sub-bagian voice dipisah koma; di-index dari `VoiceConfig` |
 | `--skip-selftest` | lewati self-test penutup (untuk otomasi yang menjalankannya terpisah) |
 | `--voice-layer on\|off` | tetap nyalakan emosi, humanize, dan karakter (default `off`, ADR-0041) atau matikan ketiganya |
 | `--no-color` | keluaran polos (juga dihormati lewat `NO_COLOR`) |

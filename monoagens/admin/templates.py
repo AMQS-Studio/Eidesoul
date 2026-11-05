@@ -2,7 +2,8 @@
 
 
 import copy
-from dataclasses import asdict
+import re
+from dataclasses import MISSING, asdict, fields
 from pathlib import Path
 
 import yaml
@@ -14,7 +15,7 @@ from ..engine.config import (
     SandboxConfig,
     WebSearchConfig,
 )
-from ..engine.soul import DEFAULT_SOUL_YAML
+from ..engine.soul import DEFAULT_SOUL_YAML, VoiceConfig
 from ..providers import PROVIDERS
 
 # The operator surface of `config.yaml`: the order and the keys the file shows. The values come
@@ -67,10 +68,10 @@ def host_defaults() -> dict:
     raw["plugin"] = {**raw["plugin"], "root": ""}
     raw["plugins"] = {}
     host: dict = {}
-    for key, fields in HOST_KEYS.items():
+    for key, names in HOST_KEYS.items():
         value = raw[key]
-        if fields:
-            value = {name: value[name] for name in fields}
+        if names:
+            value = {name: value[name] for name in names}
             value = {
                 name: int(item)
                 if isinstance(item, float) and item.is_integer() and name != "cpus"
@@ -498,16 +499,51 @@ def dump_config(body: dict) -> str:
     return "\n".join(lines) + "\n"
 
 
+def _voice_parts() -> tuple[str, ...]:
+    """Index the voice sub-sections that carry their own enabled switch."""
+    found: list[str] = []
+    for field in fields(VoiceConfig):
+        factory = field.default_factory
+        if factory is MISSING or not callable(factory):
+            continue
+        value = factory()
+        if getattr(value, "enabled", None) is not None:
+            found.append(field.name)
+    return tuple(found)
+
+
+VOICE_PARTS = _voice_parts()
+
+
 def soul_yaml(
-    language: str, locale: str, timezone: str, *, voice_enabled: bool = False
+    language: str,
+    locale: str,
+    timezone: str,
+    *,
+    voice_enabled: bool = False,
+    voice_parts: tuple[str, ...] | None = None,
 ) -> str:
     """The seed soul with required values; voice is a soul setting, not an engine section."""
-    return DEFAULT_SOUL_YAML.format(
+    text = DEFAULT_SOUL_YAML.format(
         language=language,
         locale=locale,
         timezone=timezone,
         voice_enabled=str(bool(voice_enabled)).lower(),
     )
+    if voice_parts is None:
+        return text
+    selected = set(voice_parts)
+    unknown = selected.difference(VOICE_PARTS)
+    if unknown:
+        raise ValueError(f"unknown voice part(s): {', '.join(sorted(unknown))}")
+    for part in VOICE_PARTS:
+        flag = "true" if part in selected else "false"
+        text = re.sub(
+            rf"(?m)^(  {re.escape(part)}:\n    enabled: )\w+$",
+            rf"\g<1>{flag}",
+            text,
+        )
+    return text
 
 
 def files(
@@ -518,6 +554,11 @@ def files(
     locale: str,
     timezone: str,
     voice_enabled: bool = False,
+    voice_parts: tuple[str, ...] | None = None,
+    websearch: str = "",
+    websearch_url: str = "",
+    tools: tuple[str, ...] | None = None,
+    gateways: tuple[str, ...] | None = None,
 ) -> dict[str, str]:
     """Every scaffold file: relative path -> content.
 
@@ -534,9 +575,30 @@ def files(
     llm["base_url"] = defaults.base_url
     llm["api_key_env"] = defaults.api_key_env
     llm["model"] = model
+    if websearch == "searxng":
+        config["web_search"]["base_url"] = websearch_url.strip().rstrip("/")
+    elif websearch == "off":
+        config["web_search"]["base_url"] = ""
+        config["engine"]["research"]["mode"] = "off"
+    elif websearch == "ddgs":
+        config["web_search"]["base_url"] = ""
+    if gateways is not None:
+        config["gateways"] = {
+            name: copy.deepcopy(GATEWAY["gateways"].get(name, {"enabled": True}))
+            for name in gateways
+        }
+    roles = copy.deepcopy(ROLES)
+    if tools is not None:
+        roles["member"]["tools"] = list(tools)
     return {
         "config.yaml": dump_config(config),
-        "roles.yaml": dump({"roles": ROLES}),
-        "soul.yaml": soul_yaml(language, locale, timezone, voice_enabled=voice_enabled),
+        "roles.yaml": dump({"roles": roles}),
+        "soul.yaml": soul_yaml(
+            language,
+            locale,
+            timezone,
+            voice_enabled=voice_enabled,
+            voice_parts=voice_parts,
+        ),
         ".env": env_file(provider),
     }
