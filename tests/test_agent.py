@@ -494,3 +494,30 @@ def test_status_shows_the_gateway_capability_counters(tmp_path) -> None:
     assert "Rich surface missing: 2" in card or "Permukaan rich tidak ada: 2" in card
     assert "Directory missing: 3" in card or "Direktori tidak ada: 3" in card
     assert "Participants unknown: 4" in card or "Peserta tidak diketahui: 4" in card
+
+
+def test_soul_rule_promotion_receives_the_soul_timezone() -> None:
+    """ADR-0008 §4.3: promotion groups rows by the soul's zone; the caller must pass it."""
+    from types import SimpleNamespace
+
+    from monoagens.engine.agent import Agent
+
+    calls: list[dict] = []
+
+    class Memory:
+        @staticmethod
+        def sync_soul_rules(rules):
+            return []
+
+        @staticmethod
+        def promote_soul_rules(**kwargs):
+            calls.append(kwargs)
+            return 0
+
+    fake = SimpleNamespace(
+        soul=SimpleNamespace(rules=("stay calm",), timezone="Asia/Jakarta"),
+        memory=Memory(),
+    )
+
+    assert Agent._sync_soul_rules(fake) == "ok"
+    assert calls == [{"tz": "Asia/Jakarta"}]

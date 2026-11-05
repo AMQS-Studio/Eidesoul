@@ -185,7 +185,7 @@ class Agent:
             if callable(sync) and rules:
                 sync(rules)
             if callable(promote):
-                promoted = int(promote() or 0)
+                promoted = int(promote(tz=self.soul.timezone) or 0)
                 if promoted:
                     log.info("soul rules promoted: %d", promoted)
         except Exception:
