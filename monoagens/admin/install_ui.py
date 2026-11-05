@@ -80,11 +80,10 @@ def stack(out: str, default: str) -> None:
 
 
 def location(out: str, default: str, here: str) -> None:
-    choices = [
-        terminal.Choice("default", default, default),
-        terminal.Choice("here", here, here),
-        terminal.Choice("custom", "enter a path", "custom"),
-    ]
+    choices = [terminal.Choice("default", default, default)]
+    if here:
+        choices.append(terminal.Choice("here", here, here))
+    choices.append(terminal.Choice("custom", "enter a path", "custom"))
     picked = _ask(
         title="where should MonoAgens live?",
         choices=choices,
@@ -185,7 +184,7 @@ def main(argv: list[str] | None = None) -> int:
 
     child = add("location")
     child.add_argument("--default", required=True)
-    child.add_argument("--here", required=True)
+    child.add_argument("--here", default="")
 
     child = add("database")
     child.add_argument("--default", choices=("container", "external"), default="container")

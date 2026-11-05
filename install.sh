@@ -32,8 +32,12 @@ default_dir="${monoagens_home}/app"
 log_file="${monoagens_home}/logs/install.log"
 uv_bin="${monoagens_home}/bin/uv"
 
-start_dir="$(pwd -P 2>/dev/null || printf '%s' "${HOME:-/}")"
-[[ -d "$start_dir" ]] || start_dir="${HOME:-/}"
+start_dir="$(pwd -P 2>/dev/null || true)"
+here_dir=""
+if [[ -n "$start_dir" && -d "$start_dir" && "$start_dir" != "${HOME:-}" ]]; then
+    here_dir="$start_dir"
+fi
+[[ -n "$start_dir" && -d "$start_dir" ]] || start_dir="${HOME:-/}"
 dir="$default_dir"
 dir_set=0
 stack="native"
@@ -356,7 +360,7 @@ ask_directory() {
     local answer="" choice="" picked=""
     (( dir_set || non_interactive || dry_run )) && return 0
     [[ -t 0 ]] || return 0
-    if picked="$(ui_choice location --default "$default_dir" --here "$start_dir")"; then
+    if picked="$(ui_choice location --default "$default_dir" --here "$here_dir")"; then
         dir="$picked"
         dir="$(normalize_directory "$dir")"
         [[ -n "$dir" ]] || usage 2 "install directory must not be empty"
@@ -368,12 +372,23 @@ ask_directory() {
     say "Where should MonoAgens live?"
     say "  config.yaml, roles.yaml, soul.yaml, .env, and the runtime state are written there."
     say "  1) default  - $default_dir (recommended)"
-    say "  2) here     - $start_dir"
-    say "  3) custom   - enter a path"
+    if [[ -n "$here_dir" ]]; then
+        say "  2) here     - $here_dir"
+        say "  3) custom   - enter a path"
+    else
+        say "  2) custom   - enter a path"
+    fi
     read -r -p "  location [1]: " choice || choice="1"
     case "$choice" in
         "" | 1 | default | recommended) dir="$default_dir" ;;
-        2 | here) dir="$PWD" ;;
+        2 | here)
+            if [[ -n "$here_dir" ]]; then
+                dir="$here_dir"
+            else
+                read -r -p "  custom directory: " answer || answer=""
+                [[ -n "$answer" ]] && dir="$answer"
+            fi
+            ;;
         3 | custom)
             read -r -p "  custom directory: " answer || answer=""
             if [[ -n "$answer" ]]; then
@@ -640,6 +655,26 @@ refresh_existing_checkout() {
     return 0
 }
 
+looks_like_monoagens_dir() {
+    [[ -f "$1/pyproject.toml" || -f "$1/install.sh" || -d "$1/monoagens" || -f "$1/uv.lock" ]]
+}
+
+guard_install_dir() {
+    local resolved
+    resolved="$(realpath -m -- "$dir" 2>/dev/null || printf '%s' "$dir")"
+    case "$resolved" in
+        / | /home | /root | /usr | /etc | /var | /opt | /boot | /dev | /proc | /sys | /run | /tmp)
+            die "refusing to install at $resolved; choose a project directory"
+            ;;
+    esac
+    if [[ "$resolved" == "${HOME:-}" || "${HOME:-}" == "$resolved"/* ]]; then
+        die "refusing to install at $resolved; that is your home directory or above it"
+    fi
+    if [[ -z "$dir" ]]; then
+        die "install directory is empty; choose a project directory"
+    fi
+}
+
 prepare_dir() {
     stage "install directory: $dir"
     if [[ -f "$dir/pyproject.toml" ]]; then
@@ -652,6 +687,9 @@ prepare_dir() {
         fi
     fi
     if [[ -d "$dir" && -n "$(ls -A -- "$dir" 2>/dev/null)" ]]; then
+        if ! looks_like_monoagens_dir "$dir"; then
+            die "$dir is not empty and is not a MonoAgens checkout; choose an empty directory (refusing to remove it)"
+        fi
         warn "$dir is not empty and has no pyproject.toml."
         warn "This is usually a partial checkout from an interrupted install."
         if (( dry_run )); then
@@ -1367,6 +1405,7 @@ main() {
     ask_directory
     ask_database
     ask_engine
+    guard_install_dir
     if [[ "$stack" == "compose" && "$database_mode" == "external" ]]; then
         die "compose uses its own Postgres; omit --database-url or choose --stack native"
     fi

@@ -281,6 +281,27 @@ def test_installer_menus_return_the_selected_values(tmp_path):
     ) == "docker"
 
 
+def test_the_installer_refuses_the_home_directory(tmp_path):
+    home = tmp_path / "home"
+    home.mkdir()
+    code = """
+MONOAGENS_INSTALL_SOURCED=1
+source "$1/install.sh"
+dir="$HOME"
+guard_install_dir
+"""
+    result = subprocess.run(
+        ["bash", "-c", code, "_", str(ROOT)],
+        env=clean_env(HOME=str(home)),
+        capture_output=True,
+        text=True,
+        timeout=60,
+        check=False,
+    )
+    assert result.returncode != 0
+    assert "home directory" in result.stderr
+
+
 def test_prepare_database_env_marks_a_container_database(tmp_path):
     env_file = tmp_path / ".env"
     code = """
