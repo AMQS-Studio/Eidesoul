@@ -258,24 +258,23 @@ def _ask_label(state: Answers, stdin: TextIO, stdout: TextIO, color: bool = Fals
 
 
 def _ask_voice(state: Answers, stdin: TextIO, stdout: TextIO, color: bool = False) -> None:
-    default = "on" if state.voice_on else "off"
-    while True:
-        answer = terminal.text(
-            stdin=stdin,
-            stdout=stdout,
-            title="turn the voice layer on?",
-            default=default,
-            header=_menu_header(STEP_INDEX["voice layer"], color),
-            detail=["off keeps emotion, style, character, and humanize inert"],
-            allow_back=True,
-            color=color,
-            plain=not color,
-        )
-        try:
-            state.voice_on = voice_enabled(answer)
-            return
-        except ValueError as exc:
-            _say(stdout, f"  {exc}; try again")
+    default = 1 if state.voice_on else 0
+    picked = terminal.choose(
+        stdin=stdin,
+        stdout=stdout,
+        title="turn the voice layer on?",
+        choices=[
+            terminal.Choice("off", "emotion, style, character, and humanize stay inert", "off"),
+            terminal.Choice("on", "enable the tuned voice layer", "on"),
+        ],
+        default=default,
+        header=_menu_header(STEP_INDEX["voice layer"], color),
+        searchable=False,
+        allow_back=True,
+        color=color,
+        plain=not color,
+    )
+    state.voice_on = picked == 1
 
 
 ASKERS = (

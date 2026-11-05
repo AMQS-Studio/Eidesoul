@@ -32,6 +32,8 @@ default_dir="${monoagens_home}/app"
 log_file="${monoagens_home}/logs/install.log"
 uv_bin="${monoagens_home}/bin/uv"
 
+start_dir="$(pwd -P 2>/dev/null || printf '%s' "${HOME:-/}")"
+[[ -d "$start_dir" ]] || start_dir="${HOME:-/}"
 dir="$default_dir"
 dir_set=0
 stack="native"
@@ -257,7 +259,7 @@ parse_args() {
     case "$database_mode" in container | external) ;; *) usage 2 "--database must be container or external" ;; esac
     [[ -n "$dir" ]] || usage 2 "--dir must not be empty"
     dir="${dir/#\~/$HOME}"
-    [[ "$dir" = /* ]] || dir="${PWD}/${dir}"
+    [[ "$dir" = /* ]] || dir="${start_dir}/${dir}"
     # The checkout this script runs from, when it is a file (`curl | bash` has no source).
     if [[ -n "${BASH_SOURCE[0]:-}" && -f "${BASH_SOURCE[0]}" ]]; then
         source_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
@@ -354,7 +356,7 @@ ask_directory() {
     local answer="" choice="" picked=""
     (( dir_set || non_interactive || dry_run )) && return 0
     [[ -t 0 ]] || return 0
-    if picked="$(ui_choice location --default "$default_dir" --here "$PWD")"; then
+    if picked="$(ui_choice location --default "$default_dir" --here "$start_dir")"; then
         dir="$picked"
         dir="$(normalize_directory "$dir")"
         [[ -n "$dir" ]] || usage 2 "install directory must not be empty"
@@ -366,7 +368,7 @@ ask_directory() {
     say "Where should MonoAgens live?"
     say "  config.yaml, roles.yaml, soul.yaml, .env, and the runtime state are written there."
     say "  1) default  - $default_dir (recommended)"
-    say "  2) here     - $PWD"
+    say "  2) here     - $start_dir"
     say "  3) custom   - enter a path"
     read -r -p "  location [1]: " choice || choice="1"
     case "$choice" in
@@ -380,6 +382,8 @@ ask_directory() {
             ;;
         *) dir="$choice" ;;
     esac
+    dir="${dir/#\~/$HOME}"
+    [[ "$dir" = /* ]] || dir="${start_dir}/${dir}"
     dir="$(normalize_directory "$dir")"
     [[ -n "$dir" ]] || usage 2 "install directory must not be empty"
     [[ "$dir" != "/" ]] || usage 2 "refusing to install directly at /"
@@ -659,8 +663,15 @@ prepare_dir() {
             read -r -p "  remove the contents and install there? [y/N]: " answer || answer=""
             case "$answer" in
                 y | Y | yes | YES)
-                    rm -rf -- "$dir"
-                    mkdir -p -- "$dir"
+                    if [[ "$PWD" == "$dir" ]]; then
+                        # Removing the shell's own directory breaks every child's getcwd.
+                        find "$dir" -mindepth 1 -maxdepth 1 -exec rm -rf -- {} +
+                    elif [[ "$PWD" == "$dir"/* ]]; then
+                        die "refusing to remove $dir while the shell is inside it; cd elsewhere first"
+                    else
+                        rm -rf -- "$dir"
+                        mkdir -p -- "$dir"
+                    fi
                     detail "removed the partial contents"
                     ;;
                 *) die "install directory is not empty; choose another one or clear it yourself" ;;
@@ -1339,6 +1350,9 @@ finish() {
 
 
 main() {
+    # A shell can still be sitting in a directory that was removed; every child then
+    # fails getcwd. Move to a known-valid directory; `start_dir` keeps "here" honest.
+    cd -- "$start_dir" 2>/dev/null || cd -- "${HOME:-/}" 2>/dev/null || cd /
     parse_args "$@"
     setup_colors
     detect_arch
