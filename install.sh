@@ -899,9 +899,7 @@ except ValueError:
     sys.exit(2)
 name = parts.path.lstrip("/") or "monoagens"
 url_password = unquote(parts.password) if parts.password else ""
-if password and url_password and password != url_password:
-    print("POSTGRES_PASSWORD does not match the database URL", file=sys.stderr)
-    sys.exit(2)
+# POSTGRES_PASSWORD is what created the container volume; the URL follows it.
 password = password or url_password or secrets.token_hex(24)
 host = parts.hostname
 if host not in ("127.0.0.1", "localhost", "::1"):
@@ -946,6 +944,9 @@ prepare_database_before_init() {
         local scratch
         scratch="$(mktemp)"
         TMP_DIRS+=("$scratch")
+        # Reuse an existing password so `init` cannot replace the URL with a value that
+        # no longer matches the container that is already on disk.
+        [[ -f "$dir/.env" ]] && cp -- "$dir/.env" "$scratch"
         prepare_database_env "$(database_env_mode)" "$scratch" >/dev/null
         database_url="$(env_value MONOAGENS_DATABASE_URL "$scratch")"
         detail "Postgres URL and password prepared"
