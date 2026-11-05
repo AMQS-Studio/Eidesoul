@@ -1473,10 +1473,8 @@ stage_postgres() {
     check_database_credentials
 }
 
-check_database_credentials() {
-    local code=0
-    database_configured || return 0
-    uv_python_in_dir - "$dir/.env" <<'PY' || code=$?
+probe_database_credentials() {
+    uv_python_in_dir - "$dir/.env" <<'PY'
 import sys
 from pathlib import Path
 
@@ -1500,12 +1498,34 @@ except Exception as exc:
     print(f"{type(exc).__name__}: {exc}", file=sys.stderr)
     raise SystemExit(1) from exc
 PY
-    if (( code != 0 )); then
-        warn "Postgres is running but the password in .env does not match its volume."
-        warn "Remove the stale container/volume (destructive) or set POSTGRES_PASSWORD to the volume's old password."
-        die "database credentials do not match the running Postgres"
+}
+
+repair_database_password() {
+    local container password db escaped
+    container="$("${COMPOSE[@]}" ps -q postgres 2>/dev/null | head -n 1)"
+    [[ -n "$container" ]] || return 1
+    password="$(env_value POSTGRES_PASSWORD "$dir/.env")"
+    db="$(env_value POSTGRES_DB "$dir/.env")"
+    [[ -n "$password" ]] || return 1
+    db="${db:-monoagens}"
+    escaped="$(printf '%s' "$password" | sed "s/'/''/g")"
+    printf "ALTER ROLE monoagens PASSWORD '%s';\n" "$escaped" \
+        | "${container_engine:-$(selected_engine)}" exec -i "$container" psql \
+            -U monoagens -d "$db" -v ON_ERROR_STOP=1 >/dev/null 2>&1
+}
+
+check_database_credentials() {
+    database_configured || return 0
+    if probe_database_credentials 2>/dev/null; then
+        return 0
     fi
-    return 0
+    warn "Postgres is running but the password in .env does not match its volume."
+    if repair_database_password && probe_database_credentials 2>/dev/null; then
+        detail "updated the existing Postgres role to the password in .env"
+        return 0
+    fi
+    warn "Remove the stale container/volume (destructive) or set POSTGRES_PASSWORD to the volume's old password."
+    die "database credentials do not match the running Postgres"
 }
 
 stage_native_database() {
