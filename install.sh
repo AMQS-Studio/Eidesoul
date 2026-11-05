@@ -1470,6 +1470,42 @@ stage_postgres() {
     run_logged "start the Postgres container" \
         "${COMPOSE[*]:-podman compose} up -d postgres" compose_up postgres
     run_logged "wait for Postgres" "compose exec postgres pg_isready" wait_for_postgres
+    check_database_credentials
+}
+
+check_database_credentials() {
+    local code=0
+    database_configured || return 0
+    uv_python_in_dir - "$dir/.env" <<'PY' || code=$?
+import sys
+from pathlib import Path
+
+import psycopg
+
+path = Path(sys.argv[1])
+for line in path.read_text(encoding="utf-8").splitlines():
+    if line.startswith("MONOAGENS_DATABASE_URL="):
+        url = line.partition("=")[2].strip()
+        break
+else:
+    raise SystemExit(0)
+if not url:
+    raise SystemExit(0)
+if url.startswith("postgresql+psycopg://"):
+    url = "postgresql://" + url.removeprefix("postgresql+psycopg://")
+try:
+    with psycopg.connect(url, connect_timeout=5) as conn:
+        conn.execute("select 1")
+except Exception as exc:
+    print(f"{type(exc).__name__}: {exc}", file=sys.stderr)
+    raise SystemExit(1) from exc
+PY
+    if (( code != 0 )); then
+        warn "Postgres is running but the password in .env does not match its volume."
+        warn "Remove the stale container/volume (destructive) or set POSTGRES_PASSWORD to the volume's old password."
+        die "database credentials do not match the running Postgres"
+    fi
+    return 0
 }
 
 stage_native_database() {
@@ -1496,6 +1532,7 @@ stage_compose() {
     ensure_compose
     run_logged "bring the stack up" "${COMPOSE[*]:-podman compose} up -d" compose_up
     run_logged "wait for Postgres" "compose exec postgres pg_isready" wait_for_postgres
+    check_database_credentials
     run_logged "publish the schema (compose exec)" \
         "${COMPOSE[*]:-podman compose} exec monoagens monoagens db upgrade" compose_run db upgrade
     compose_bootstrap_identity

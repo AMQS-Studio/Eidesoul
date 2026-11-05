@@ -1,5 +1,13 @@
 # LOG
 
+## 2026-11-05 — Stale database detector and full tool details
+
+The installer now verifies the `.env` database URL against the running Postgres after the
+container starts, so a reused volume with an older password fails with an actionable message
+instead of a raw SQLAlchemy traceback. The capability multi-select has a `? details` view
+that wraps the full tool description. The stale `monoagens-postgres-1` container and its
+volume were removed to reinitialize the failed local install.
+
 ## 2026-11-05 — NTFS target and module invocation
 
 A `curl` install into `/mnt/data` (fuseblk NTFS) failed with an import traceback because

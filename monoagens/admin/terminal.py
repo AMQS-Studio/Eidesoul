@@ -6,6 +6,7 @@ writes; this module never touches the host (ADR-0039 §4.2).
 
 import contextlib
 import os
+import textwrap
 from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import TextIO
@@ -409,7 +410,12 @@ def _line_multi(
     return [choice.value for choice in choices if choice.value in chosen]
 
 
-def _curses_multi(  # noqa: C901
+def _detail_lines(text: str, width: int) -> list[str]:
+    value = " ".join(str(text or "").split())
+    return textwrap.wrap(value, width=max(20, width), break_long_words=True) or ["(no details)"]
+
+
+def _curses_multi(  # noqa: C901, PLR0915
     *,
     title: str,
     choices: Sequence[Choice],
@@ -420,9 +426,11 @@ def _curses_multi(  # noqa: C901
 ) -> list[str]:
     import curses
 
-    def run(stdscr) -> list[str]:  # noqa: C901, PLR0912
+    def run(stdscr) -> list[str]:  # noqa: C901, PLR0912, PLR0915
         _init_colors(color)
         cursor = 0
+        helping = False
+        help_offset = 0
         while True:
             stdscr.erase()
             height, width = stdscr.getmaxyx()
@@ -435,6 +443,34 @@ def _curses_multi(  # noqa: C901
                 row += 1
             if row and row < height:
                 row += 1
+            if helping:
+                item = choices[cursor]
+                _put_line(stdscr, row, f"  {item.label}", width, curses.A_BOLD, x=x)
+                row += 1
+                lines = _detail_lines(item.detail, width - x - 4)
+                visible = max(1, height - row - 3)
+                for line in lines[help_offset : help_offset + visible]:
+                    _put_line(stdscr, row, f"  {line}", width, x=x)
+                    row += 1
+                _put_line(
+                    stdscr,
+                    max(0, height - 2),
+                    "  ↑↓ scroll   ?/enter/esc back",
+                    width,
+                    curses.A_DIM,
+                )
+                stdscr.refresh()
+                key = stdscr.getch()
+                if key in (curses.KEY_UP, ord("k")):
+                    help_offset = max(0, help_offset - 1)
+                elif key in (curses.KEY_DOWN, ord("j")):
+                    help_offset = min(max(0, len(lines) - 1), help_offset + 1)
+                elif key in (27, ord("?"), ord("d"), curses.KEY_ENTER, 10, 13):
+                    helping = False
+                    help_offset = 0
+                elif key in (3, ord("q")):
+                    raise Cancelled("cancelled by the operator")
+                continue
             _put_line(stdscr, row, f"  {title}", width, curses.A_BOLD, x=x)
             row += 1
             visible = max(1, height - row - 3)
@@ -454,7 +490,7 @@ def _curses_multi(  # noqa: C901
                     x=x,
                 )
                 row += 1
-            footer = "  ↑↓ move   space toggle   enter continue   esc cancel"
+            footer = "  ↑↓ move   space toggle   ? details   enter continue   esc cancel"
             if allow_back:
                 footer = footer.replace("esc cancel", "← back   esc cancel")
             _put_line(stdscr, max(0, height - 2), footer, width, curses.A_DIM)
@@ -467,6 +503,9 @@ def _curses_multi(  # noqa: C901
             elif key == ord(" "):
                 value = choices[cursor].value
                 selected.symmetric_difference_update({value})
+            elif key in (ord("?"), ord("d")):
+                helping = True
+                help_offset = 0
             elif key in (curses.KEY_ENTER, 10, 13):
                 return [item.value for item in choices if item.value in selected]
             elif key in (curses.KEY_LEFT, 27):
