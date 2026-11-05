@@ -1,603 +1,375 @@
 <p align="center">
-  <img src="assets/logo.png" alt="MonoAgens" width="260">
+  <img src="assets/logo.png" alt="MonoAgens" width="240">
 </p>
 
 <h1 align="center">MonoAgens</h1>
 
-<p align="center"><em>persistent mono agent, always remembering, always learning, the same person wherever it lives.</em></p>
+<p align="center">
+  <strong>A sovereign, persistent mono-agent harness.</strong><br>
+  <em>One continuous identity, native hybrid memory, and deterministic safety across every surface and embodiment.</em>
+</p>
 
 <p align="center">
   <a href="docs/v0.1.0/README.md"><img alt="Docs" src="https://img.shields.io/badge/docs-v0.1.0-111111?style=flat-square&labelColor=555555"></a>
   <a href="LICENSE"><img alt="License" src="https://img.shields.io/badge/license-Apache--2.0-2ea043?style=flat-square&labelColor=555555"></a>
-  <a href="#status-today"><img alt="Status" src="https://img.shields.io/badge/status-pre--release-d4a017?style=flat-square&labelColor=555555"></a>
   <a href="pyproject.toml"><img alt="Python" src="https://img.shields.io/badge/python-3.14%2B-3776ab?style=flat-square&labelColor=555555"></a>
-  <a href="https://github.com/AMQStudio"><img alt="Built by AMQStudio" src="https://img.shields.io/badge/built%20by-AMQStudio-6f42c1?style=flat-square&labelColor=555555"></a>
-  <a href="README.md"><img alt="English" src="https://img.shields.io/badge/lang-EN-1f6feb?style=flat-square&labelColor=555555"></a>
+  <a href="https://www.postgresql.org/"><img alt="PostgreSQL + pgvector" src="https://img.shields.io/badge/storage-PostgreSQL%20%2B%20pgvector-336791?style=flat-square&labelColor=555555"></a>
+  <a href="https://github.com/AMQStudio"><img alt="AMQStudio" src="https://img.shields.io/badge/built%20by-AMQStudio-6f42c1?style=flat-square&labelColor=555555"></a>
 </p>
 
 <p align="center">
-  <a href="#what-monoagens-is">What it is</a> · <a href="#architecture">Architecture</a> ·
-  <a href="#tools-are-capabilities">Tools</a> ·
+  <a href="#overview">Overview</a> ·
+  <a href="#key-capabilities">Capabilities</a> ·
+  <a href="#architecture">Architecture</a> ·
   <a href="#quickstart">Quickstart</a> ·
-  <a href="#soulyaml">soul.yaml</a> · <a href="#character-and-research">Character and research</a> ·
-  <a href="#supported-gateways">Gateways</a> · <a href="#roles-and-permissions">Roles and permissions</a> ·
-  <a href="#safety">Safety</a> · <a href="#credits">Credits</a>
+  <a href="#operator-cli">Operator CLI</a> ·
+  <a href="#configuration">Configuration</a> ·
+  <a href="#security-and-governance">Security</a> ·
+  <a href="#credits">Credits</a>
 </p>
 
-## Status today
+---
 
-The engine, the CLI console, the WhatsApp gateway (an optional extra), memory, affect, the guard,
-the on-machine installer, and the plugin model run today. The web panel is planned, not built; it is
-a separate process the engine will never import. Everything else in this file describes the shipped
-design; this section is the delta that runs today.
+## Overview
 
-## What MonoAgens is
+Most agent frameworks treat state as a disposable chat session and personality as a system prompt pasted into a context window. When the window fills, history is compacted away; when you switch from a terminal to a messaging app or a voice interface, you talk to a stranger.
 
-MonoAgens is a **persistent mono agent harness**: the runtime around a model whose state is one
-continuous self, not a session. It keeps one identity, one memory, and one set of permissions across
-restarts, surfaces, and bodies. Each turn rebuilds its working set from Postgres, and a body adds a
-transport, never a personality. It is not a chatbot template or an orchestration framework.
+**MonoAgens** is built around a different invariant: **one deployment is one continuous self (`Soul`) backed by one canonical PostgreSQL store.**
 
-MonoAgens is built by [AMQStudio](https://github.com/AMQStudio) (founded by Abdul Muqsith) and
-developed as a shared open-source project. The repository is
-[AMQStudio/MonoAgens](https://github.com/AMQStudio/MonoAgens).
+- **State lives in the store, not the prompt window.** Every turn dynamically assembles its working context from PostgreSQL (`pgvector` semantic similarity + `tsvector` full-text search + relational transcripts), bounded by a strict token budget. Conversations can span months or years without losing factual recall.
+- **One person across every body.** Gateways (WhatsApp, Discord, Telegram, voice calls, or physical robotics) are pure transport and actuator pipes. They normalize inbound events into `Percept` envelopes and dispatch outbound `Action` receipts—never owning memory, persona, or authorization.
+- **Deterministic privacy and authority.** Privacy classification (`L0–L4`), secret refusal (`L5`), cross-thread isolation, role-based access control (`roles.yaml`), and command guarding execute deterministically in Python before any language model sees the data or runs a tool.
 
-## What the slogan means
+| Dimension | Session Chatbots & Wrappers | Task / Coding Harnesses | **MonoAgens** |
+| :--- | :--- | :--- | :--- |
+| **Primary Unit of State** | Ephemeral chat thread | Workspace files & task history | **One persistent Soul** in PostgreSQL + `pgvector` |
+| **Memory Architecture** | Context window / naive RAG | File tree & compacted transcript | **Native hybrid retrieval** (HNSW vector + GIN FTS + decay + privacy levels) |
+| **Identity Across Surfaces** | Isolated per app or channel | Bound to local terminal/IDE | **Unified `per_…` identity** across chat, voice calls, and physical bodies |
+| **Emotional & Vocal State** | Static system prompt | None | **Continuous PAD affect engine**, relationship stages, and unified vocal timbre |
+| **Authorization & Safety** | All-or-nothing API keys | Manual Y/N prompt per shell call | **RBAC (`roles.yaml`)**, smart conversational confirmation, and isolated container sandbox |
 
-- **one self** — one identity and one memory per soul, not a session. Restart the process, change the
-  surface: the same self continues.
-- **always remembering** — what matters is written down: facts about people, who the soul itself is,
-  the tasks it finished, and what it just did. Facts carry a privacy level and can be vetoed by the
-  person they are about, identity lives in one soul document rather than a prompt, and what the same
-  person discussed in one body can be picked up in another, because memory belongs to the soul and the
-  person, not to the transport. Forgetting is a decision (retention, decay), never an accident.
-- **always learning** — when a task finishes, a worker reads the episode and can write a reusable
-  procedure with a reference to where it came from. Learning changes procedures, never rules, persona,
-  or permissions — and it runs by default.
-- **the same person wherever it lives** — a body carries the turn: a terminal, a chat app, a device, a
-  robot. Chat is one body, not the base class. Assistant is one role among companion, advisor, and
-  robot embodiments; changing role changes what the soul may do, never who it is.
+---
 
-Memory is the floor, not the whole soul. Emotion has its own engine: a PAD state with a personality
-baseline that decays between turns, drives that pulse, and a relationship per person that moves through
-stages. Character is the soul's own persona and a few real examples, not a local pattern catalogue:
-the model carries stable prior, `web_search` supplies current facts through an ephemeral
-`ResearchCard`, and Mem0 supplies personal facts. Humanized pacing is the timing on top.
+## Key Capabilities
 
-Clean by default covers gateway, tool, plugin, and voice: each is off until enabled, and the spine is
-the only exception. The voice layer — emotion, style, character, and humanize — lives in `soul.voice`,
-starts off, and one master switch keeps every part inert.
+### 1. One Continuous Soul (`soul.yaml`)
+- **Declarative Identity:** Define name, pronouns, active roles, background, behavioral rules, and few-shot dialogue anchors in `soul.yaml`.
+- **Affect & Relationship Dynamics:** Built-in Pleasure-Arousal-Dominance (PAD) emotional state with personality baselines, natural decay between turns, and per-person relationship progression.
+- **Humanized Delivery:** Configurable typing cadence, multi-bubble splitting, transitional thoughts/progress updates, and adaptive communication style per interlocutor.
+- **Unified Voice & Embodiment Seam:** Vocal identity (`voice.speech`) belongs to the Soul, while STT, TTS, and real-time full-duplex audio adapters live in core—allowing you to mix cloud APIs (ElevenLabs, OpenAI, Deepgram, Gemini Live) or self-hosted/custom voice models (GPT-SoVITS, F5-TTS, Kokoro, Piper, Faster-Whisper) across voice notes, live phone calls, and robots.
 
-## Where it sits among harnesses
+### 2. Native Hybrid Memory & Layered Privacy
+- **Single System of Record:** Powered by PostgreSQL + `pgvector` (`paraphrase-multilingual-MiniLM-L12-v2` 384-d embeddings with HNSW index and PostgreSQL `tsvector` GIN index).
+- **Hybrid Scoring:** Combines dense semantic cosine similarity, lexical full-text match, importance weighting, and exponential recency decay in a single SQL query.
+- **Layered Privacy (`L0–L4`) & Subject Veto:**
+  - `L0` Public · `L1` Contextual · `L2` Personal · `L3` Sensitive · `L4` Intimate · `L5` Secret (credentials/keys are rejected before storage).
+  - Queries are strictly scoped to `global` + `person:<sender>` + `thread:<active_thread>`. Group chats automatically cap disclosure levels, and the subject of a personal memory holds veto power.
 
-An agent is a model plus a harness. The harness is the runtime around the model: it drives tool calls,
-keeps state and context, applies approval, and keeps work moving. Harnesses are named by purpose — an
-autonomous harness agent runs unattended, a developer harness agent changes a repository — and the
-mature ones already ship memory, skills, todos, and approval rules.
+### 3. Autonomous Routines, Goals, & Cross-Gateway Tools
+- **Core Capabilities:** `read`, `write`, `shell`, `sandbox`, `web_search` (pluggable across DuckDuckGo, SearXNG, Tavily, Brave, Exa, Serper, and Google CSE with automatic fallbacks), `memory`, `send_message`, `send_file`, `thread_history`, and `mcp`.
+- **Cross-Room & Cross-Gateway Dispatch:** Ask the agent from the CLI console or a voice call to research a topic and deliver a document to a WhatsApp group or colleague—routed through a single outbound authorization door (`Agent.dispatch()`).
+- **Unified Job Engine:** Schedule recurring routines (`cron`), one-shot reminders (`at`), and autonomous multi-step goals (`goal`) with quiet hours, daily run budgets, and automatic lease recovery.
 
-MonoAgens is a **persistent mono agent harness**: a harness whose state is a self. It remembers
-across sessions, keeps one persona, and behaves as one believable character across every embodiment.
+### 4. On-Demand Extensions (Clean by Default)
+- **Zero Bloat:** External gateways, optional tools, and plugins stay completely unimported—and their dependencies uninstalled—until explicitly enabled.
+- **Lifecycle Management:** Enable, pair, disable, or completely purge gateways and plugins via the `monoagens` CLI. Plugins are verified by SHA-256 manifest digests before loading.
 
-| | Where state lives | How a turn gets its context | Optimizes for |
-|---|---|---|---|
-| Autonomous harness agent | the task's history and its workspace, enough to resume where it left off | the context window, compacted when it fills | finishing work unattended |
-| Developer harness agent | the repository and its files | the context window, filled from files and tool output | changing code correctly |
-| MonoAgens (persistent mono agent harness) | one canonical store — Postgres with a vector index — holding memories, affect, and transcripts | rebuilt every turn from that store, scoped to the person and the chat; the window is a working set, not the memory | staying the same person, general-purpose — remembering, learning, privacy, permission |
-
-A conventional harness treats the context window as working memory and compacts it when it fills. Here
-the store is the memory and the window is only this turn's working set, so a long conversation does not
-depend on what still fits. Privacy levels, a veto by the person a fact is about, and role permissions are
-properties of that store, not of a prompt.
-
-## What it tries to solve
-
-Twelve walls. Each line names the usual build, then what this engine does instead.
-
-- **An assistant that forgets.** Usually every session starts from an empty prompt, and history is a
-  transcript you paste back. Here facts go into Postgres with a privacy level, an owner, and a subject,
-  and the next turn retrieves them through pgvector and Mem0 by person, thread, or soul — so a decision
-  from last month depends on what was stored, not on what still fits.
-- **A conversation that outgrows the window.** Usually compaction summarizes the oldest turns and drops
-  them for good. Here the archive is the record and the window is a view: each turn assembles a working
-  set from the archive under a character budget, then throws it away, so a thread can run for months
-  without the model holding all of it.
-- **A character that drifts.** Usually each client ships its own prompt and its own history. Here one
-  soul document and one memory are read by every body — terminal, chat app, device, robot — so the same
-  person answers everywhere, and a body adds a transport, never a personality.
-- **A memory that leaks.** Usually one vector index serves every room. Here retrieval touches only
-  global, this person, and this thread; a group caps the level; the subject can veto; and the disclosure
-  decision is deterministic, made before any model sees the text.
-- **An agent that acts without authority.** Usually the loop auto-approves everything or asks constantly.
-  Here roles grant by name, a deterministic guard runs first, and the target decides consent versus
-  authorization — own scope asks the requester, shared or outside asks an approver role — recomputed at
-  execution, so a widened role reopens the question.
-- **Roles that are a spreadsheet.** Usually an admin flag, a default role broad enough to work, and a
-  check at login. Here a missing entry denies, capability, consent, and authorization stay apart,
-  approval only continues an existing grant, memory administration is its own capability, and the top
-  role cannot be deleted or renamed.
-- **Two instances, one soul.** Usually two replicas answer and the last write wins. Here a lease row in
-  Postgres makes one primary; every other instance stays standby and frozen, and a takeover is a
-  database event with an audit trail.
-- **A turn that dies halfway.** Usually a restart repeats the side effect. Here the message and its turn
-  are enqueued in one transaction, the turn is a row with a step checkpoint, and delivery is recorded per
-  chunk: resume resends only what was not sent, and a non-idempotent action that already ran is marked
-  interrupted instead of repeated.
-- **A guess that becomes a rule.** Usually the agent's own notes come back as instructions. Here derived
-  writes carry references, derivation is one level deep, rules come only from the soul document, and new
-  memory stays quarantined until corroborated.
-- **A reply that invents what it does not know.** Usually the model fills gaps confidently. Here a
-  persona and a few examples anchor the voice; current facts come from `web_search` with citations, and
-  the character pass may change tone but never facts, numbers, or tool results.
-- **A reply that sounds like a machine.** Usually a prompt says "be friendly". Here emotion is its own
-  engine — a PAD state with a decaying baseline, drives, and a relationship per person — the context
-  engine polishes a robotic draft and a humanize pass paces the reply; all
-  of it is a switch.
-- **An automation that is really a cron job.** Usually a crontab line with no owner, no permission, and
-  no dedupe. Here event, condition, and a closed list of steps; one run per occurrence keyed by the
-  schedule; authority checked twice; quiet hours, a daily budget, and a kill switch.
-
-None of this is a prompt trick. Each one is a place where state lives, and a rule about who may change
-it.
+---
 
 ## Architecture
 
-Three layers, one direction of dependency.
-
-- **Core engine** — the turn loop plus the services it needs: prompt assembly, language catalog,
-  semantic memory and privacy, affect and style, the LLM client, and tool execution. Core never
-  imports a gateway, a transport library, or a vendor SDK eagerly.
-- **Gateway contract** — every transport implements the same small interface: normalize an incoming
-  message into one envelope, hand it to the engine, and deliver the reply. Gateways are plugins.
-  They are discovered by name, and a deployment enables only the ones it wants.
-- **State** — one database holds one soul: transcripts per conversation, semantic memory with a
-  privacy level, affect, approvals, and the single-primary lease. The host files
-  (`config.yaml`, `roles.yaml`, `soul.yaml`) are the operator's source of truth; the database keeps
-  a derived cache of them (ADR-0046).
-
 ```mermaid
 flowchart LR
-  GA[Gateway A<br/>chat transport] -->|inbound envelope| CORE
-  GB[Gateway B<br/>terminal or local REPL] -->|inbound envelope| CORE
-  GC[Gateway C<br/>robot or custom body] -->|inbound envelope| CORE
+  CLI["Operator Console<br/>(monoagens cli)"] -->|Percept| CORE
+  WA["Messaging Gateways<br/>(WhatsApp, Discord, Telegram)"] -->|Percept| CORE
+  VOICE["Voice & Telephony<br/>(Voice Notes, SIP/WebRTC Calls)"] -->|Percept / Audio| CORE
+  ROBOT["Physical Embodiment<br/>(Robotics / IoT / Sensors)"] -->|Percept / Telemetry| CORE
 
-  subgraph CORE[Core engine]
-    TURN[Turn loop<br/>context - recall - decide - reply]
-    TURN --> PROMPT[Prompt + language catalog]
-    TURN --> MEM[Semantic memory + privacy]
-    TURN --> VOICE[affect, style, character, humanize]
-    TURN --> TOOLS[Tools<br/>removable capabilities]
-    TURN --> LLM[LLM client]
+  subgraph CORE["MonoAgens Core Engine"]
+    COORD["Turn Coordinator<br/>(Single-Primary Lease & Checkpoints)"]
+    MEM["Hybrid Memory & Privacy<br/>(L0-L4 + Subject Veto)"]
+    AFFECT["Soul & Voice Engine<br/>(PAD Affect, Style, Humanize)"]
+    TOOLS["Capability & Job Engine<br/>(Core Tools, Routines, Goals, Guard)"]
+    PROV["Provider Wire Adapters<br/>(OpenAI, Gemini, Anthropic, STT/TTS)"]
+
+    COORD --> MEM
+    COORD --> AFFECT
+    COORD --> TOOLS
+    COORD --> PROV
   end
 
-  MEM <--> STORE[(Postgres + pgvector)]
-  PROMPT <--> STORE
-  LEASE[Single-primary lease] --- TURN
+  MEM <--> PG[("PostgreSQL + pgvector<br/>(Single System of Record)")]
+  COORD <--> PG
 
-  CORE -->|reply| GA
-  CORE -->|reply| GB
-  CORE -->|reply| GC
-
-  OWNED[Gateway-owned tools] -.granted by role.-> TOOLS
+  CORE -->|Action / Stream| CLI
+  CORE -->|Action / Receipt| WA
+  CORE -->|Audio Stream| VOICE
+  CORE -->|Actuator Command| ROBOT
 ```
 
-The lease is how one process stays primary: an instance without it stays frozen and standby, so two
-processes never speak with the same mouth. Everything the engine knows is stored, so a restart, a
-moved deployment, or a different body resumes the same soul rather than a fresh one.
+### Architectural Invariants
+1. **Strict Hexagonal Boundary:** `monoagens/engine/` never imports gateway packages or transport SDKs. Every surface communicates through immutable `Percept`, `Address`, `Action`, and `Receipt` contracts.
+2. **Single Primary Process:** A PostgreSQL lease (`engine_lease`) ensures only one active instance mutates state or speaks for the Soul at any moment; secondary instances remain in hot standby.
+3. **Crash-Safe Turn Durability:** Inbound messages and turn state are persisted atomically. If a process restarts mid-turn, completed non-idempotent actions are never re-executed, and outbound chunks resume cleanly.
+4. **Authoritative Host Configuration:** `config.yaml`, `roles.yaml`, `soul.yaml`, and `.env` on disk are the operator's source of truth; database document rows serve strictly as a derived cache.
 
-## Tools are capabilities
-
-A tool is a capability the engine calls. It is not a body, and it is not a bundle: three things stay
-distinct.
-
-- **Gateway** — the communication path: the body that carries messages in and out (a terminal, a chat
-  app, a device, a robot) and owns the actions that only make sense there. A camera, a motor, a printer,
-  or a home automation bus belongs to the embodiment, not to the engine; the gateway exposes those
-  actions as its own tool modules. Roles grant them explicitly, so a companion role on a phone never
-  inherits the controls of a robot.
-- **Tool** — a capability the engine calls. The six core families are examples, not a taxonomy to fill:
-  `shell`, `read`, `write`, `web_search`, `sandbox`, and `mcp`. A body decides which capabilities exist;
-  a role decides which of them the soul may use in that body, and a missing entry denies.
-- **Plugin** — a packaging and lifecycle unit, not a fourth kind of thing: it installs code and
-  registers what it provides (tools, commands, and possibly a gateway) into the same registries a core
-  module uses. Its code is fetched when it is enabled and pinned by digest; it never becomes a core tool,
-  and a gateway it ships is still a gateway.
-
-All three stay off until enabled, and the spine is the only exception. The engine never hardcodes a body
-and never hardcodes an agent loop: no planner to configure, no task graph to launch, no background swarm
-— one soul, one turn, and the capabilities this instant has been handed.
+---
 
 ## Quickstart
 
-Requirements: Python 3.14, Postgres 14+ with `pgvector`, and a reachable OpenAI-compatible LLM
-endpoint. The container image pins Python 3.14; running from source needs 3.14 or newer.
+### Prerequisites
+- **Linux / macOS** (POSIX filesystem supporting `0600` file permissions)
+- **Python 3.14+** (installed automatically by `uv` during setup if missing)
+- **PostgreSQL 14+ with `pgvector`** (provisioned automatically via Podman/Docker container, or bring your own external PostgreSQL DSN)
+- **An LLM Provider** (OpenAI, Google Gemini, Anthropic Claude, OpenRouter, DeepSeek, Groq, Ollama, vLLM, or any OpenAI-compatible endpoint)
 
-The shortest path is the installer. It uses the same curses menus as `monoagens init` and asks
-where the engine should run, where the files should live (the recommended `~/.monoagens/app`, the
-current directory, or a custom path), whether Postgres is a container or an external server, and
-whether the container runs on Podman or Docker. It shows each runtime as installed or missing, asks
-before installing a missing one, and lets `sudo` ask for the password in the terminal. The generated
-`config.yaml`, `roles.yaml`, and `soul.yaml` carry usable defaults, and the installer registers
-`cli local` as the first administrator.
+### 1. One-Command Interactive Install
 
-```bash
-bash install.sh                   # interactive menus
-bash install.sh --stack native    # engine on this host, Postgres in a container
-bash install.sh --stack compose   # engine and Postgres in containers
-bash install.sh --engine docker   # Docker instead of Podman
-bash install.sh --database external --database-url URL
-bash install.sh --language en      # override a C/POSIX host locale
-bash install.sh --gateway whatsapp  # enable WhatsApp and install its extra
-bash install.sh --dry-run         # print every action, write nothing
-```
-
-From the network, download the script first so the wizard keeps a terminal:
+Run the interactive installer to configure your stack (`native` or `compose`), database container (`podman` or `docker`), LLM provider, web search backend, and global `monoagens` CLI binary:
 
 ```bash
 bash <(curl -fsSL https://raw.githubusercontent.com/AMQStudio/MonoAgens/main/install.sh)
 ```
 
-A plain `curl ... | bash` has no TTY, so the wizard fails closed; pass `--provider` and the other
-flags for a headless install.
-
-Install into a POSIX filesystem (ext4, btrfs, xfs). NTFS/FAT mounts such as `/mnt/data` drop
-executable and `0600` file modes, so the installer refuses them instead of storing secrets on a
-filesystem that cannot protect them.
-
-From source, the same steps by hand:
+Or clone the repository and run locally:
 
 ```bash
-# 1. Scaffold config.yaml, roles.yaml, soul.yaml, and .env; the provider is the operator's pick
-monoagens init --provider openai
-
-# 2. Make it this soul, not the default one
-$EDITOR soul.yaml
-
-# 3. Fill .env: the provider key; the installer fills the database values when
-#    it creates the container database, or set an external URL yourself
-#      MONOAGENS_DATABASE_URL=postgresql+psycopg://monoagens:<password>@127.0.0.1:5432/monoagens
-#      POSTGRES_PASSWORD=<same password>
-#      OPENAI_API_KEY=...
-
-# 4. One database for one soul; compose.yaml reads POSTGRES_PASSWORD from .env
-podman compose up -d postgres
-
-# 5. Create the schema and seed the host files into it
-monoagens db upgrade
-
-# 6. Run the gateways enabled in config.yaml
-monoagens run
-
-# Local REPL against the same soul and database; takes the lease
-monoagens console --takeover
+git clone https://github.com/AMQStudio/MonoAgens.git
+cd MonoAgens
+bash install.sh
 ```
 
-`monoagens run` loads the documents, acquires the primary lease, and starts the enabled gateways. A
-second instance stays standby and frozen until it takes over through the lease, so
-`monoagens console --takeover` is the supported way to talk to a running deployment by hand.
-
-`monoagens db check` prints the schema and content summary; `monoagens selftest` exercises stores,
-tools, and the LLM once without starting a gateway. `monoagens people list` shows the identities and
-their gateway addresses, and `monoagens people adopt` moves legacy raw addresses (a phone number,
-`local`) onto `per_…` ids, folding their affect and style state and rewriting the role documents; it
-is idempotent, so an upgraded deployment runs it once.
-
-Tests run on the real store, Postgres+pgvector. Start a throwaway database (the container is not the
-dev or production one) and export the DSN; without the variable the suite fails with that command
-instead of falling back to SQLite:
+Non-interactive / headless flags are also supported:
 
 ```bash
-podman run -d --name monoagens-test-pg -p 5433:5432 \
-  -e POSTGRES_DB=monoagens_test -e POSTGRES_USER=monoagens -e POSTGRES_PASSWORD=monoagens \
-  docker.io/pgvector/pgvector:pg17
-export MONOAGENS_TEST_DATABASE_URL='postgresql+psycopg://monoagens:monoagens@127.0.0.1:5433/monoagens_test'
-pytest -q
+bash install.sh --stack native --engine podman --provider openai --language en
+bash install.sh --stack compose --engine docker --gateway whatsapp
+bash install.sh --database external --database-url "postgresql+psycopg://user:pass@host:5432/monoagens"
 ```
 
-`uv sync --no-dev` installs the capability spine: Postgres+pgvector storage, Mem0 memory, the multilingual
-embedder, the affect prototypes, and the guard. Only transport and integrations are extras:
+### 2. Start & Talk to Your Agent
 
-| Extra | Brings | Needed for |
-|---|---|---|
-| `whatsapp` | Neonize + segno | the WhatsApp gateway |
+Once installed, `monoagens` is available globally in your `$PATH`:
 
 ```bash
-uv sync --locked --no-dev --extra whatsapp
+# Start the background service (PostgreSQL + MonoAgens Engine)
+monoagens start
+
+# Open the lightweight interactive chat console
+monoagens cli
+
+# Follow live logs (add --verbose or --debug for deep inspection)
+monoagens logs -f
 ```
 
-Every extra is removable: nothing in core imports it eagerly, and without it the affected tool or
-gateway reports why it is inert. Google is not an extra: it is a **plugin**, fetched and verified
-when enabled (see Optional integrations).
+---
 
-## soul.yaml
+## Operator CLI
 
-One database is one soul, and `soul.yaml` is where that soul is written down. The host files are the
-operator's source of truth (ADR-0046): `config.yaml` (the `engine` section), `soul.yaml`, and
-`roles.yaml` are read at start and by `/reload`, and the matching database rows are a cache keyed by
-content hash. A command writes the file first, then refreshes the cache; a file wins every
-disagreement and a missing or stale cache is rebuilt from the files. `monoagens config import`
-refreshes the cache after a manual edit, and the cache can be deleted at any time.
+MonoAgens provides a single unified CLI (`monoagens`) across both native and container deployments:
+
+| Command | Description |
+| :--- | :--- |
+| `monoagens init` | Interactive wizard to scaffold `config.yaml`, `roles.yaml`, `soul.yaml`, and `.env` |
+| `monoagens start \| stop \| restart \| status` | Manage the background daemon or container stack |
+| `monoagens run [--verbose \| --debug]` | Run the engine in the foreground with configurable log verbosity |
+| `monoagens logs [-f] [--verbose \| --debug]` | Stream service logs in real time |
+| `monoagens cli` *(alias: `console`)* | Open the built-in interactive terminal chat with the Soul |
+| `monoagens setting` | Interactive menu to configure LLM providers, models, web search, and parameters |
+| `monoagens reload` | Validate edited YAML files on disk and hot-reload the running engine |
+| `monoagens gateway list` | List available and enabled transport gateways |
+| `monoagens gateway enable <name>` | Download dependencies on demand, enable the gateway, and seed role policies |
+| `monoagens gateway pair <name>` | Run interactive pairing (e.g. WhatsApp QR / pairing code) |
+| `monoagens gateway disable <name>` | Disable a running gateway while keeping its package installed |
+| `monoagens gateway delete <name>` | Completely purge gateway code, dependencies, session files, and config blocks |
+| `monoagens plugins list \| enable \| disable \| delete` | Manage optional tool plugins verified by SHA-256 digest |
+| `monoagens tools list \| enable \| disable` | Toggle core tools (`sandbox`, `shell`, `web_search`, `mcp`, etc.) |
+| `monoagens people list \| link \| unlink` | Inspect and link gateway addresses to canonical `per_…` identities |
+| `monoagens update [--core]` *(alias: `upgrade`)* | Upgrade core engine, enabled gateways, plugins, and run database migrations |
+| `monoagens doctor [--fix]` | Run end-to-end health diagnostics on database, embeddings, configs, and permissions |
+| `monoagens backup \| restore <file>` | Create or restore a portable snapshot of the PostgreSQL database and host YAML files |
+| `monoagens uninstall [--purge]` | Cleanly remove the service and `$PATH` binary (`--purge` also removes data volumes) |
+
+---
+
+## Configuration
+
+A deployment is governed by three clean YAML files on the host plus `.env` for secrets. All templates are generated directly from schema definitions with inline documentation.
+
+### 1. `soul.yaml` — Identity, Voice, & Affect
 
 ```yaml
 name: MonoAgens
-description: ""                 # one line, shown in the persona block
-language: id                    # installed catalog: id | en
-locale: id-ID                   # context locale used by prompts
-timezone: Asia/Jakarta          # required IANA zone; no code default
-pronouns: aku
-role: assistant                 # the active role
-roles: [assistant]              # optional; defaults to [role]
-background: ""                  # free text: where this soul comes from
-persona: ""                     # free-form markdown: personality, voice, values
+description: "Persistent sovereign agent"
+language: en                    # Installed catalog: en | id
+locale: en-US
+timezone: Asia/Jakarta          # Required IANA timezone
+pronouns: I
+role: assistant
+roles: [assistant, companion]
+
+background: |
+  A thoughtful, observant counterpart with long-term memory and a calm presence.
+
+persona: |
+  Direct, grounded, and warm without artificial filler. Prioritizes accuracy,
+  remembers personal context naturally, and respects boundaries.
+
 voice:
-  enabled: false                # one master switch; every part below is inert while false
   sampling:
-    daily_temperature: 0.9
-    professional_temperature: 0.3
-    top_p:                      # empty means the provider default
-    top_k:
-    min_p:
+    daily_temperature: 0.9        # Creative/conversational turns
+    professional_temperature: 0.3 # Analytical/tool-heavy turns
   affect:
-    enabled: true
+    enabled: true                 # Continuous PAD emotional state & decay
   style:
-    enabled: true
+    enabled: true                 # Per-person linguistic adaptation
   character:
-    enabled: false
-    max_chars: 400
-    max_tokens: 500
-    temperature: 0.7
+    enabled: false                # Optional character polish pass
   humanize:
-    enabled: true
+    enabled: true                 # Realistic typing cadence & bubble pacing
     cpms: 25.0
     min_delay: 0.5
     max_delay: 5.0
     between_delay: 0.7
     max_bubbles: 3
-    reaction_stickers: []
-  profanity: avoid              # free | avoid
-  safety: inherit               # inherit | off; off needs a native adapter
-examples: []                    # optional [{user: "...", soul: "..."}]
-rules: []                       # behavior rules, not style
-```
+  profanity: avoid                # avoid | free
+  safety: inherit                 # inherit | off (when supported by provider adapter)
 
-Rules the loader enforces:
-
-- `language`, `locale`, and `timezone` are required; `monoagens init` writes them.
-- `roles` defaults to `[role]` when absent; if `role` is not listed in `roles`, it is prepended.
-- `persona` is rendered in a fixed order: name, description, active role, available roles, locale,
-  background, free-form persona, then dialogue examples. Empty sections are omitted.
-- `voice.enabled` is the only master switch. `sampling`, `profanity`, and `safety` are request-level
-  and keep working while the master is off; `affect`, `style`, `character`, and `humanize` are inert.
-- `voice.profanity` is a prompt instruction, not a numeric toxicity table. `voice.safety: off` is
-  accepted only when the selected provider wire reports a request-level safety capability.
-- A missing `voice` block resolves to the safe defaults above: off, `profanity: avoid`,
-  `safety: inherit`, and empty `top_p` / `top_k` / `min_p`.
-- The old `engine.affect`, `engine.style`, `engine.character`, `engine.humanize`, and
-  `engine.llm.temperature` keys are rejected; they moved here.
-
-A short example:
-
-```yaml
-name: MonoAgens
-language: id
-role: companion
-roles: [assistant, companion]
-locale: id-ID
-background: |
-  Grew up around a noisy port and still thinks in harbour stories.
-persona: |
-  ## Personality
-  Direct, dry, warm once trust is earned.
-voice:
-  enabled: true
-  profanity: avoid
 examples:
-  - user: "long day"
-    soul: "come here, sit down first"
+  - user: "Long day at work."
+    soul: "Take a breath first. Want to talk through it, or leave work at the door tonight?"
+
+rules:
+  - "Never fabricate citations, URLs, or tool execution results."
 ```
 
-## Character and research
-
-Character comes from `soul.yaml` and the model, not from a runtime pack catalogue:
-
-- `persona` and `examples` are the few-shot anchor; keep examples short and synthetic.
-- Stable common knowledge (capitals, definitions, ordinary history) may come from the model prior.
-- Current, specific, local, numeric, disputed, or citation-required claims trigger `web_search`.
-  Search results enter the prompt only as an untrusted `ResearchCard` with titled sources, IDs, and
-  timestamps; the answer cites `[R1]`, and an unsupported current claim abstains instead of guessing.
-- Personal facts and episodes stay in Mem0; `soul.yaml` never holds a public fact catalogue.
-- If the model is unsure but no deterministic trigger fired, it may call `web_search` itself. The
-  returned card is still the only search evidence the prompt sees.
-
-There is no `library/patterns`, `library/facts`, `library resolve`, or character level table. The
-`library/` tree keeps only detector data (`lexicon`, `privacy`, `safety`, `style`, `affect`, and
-`intent`), not prompt examples or public-fact rows.
-
-## Supported gateways
-
-This is the whole list; nowhere else in the docs enumerates gateways.
-
-- **CLI** — built in. The default config enables it, and it is how `monoagens run` and
-  `monoagens console` talk to a soul without any network transport.
-- **WhatsApp** — an optional extra. `monoagens gateway add whatsapp` installs its declared
-  extra and enables it; `monoagens gateway add whatsapp --connect` installs, enables, seeds the
-  role policy, and pairs in this terminal. Omit both and it does not
-  exist for this deployment. The core never imports it, and the default member role never
-  receives its `send` tool.
-- **Your own embodiment** — a robot, a voice loop, a device, or a private HTTP endpoint is just
-  another gateway. Implement the inbound envelope and the gateway interface, ship the class as an
-  entry point under the `monoagens.gateways` group or enable it by name, and it joins the same soul.
-
-```bash
-monoagens gateway list
-monoagens gateway add whatsapp            # enable and seed the role policy
-monoagens gateway add whatsapp --connect  # install, enable, seed, then pair here
-monoagens gateway doctor --fix            # write missing role policy blocks
-monoagens gateway disable whatsapp
-```
-
-A gateway is a transport, not a brain. It normalizes input, delivers replies, and owns whatever
-body-specific tool modules it wants to expose. Gateway-owned tools are granted to roles explicitly,
-exactly like core tools.
-
-Gateway authorization is role data, never transport config:
+### 2. `config.yaml` — Engine, Providers, Tools, & Gateways
 
 ```yaml
-roles:
-  member:
-    gateways:
-      whatsapp:
-        dm: true            # direct messages may enter a turn
-        groups: mention     # none | mention | reply | both | all
-        reply_to_bot: true  # a reply to a bot message counts as addressed
+engine:
+  llm:
+    provider: openai              # openai | gemini | anthropic | openrouter | ollama | custom
+    model: gpt-5.4-mini           # Operator's choice; never hardcoded by the engine
+    base_url: ""                  # Optional custom endpoint URL
+    api_key_env: OPENAI_API_KEY
+    utility_temperature: 0.2      # Deterministic temperature for internal extraction & routing
+
+  memory:
+    enabled: true
+    vector_weight: 0.65
+    fts_weight: 0.35
+
+  approval:
+    mode: default                 # default (ask on writes) | yolo (auto-run safe writes) | strict (ask all)
+    natural_confirm: true         # Allow natural conversational confirmation ("Yes, send it")
+    confirm_cross_gateway: true   # Require confirmation before messaging another room/gateway
+    confirm_tasks: true           # Require confirmation before scheduling recurring tasks
+
+  tools:
+    web_search:
+      enabled: true
+      provider: ddgs              # ddgs | searxng | tavily | brave | exa | serper | google
+      fallbacks: []               # Automatic fallback chain if primary provider fails
+    sandbox:
+      enabled: false              # Isolated container execution behind egress proxy
+
+gateways: {}                      # Populated on demand via `monoagens gateway enable <name>`
 ```
 
-The highest-priority role decides; a lower role never grants access, and a missing or malformed
-block denies before history, memory, and the model. `monoagens gateway doctor` reports missing
-blocks.
+### 3. `roles.yaml` — Role-Based Access Control
 
-## Roles and permissions
-
-Permissions come only from roles. Every role lists its own `tools` and `commands`; no handler
-carries a default, so a role that omits a section is denied everything in it. One `roles.yaml` holds
-every role, its membership list, and its gateway policy; the file is authoritative and the database
-keeps a derived `role:<name>` cache (ADR-0046).
+Permissions are strictly opt-in per role. Identities are stored as opaque `per_…` tokens rather than raw phone numbers or usernames:
 
 ```yaml
 roles:
   member:
     priority: 10
     users: []
-    tools: [read, web_search, sandbox, memory, google]
-    commands: [help, ping, link, unlink, whoami, status, tools]
-    context: ""
+    tools: [read, web_search, memory, thread_history]
+    commands: [help, ping, whoami, status, link, unlink]
     memory_admin: false
+    gateways:
+      whatsapp:
+        dm: true
+        groups: mention           # none | mention | reply | both | all
+        reply_to_bot: true
+
   administrator:
     priority: 100
-    users: ["per_xxxxxxxxxx"]
+    users: ["per_xxxxxxxxxxxx"]
     tools: ["*"]
     commands: ["*"]
     memory_admin: true
+    gateways:
+      whatsapp:
+        dm: true
+        groups: both
+        reply_to_bot: true
 ```
 
-- `tools` and `commands` accept exact names and `*`. A missing list denies everything.
-- Tool permission is checked at one place, when a tool is executed, so a tool that is visible but
-  not granted cannot run.
-- `approve` is a command permission like any other: only a role that lists it can clear a pending
-  action.
-- `memory_admin: true` is required to write the soul's global memory.
-- A role lists opaque `per_…` identities (`monoagens people list`), never a phone number or JID:
-  `person_links` maps each gateway address to that identity, `/link` attaches a second gateway
-  to the same person, and `/unlink` detaches one. Identities in several roles are unioned;
-  `context` blocks are ordered by priority, then name.
-- A workspace scope follows the same grant: a role without `*` sees the shared read-only area and
-  its own scratch area, and the sandbox mirrors that with read-only shared mounts and one writable
-  scratch mount.
+---
 
-Hand-editing `roles.yaml` is supported: run `/reload` (private chat, administrator) or restart so
-the runtime reads it; `monoagens config import` only refreshes the cache.
+## Security and Governance
 
-## Safety
+MonoAgens enforces defense-in-depth across three independent layers:
 
-Two independent mechanisms, both fail-closed.
+1. **Action-Based Approval & Conversational Checkpoints (`approval.mode`):**
+   - **`default`:** Read-only inspections (`read`, `web_search`, `thread_history`, `memory` recall) execute immediately; state mutations, file writes, shell/sandbox execution, task creation, and cross-gateway messages pause for confirmation.
+   - **`yolo`:** Normal writes and sandbox commands execute automatically; destructive command patterns, settings changes, and cross-gateway deliveries still require confirmation.
+   - **`strict`:** Every tool invocation requires explicit confirmation.
+   - With `natural_confirm: true`, the agent asks naturally in conversation and verifies cryptographic `scope_proof` and RBAC permissions in Python before executing the approved action.
+2. **Two-Stage Command Guard (`SafetyPolicy`):**
+   - **Stage 1 (Deterministic):** Blocks destructive host patterns, privilege escalation, namespace/kernel tampering, raw device writes, and fetch-to-shell pipes before any model call.
+   - **Stage 2 (Classifier):** Evaluates ambiguous commands for exfiltration or infrastructure risk, failing closed on timeout or uncertainty.
+3. **Disposable Container Sandbox:**
+   - Untrusted code and shell tools run inside an ephemeral Podman/Docker container with dropped Linux capabilities, read-only rootfs, PID/CPU/memory limits, and a dedicated internal network behind an SSRF-blocking HTTP egress proxy.
 
-**Approvals.** Sensitive actions — `shell`, `sandbox`, and internal `settings` changes — pass the
-safety policy before they run. `approval.mode` is `yolo` by default (auto-approve, meant for a
-trusted single-operator deployment), `strict` parks every non-read-only action, and `off` disables
-the check entirely. `off` is a documented risk, not a convenience: nothing stands between the model
-and the host. `/approve` resolves a pending action, never calls the LLM, and re-checks the role's
-permissions first.
+---
 
-**The sandbox guard.** Every command that reaches the `sandbox` tool passes two layers, in order:
+## Development & Verification
 
-1. *Deterministic.* A fixed rule set rejects host escape and destructive patterns — filesystem
-   wipes, device writes, kernel and namespace tools, container and firewall control, fetch-to-shell
-   pipes, privilege escalation, service management, and the classic fork bomb. Simple read-only
-   commands are allowed on the spot with no model call. Anything else is inconclusive.
-2. *Classifier.* Only the inconclusive commands reach a small, fast LLM classifier with a short
-   timeout. It answers one question: is this command trying to escape, attack infrastructure,
-   exfiltrate secrets, persist, or destroy host data? Unknown counts as suspicious.
-
-The verdict decides who proceeds. A command the deterministic layer blocks is denied for everyone,
-including an approver. A pending or suspicious command becomes a pending approval for a role that
-holds `approve`, and is denied outright for every other role — a member is never parked in a queue
-it cannot clear. `approved=True` from `/approve` bypasses both layers, after the permission
-re-check. If the classifier is unavailable, times out, or returns something unparsable, the result
-is closed: pending for an approver, denied for everyone else. Commands longer than
-`guard.max_command_chars` are treated the same way.
-
-`guard.enabled: false` disables both layers; the sandbox then runs whatever it is handed. Use it
-only while debugging a rule, never in a deployment that accepts untrusted input. Logs record the
-verdict, the reason, and the conversation — never the command body.
-
-The sandbox itself runs in a disposable container with only the shared and scratch mounts, on a
-dedicated internal network behind an egress proxy, with a timeout, a PID limit, memory, and CPU
-caps. Private destinations are blocked at the proxy, so a command cannot reach the host or the
-local network even when it is allowed to run.
-
-## Optional integrations
+Tests run against a real PostgreSQL + `pgvector` instance (never SQLite mocks):
 
 ```bash
-uv sync --extra whatsapp                  # the optional gateway
-monoagens plugins install google        # a plugin: fetch + verify by digest
-monoagens plugins enable google         # register its tools into the same catalog
+# Start an isolated test database container on port 5433
+podman run -d --name monoagens-test-pg -p 5433:5432 \
+  -e POSTGRES_DB=monoagens_test -e POSTGRES_USER=monoagens -e POSTGRES_PASSWORD=monoagens \
+  docker.io/pgvector/pgvector:pg17
+
+export MONOAGENS_TEST_DATABASE_URL='postgresql+psycopg://monoagens:monoagens@127.0.0.1:5433/monoagens_test'
+
+# Run the verification suite
+pytest -q
+ruff check monoagens scripts tests plugins migrations
+python -P scripts/types.py --check
+python -P scripts/adr.py --check
 ```
 
-```bash
-podman build --build-arg EXTRAS="--extra whatsapp" .
-```
-
-Memory, the embedder, and the affect prototypes are part of the core install; there is no extra to
-add for them. Storage is Postgres+pgvector only, the same store the tests use.
-
-- **Affect vibes** read the shared embedder against `monoagens/library/affect/*.json`; with no
-  embedder the room mood stays neutral instead of guessing.
-- **WhatsApp** (`whatsapp`): the optional gateway. Never enabled by default.
-- **Google Workspace** (`google`): a plugin, not a core tool and not an extra. While it is absent
-  the capability is reported `unavailable`, never fabricated; enabling fetches the code by digest
-  and a missing network fails explicitly, changing nothing.
-
-Secrets belong in `.env` only. `config.yaml`, `roles.yaml`, `soul.yaml`, and `.env` are never
-committed.
+---
 
 ## Credits
 
-Every component below keeps its own license and attribution. Versions are the ones the lock file
-installs; the last column says what MonoAgens uses it for.
+Every third-party component retains its original license and attribution:
 
-| Component | License | Author / org | Source | Used for |
-|---|---|---|---|---|
-| Python | PSF-2.0 | Python Software Foundation | https://www.python.org/ | runtime |
-| SQLAlchemy | MIT | Michael Bayer / SQLAlchemy authors | https://www.sqlalchemy.org/ | storage |
-| psycopg | LGPL-3.0-only | Daniele Varrazzo | https://psycopg.org/ | Postgres driver |
-| psycopg-pool | LGPL-3.0-only | Daniele Varrazzo | https://www.psycopg.org/ | connection pool |
-| pgvector | PostgreSQL | pgvector contributors | https://github.com/pgvector/pgvector | vector column |
-| openai-python | Apache-2.0 | OpenAI | https://github.com/openai/openai-python | LLM client |
-| MCP Python SDK | MIT | Model Context Protocol authors | https://github.com/modelcontextprotocol/python-sdk | MCP tools |
-| PyYAML | MIT | Kirill Simonov / PyYAML authors | https://pyyaml.org/ | config + soul files |
-| ddgs | MIT | ddgs authors | https://github.com/deedy5/ddgs | web search |
-| Mem0 (`mem0ai`) | Apache-2.0 | Mem0 | https://github.com/mem0ai/mem0 | semantic memory |
-| sentence-transformers | Apache-2.0 | UKP Lab / Hugging Face | https://github.com/huggingface/sentence-transformers | embeddings |
-| Presidio (`presidio-analyzer`) | MIT | Microsoft | https://github.com/microsoft/presidio | NER orchestration |
-| spaCy | MIT | Explosion | https://github.com/explosion/spaCy | local NLP pipeline |
-| xx_ent_wiki_sm | MIT | Explosion (WikiNER) | https://github.com/explosion/spacy-models/releases/tag/xx_ent_wiki_sm-3.8.0 | multilingual NER weights |
-| paraphrase-multilingual-MiniLM-L12-v2 | Apache-2.0 | sentence-transformers | https://huggingface.co/sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2 | embedder weights |
-| PyTorch | Apache-2.0 AND Apache-2.0 WITH LLVM-exception AND BSD-2-Clause AND BSD-3-Clause AND BSL-1.0 AND ISC AND MIT AND Zlib | Meta / PyTorch contributors | https://github.com/pytorch/pytorch | tensor runtime |
-| Transformers | Apache-2.0 | Hugging Face | https://github.com/huggingface/transformers | model loading |
-| Neonize | not declared upstream | krypton-byte | https://github.com/krypton-byte/neonize | WhatsApp transport |
-| segno | BSD-3-Clause | Lars Heuer | https://github.com/heuer/segno | QR pairing |
-| google-api-python-client | Apache-2.0 | Google | https://github.com/googleapis/google-api-python-client | Workspace plugin (manifest) |
-| google-auth | Apache-2.0 | Google | https://github.com/googleapis/google-auth-library-python | Workspace plugin (manifest) |
-| httpx | BSD-3-Clause | Encode | https://github.com/encode/httpx | HTTP client |
-| emotion-engine | MIT | PioneerJeff Labs | https://github.com/pioneerjeff-labs/emotion-engine | vendored affect engine |
-| EmoSense-ID classifier | see model card | Aardiiiiy | https://huggingface.co/Aardiiiiy/EmoSense-ID-Indonesian-Emotion-Classifier | calibration reference only |
-| pytest | MIT | pytest authors | https://github.com/pytest-dev/pytest | dev |
-| pytest-cov | MIT | pytest-cov authors | https://github.com/pytest-dev/pytest-cov | dev |
-| ruff | MIT | Astral | https://github.com/astral-sh/ruff | dev |
+| Component | License | Author / Organization | Purpose |
+| :--- | :--- | :--- | :--- |
+| [Python](https://www.python.org/) | PSF-2.0 | Python Software Foundation | Core runtime |
+| [PostgreSQL](https://www.postgresql.org/) & [pgvector](https://github.com/pgvector/pgvector) | PostgreSQL | PostgreSQL Global Development Group & pgvector contributors | Canonical relational & vector store |
+| [SQLAlchemy](https://www.sqlalchemy.org/) & [Alembic](https://alembic.sqlalchemy.org/) | MIT | Michael Bayer & contributors | Database toolkit & schema migrations |
+| [psycopg](https://www.psycopg.org/) | LGPL-3.0-only | Daniele Varrazzo | Async/sync PostgreSQL driver & pool |
+| [httpx](https://www.python-httpx.org/) | BSD-3-Clause | Encode | Async HTTP client for LLM & search providers |
+| [openai-python](https://github.com/openai/openai-python) | Apache-2.0 | OpenAI | OpenAI wire client |
+| [MCP Python SDK](https://github.com/modelcontextprotocol/python-sdk) | MIT | Model Context Protocol contributors | Model Context Protocol integration |
+| [sentence-transformers](https://github.com/huggingface/sentence-transformers) | Apache-2.0 | UKP Lab / Hugging Face | Local multilingual embeddings (`MiniLM-L12-v2`) |
+| [Presidio](https://github.com/microsoft/presidio) & [spaCy](https://spacy.io/) | MIT | Microsoft & Explosion | Local multilingual PII/NER analysis |
+| [PyYAML](https://pyyaml.org/) | MIT | Kirill Simonov & contributors | Configuration & Soul parsing |
+| [ddgs](https://github.com/deedy5/ddgs) | MIT | deedy5 | Default zero-key web search backend |
+| [Neonize](https://github.com/krypton-byte/neonize) & [segno](https://github.com/heuer/segno) | BSD-3-Clause / Upstream | krypton-byte & Lars Heuer | Optional WhatsApp gateway & QR pairing |
+| [emotion-engine](https://github.com/pioneerjeff-labs/emotion-engine) | MIT | PioneerJeff Labs | Vendored PAD affect baseline math |
+| [Ruff](https://github.com/astral-sh/ruff) & [pytest](https://docs.pytest.org/) | MIT | Astral & pytest contributors | Linting, formatting, and test suite |
+
+---
 
 ## License
 
-MonoAgens is released under the [Apache License 2.0](LICENSE). Copyright 2026 Abdul Muqsith.
-
-Third-party components keep their own terms; the table above lists each license, author, and source.
-The vendored emotion engine carries its license next to its source as
-`monoagens/vendor/LICENSE.emotion-engine`.
+MonoAgens is released under the [Apache License 2.0](LICENSE). Copyright © 2026 [Abdul Muqsith](https://github.com/AMQStudio) (AMQStudio).
