@@ -502,6 +502,8 @@ class AutomationWorker:
         from ..turn.reply import split_text
 
         address = self._address(str(target))
+        if origin is None:
+            raise StepError("explicit origin address is required", transient=False)
         owner = str(automation["owner"])
         reason = t("automation.attribution", self._language()) if attribution else ""
         body = str(text)
@@ -516,7 +518,7 @@ class AutomationWorker:
                 id=f"automation:{run['id']}:{index}",
             )
             receipt = await self.agent.dispatch(
-                owner, address, action, origin=origin or address, reason=reason
+                owner, address, action, origin=origin, reason=reason
             )
             if receipt.state == "sent":
                 facts["chunk"] = index + 1
@@ -558,6 +560,7 @@ class AutomationWorker:
                 run,
                 facts,
                 attribution=grant.mode != "anonymous",
+                origin=Address(self._route_name(owner), owner),
             )
 
     async def _sandbox(self, step: dict, automation: dict, run: dict, facts: dict) -> None:
@@ -729,7 +732,14 @@ class AutomationWorker:
             )
             fake_run = {"id": f"apology-{grouped[0]['id']}"}
             try:
-                await self._deliver(owner, text, grouped[0]["_automation"], fake_run, {})
+                await self._deliver(
+                    owner,
+                    text,
+                    grouped[0]["_automation"],
+                    fake_run,
+                    {},
+                    origin=Address(self._route_name(owner), owner),
+                )
             except StepError as exc:
                 log.warning("apology failed: %s", exc)
                 continue
@@ -749,7 +759,11 @@ class AutomationWorker:
             if gateway is None:
                 return
             await self.agent.send_text(
-                address.thread, text, gateway=gateway, subject=str(automation["owner"])
+                address.thread,
+                text,
+                gateway=gateway,
+                subject=str(automation["owner"]),
+                origin=address,
             )
         except Exception as exc:  # a notice never fails the run
             log.warning("automation notice failed: %s", type(exc).__name__)

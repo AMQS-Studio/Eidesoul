@@ -2,9 +2,10 @@
 
 The deterministic layer runs without a model and only collects what it can prove: duplicate
 texts in one scope, opposite polarity on the same predicate (using the language pack's
-negations), a different number/date for an otherwise identical claim, and mutually exclusive
-commitment statuses. The LLM, when present, only rules on those candidates; it never invents
-rows. Every write goes through `MemoryStore.apply_reflection` with `refs` to its sources.
+negations), a different number/date for an otherwise identical claim, mutually exclusive
+commitment statuses, and same-attribute statements that are close in the shared multilingual
+vector space. The LLM, when present, only rules on those candidates; it never invents rows.
+Every write goes through `MemoryStore.apply_reflection` with `refs` to its sources.
 """
 
 
@@ -15,6 +16,7 @@ import time
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 
+from .. import embed, io
 from ..character import lexicon
 from .store import MemoryStore
 
@@ -22,6 +24,89 @@ log = logging.getLogger(__name__)
 
 WORD = re.compile(r"\w+", re.UNICODE)
 DIGITS = re.compile(r"\d+", re.UNICODE)
+CJK = re.compile(r"[\u4e00-\u9fff\u3040-\u30ff\uac00-\ud7af]")
+# A pair is a candidate when the two statements sit close enough in the shared multilingual
+# space to talk about the same attribute, but not so close that one is a paraphrase of the
+# other. Below the floor they are unrelated; above the ceiling the duplicate pass already owns
+# them.
+SIMILAR_FLOOR = 0.55
+SIMILAR_CEILING = 0.94
+# The "not" direction is learned from English foundation anchors (AGENTS §1: no foreign words
+# in code). The multilingual encoder places a translated negation near its English anchor, so
+# the difference vector recognizes a direct negation pair in any language.
+POLARITY_AXIS_FLOOR = 0.45
+POLARITY_ANCHORS = (
+    ("the user likes it", "the user does not like it"),
+    ("this is true", "this is not true"),
+    ("the user wants it", "the user does not want it"),
+    ("I agree with this", "I disagree with this"),
+    ("the user is happy about it", "the user is unhappy about it"),
+)
+_STOPWORDS = frozenset(
+    {
+        "about",
+        "after",
+        "again",
+        "against",
+        "also",
+        "because",
+        "been",
+        "before",
+        "being",
+        "both",
+        "could",
+        "does",
+        "doing",
+        "during",
+        "each",
+        "from",
+        "further",
+        "have",
+        "having",
+        "here",
+        "hers",
+        "into",
+        "its",
+        "just",
+        "more",
+        "most",
+        "much",
+        "must",
+        "only",
+        "other",
+        "ours",
+        "over",
+        "same",
+        "should",
+        "some",
+        "such",
+        "than",
+        "that",
+        "their",
+        "them",
+        "then",
+        "there",
+        "these",
+        "they",
+        "this",
+        "those",
+        "through",
+        "under",
+        "until",
+        "very",
+        "were",
+        "what",
+        "when",
+        "where",
+        "which",
+        "while",
+        "will",
+        "with",
+        "would",
+        "your",
+        "yours",
+    }
+)
 _AUXILIARIES = frozenset(
     {
         "am",
@@ -96,6 +181,49 @@ def _same_claim(left: str, right: str) -> bool:
     return _normal(DIGITS.sub("#", _normal(left))) == _normal(DIGITS.sub("#", _normal(right)))
 
 
+def _content_tokens(text: str) -> set[str]:
+    return {
+        word
+        for word in WORD.findall(_normal(text))
+        if word not in _STOPWORDS and (len(word) >= 3 or CJK.search(word))
+    }
+
+
+def _shared_topic(left: str, right: str) -> bool:
+    """True when both statements name the same attribute: two shared content tokens, or
+    half of the shorter statement (a short claim has little room to repeat itself)."""
+    first, second = _content_tokens(left), _content_tokens(right)
+    shared = first & second
+    if not shared:
+        return False
+    shortest = min(len(first), len(second))
+    return len(shared) >= 2 or (shortest > 0 and len(shared) / shortest >= 0.5)
+
+
+def _polarity_axis() -> list[float]:
+    """The English "not" direction, averaged over the foundation anchors ([] without a model)."""
+    left = embed.encode([pair[0] for pair in POLARITY_ANCHORS])
+    right = embed.encode([pair[1] for pair in POLARITY_ANCHORS])
+    if not left or not right or len(left) != len(right) or len(left[0]) != len(right[0]):
+        return []
+    size = len(left[0])
+    return [
+        sum(float(a[index]) - float(b[index]) for a, b in zip(left, right, strict=True))
+        / len(left)
+        for index in range(size)
+    ]
+
+
+def opposite_in_vector_space(
+    first: Sequence[float], second: Sequence[float], axis: Sequence[float]
+) -> bool:
+    """A direct negation pair in any language: the statement difference follows the axis."""
+    if not axis or not first or not second or len(first) != len(second):
+        return False
+    difference = [float(a) - float(b) for a, b in zip(first, second, strict=True)]
+    return embed.cosine(difference, axis) >= POLARITY_AXIS_FLOOR
+
+
 def opposite_polarity(left: str, right: str, negations: frozenset[str]) -> bool:
     """Same predicate, one side negated: one side has exactly one extra negation token."""
     first, second = _tokens(left), _tokens(right)
@@ -111,14 +239,24 @@ def opposite_polarity(left: str, right: str, negations: frozenset[str]) -> bool:
     return False
 
 
-def _pair(left: Mapping, right: Mapping, language: str) -> Candidate | None:
-    if str(left.get("scope")) != str(right.get("scope")):
-        return None
-    if str(left.get("subject_id") or "") != str(right.get("subject_id") or ""):
-        return None
-    if str(left.get("kind") or "") != str(right.get("kind") or ""):
-        return None
-    if str(left.get("thread_id") or "") != str(right.get("thread_id") or ""):
+def _same_identity(left: Mapping, right: Mapping) -> bool:
+    """Same scope, subject, kind, and thread: two statements about the same thing."""
+    return (
+        str(left.get("scope")) == str(right.get("scope"))
+        and str(left.get("subject_id") or "") == str(right.get("subject_id") or "")
+        and str(left.get("kind") or "") == str(right.get("kind") or "")
+        and str(left.get("thread_id") or "") == str(right.get("thread_id") or "")
+    )
+
+
+def _pair(
+    left: Mapping,
+    right: Mapping,
+    language: str,
+    vectors: Mapping[str, Sequence[float]] | None = None,
+    axis: Sequence[float] | None = None,
+) -> Candidate | None:
+    if not _same_identity(left, right):
         return None
     left_id, right_id = str(left.get("id") or ""), str(right.get("id") or "")
     if not left_id or not right_id or left_id == right_id:
@@ -137,17 +275,41 @@ def _pair(left: Mapping, right: Mapping, language: str) -> Candidate | None:
     negations = lexicon.load(language).negations
     if opposite_polarity(body_left, body_right, negations):
         return Candidate(id=f"{left_id}:{right_id}", rule="opposite_polarity", **base)
-    return None
+    first = (vectors or {}).get(left_id)
+    second = (vectors or {}).get(right_id)
+    if first is None or second is None:
+        return None
+    similarity = embed.cosine(first, second)
+    if not SIMILAR_FLOOR <= similarity <= SIMILAR_CEILING:
+        return None
+    if not _shared_topic(body_left, body_right):
+        return None
+    rule = (
+        "vector_opposite"
+        if opposite_in_vector_space(first, second, axis or ())
+        else "similar_claim"
+    )
+    return Candidate(id=f"{left_id}:{right_id}", rule=rule, **base)
 
 
-def candidates(rows: Sequence[Mapping], *, language: str) -> list[Candidate]:
-    """All deterministic contradiction candidates in one scope (no model, no writes)."""
+def candidates(
+    rows: Sequence[Mapping],
+    *,
+    language: str,
+    vectors: Mapping[str, Sequence[float]] | None = None,
+    axis: Sequence[float] | None = None,
+) -> list[Candidate]:
+    """All deterministic contradiction candidates in one scope (no model, no writes).
+
+    `vectors` maps a row id to its multilingual embedding and `axis` is the English "not"
+    direction; without them only the lexical rules run.
+    """
     ordered = sorted(rows, key=lambda row: str(row.get("id") or ""))
     found: list[Candidate] = []
     seen: set[tuple[str, str]] = set()
     for index, left in enumerate(ordered):
         for right in ordered[index + 1 :]:
-            pair = _pair(left, right, language)
+            pair = _pair(left, right, language, vectors, axis)
             if pair is None:
                 continue
             key = (pair.left, pair.right)
@@ -277,6 +439,26 @@ def _merge_duplicates(
             report.notes.append(f"merge refused: {exc}")
 
 
+async def _space(rows: Sequence[Mapping]) -> tuple[dict[str, list[float]], list[float]]:
+    """Embed one pass worth of statements and the English polarity axis.
+
+    The encoder is CPU-heavy, so it runs off the event loop (AGENTS §2). An unavailable
+    model yields empty results and the pass falls back to the lexical rules.
+    """
+    if len(rows) < 2:
+        return {}, []
+    texts = [str(row.get("text") or "") for row in rows]
+    vectors = await io.run(embed.encode, texts)
+    if not vectors or len(vectors) != len(rows):
+        return {}, []
+    found = {
+        str(row.get("id") or ""): [float(value) for value in vector]
+        for row, vector in zip(rows, vectors, strict=True)
+    }
+    axis = await io.run(_polarity_axis)
+    return found, axis
+
+
 async def run_pass(
     store: MemoryStore,
     *,
@@ -319,7 +501,8 @@ async def run_pass(
         thread_id=thread_id,
     )
 
-    pairs = candidates(live, language=language)
+    vectors, axis = await _space(live)
+    pairs = candidates(live, language=language, vectors=vectors, axis=axis)
     report.candidates = len(pairs)
     if pairs:
         if llm is None:

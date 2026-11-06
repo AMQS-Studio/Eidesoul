@@ -2,10 +2,10 @@
 
 
 import json
-import re
 from collections.abc import Mapping
 
 from ..character import lexicon
+from .words import words
 
 PENDING_HEADER = "## Tool result: pending_approval"
 CONFIRM_MAX_WORDS = 12
@@ -36,17 +36,17 @@ def confirmation_intent(text: object, language: str = "") -> str:
     body = " ".join(str(text or "").strip().split())
     if not body or len(body) > CONFIRM_MAX_CHARS:
         return ""
-    words = re.findall(r"[a-z0-9]+", body.casefold())
-    if not words or len(words) > CONFIRM_MAX_WORDS:
+    tokens = words(body)
+    if not tokens or len(tokens) > CONFIRM_MAX_WORDS:
         return ""
     confirm, reject, modify, filler = _cues(language)
-    if words[0] in reject:
+    if tokens[0] in reject:
         return "reject"
-    if words[0] in modify:
+    if tokens[0] in modify:
         return "modify"
-    if all(word in confirm | filler for word in words):
+    if all(word in confirm | filler for word in tokens):
         return "confirm"
-    if words[0] in confirm:
+    if tokens[0] in confirm:
         return "confirm"
     return ""
 

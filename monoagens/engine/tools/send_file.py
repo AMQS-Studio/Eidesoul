@@ -83,8 +83,11 @@ def _reason_refusal(address: Address, reason: str) -> str:
     )
 
 
-async def _local(ctx: ToolContext, path: Path, caption: str, reason: str) -> str:
+async def _local(
+    ctx: ToolContext, path: Path, caption: str, reason: str, part: int = -1
+) -> str:
     """The active room goes through the one delivery path (`Rich`, fallback, and outbox)."""
+    action_id = tool_action_id(f"file:{part}") if part >= 0 else ""
     result = await ctx.agent.send_file(
         ctx.thread_id,
         path,
@@ -93,6 +96,7 @@ async def _local(ctx: ToolContext, path: Path, caption: str, reason: str) -> str
         subject=str(ctx.person_id or ctx.sender),
         origin=_origin(ctx),
         reason=reason,
+        action_id=action_id,
     )
     ok = not str(result).startswith("error:")
     label = _label(ctx.gateway, _origin(ctx))
@@ -112,8 +116,9 @@ async def _forward(
     path: Path,
     caption: str,
     reason: str,
+    part: int = -1,
 ) -> str:
-    found = tool_action_id()
+    found = tool_action_id(f"file:{part}") if part >= 0 else tool_action_id()
     action = Action(
         address=address,
         capability="send_file",
@@ -150,7 +155,7 @@ def _path_items(raw: object) -> list[str]:
     return [str(item).strip() for item in items if str(item).strip()]
 
 
-async def _send_one(args: dict, ctx: ToolContext, raw: str) -> str:
+async def _send_one(args: dict, ctx: ToolContext, raw: str, part: int = -1) -> str:
     path, refusal = _source(ctx, raw)
     if path is None:
         return refusal
@@ -166,8 +171,8 @@ async def _send_one(args: dict, ctx: ToolContext, raw: str) -> str:
         return refusal
     caption = str(args.get("caption") or "").strip()
     if body is ctx.gateway and address.thread == ctx.thread_id:
-        return await _local(ctx, path, caption, reason)
-    return await _forward(ctx, address, _label(body, address), path, caption, reason)
+        return await _local(ctx, path, caption, reason, part)
+    return await _forward(ctx, address, _label(body, address), path, caption, reason, part)
 
 
 async def _send_file(args: dict, ctx: ToolContext) -> str:
@@ -176,7 +181,10 @@ async def _send_file(args: dict, ctx: ToolContext) -> str:
     items = _path_items(args.get("path"))
     if not items:
         return "error: empty path"
-    return "\n".join([await _send_one(args, ctx, raw) for raw in items])
+    multi = len(items) > 1
+    return "\n".join(
+        [await _send_one(args, ctx, raw, index if multi else -1) for index, raw in enumerate(items)]
+    )
 
 
 TOOL = Handler(
@@ -198,11 +206,13 @@ TOOL = Handler(
         "type": "object",
         "properties": {
             "path": {
-                "type": "string",
+                "anyOf": [
+                    {"type": "string"},
+                    {"type": "array", "items": {"type": "string"}},
+                ],
                 "description": (
-                    "Workspace path (e.g. 'scratch/report.csv') OR attachment handle "
-                    "(e.g. 'att_...'). Pass the att_... handle string directly to forward "
-                    "an attachment."
+                    "Workspace path (e.g. 'scratch/report.csv'), attachment handle "
+                    "(e.g. 'att_...'), or a list of either to send several files in order."
                 ),
             },
             "chat": {

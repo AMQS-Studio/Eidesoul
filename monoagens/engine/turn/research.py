@@ -102,8 +102,14 @@ def trigger_reason(
     language: str,
     mode: str = "auto",
     challenged: bool = False,
+    needs_search: bool | None = None,
 ) -> str:
-    """Why this message needs evidence; empty means the model may answer from its prior."""
+    """Why this message needs evidence; empty means the model may answer from its prior.
+
+    `needs_search` is the turn decision's own judgement. A `True` hint forces the search; a
+    `False` hint suppresses the soft keyword triggers, but an explicit lookup (`EXACT`) or a
+    challenged claim still wins, and `mode:always` stays unconditional.
+    """
     if mode == "off":
         return ""
     if mode == "always":
@@ -111,6 +117,10 @@ def trigger_reason(
     body = str(text or "").casefold()
     if challenged and _triggers(language, "research_challenge", body):
         return "challenge"
+    if needs_search is True:
+        return "decision"
+    if needs_search is False:
+        return "exact" if EXACT.search(body) else ""
     for reason, field in (
         ("time", "research_time"),
         ("source", "research_source"),

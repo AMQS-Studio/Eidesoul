@@ -122,6 +122,38 @@ def test_forget_intent_reaches_cross_thread_person_rows_and_three_letter_nouns(
     assert memory.get(memory_id) is None
 
 
+def test_forget_intent_keeps_a_one_character_cjk_topic(tmp_path, monkeypatch) -> None:
+    """P0-4: `猫` is one token; the old three-character floor erased the request topic."""
+    from monoagens.engine import embed
+
+    memory = store(tmp_path)
+    vectors = {
+        "猫の餌はリビング": [1.0] + [0.0] * 383,
+        "今日は晴れです": [0.0, 1.0] + [0.0] * 382,
+        "猫を忘れて": [1.0] + [0.0] * 383,
+    }
+    monkeypatch.setattr(
+        embed, "encode", lambda texts, **kwargs: [vectors.get(texts[0], [0.0] * 384)]
+    )
+    target = write(memory, "猫の餌はリビング")
+    write(memory, "今日は晴れです")
+
+    removed = asyncio.run(
+        memory.forget_by_intent("猫を忘れて", person_id=OWNER, thread_id="current")
+    )
+
+    assert removed == [target]
+    assert memory.get(target) is None
+
+
+def test_forget_tokens_keep_short_cjk_words() -> None:
+    from monoagens.engine.memory.records import _tokens
+
+    assert _tokens("猫") == {"猫"}
+    assert _tokens("給料はいくら") == {"給料はいくら"}
+    assert _tokens("ok") == set()
+
+
 # ------------------------------------------------------------------ IV.5
 
 BENIGN = (
@@ -138,8 +170,8 @@ GENUINE = (
     ("I stole from the store", "en", 4),
     ("I do not like him", "en", 3),
     ("I was threatened", "en", 4),
-    ("my password is hunter2", "en", 4),
-    ("the secret token is here", "en", 4),
+    ("my password is hunter2", "en", 5),
+    ("the secret token is here", "en", 5),
     ("I do not like her", "en", 3),
     ("I want to kill him", "en", 4),
     ("he hit me", "en", 4),

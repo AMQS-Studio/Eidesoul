@@ -267,11 +267,11 @@ class SkillStore(FencedStore):
         person_id: str = "",
         held_tools: tuple[str, ...] = (),
         catalog_tools: tuple[str, ...] = (),
-        max_chars: int = 800,
+        max_chars: int = 0,
         limit: int = 3,
         app: str = "",
     ) -> str:
-        """ADR-0020 §4.6: relevance inside the readable scope, bounded by `max_chars`."""
+        """ADR-0020 §4.6: relevance inside the readable scope; `max_chars <= 0` is unbounded."""
         if self.db is None or not str(query or "").strip():
             return ""
         app = str(app or "").strip().lower()
@@ -311,7 +311,7 @@ class SkillStore(FencedStore):
             if score <= 0:
                 continue
             block = f"### {skill.name}\n{skill.body.strip()}"
-            if used + len(block) + 2 > max_chars:
+            if max_chars > 0 and used + len(block) + 2 > max_chars:
                 continue
             lines.append(block)
             used += len(block) + 2

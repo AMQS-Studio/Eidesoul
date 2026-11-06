@@ -19,7 +19,7 @@ from monoagens import cli
 from monoagens.admin import backup, doctor, extensions, gateway, init, people, service, setting
 from monoagens.engine.access.identity import is_person_id
 from monoagens.engine.config import ConfigError, load_host
-from monoagens.engine.db import Database
+from monoagens.engine.db import SCHEMA_VERSION, Database
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -273,6 +273,87 @@ def test_restore_validates_and_extracts_then_restores_with_yes(tmp_path):
 
     with pytest.raises(ConfigError, match="not found"):
         backup.restore(tmp_path / "missing.tar.gz", target / "config.yaml")
+
+
+def _fake_portable(_url: str, target: Path) -> None:
+    target.write_text('{"format": 1, "tables": {}}', encoding="utf-8")
+
+
+def _archive(path: Path, manifest: dict, dump: bytes = b"PGDUMP") -> Path:
+    with tarfile.open(path, "w:gz") as archive:
+        members = (("database.pgdump", dump), ("manifest.json", json.dumps(manifest).encode()))
+        for name, data in members:
+            info = tarfile.TarInfo(name)
+            info.size = len(data)
+            archive.addfile(info, io.BytesIO(data))
+    return path
+
+
+def test_backup_without_pg_dump_writes_a_portable_json_archive(tmp_path):
+    """3.2: the archive still exists when the host has no postgres client tools."""
+    cfg = deployment(tmp_path)
+    out = tmp_path / "portable.tar.gz"
+
+    backup.create(str(cfg), out, portable=_fake_portable, available=lambda *a, **k: False)
+
+    with tarfile.open(out, "r:gz") as archive:
+        assert "database.json" in archive.getnames()
+    manifest = backup.inspect(out)
+    assert manifest["dump"] == "database.json"
+    assert manifest["schema_version"] == SCHEMA_VERSION
+    assert manifest["dump_sha256"]
+
+
+def test_restore_picks_the_portable_restorer_for_a_json_dump(tmp_path):
+    cfg = deployment(tmp_path)
+    out = tmp_path / "portable.tar.gz"
+    backup.create(str(cfg), out, portable=_fake_portable, available=lambda *a, **k: False)
+    target = tmp_path / "restored"
+    target.mkdir()
+    (target / "config.yaml").write_text(cfg.read_text(encoding="utf-8"), encoding="utf-8")
+    calls: list[bytes] = []
+
+    backup.restore(
+        out,
+        target / "config.yaml",
+        yes=True,
+        force=True,
+        portable_restore=lambda _url, path: calls.append(path.read_bytes()),
+    )
+
+    assert calls == [b'{"format": 1, "tables": {}}']
+
+
+def test_inspect_rejects_a_tampered_dump(tmp_path):
+    cfg = deployment(tmp_path)
+    out = tmp_path / "snapshot.tar.gz"
+    backup.create(str(cfg), out, dump=_fake_dump)
+    tampered = tmp_path / "tampered.tar.gz"
+    with tarfile.open(out, "r:gz") as src, tarfile.open(tampered, "w:gz") as dst:
+        for member in src.getmembers():
+            payload = src.extractfile(member).read() if member.isfile() else None
+            if member.name == "database.pgdump":
+                payload = b"OTHER"
+                member.size = len(payload)
+            dst.addfile(member, io.BytesIO(payload) if payload is not None else None)
+
+    with pytest.raises(ConfigError, match="integrity"):
+        backup.inspect(tampered)
+
+
+def test_inspect_refuses_a_backup_from_a_newer_schema(tmp_path):
+    bad = _archive(
+        tmp_path / "future.tar.gz",
+        {
+            "format": 1,
+            "schema_version": SCHEMA_VERSION + 1,
+            "files": ["config.yaml", "roles.yaml", "soul.yaml"],
+            "dump": "database.pgdump",
+        },
+    )
+
+    with pytest.raises(ConfigError, match="newer than this code"):
+        backup.inspect(bad)
 
 
 def test_restore_refuses_a_member_outside_the_archive_root(tmp_path):

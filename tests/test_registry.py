@@ -29,6 +29,7 @@ def clear_modules(prefix: str) -> None:
 
 def test_builtin_handlers_discovered() -> None:
     assert set(COMMANDS.names()) == {
+        "alerts",
         "approve",
         "calmdown",
         "search",

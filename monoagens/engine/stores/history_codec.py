@@ -8,6 +8,7 @@ functions turn a `Message` into those values and back. They hold no connection a
 
 import re
 
+from ..guard.patterns import redact_credentials
 from ..turn.context import Media, Message
 
 # Facts ride in the `data` blob but never make a row richer: the upsert keeps the old content
@@ -49,7 +50,7 @@ def _data(message: Message) -> dict:
             "id": message.quote.id,
             "sender_name": message.quote.sender_name,
             "sender_id": message.quote.sender_id,
-            "text": message.quote.text,
+            "text": redact_credentials(message.quote.text or ""),
             "when": message.quote.when.timestamp() if message.quote.when else None,
         }
         if message.quote.media is not None:

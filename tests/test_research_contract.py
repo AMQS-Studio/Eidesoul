@@ -35,6 +35,33 @@ def test_an_action_tool_turn_keeps_its_answer_when_the_card_failed() -> None:
     assert answer == "isi file"
 
 
+def test_an_action_tool_turn_keeps_its_answer_when_the_card_is_ok() -> None:
+    """P0-6: a generic search result never overrides a confirmed action tool result."""
+    from monoagens.engine.turn.research_flow import ResearchFlow
+
+    flow = object.__new__(ResearchFlow)
+    flow.runtime = SimpleNamespace()
+    context = SimpleNamespace(used=["write"], research_cards=[])
+    card = SimpleNamespace(status="ok")
+
+    answer = asyncio.run(
+        flow._verify_research("isi file", card, "exact", context, None, None, "t", 0.0, 0.0)
+    )
+
+    assert answer == "isi file"
+
+
+def test_the_decision_hint_forces_or_suppresses_the_search() -> None:
+    assert trigger_reason("what's up", language="en", needs_search=True) == "decision"
+    assert trigger_reason("gold price today", language="en", needs_search=False) == ""
+    assert trigger_reason("date 2026-11-04", language="en", needs_search=False) == "exact"
+    assert (
+        trigger_reason("what's up", language="en", mode="always", needs_search=False)
+        == "mode:always"
+    )
+    assert trigger_reason("gold price today", language="en", mode="off", needs_search=True) == ""
+
+
 def test_current_source_and_exact_claims_force_a_search() -> None:
     assert trigger_reason("gold price today", language="en") == "time"
     assert trigger_reason("give me the source", language="en") == "source"

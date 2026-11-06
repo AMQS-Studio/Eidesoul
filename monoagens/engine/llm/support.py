@@ -10,8 +10,19 @@ import logging
 
 from .. import guard
 from ..registry import Handler
+from ..tools import resolve_spec
 
 log = logging.getLogger(__name__)
+
+def info_only(calls, by_name: dict[str, Handler]) -> bool:
+    """An `info`-only round activates schemas; it is a system round, not a model round."""
+    for call in calls:
+        spec = resolve_spec(by_name, str(call.name or ""))
+        name = str(getattr(spec, "name", "") or "")
+        if (name or str(call.name or "")) != "info":
+            return False
+    return True
+
 
 class DeadlineExceeded(RuntimeError):
     """The turn deadline is exhausted; no new call is started (ADR-0017 §4.3)."""

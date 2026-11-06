@@ -9,6 +9,7 @@ from types import SimpleNamespace
 from support import build_config
 
 from monoagens.engine.llm import LLM, parse_digest
+from monoagens.engine.llm.fallbacks import FallbackChain
 from monoagens.providers import ProviderError
 
 
@@ -218,6 +219,57 @@ def lookup_context(llm):
     return ToolContext(llm.config, (), ("lookup",), request="hi")
 
 
+def info_spec():
+    from monoagens.engine.registry import Handler
+
+    async def info(args, ctx) -> str:
+        return "catalog"
+
+    return Handler(
+        name="info",
+        description="Capability catalog.",
+        fn=info,
+        parameters={"type": "object", "properties": {}},
+        approval_class="none",
+    )
+
+
+def test_zero_max_calls_per_turn_is_unlimited(tmp_path, monkeypatch) -> None:
+    """P2.1: 0 means unlimited rounds; only the loop breakers stop the turn."""
+    replies = [
+        scripted_reply(calls=[(f"c{index}", "lookup", {"query": str(index)})])
+        for index in range(5)
+    ]
+    replies.append(scripted_reply("Final answer."))
+    llm, client = scripted_llm(tmp_path, monkeypatch, replies, max_calls_per_turn=0)
+
+    answer = asyncio.run(llm.run("system", "user", [lookup_spec()], lookup_context(llm)))
+
+    assert answer == "Final answer."
+    assert len(client.calls) == 6
+
+
+def test_an_info_only_round_does_not_spend_a_model_call(tmp_path, monkeypatch) -> None:
+    """P2.1: schema activation is a system round, even when the cap is explicit."""
+    llm, client = scripted_llm(
+        tmp_path,
+        monkeypatch,
+        [
+            scripted_reply(calls=[("c1", "info", {})]),
+            scripted_reply(calls=[("c2", "lookup", {"query": "x"})]),
+            scripted_reply("Final answer."),
+        ],
+        max_calls_per_turn=2,
+    )
+
+    answer = asyncio.run(
+        llm.run("system", "user", [info_spec(), lookup_spec()], lookup_context(llm))
+    )
+
+    assert answer == "Final answer."
+    assert len(client.calls) == 3
+
+
 def test_interim_prose_thinking_and_step_are_emitted_on_a_tool_round(
     tmp_path, monkeypatch
 ) -> None:
@@ -316,3 +368,60 @@ def test_round_two_image_rejection_retries_with_text_only_parts(tmp_path, monkey
     assert all(isinstance(item["content"], str) for item in user_messages)
     assert "could not be attached" in user_messages[0]["content"]
 
+
+
+def _fallback_config(config, model: str = "fallback-model"):
+    """The same deployment with one operator fallback target (3.1)."""
+    from monoagens.engine.config import LLMTargetConfig
+
+    return replace(
+        config,
+        llm=replace(
+            config.llm,
+            fallbacks=(
+                LLMTargetConfig(
+                    provider="openrouter",
+                    base_url="https://fallback.example/v1",
+                    model=model,
+                    api_key_env="K",
+                ),
+            ),
+        ),
+    )
+
+
+class FailingClient:
+    """Stand-in for AsyncOpenAI whose primary call raises one provider failure."""
+
+    def __init__(self, status: int) -> None:
+        self.status = status
+        self.chat = SimpleNamespace(completions=self)
+
+    async def create(self, **kwargs):
+        raise ProviderError("primary unavailable", status_code=self.status)
+
+
+def test_a_transient_primary_failure_walks_the_configured_fallback(
+    tmp_path, monkeypatch
+) -> None:
+    """3.1: a 5xx from the primary hands the same request to the fallback model."""
+    llm, _ = make_llm(tmp_path, monkeypatch)
+    llm.config = _fallback_config(llm.config)
+    llm.client = FailingClient(503)
+    fallback = FakeClient()
+    monkeypatch.setattr(FallbackChain, "_client", lambda _self, _target: fallback)
+
+    assert asyncio.run(llm.complete("system", "user")) == "ok"
+    assert fallback.kwargs["model"] == "fallback-model"
+
+
+def test_a_primary_4xx_never_spends_a_fallback(tmp_path, monkeypatch) -> None:
+    """3.1: a caller bug must surface, not silently retry on another provider."""
+    llm, _ = make_llm(tmp_path, monkeypatch)
+    llm.config = _fallback_config(llm.config)
+    llm.client = FailingClient(400)
+    fallback = FakeClient()
+    monkeypatch.setattr(FallbackChain, "_client", lambda _self, _target: fallback)
+
+    assert asyncio.run(llm.complete("system", "user")) == ""
+    assert fallback.kwargs == {}

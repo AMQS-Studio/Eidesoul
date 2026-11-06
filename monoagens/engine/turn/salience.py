@@ -24,24 +24,22 @@ def select(
     query: str = "",
     *,
     bonuses: dict[str, float] | None = None,
-    max_chars: int = 9000,
+    max_chars: int = 0,
     enabled: bool = True,
     language: str,
 ) -> tuple[list[tuple[Any, str]], list[str]]:
     """(selected (part, text) in order, names of dropped blocks).
 
-    A stable part is never passed here. Pinned parts are never dropped. Without a language
-    pack the stopwords are unknown, so selection falls back to block length.
+    A stable part is never passed here. Pinned parts are never dropped. `max_chars <= 0` or
+    `enabled=False` means no budget at all: every present block is returned untouched (P2.1).
+    Without a language pack the stopwords are unknown, so selection falls back to block length
+    and drops the longest block first.
     """
     present = [(part, text) for part, text in blocks if text.strip()]
     kept = list(present)
     dropped: list[str] = []
-    if not enabled:
-        return kept, dropped
     budget = int(max_chars)
-    if budget <= 0:
-        dropped = [part.name for part, _ in kept if not part.pinned]
-        kept = [(part, text) for part, text in kept if part.pinned]
+    if not enabled or budget <= 0:
         return kept, dropped
     scored = lexicon.load(language).ok
     bonus_map = bonuses or {}
@@ -50,7 +48,8 @@ def select(
         part, text = kept[index]
         name = str(part.name)
         bonus = float(getattr(part, "bonus", 0.0)) + float(bonus_map.get(name, 0.0))
-        score = block_score(text, query, bonus, language=language) if scored else float(len(text))
+        # `min()` picks the weakest: the longest text when there is no language pack to score.
+        score = block_score(text, query, bonus, language=language) if scored else -float(len(text))
         return (score, index)
 
     while len(JOIN.join(text for _, text in kept)) > budget:

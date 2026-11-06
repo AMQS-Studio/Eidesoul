@@ -41,7 +41,7 @@ async def language_command(ctx: CommandContext) -> str:
             "command.language.current", lang, language=agent.soul.language, available=codes
         )
     try:
-        language = normalize_language(raw)
+        language = normalize_language(raw, allow_any=True)
     except ValueError:
         return t("command.language.invalid", lang, value=raw, available=codes)
     if agent.documents is None:

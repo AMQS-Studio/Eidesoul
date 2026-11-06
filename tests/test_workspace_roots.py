@@ -136,6 +136,30 @@ def test_member_send_reads_public_but_not_private(tmp_path) -> None:
     assert env.gateway.files[0][1].name == "ok.txt"
 
 
+def test_member_round_trips_the_reported_scratch_path(tmp_path) -> None:
+    """P0-3: every form `write` may report back must resolve for `send_file` and `read`."""
+    env = member_env(tmp_path)
+    ctx = member_ctx(env)
+    slug = safe_chat(ctx.thread_id)
+
+    write = call(env, "write", {"path": "scratch/jadwal.txt", "content": "isi"}, ctx)
+
+    assert write == f"ok: wrote 3 characters to scratch/{slug}/jadwal.txt"
+    for name in ("jadwal.txt", "scratch/jadwal.txt", f"scratch/{slug}/jadwal.txt"):
+        assert not call(env, "send_file", {"path": name}, ctx).startswith("error:"), name
+        assert "isi" in call(env, "read", {"path": name}, ctx), name
+    assert len(env.gateway.files) == 3
+
+
+def test_member_cannot_escape_scratch_through_the_slug(tmp_path) -> None:
+    env = member_env(tmp_path)
+    ctx = member_ctx(env)
+
+    result = call(env, "read", {"path": "scratch/../../private/x.txt"}, ctx)
+
+    assert result.startswith("error:")
+
+
 def test_member_cannot_send_to_another_chat(tmp_path) -> None:
     env = member_env(tmp_path)
     target = ("628999999999@s.whatsapp.net", "Budi")

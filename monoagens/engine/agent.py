@@ -53,6 +53,8 @@ from .llm import LLM
 from .memory import MemoryBackend, memory_status
 from .memory import evidence as privacy_evidence
 from .memory.ledger import OutboundLedger
+from .observability import AlertManager, notify_admin
+from .observability import install as install_alerts
 from .registry import Handler, Registry
 from .runtime import ACTIVE_GENERATION, RuntimeFacts
 from .stores.turns import TurnStore, turn_identity
@@ -103,6 +105,8 @@ class Agent(DeliveryFacade, CrossRoomGuard):
         self.db = db
         self.llm = llm
         self.hub = hub
+        self.alerts = AlertManager(config, notify=partial(notify_admin, self))
+        install_alerts(self.alerts)
         self.windows = windows
         self.history = history
         self.memory = memory
@@ -710,6 +714,7 @@ class Agent(DeliveryFacade, CrossRoomGuard):
                 inbound.thread,
                 t("agent.access_refused", self.soul.language),
                 gateway=gateway,
+                origin=Address(str(getattr(gateway, "name", "") or ""), str(inbound.thread)),
             )
         except Exception:
             log.warning(

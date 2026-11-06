@@ -352,6 +352,8 @@ def test_relay_sends_when_a_grant_exists(tmp_path) -> None:
         now=at(9, 50),
     )
     seed_dm(env, "629999")
+    # A relay is a cross-room send: the body must be able to prove the owner is present there.
+    env.gateway.members = {OWNER, "629999"}
     worker = AutomationWorker(env.agent, store=env.store)
     asyncio.run(worker.run_once(now=at(10, 1)))
     approval = env.agent.approvals.latest(OWNER, OWNER)
@@ -360,6 +362,24 @@ def test_relay_sends_when_a_grant_exists(tmp_path) -> None:
     row = env.store.get(automation_id)
     env.store._insert_run(row, at(11), "queued", "", at(10, 5))
     asyncio.run(worker.run_once(now=at(11, 1)))
+
+    # ADR-0004 §4.2: a relay is a cross-room delivery, so the door parks it for /approve.
+    parked = env.agent.approvals.latest(OWNER, OWNER)
+    assert parked is not None
+    assert parked.kind == "send"
+    from monoagens.engine.commands.approve import run_approval
+
+    _text, ran = asyncio.run(
+        run_approval(
+            env.agent,
+            parked,
+            sender=OWNER,
+            roles=(env.config.roles.get("member"),),
+            gateway=env.gateway,
+            thread_id=OWNER,
+        )
+    )
+    assert ran
 
     targets = [item[0] for item in env.gateway.sent]
     assert "629999" in targets

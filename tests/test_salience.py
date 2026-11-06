@@ -41,6 +41,34 @@ def test_disabled_salience_never_drops_blocks() -> None:
     assert names(kept) == ["base", "memory", "topic"]
 
 
+def test_a_zero_budget_means_unlimited_and_drops_nothing() -> None:
+    """P2.1: 0 is unlimited, never "drop every volatile block"."""
+    blocks = [
+        (part("base", pinned=True), "b" * 100),
+        (part("memory"), "m" * 5000),
+        (part("topic"), "t" * 5000),
+    ]
+
+    kept, dropped = select(blocks, max_chars=0, enabled=True, language="id")
+
+    assert dropped == []
+    assert names(kept) == ["base", "memory", "topic"]
+
+
+def test_an_unscored_budget_drops_the_longest_block_first() -> None:
+    """Without a language pack the fallback must shed the biggest block, not the smallest."""
+    blocks = [
+        (part("base", pinned=True), "b" * 10),
+        (part("memory"), "m" * 400),
+        (part("topic"), "t" * 100),
+    ]
+
+    kept, dropped = select(blocks, max_chars=200, language="xx-unknown")
+
+    assert names(kept) == ["base", "topic"]
+    assert dropped == ["memory"]
+
+
 def test_tight_budget_keeps_pinned_blocks_only() -> None:
     blocks = [
         (part("base", pinned=True), "b" * 100),

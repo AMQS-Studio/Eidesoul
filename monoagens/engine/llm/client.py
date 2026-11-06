@@ -21,10 +21,12 @@ from ..config import Config
 from ..db import Database
 from ..i18n import t
 from ..inbound import bind_tool_action, reset_tool_action
+from ..observability import alerts
 from ..registry import Handler, allows
 from ..schema import llm_calls
 from ..tools import ToolContext, execute, resolve_spec
 from ..turn import observability
+from .fallbacks import FallbackChain, eligible
 from .support import (
     BUDGET_TEXT,
     DIGEST_PROMPT,
@@ -35,6 +37,7 @@ from .support import (
     _emit,
     _has_images,
     _strip_images,
+    info_only,
     parse_digest,
     prompt_prefix_hash,
 )
@@ -177,39 +180,62 @@ class LLM:
         turn_id: str = "",
         job_id: int | None = None,
         run_id: str = "",
+        call_timeout: float | None = None,
     ):
-        """One provider call, always recorded (success or failure) in `llm_calls`."""
-        started = time.monotonic()
-        try:
-            raw = (
-                await client.create(**kwargs)
-                if self.config.llm.native
-                else await client.chat.completions.create(**kwargs)
-            )
-            response = normalize_response(raw)
-        except Exception:
+        """One provider call, walking fallbacks after a transient failure.
+
+        Every attempt is recorded in `llm_calls`, so the row names the target that actually
+        answered. The primary keeps the SDK retry policy; a fallback gets the same budget.
+        """
+        chain = FallbackChain(self.config, client, kwargs, call_timeout)
+        total = len(chain)
+        for index, (target, target_client, target_kwargs) in enumerate(chain):
+            started = time.monotonic()
+            try:
+                raw = (
+                    await target_client.create(**target_kwargs)
+                    if target.wire != "openai"
+                    else await target_client.chat.completions.create(**target_kwargs)
+                )
+                response = normalize_response(raw)
+            except Exception as exc:
+                await self._record(
+                    purpose,
+                    target_kwargs.get("model", ""),
+                    None,
+                    started,
+                    False,
+                    turn_id=turn_id,
+                    job_id=job_id,
+                    run_id=run_id,
+                )
+                if index == total - 1:
+                    if eligible(exc):
+                        await alerts.emit("llm", f"{type(exc).__name__}: {exc}")
+                    raise
+                if not eligible(exc):
+                    raise
+                log.warning(
+                    "LLM target %s failed (%s); trying fallback %d/%d",
+                    target_kwargs.get("model", ""),
+                    type(exc).__name__,
+                    index + 1,
+                    total - 1,
+                )
+                continue
             await self._record(
                 purpose,
-                kwargs.get("model", ""),
-                None,
+                target_kwargs.get("model", ""),
+                response.usage,
                 started,
-                False,
+                True,
                 turn_id=turn_id,
                 job_id=job_id,
                 run_id=run_id,
             )
-            raise
-        await self._record(
-            purpose,
-            kwargs.get("model", ""),
-            response.usage,
-            started,
-            True,
-            turn_id=turn_id,
-            job_id=job_id,
-            run_id=run_id,
-        )
-        return response
+            alerts.clear("llm")
+            return response
+        raise RuntimeError("LLM call has no target")
 
     async def _record(
         self,
@@ -321,7 +347,7 @@ class LLM:
         sampling=None,
     ) -> str:
         text = response.text
-        if not ctx.sent or attempts >= max_calls:
+        if not ctx.sent or (max_calls > 0 and attempts >= max_calls):
             return text or last_text
         sent_note = "\n".join(
             f"- {entry['tool']} to {entry['target']}: {entry['kind']} {entry['summary']}"
@@ -343,7 +369,7 @@ class LLM:
             },
         ]
         try:
-            client, _ = self._request_client(deadline, min_call)
+            client, timeout = self._request_client(deadline, min_call)
             confirm = await self._call(
                 client,
                 self._request_kwargs(
@@ -352,6 +378,7 @@ class LLM:
                 ),
                 purpose=purpose,
                 turn_id=turn_id,
+                call_timeout=timeout,
             )
         except DeadlineExceeded:
             raise
@@ -519,7 +546,7 @@ class LLM:
             return float(temperature)
         return float(self.config.soul.voice.sampling.daily_temperature)
 
-    async def run(
+    async def run(  # noqa: C901 — the loop is the turn state machine
         self,
         system: str,
         user_content: str | list[dict],
@@ -547,7 +574,7 @@ class LLM:
         images = _has_images(user_content)
         base_specs = self._base_specs(specs)
         self._set_prefix_hash(messages, base_specs, ctx)
-        max_calls = max(1, int(self.config.llm.max_calls_per_turn))
+        max_calls = max(0, int(self.config.llm.max_calls_per_turn))  # 0 = unlimited
         budget = max(0.0, float(self.config.llm.run_budget_seconds))
         attempts = 0
         start = time.monotonic()
@@ -555,14 +582,14 @@ class LLM:
         last_sig: tuple[str, str] | None = None
         repeat = 0
         while True:
-            if attempts >= max_calls:
+            if max_calls > 0 and attempts >= max_calls:
                 return last_text or t("agent.budget_notice", self.config.soul.language)
             # ADR-0003 §4.5: a round that cannot fit the minimum call window is not started,
             # so the turn ends with the best text already produced instead of a hard cutoff.
             if self._budget_spent(start, budget, min_call_seconds):
                 return last_text or t("agent.budget_notice", self.config.soul.language)
             client, _timeout = self._request_client(deadline, min_call_seconds)
-            wrap = attempts + 1 >= max_calls
+            wrap = max_calls > 0 and attempts + 1 >= max_calls
             active = self._active_specs(base_specs, ctx)
             by_name = {spec.name: spec for spec in active}
             if wrap:
@@ -574,7 +601,7 @@ class LLM:
             attempts += 1
             try:
                 response = await self._call(
-                    client, kwargs, purpose=purpose, turn_id=turn_id
+                    client, kwargs, purpose=purpose, turn_id=turn_id, call_timeout=_timeout
                 )
             except (APIError, ProviderError) as exc:
                 retry, attempts = self._retry_vision(
@@ -584,6 +611,8 @@ class LLM:
                     images = False
                     continue
                 if self._merge_system(messages, exc):
+                    # A merged-system retry is a transport fix, never a model round.
+                    attempts = max(0, attempts - 1)
                     continue
                 return self._failed(exc, deadline, min_call_seconds)
             except (APITimeoutError, TimeoutError) as exc:
@@ -636,6 +665,8 @@ class LLM:
                 if response.message is not None
                 else {"role": "assistant", "content": response.text}
             )
+            # An `info`-only round activates schemas; it is a system round, not a model round.
+            only_info = info_only(calls, by_name)
             last_sig, repeat = await self._tools(
                 calls,
                 by_name,
@@ -648,6 +679,8 @@ class LLM:
                 send_step,
                 turn_id,
             )
+            if only_info:
+                attempts = max(0, attempts - 1)
 
     async def complete(
         self,
@@ -695,6 +728,7 @@ class LLM:
                 turn_id=turn_id,
                 job_id=job_id,
                 run_id=run_id,
+                call_timeout=_timeout,
             )
         except DeadlineExceeded:
             raise

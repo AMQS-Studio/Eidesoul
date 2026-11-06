@@ -277,6 +277,83 @@ def test_static_sticker_is_labelled_static_sticker(tmp_path) -> None:
     assert "animated" not in line
 
 
+def test_every_attachment_of_one_message_is_rendered(tmp_path) -> None:
+    """P2.2: the envelope may carry several files; none of them may be invisible."""
+    from monoagens.engine.turn.context import Media
+
+    config = build_config(tmp_path, soul=QUIET)
+    first = Media(kind="image", mimetype="image/jpeg", filename="a.jpg", size=10)
+    second = Media(kind="document", mimetype="application/pdf", filename="b.pdf", size=20)
+    entry = Message(
+        id="m1",
+        sender_name="Budi",
+        sender_id="628222",
+        when=datetime(2026, 1, 1, 10),
+        text="dua lampiran",
+        attachments=(first, second),
+    )
+
+    text = asyncio.run(build_user_content(config, "chat", [entry], entry))
+
+    assert "a.jpg" in text
+    assert "b.pdf" in text
+
+
+def test_prompt_entry_marks_every_attachment() -> None:
+    from monoagens.engine.turn.context import Media
+
+    entry = Message(
+        id="m1",
+        sender_name="Budi",
+        sender_id="628222",
+        when=datetime(2026, 1, 1, 10),
+        text="",
+        attachments=(
+            Media(kind="image", mimetype="image/jpeg", filename="a.jpg", size=10),
+            Media(kind="sticker", mimetype="image/webp", filename="b.webp", size=10, animated=True),
+        ),
+    )
+
+    assert prompt_entry(entry, "monoagens") == (
+        "[role=unknown vis=L2] Budi: [image] [sticker, animated]"
+    )
+
+
+def test_images_are_numbered_only_when_they_really_attach(tmp_path) -> None:
+    """P2.2: a failed read must not leave a gap in the `#1..` numbering."""
+    import base64
+
+    from monoagens.engine.turn.context import Media
+
+    config = build_config(tmp_path, soul=QUIET)
+    good = tmp_path / "good.png"
+    good.write_bytes(b"png-bytes")
+    # A directory passes the size check but fails the read, which is the race the numbering
+    # must survive.
+    missing = tmp_path / "gone.png"
+    missing.mkdir()
+    first = Media(kind="image", mimetype="image/png", filename="good.png", size=9, path=good)
+    second = Media(kind="image", mimetype="image/png", filename="gone.png", size=9, path=missing)
+    entry = Message(
+        id="m1",
+        sender_name="Budi",
+        sender_id="628222",
+        when=datetime(2026, 1, 1, 10),
+        text="lihat",
+        attachments=(first, second),
+    )
+
+    payload = asyncio.run(build_user_content(config, "chat", [entry], entry))
+
+    assert isinstance(payload, list)
+    text = payload[0]["text"]
+    images = [part for part in payload[1:]]
+    assert len(images) == 1
+    assert "Images #1 are attached in order after this text." in text
+    assert "gone.png could not be attached" in text
+    assert base64.b64decode(images[0]["image_url"]["url"].split(",", 1)[1]) == b"png-bytes"
+
+
 def test_prompt_entry_marks_an_animated_sticker() -> None:
     from monoagens.engine.turn.context import Media
 

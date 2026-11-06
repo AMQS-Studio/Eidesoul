@@ -47,7 +47,7 @@ LABELS = (
     ENTITY,
 )
 LEVELS = {
-    "credential": 4,
+    "credential": 5,
     "health": 4,
     "crime_admission": 4,
     "self_harm": 4,
@@ -595,11 +595,13 @@ class SemanticDetector:
 
 DETECTORS = (PatternDetector(), EntityDetector(), SemanticDetector())
 
-# ADR-0038 §4.3: a model may raise a level or abstain. The nearest-centroid layer is still
-# uncalibrated short-text evidence (ADR-0038 status: the linear head and production calibration
-# are the remaining work), so it is recorded for audit but may not set a level or ask the sender
-# until that calibration exists. Only the deterministic layer owns the verdict.
+# ADR-0038 §4.3: a model may raise a level or abstain. Every evidence layer contributes to the
+# verdict, so a credential or a sensitive label found by the entity or encoder layer is not
+# lost when the regex layer stays silent. A layer that also reports AMBIGUOUS evidence has no
+# confident separation between two labels, so its label is audit-only: only a layer whose best
+# match clearly wins may set the level.
 POLICY_DETECTORS = ("regex",)
+MODEL_DETECTORS = ("entity-regex", "ner", "encoder")
 
 
 def collect(text: str, language: str) -> tuple[list[Evidence], Pack]:
@@ -620,9 +622,23 @@ def collect(text: str, language: str) -> tuple[list[Evidence], Pack]:
     return found, pack
 
 
-def decide(evidence: Sequence[Evidence]) -> PrivacyDecision:
-    """The only level writer: max policy evidence level, credentials drop, ambiguity asks."""
-    labels = [item.label for item in evidence if item.detector in POLICY_DETECTORS]
+def decide(evidence: Sequence[Evidence], floor: float = 0.0) -> PrivacyDecision:
+    """The only level writer: max policy evidence level, credentials drop, ambiguity asks.
+
+    `floor` is the pack's semantic floor plus margin: a model layer below it or with an
+    AMBIGUOUS sibling has no confident verdict, so its label stays audit-only.
+    """
+    unsure = {item.detector for item in evidence if item.label == AMBIGUOUS}
+    labels = [
+        item.label
+        for item in evidence
+        if item.detector in POLICY_DETECTORS
+        or (
+            item.detector in MODEL_DETECTORS
+            and item.detector not in unsure
+            and float(item.score or 0.0) >= floor
+        )
+    ]
     if CREDENTIAL in labels:
         return PrivacyDecision(
             level=LEVELS[CREDENTIAL],
@@ -633,7 +649,9 @@ def decide(evidence: Sequence[Evidence]) -> PrivacyDecision:
         )
     strongest = max((LEVELS.get(label, 0) for label in labels), default=0)
     sensitive = [label for label in labels if label in LEVELS]
-    ambiguous = AMBIGUOUS in labels
+    ambiguous = AMBIGUOUS in labels and any(
+        item.detector in POLICY_DETECTORS for item in evidence
+    )
     level = max(strongest, 0) if sensitive else 2
     ask = bool(ambiguous or level >= 4)
     if sensitive:
@@ -651,8 +669,8 @@ def decide(evidence: Sequence[Evidence]) -> PrivacyDecision:
 
 
 def classify(text: str, language: str) -> tuple[list[Evidence], PrivacyDecision]:
-    evidence, _pack = collect(text, language)
-    return evidence, decide(evidence)
+    evidence, pack = collect(text, language)
+    return evidence, decide(evidence, pack.semantic_floor + pack.semantic_margin)
 
 
 def policy_record(decision: PrivacyDecision) -> dict:

@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Any
 
 from ..config import Config, HostConfig, Paths, PluginSettings
+from ..observability import alerts
 from ..registry import Handler, validate
 from ..turn import plugin_registration
 from ..turn.prompts import PromptPart
@@ -291,12 +292,15 @@ def _register(
             plugin_registration.collisions("command", commands, reserved_commands)
         except plugin_registration.RegistrationError as exc:
             raise PluginError(str(exc)) from exc
+        alerts.clear("plugin")
         return tools, commands, prompts
-    except PluginError:
+    except PluginError as exc:
         _purge(key)
+        alerts.note("plugin", f"{manifest.name}: {exc}")
         raise
     except Exception as exc:  # no plugin import may take the engine down
         _purge(key)
+        alerts.note("plugin", f"{manifest.name}: {type(exc).__name__}: {exc}")
         raise PluginError(f"failed to load: {type(exc).__name__}: {exc}") from exc
 
 

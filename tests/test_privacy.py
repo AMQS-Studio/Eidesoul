@@ -566,17 +566,18 @@ def test_an_unmentioned_private_hit_never_triggers_a_disclosure(tmp_path) -> Non
     assert env.agent.approvals.latest("111@g.us", "628111") is None
 
 
-def test_a_credential_that_reaches_the_worker_is_redacted_before_the_drop(tmp_path) -> None:
-    from monoagens.engine.memory.gate import REDACTED_CREDENTIAL
+def test_a_nik_is_refused_at_intake_and_never_stored(tmp_path) -> None:
+    """P0-1: the 16-digit NIK is an L5 credential shape, so no candidate and no plaintext row."""
+    from sqlalchemy import text as sql
 
     env = capture_env(tmp_path, [assess(2)])
 
     capture(env, "my id number is 1234567890123456")
 
-    found = row(env)
-    assert found["state"] == "not_worth"
-    assert found["text"] == REDACTED_CREDENTIAL
-    assert "1234567890123456" not in str(found["text"])
+    assert row(env) is None
+    message = env.db.fetch_one(sql("SELECT text FROM messages ORDER BY id LIMIT 1"))
+    assert message is not None
+    assert "1234567890123456" not in str(message["text"])
 
 
 def test_the_model_may_raise_the_privacy_floor(tmp_path) -> None:

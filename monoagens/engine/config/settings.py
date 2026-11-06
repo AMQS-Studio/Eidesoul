@@ -150,7 +150,7 @@ class MemoryConfig:
     auto_capture: bool = True
     capture: CaptureConfig = field(default_factory=CaptureConfig)
     max_items: int = 12
-    max_chars: int = 3000
+    max_chars: int = 0  # 0 = no prompt-budget truncation
     collection: str = "monoagens_memories"
     extraction_model: str = ""  # empty = llm.model
     telemetry: bool = False
@@ -202,7 +202,7 @@ class SkillsConfig:
     task_idle_minutes: float = 10.0
     idle_after_send_minutes: float = 3.0
     per_episode: int = 1
-    max_chars: int = 800
+    max_chars: int = 0  # 0 = no prompt-budget truncation
     max_body_chars: int = 18000
     use_renewal_days: float = 30.0
     # ADR-0020 §4.6/§4.7: the efficiency comparison and the automation ladder.
@@ -214,9 +214,9 @@ class SkillsConfig:
 
 @dataclass(frozen=True)
 class PromptConfig:
-    salience: bool = True
-    max_chars: int = 9000
-    thread_chars: int = 4000
+    salience: bool = False
+    max_chars: int = 0  # 0 = unlimited
+    thread_chars: int = 0  # 0 = unlimited
     pinned_blocks: tuple[str, ...] = ("base", "self", "roles", "away")
     capability_index: bool = True
     capability_index_max_chars: int = 1200

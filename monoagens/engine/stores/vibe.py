@@ -28,8 +28,14 @@ log = logging.getLogger(__name__)
 NEUTRAL = (0.5, 0.4, 0.5)
 CURRENT_TAU = (120.0, 45.0, 90.0)  # V, A, D seconds
 BASELINE_TAU = 14400.0  # 4 hours
-PROTOTYPE_FLOOR = 0.73  # calibrated: neutral sentences score <= 0.54, emotional ones >= 0.92
-PROTOTYPE_MARGIN = 0.063  # calibrated: half of the smallest gap between accepted matches
+# Calibrated on the shipped bank: neutral/functional sentences top out near 0.61, while an
+# emotional paraphrase clears 0.70. The margin compares the two valence groups, so `anger` and
+# `disgust` may co-occur without cancelling each other.
+PROTOTYPE_FLOOR = 0.58
+PROTOTYPE_MARGIN = 0.063
+PROTOTYPE_BASE = 0.45  # an unrelated prototype still scores about this much on MiniLM
+POSITIVE = frozenset({"joy", "trust", "anticipation"})
+NEGATIVE = frozenset({"anger", "disgust", "fear", "sadness"})
 EMOTION_VAD = {
     "anger": (0.15, 0.85, 0.80),
     "anticipation": (0.60, 0.60, 0.55),
@@ -278,22 +284,32 @@ class VibeRunner:
         """Label scores -> one VAD point; a weak or ambiguous top label counts as neutral."""
         if not probs:
             return None
-        ranked = sorted(float(value) for value in probs.values())
-        if ranked[-1] < PROTOTYPE_FLOOR:
+        scores = {
+            str(label).strip().lower(): float(value)
+            for label, value in probs.items()
+            if str(label).strip().lower() in EMOTION_VAD
+        }
+        if not scores:
             return None
-        if len(ranked) > 1 and ranked[-1] - ranked[-2] < PROTOTYPE_MARGIN:
+        if max(scores.values()) < PROTOTYPE_FLOOR:
             return None
-        total = 0.0
-        acc = [0.0, 0.0, 0.0]
-        for label, mass in probs.items():
-            point = EMOTION_VAD.get(str(label).strip().lower())
-            if point is None:
-                continue
-            total += float(mass)
-            for index in range(3):
-                acc[index] += float(mass) * point[index]
+        # A margin between the valence groups, not between the global top two: `anger` and
+        # `disgust` (or `joy` and `trust`) agreeing is a stronger signal, not a tie.
+        positive = max((score for label, score in scores.items() if label in POSITIVE), default=0.0)
+        negative = max((score for label, score in scores.items() if label in NEGATIVE), default=0.0)
+        if abs(positive - negative) < PROTOTYPE_MARGIN:
+            return None
+        # Every prototype keeps a ~0.45 baseline cosine, so the raw average is compressed into
+        # neutral. Only the mass above that baseline carries the emotion; renormalize it.
+        weights = {label: max(0.0, score - PROTOTYPE_BASE) for label, score in scores.items()}
+        total = sum(weights.values())
         if total <= 0:
             return None
+        acc = [0.0, 0.0, 0.0]
+        for label, weight in weights.items():
+            point = EMOTION_VAD[label]
+            for index in range(3):
+                acc[index] += weight * point[index]
         return [_clamp(value / total) for value in acc]
 
     async def observe(self, thread_id: str, text: str) -> str:

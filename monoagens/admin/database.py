@@ -5,13 +5,19 @@ destructive operation while a primary is still alive.
 """
 
 
+import base64
+import json
 import logging
 import os
 import shutil
 import subprocess
+from collections.abc import Mapping
+from datetime import date, datetime, time
+from decimal import Decimal
 from pathlib import Path
+from uuid import UUID
 
-from sqlalchemy import func, select, text
+from sqlalchemy import Integer, func, select, text
 from sqlalchemy.engine import make_url
 from sqlalchemy.exc import SQLAlchemyError
 
@@ -25,6 +31,7 @@ from ..engine.schema import (
     drives,
     engine_lease,
     messages,
+    metadata,
     people,
     recipes,
     schema_meta,
@@ -347,5 +354,141 @@ def restore(config_path, source: Path, *, yes: bool = False, force: bool = False
             raise ConfigError(f"backup file not found: {path}")
         restore_database(_pg_dsn(url), path, config_path=config_path)
         log.info("database restore %s <- %s", db.label, path)
+    finally:
+        db.dispose()
+
+
+# ------------------------------------------------------------------ portable JSON
+
+
+def pg_available(tool: str, *, config_path=None) -> bool:
+    """True when the host binary or the managed postgres container can run `tool`."""
+    try:
+        _pg_command(tool, config_path=config_path)
+    except ConfigError:
+        return False
+    return True
+
+
+def _json_value(value: object) -> object:
+    """One column value in a JSON-safe form that `_db_value` can reverse."""
+    if isinstance(value, datetime):
+        return {"$type": "datetime", "value": value.isoformat()}
+    if isinstance(value, date):
+        return {"$type": "date", "value": value.isoformat()}
+    if isinstance(value, time):
+        return {"$type": "time", "value": value.isoformat()}
+    if isinstance(value, Decimal):
+        return {"$type": "decimal", "value": str(value)}
+    if isinstance(value, (bytes, bytearray, memoryview)):
+        return {"$type": "bytes", "value": base64.b64encode(bytes(value)).decode("ascii")}
+    if isinstance(value, UUID):
+        return str(value)
+    tolist = getattr(value, "tolist", None)
+    if callable(tolist) and not isinstance(value, (str, bytes)):
+        return tolist()  # numpy arrays from pgvector
+    if isinstance(value, (list, tuple)):
+        return [_json_value(item) for item in value]
+    if isinstance(value, Mapping):
+        return {str(key): _json_value(item) for key, item in value.items()}
+    return value
+
+
+def _db_value(value: object) -> object:
+    """Reverse `_json_value` for the handful of types Postgres returns as objects."""
+    if isinstance(value, Mapping) and value.get("$type"):
+        kind = str(value.get("$type"))
+        raw = value.get("value")
+        if kind == "datetime":
+            return datetime.fromisoformat(str(raw))
+        if kind == "date":
+            return date.fromisoformat(str(raw))
+        if kind == "time":
+            return time.fromisoformat(str(raw))
+        if kind == "decimal":
+            return Decimal(str(raw))
+        if kind == "bytes":
+            return base64.b64decode(str(raw))
+    return value
+
+
+def _portable_rows(db: Database) -> dict:
+    """Every non-computed column of every table, in dependency order."""
+    body: dict = {"format": 1, "tables": {}}
+    with db.connect() as conn:
+        for table in metadata.sorted_tables:
+            columns = [column for column in table.columns if column.computed is None]
+            order = [column for column in table.primary_key.columns] or list(columns)
+            rows = conn.execute(select(*columns).order_by(*order)).mappings().all()
+            body["tables"][table.name] = [
+                {key: _json_value(value) for key, value in row.items()} for row in rows
+            ]
+    return body
+
+
+def dump_portable(url: str, target: Path) -> None:
+    """Portable JSON dump for a host without `pg_dump`; the whole schema, row by row."""
+    db = Database(url, pool_size=1, pool_timeout=2)
+    try:
+        body = _portable_rows(db)
+    finally:
+        db.dispose()
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(json.dumps(body, ensure_ascii=False, sort_keys=True), encoding="utf-8")
+
+
+def _align_sequences(db: Database) -> None:
+    """Realign every integer primary-key sequence after explicit ids were inserted."""
+    with db.connect() as conn:
+        for table in metadata.sorted_tables:
+            columns = list(table.primary_key.columns)
+            if len(columns) != 1 or not isinstance(columns[0].type, Integer):
+                continue
+            column = columns[0]
+            seq = conn.execute(
+                text("SELECT pg_get_serial_sequence(:table, :column)"),
+                {"table": table.name, "column": column.name},
+            ).scalar()
+            if not seq:
+                continue
+            # Table and column names come from the static schema, never from the archive.
+            conn.execute(
+                text(
+                    f"SELECT setval(:seq, COALESCE((SELECT MAX({column.name}) "
+                    f"FROM {table.name}), 1), (SELECT COUNT(*) FROM {table.name}) > 0)"
+                ),
+                {"seq": str(seq)},
+            )
+
+
+def restore_portable(url: str, source: Path) -> None:
+    """Replace every table from a portable JSON dump, then realign the sequences."""
+    try:
+        body = json.loads(source.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise ConfigError(f"cannot read portable backup {source}: {exc}") from exc
+    if not isinstance(body, dict) or body.get("format") != 1:
+        raise ConfigError(f"unsupported portable backup format in {source}")
+    tables = body.get("tables")
+    if not isinstance(tables, dict):
+        raise ConfigError(f"portable backup has no tables: {source}")
+    db = Database(url, pool_size=1, pool_timeout=2)
+    try:
+        with db.connect() as conn:
+            for table in reversed(list(metadata.sorted_tables)):
+                conn.execute(table.delete())
+            for table in metadata.sorted_tables:
+                rows = tables.get(table.name) or []
+                if not isinstance(rows, list) or not rows:
+                    continue
+                allowed = {column.name for column in table.columns if column.computed is None}
+                payload = [
+                    {key: _db_value(value) for key, value in row.items() if key in allowed}
+                    for row in rows
+                    if isinstance(row, dict)
+                ]
+                if payload:
+                    conn.execute(table.insert(), payload)
+        _align_sequences(db)
     finally:
         db.dispose()

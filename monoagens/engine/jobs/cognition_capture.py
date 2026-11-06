@@ -159,6 +159,9 @@ class CognitionCapture:
         level = int(decision.level)
         if model_level is not None:
             level = max(level, int(model_level))
+        # ADR-0009 §4.2: the category is itself a floor. A `health` verdict that reports a low
+        # level still cannot be stored below the level the category requires.
+        level = max(level, privacy_layers.LEVELS.get(model_category, 0))
         ask = bool(decision.ask or level >= 4)
         category, durability = await self._remember_hint(row, verdict)
         labelled = await io.run(

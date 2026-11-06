@@ -85,6 +85,21 @@ class WorkerConfig:
     reaper: ReaperConfig = field(default_factory=ReaperConfig)
 
 @dataclass(frozen=True)
+class LLMTargetConfig:
+    """One operator-defined fallback target; no field is filled from a code default."""
+
+    provider: str = ""
+    base_url: str = ""
+    model: str = ""  # chosen by the operator; never filled from a provider default
+    api_key_env: str = ""
+    reasoning_effort: str = ""  # "" = the provider's own default
+    service_tier: str = ""  # "" = the provider's own default
+    wire: str = "openai"
+    timeout_seconds: float = 120.0
+    api_key_optional: bool = False
+
+
+@dataclass(frozen=True)
 class LLMConfig:
     provider: str = ""  # chosen by the operator at init; never a provider default
     base_url: str = ""
@@ -103,9 +118,10 @@ class LLMConfig:
     sampling_supported: tuple[str, ...] = ("temperature", "top_p")
     safety_supported: bool = False
     run_budget_seconds: int = 240
-    max_calls_per_turn: int = 6  # decision + reply loop + polish (ADR-0025 §4.4)
+    max_calls_per_turn: int = 0  # 0 = unlimited rounds; > 0 caps model calls per turn
     prompt_cache: bool = True  # two system messages: stable prefix then volatile (ADR-0025 §4.1)
     retry: RetryConfig = field(default_factory=RetryConfig)
+    fallbacks: tuple[LLMTargetConfig, ...] = ()  # tried in order after the primary target
 
     def session_headers(self, session: str) -> dict[str, str]:
         """Per-request headers for a session; empty when the provider wants none."""
@@ -239,6 +255,29 @@ class MetricsConfig:
     retention_days: int = 90
     enabled: bool = True
     window_seconds: int = 300
+
+@dataclass(frozen=True)
+class AlertSourcesConfig:
+    """Which failure sources may fire an alert; every source is independent."""
+
+    database: bool = True
+    llm: bool = True
+    gateway: bool = True
+    plugin: bool = True
+    mcp: bool = True
+
+
+@dataclass(frozen=True)
+class AlertsConfig:
+    """ADR-0047: consecutive failures become one admin message and one webhook POST."""
+
+    enabled: bool = False  # disabled by default: alerting is opt-in
+    sources: AlertSourcesConfig = field(default_factory=AlertSourcesConfig)
+    threshold: int = 3  # consecutive failures before one alert fires
+    cooldown_seconds: float = 900.0  # minimum interval between duplicate alerts per source
+    notify_admin: bool = True  # send to the administrator through the active body
+    webhook_url_env: str = ""  # env var holding an optional Slack/Discord/HTTP webhook
+
 
 SPEECH_TIMEOUT_DEFAULT = 30.0
 SPEECH_TIMEOUT_HARD_LIMIT = 600.0

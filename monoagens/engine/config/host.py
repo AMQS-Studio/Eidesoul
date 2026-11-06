@@ -9,6 +9,7 @@ from ..access.roles import RoleRegistry
 from ..soul import Soul
 from .environment import resolve_database_url
 from .models import (
+    AlertsConfig,
     AutomationConfig,
     ConcurrencyConfig,
     DatabaseConfig,
@@ -102,6 +103,7 @@ class Config:
     speech: SpeechConfig = field(default_factory=SpeechConfig)
     automations: AutomationConfig = field(default_factory=AutomationConfig)
     self_knowledge: SelfKnowledgeConfig = field(default_factory=SelfKnowledgeConfig)
+    alerts: AlertsConfig = field(default_factory=AlertsConfig)
     plugin: PluginConfig = field(default_factory=PluginConfig)
     plugins: dict[str, PluginSettings] = field(default_factory=dict)
 

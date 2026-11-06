@@ -257,5 +257,4 @@ memory_index = Table(
     Column("updated_at", Float, nullable=False),
     UniqueConstraint("backend", "external_id", name="uq_memory_index_external"),
 )
-Index("ix_memory_index_external", memory_index.c.backend, memory_index.c.external_id)
 

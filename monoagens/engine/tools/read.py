@@ -3,6 +3,7 @@
 
 import re
 
+from .. import io
 from ..registry import Handler
 from . import ToolContext, _int, _resolve
 
@@ -26,16 +27,19 @@ def _refusal(path, ctx: ToolContext) -> str:
     return ""
 
 
+def _names(path) -> list[str]:
+    """Visible child names; blocking disk walk, offloaded by `_read` (AGENTS.md §2)."""
+    return sorted(child.name for child in path.iterdir() if not child.name.startswith("."))
+
+
 async def _read(args: dict, ctx: ToolContext) -> str:
     path = _resolve(ctx, args.get("path", ""))
     refusal = _refusal(path, ctx)
     if refusal:
         return refusal
-    if path.is_dir():
+    if await io.run(path.is_dir):
         try:
-            names = sorted(
-                child.name for child in path.iterdir() if not child.name.startswith(".")
-            )
+            names = await io.run(_names, path)
         except OSError as exc:
             return f"error: cannot list directory: {exc}"
         if not names:
@@ -44,11 +48,12 @@ async def _read(args: dict, ctx: ToolContext) -> str:
         if len(names) > 100:
             body += f"\n(more: {len(names) - 100})"
         return body
-    if not path.is_file():
+    if not await io.run(path.is_file):
         return f"error: file not found: {args.get('path')}"
     start = max(1, _int(args, "start", 1))
     limit = max(1, _int(args, "limit", 400))
-    lines = path.read_text(encoding="utf-8", errors="replace").splitlines()
+    text = await io.run(path.read_text, encoding="utf-8", errors="replace")
+    lines = text.splitlines()
     if not lines:
         return "(empty file)"
     chosen = lines[start - 1 : start - 1 + limit]

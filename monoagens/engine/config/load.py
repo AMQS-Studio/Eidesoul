@@ -24,12 +24,15 @@ from .models import (
     QUIET_POLICIES,
     SPEECH_TIMEOUT_DEFAULT,
     SPEECH_TIMEOUT_HARD_LIMIT,
+    AlertsConfig,
+    AlertSourcesConfig,
     AutomationConditionConfig,
     AutomationConfig,
     AutomationResilienceConfig,
     AutomationRetryConfig,
     AutomationSandboxConfig,
     LLMConfig,
+    LLMTargetConfig,
     LoggingConfig,
     NoticeRetryConfig,
     ReaperConfig,
@@ -184,6 +187,67 @@ def _strings(value: object) -> tuple[str, ...]:
     return tuple(str(item).strip() for item in items if str(item).strip())
 
 
+def _alerts_config(raw: Mapping) -> AlertsConfig:
+    """`engine.alerts`: opt-in failure alerting; off unless the operator enables it."""
+    sources = _section(raw, "sources")
+    return AlertsConfig(
+        enabled=_bool(raw.get("enabled"), False),
+        sources=AlertSourcesConfig(
+            database=_bool(sources.get("database"), True),
+            llm=_bool(sources.get("llm"), True),
+            gateway=_bool(sources.get("gateway"), True),
+            plugin=_bool(sources.get("plugin"), True),
+            mcp=_bool(sources.get("mcp"), True),
+        ),
+        threshold=max(1, int(_num(raw.get("threshold"), 3))),
+        cooldown_seconds=max(0.0, _num(raw.get("cooldown_seconds"), 900.0)),
+        notify_admin=_bool(raw.get("notify_admin"), True),
+        webhook_url_env=str(raw.get("webhook_url_env") or "").strip(),
+    )
+
+
+def _llm_target(raw: object) -> LLMTargetConfig:
+    """One `engine.llm.fallbacks` entry; provider and model are operator choices."""
+    if not isinstance(raw, Mapping):
+        raise ConfigError("engine.llm.fallbacks entries must be mappings")
+    provider = str(raw.get("provider") or "").strip()
+    if not provider:
+        raise ConfigError("engine.llm.fallbacks[].provider is required")
+    model = str(raw.get("model") or "").strip()
+    if not model:
+        raise ConfigError("engine.llm.fallbacks[].model is required")
+    try:
+        provider, defaults = resolve(
+            provider, str(raw.get("base_url") or ""), str(raw.get("api_key_env") or "")
+        )
+    except ValueError as exc:
+        raise ConfigError(str(exc)) from exc
+    if not defaults.api_key_env:
+        raise ConfigError(
+            "engine.llm.fallbacks[].api_key_env is required when the provider has no default"
+        )
+    return LLMTargetConfig(
+        provider=provider,
+        base_url=defaults.base_url,
+        model=model,
+        api_key_env=defaults.api_key_env,
+        reasoning_effort=str(raw.get("reasoning_effort") or "").strip(),
+        service_tier=str(raw.get("service_tier") or "").strip(),
+        wire=defaults.wire,
+        timeout_seconds=_num(raw.get("timeout_seconds"), 120.0),
+        api_key_optional=defaults.api_key_optional,
+    )
+
+
+def _llm_fallbacks(raw: object) -> tuple[LLMTargetConfig, ...]:
+    """The ordered fallback list; missing or empty means the primary is the only target."""
+    if raw is None:
+        return ()
+    if not isinstance(raw, list):
+        raise ConfigError("engine.llm.fallbacks must be a list")
+    return tuple(_llm_target(entry) for entry in raw)
+
+
 def _llm_config(
     llm_raw: Mapping, *, require_key: bool, require_model: bool
 ) -> LLMConfig:
@@ -234,9 +298,10 @@ def _llm_config(
         ),
         safety_supported=defaults.safety_supported,
         run_budget_seconds=int(_num(llm_raw.get("run_budget_seconds"), 240)),
-        max_calls_per_turn=max(1, int(_num(llm_raw.get("max_calls_per_turn"), 6))),
+        max_calls_per_turn=max(0, int(_num(llm_raw.get("max_calls_per_turn"), 0))),
         prompt_cache=_bool(llm_raw.get("prompt_cache"), True),
         retry=_retry_config(_section(llm_raw, "retry")),
+        fallbacks=_llm_fallbacks(llm_raw.get("fallbacks")),
     )
 
 BACKLOG_POLICIES = frozenset(
@@ -361,7 +426,7 @@ def _skills_config(raw: Mapping) -> SkillsConfig:
             raw.get("idle_after_send_minutes"), 3.0, 0.0, 1440.0
         ),
         per_episode=_clamped(raw.get("per_episode"), 1, 0, 10),
-        max_chars=_clamped(raw.get("max_chars"), 800, 0, 20000),
+        max_chars=_clamped(raw.get("max_chars"), 0, 0, 20000),
         max_body_chars=_clamped(raw.get("max_body_chars"), 18000, 100, 100000),
         use_renewal_days=_num_clamped(raw.get("use_renewal_days"), 30.0, 0.0, 3650.0),
         efficiency_enabled=_bool(_section(raw, "efficiency").get("enabled"), True),

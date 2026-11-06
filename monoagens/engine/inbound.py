@@ -87,15 +87,18 @@ def reset_tool_action(token) -> None:
     TOOL_ACTION.reset(token)
 
 
-def tool_action_id() -> str:
+def tool_action_id(suffix: str = "") -> str:
     """The next deterministic id for an action a tool emits; "" outside a tool step.
 
     The first action of a step is exactly `turn:<turn_id>:tool:<step_seq>`; further actions of the
     same step (a second bubble, a file after the text) carry `:<n>` so every outbox key is unique.
+    `suffix` names the part explicitly (`chunk:2`, `file:1`) when one tool call emits several.
     """
     base = TOOL_ACTION.get()
     if not base:
         return ""
+    if suffix:
+        return f"{base}:{suffix}"
     index = int(TOOL_ACTION_SEQ.get())
     TOOL_ACTION_SEQ.set(index + 1)
     return base if index == 0 else f"{base}:{index}"

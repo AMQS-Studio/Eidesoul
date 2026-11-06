@@ -419,7 +419,12 @@ def test_strict_mode_allows_an_origin_reply_and_parks_a_tool_call(tmp_path) -> N
     env = make_agent(tmp_path, approvals=ApprovalConfig(mode="strict"))
 
     delivered = asyncio.run(
-        env.agent.delivery.text(DM, "halo juga", gateway=env.gateway)
+        env.agent.delivery.text(
+            DM,
+            "halo juga",
+            gateway=env.gateway,
+            origin=Address(env.gateway.name, DM),
+        )
     )
 
     assert delivered == "msg-1"

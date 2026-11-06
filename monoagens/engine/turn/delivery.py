@@ -53,9 +53,16 @@ def reset_origin(token) -> None:
     TURN_ORIGIN.reset(token)
 
 
-def origin_for(address: Address, origin: Address | None = None) -> Address:
-    """The explicit origin, the bound turn origin, or the target room for an internal send."""
-    return origin or TURN_ORIGIN.get() or address
+def origin_for(origin: Address | None = None) -> Address:
+    """The explicit origin or the bound turn origin; the target room is never an origin.
+
+    AGENTS §5: the door must be able to run its cross-room check, so a delivery without a
+    stated origin is a programming error, not a send to the target.
+    """
+    found = origin or TURN_ORIGIN.get()
+    if found is None:
+        raise ValueError("explicit origin address is required")
+    return found
 
 
 def typing_delay(text: str, config, rng=random) -> float:
@@ -163,16 +170,18 @@ class Delivery:
         subject: str = "",
         origin: Address | None = None,
         reason: str = "",
+        action_id: str = "",
     ) -> str:
         address = Address(str(gateway.name), str(thread_id))
+        found = action_id or str(self._action_id().get("id") or "")
         action = Action(
             address=address,
             capability="send_text",
             payload=str(text or ""),
-            **self._action_id(),
+            id=found or uuid4().hex,
         )
         receipt = await self._door(
-            action, subject=subject, origin=origin_for(address, origin), reason=reason
+            action, subject=subject, origin=origin_for(origin), reason=reason
         )
         message_id = self._reference(receipt)
         self.remember(thread_id, text, gateway=gateway, message_id=message_id)
@@ -192,6 +201,7 @@ class Delivery:
         subject: str = "",
         origin: Address | None = None,
         reason: str = "",
+        action_id: str = "",
     ) -> str:
         path = Path(path)
         if not isinstance(gateway, Rich):
@@ -205,14 +215,15 @@ class Delivery:
                 reason=reason,
             )
         address = Address(str(gateway.name), str(thread_id))
+        found = action_id or str(self._action_id().get("id") or "")
         action = Action(
             address=address,
             capability="send_file",
             payload={"path": str(path), "caption": str(caption or "")},
-            **self._action_id(),
+            id=found or uuid4().hex,
         )
         receipt = await self._door(
-            action, subject=subject, origin=origin_for(address, origin), reason=reason
+            action, subject=subject, origin=origin_for(origin), reason=reason
         )
         message_id = self._reference(receipt)
         note = t(
@@ -256,7 +267,7 @@ class Delivery:
             id=action_id or str(self._action_id().get("id") or uuid4().hex),
         )
         label = self._reference(
-            await self._door(action, subject=subject, origin=origin_for(address, origin))
+            await self._door(action, subject=subject, origin=origin_for(origin))
         )
         if label:
             self.runtime.windows.append(
@@ -335,6 +346,7 @@ class Delivery:
         subject: str = "",
         origin: Address | None = None,
         reason: str = "",
+        action_id: str = "",
     ) -> str:
         if gateway is None:
             return "error: gateway is not available"
@@ -347,6 +359,7 @@ class Delivery:
                 subject=subject,
                 origin=origin,
                 reason=reason,
+                action_id=action_id,
             )
         except StandbyError:
             return "error: delivery refused"
@@ -454,9 +467,12 @@ class Delivery:
             # It may already be visible; a notice must never duplicate (ADR-0013 §10).
             return False
         attempts = max(1, int(retry.attempts))
+        origin = Address(str(gateway.name), str(thread_id))
         for attempt in range(attempts):
             try:
-                message_id = await self.text(thread_id, text, gateway=gateway, kind=kind)
+                message_id = await self.text(
+                    thread_id, text, gateway=gateway, kind=kind, origin=origin
+                )
             except StandbyError:
                 runtime.outbox.forget(scope_key, 0)
                 return False

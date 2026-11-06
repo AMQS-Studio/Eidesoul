@@ -20,6 +20,7 @@ from ..engine.access.roles import Role
 from ..engine.config import (
     ENGINE_SCHEMA,
     WEB_SEARCH_PROVIDERS,
+    AlertsConfig,
     AmbientConfig,
     ApprovalConfig,
     AutomationConfig,
@@ -228,6 +229,7 @@ def engine_defaults() -> dict:
     engine = {
         "default_role": default_role_name(),
         "llm": _section_defaults(LLMConfig(), ENGINE_SCHEMA["llm"]),
+        "alerts": _section_defaults(AlertsConfig(), ENGINE_SCHEMA["alerts"]),
         "turns": _section_defaults(TurnConfig(), ENGINE_SCHEMA["turns"]),
         "worker": _section_defaults(WorkerConfig(), ENGINE_SCHEMA["worker"]),
         "io": _section_defaults(IOConfig(), ENGINE_SCHEMA["io"]),
@@ -571,7 +573,9 @@ COMMENTS: dict[str, str] = {
         "Temperature for decisions, summaries, and extraction. Default: 0.2."
     ),
     "engine.llm.run_budget_seconds": "Wall-clock budget for one turn. Default: 240.",
-    "engine.llm.max_calls_per_turn": "Model calls allowed in one turn. Default: 6.",
+    "engine.llm.max_calls_per_turn": (
+        "Model calls allowed in one turn; 0 = unlimited. Default: 0."
+    ),
     "engine.llm.prompt_cache": (
         "Send a stable prefix first for provider prompt caching. Default: true."
     ),
@@ -582,6 +586,27 @@ COMMENTS: dict[str, str] = {
     "engine.llm.retry.cap_seconds": "Backoff cap. Default: 60.",
     "engine.llm.retry.jitter": "Backoff jitter ratio. Default: 0.2.",
     "engine.llm.retry.retry_after_max_seconds": "Cap on a provider Retry-After. Default: 10.",
+    "engine.llm.fallbacks": (
+        "Ordered fallback targets tried after the primary fails; empty means none."
+    ),
+    "engine.alerts": "Consecutive failures become one admin message and one webhook POST.",
+    "engine.alerts.enabled": "Enable alerting; disabled by default. Default: false.",
+    "engine.alerts.sources": "Which failure sources may fire an alert.",
+    "engine.alerts.sources.database": "Alert on database failures. Default: true.",
+    "engine.alerts.sources.llm": "Alert on model-provider failures. Default: true.",
+    "engine.alerts.sources.gateway": "Alert on gateway crashes. Default: true.",
+    "engine.alerts.sources.plugin": "Alert on plugin load failures. Default: true.",
+    "engine.alerts.sources.mcp": "Alert on MCP server failures. Default: true.",
+    "engine.alerts.threshold": "Consecutive failures before one alert fires. Default: 3.",
+    "engine.alerts.cooldown_seconds": (
+        "Minimum seconds between duplicate alerts per source. Default: 900."
+    ),
+    "engine.alerts.notify_admin": (
+        "Send the alert to the administrator through the active body. Default: true."
+    ),
+    "engine.alerts.webhook_url_env": (
+        "Environment variable holding an optional Slack/Discord/HTTP webhook URL."
+    ),
     "engine.turns": "Turn lifecycle, resume, and shutdown.",
     "engine.turns.timeout_seconds": "Hard one-turn deadline. Default: 300.",
     "engine.turns.min_call_seconds": (
@@ -621,7 +646,7 @@ COMMENTS: dict[str, str] = {
     "engine.memory": "Memory store, capture, privacy, and retention.",
     "engine.memory.auto_capture": "Capture durable facts automatically. Default: true.",
     "engine.memory.max_items": "Memory items per prompt. Default: 12.",
-    "engine.memory.max_chars": "Memory prompt budget. Default: 3000.",
+    "engine.memory.max_chars": "Memory prompt budget; 0 = unlimited. Default: 0.",
     "engine.memory.collection": "Memory collection label.",
     "engine.memory.extraction_model": "Extraction model; empty uses engine.llm.model.",
     "engine.memory.telemetry": "Send memory telemetry. Default: false.",
@@ -685,7 +710,7 @@ COMMENTS: dict[str, str] = {
     "engine.skills.task_idle_minutes": "Task idle window. Default: 10.",
     "engine.skills.idle_after_send_minutes": "Idle after a send. Default: 3.",
     "engine.skills.per_episode": "Skills retrieved per episode. Default: 1.",
-    "engine.skills.max_chars": "Skill prompt budget. Default: 800.",
+    "engine.skills.max_chars": "Skill prompt budget; 0 = unlimited. Default: 0.",
     "engine.skills.max_body_chars": "Stored skill body cap. Default: 18000.",
     "engine.skills.use_renewal_days": "Renew an unused skill after this window. Default: 30.",
     "engine.skills.efficiency": "Efficiency comparison evidence.",
@@ -696,9 +721,9 @@ COMMENTS: dict[str, str] = {
     "engine.skills.ladder.enabled": "Propose automations. Default: true.",
     "engine.skills.ladder.proposal_cooldown_days": "Proposal cooldown. Default: 14.",
     "engine.prompt": "Prompt assembly and salience.",
-    "engine.prompt.salience": "Select volatile blocks by salience. Default: true.",
-    "engine.prompt.max_chars": "Volatile prompt budget. Default: 9000.",
-    "engine.prompt.thread_chars": "Thread window budget. Default: 4000.",
+    "engine.prompt.salience": "Select volatile blocks by salience. Default: false.",
+    "engine.prompt.max_chars": "Volatile prompt budget; 0 = unlimited. Default: 0.",
+    "engine.prompt.thread_chars": "Thread window budget; 0 = unlimited. Default: 0.",
     "engine.prompt.pinned_blocks": "Blocks that always stay in the prompt.",
     "engine.prompt.capability_index": "Render the capability index. Default: true.",
     "engine.prompt.capability_index_max_chars": "Capability index budget. Default: 1200.",
@@ -871,6 +896,7 @@ HOST_TITLES: dict[str, str] = {
 ENGINE_TITLES: dict[str, str] = {
     "default_role": "DEFAULT ROLE",
     "llm": "PROVIDER & MODEL",
+    "alerts": "OUT-OF-BAND ALERTING",
     "turns": "TURN LIFECYCLE & SHUTDOWN",
     "worker": "BACKGROUND WORKER",
     "io": "BLOCKING I/O",

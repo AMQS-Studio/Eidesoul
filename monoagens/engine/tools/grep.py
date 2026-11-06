@@ -5,6 +5,7 @@ import fnmatch
 import re
 from pathlib import Path
 
+from .. import io
 from ..registry import Handler
 from . import ToolContext, _int, _resolve
 from .read import _refusal
@@ -21,40 +22,46 @@ def _relative(path: Path, ctx: ToolContext) -> str:
         return str(path)
 
 
-def _files(ctx: ToolContext, raw_path: str, pattern: str) -> list[Path]:
+def _walk(root: Path, ctx: ToolContext, pattern: str) -> list[Path]:
+    """Blocking walk under one root; offloaded by `_files` (AGENTS.md §2)."""
+    found: list[Path] = []
+    for path in sorted(root.rglob("*")):
+        if not path.is_file():
+            continue
+        if path.is_symlink() and not path.resolve().is_relative_to(root.resolve()):
+            continue
+        if pattern and not (
+            fnmatch.fnmatch(_relative(path, ctx), pattern)
+            or fnmatch.fnmatch(path.name, pattern)
+        ):
+            continue
+        found.append(path)
+    return found
+
+
+async def _files(ctx: ToolContext, raw_path: str, pattern: str) -> list[Path]:
     """Deterministic file list; a symlink escaping the root is already rejected by `_resolve`."""
     if raw_path:
         target = _resolve(ctx, raw_path)
-        if target.is_file():
+        if await io.run(target.is_file):
             return [target]
-        if not target.is_dir():
+        if not await io.run(target.is_dir):
             return []
         roots = [target]
     else:
         roots = list(ctx.roots)
     found: list[Path] = []
     for root in roots:
-        if not root.is_dir():
+        if not await io.run(root.is_dir):
             continue
-        for path in sorted(root.rglob("*")):
-            if not path.is_file():
-                continue
-            if path.is_symlink() and not path.resolve().is_relative_to(root.resolve()):
-                continue
-            if pattern and not (
-                fnmatch.fnmatch(_relative(path, ctx), pattern)
-                or fnmatch.fnmatch(path.name, pattern)
-            ):
-                continue
-            found.append(path)
+        found.extend(await io.run(_walk, root, ctx, pattern))
     return sorted(dict.fromkeys(found))
 
 
-def _searchable(path: Path, ctx: ToolContext) -> bool:
-    if _refusal(path, ctx):
-        return False
+def _probe(path: Path, max_bytes: int) -> bool:
+    """Blocking size/binary probe; offloaded by `_searchable` (AGENTS.md §2)."""
     try:
-        if path.stat().st_size > ctx.config.read.grep.max_file_bytes:
+        if path.stat().st_size > max_bytes:
             return False
         with path.open("rb") as handle:
             return b"\x00" not in handle.read(BINARY_PROBE)
@@ -62,11 +69,22 @@ def _searchable(path: Path, ctx: ToolContext) -> bool:
         return False
 
 
-def _match(pattern: re.Pattern[str], path: Path) -> list[tuple[int, str]]:
+async def _searchable(path: Path, ctx: ToolContext) -> bool:
+    if _refusal(path, ctx):
+        return False
+    return await io.run(_probe, path, ctx.config.read.grep.max_file_bytes)
+
+
+def _text(path: Path) -> str:
+    """Blocking file read; offloaded by `_match` (AGENTS.md §2)."""
     try:
-        text = path.read_text(encoding="utf-8", errors="replace")
+        return path.read_text(encoding="utf-8", errors="replace")
     except OSError:
-        return []
+        return ""
+
+
+async def _match(pattern: re.Pattern[str], path: Path) -> list[tuple[int, str]]:
+    text = await io.run(_text, path)
     found: list[tuple[int, str]] = []
     for number, line in enumerate(text.splitlines(), 1):
         if pattern.search(line):
@@ -88,7 +106,7 @@ def _render(rows: list[tuple[Path, list[tuple[int, str]]]], ctx: ToolContext, mo
     return "\n".join(lines)
 
 
-def _collect(
+async def _collect(
     ctx: ToolContext,
     raw_path: str,
     pattern: re.Pattern[str],
@@ -99,10 +117,10 @@ def _collect(
     rows: list[tuple[Path, list[tuple[int, str]]]] = []
     used = 0
     cut = False
-    for path in _files(ctx, raw_path, glob):
-        if not _searchable(path, ctx):
+    for path in await _files(ctx, raw_path, glob):
+        if not await _searchable(path, ctx):
             continue
-        hits = _match(pattern, path)
+        hits = await _match(pattern, path)
         if not hits:
             continue
         seen = sum(len(item[1]) for item in rows)
@@ -134,7 +152,7 @@ async def _grep(args: dict, ctx: ToolContext) -> str:
     glob = str(args.get("glob") or "").strip()
     limit = min(MAX_LIMIT, max(1, _int(args, "limit", ctx.config.read.grep.max_matches)))
     budget = int(ctx.config.read.grep.max_output_chars)
-    rows, cut = _collect(
+    rows, cut = await _collect(
         ctx, str(args.get("path") or ""), pattern, glob, limit, budget
     )
     if not rows:

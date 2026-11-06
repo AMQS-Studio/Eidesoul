@@ -24,6 +24,7 @@ from support import (
 from monoagens.engine.access.roles import Role
 from monoagens.engine.config import ConfigError, GatewaySettings
 from monoagens.engine.inbound import (
+    Address,
     Directory,
     GatewayCore,
     Rich,
@@ -103,7 +104,13 @@ def test_without_rich_typing_is_skipped_and_media_falls_back_to_text(tmp_path) -
 
     async def turn() -> str:
         await env.agent.handle(inbound_message("halo"), gateway)
-        return await env.agent.send_file("chat", note, "lampiran", gateway=gateway)
+        return await env.agent.send_file(
+            "chat",
+            note,
+            "lampiran",
+            gateway=gateway,
+            origin=Address(gateway.name, "chat"),
+        )
 
     result = asyncio.run(turn())
 
@@ -124,7 +131,11 @@ def test_with_rich_a_file_is_a_file_and_typing_is_real(tmp_path) -> None:
     note.write_text("isi laporan", encoding="utf-8")
 
     asyncio.run(env.agent.handle(inbound_message("halo"), gateway))
-    asyncio.run(env.agent.send_file("chat", note, gateway=gateway))
+    asyncio.run(
+        env.agent.send_file(
+            "chat", note, gateway=gateway, origin=Address(gateway.name, "chat")
+        )
+    )
 
     assert gateway.files
     assert gateway.files[0][1].name == "catatan.txt"

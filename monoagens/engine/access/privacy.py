@@ -15,6 +15,7 @@ from dataclasses import dataclass
 from ..character import lexicon
 from ..config import PrivacyConfig
 from ..i18n import t
+from ..inbound import Address
 from ..memory import MemoryHit
 from ..memory.evidence import POLICY_VERSION
 from ..memory.privacy import AuditResult, PrivacyPolicy, clamp_level
@@ -97,7 +98,12 @@ class PrivacyService:
                 summary=question,
             )
             log.info("disclosure pending chat=%s approval=%s", inbound.thread, approval.id)
-            await self.agent.send_text(inbound.thread, question, gateway=gateway)
+            await self.agent.send_text(
+                inbound.thread,
+                question,
+                gateway=gateway,
+                origin=Address(str(getattr(gateway, "name", "") or ""), str(inbound.thread)),
+            )
             return ReviewResult(True, "")
         return ReviewResult(False, audit.reply or reply)
 
@@ -172,7 +178,13 @@ class PrivacyService:
         if body is None:
             log.info("dispute question skipped: no body owns %s", thread)
             return "skipped: no dm"
-        sent = await agent.send_text(thread, text, gateway=body, subject=subject)
+        sent = await agent.send_text(
+            thread,
+            text,
+            gateway=body,
+            subject=subject,
+            origin=Address(str(getattr(body, "name", "") or ""), str(thread)),
+        )
         if not str(sent).startswith("ok:"):
             return f"failed: {sent}"
         agent.memory.mark_dispute_asked(ids)
@@ -206,7 +218,13 @@ class PrivacyService:
             summary=text,
         )
         log.info("privacy pending thread=%s approval=%s", thread_id, approval.id)
-        await agent.send_text(thread_id, text, gateway=body, subject=person_id)
+        await agent.send_text(
+            thread_id,
+            text,
+            gateway=body,
+            subject=person_id,
+            origin=Address(str(getattr(body, "name", "") or ""), str(thread_id)),
+        )
 
     # ------------------------------------------------------------- pending
 
@@ -235,20 +253,33 @@ class PrivacyService:
                     thread_id=inbound.thread,
                 )
             self.agent.approvals.mark(pending.id, "denied", sender, "privacy declined")
-            await self.agent.send_text(inbound.thread, self._text("keep"), gateway=gateway)
+            await self.agent.send_text(
+                inbound.thread,
+                self._text("keep"),
+                gateway=gateway,
+                origin=Address(str(getattr(gateway, "name", "") or ""), str(inbound.thread)),
+            )
             return
         level = answer.get("level")
         if level is None and kind == "yes":
             level = pending.payload.get("level")
         if level is None:
-            await self.agent.send_text(inbound.thread, self._text("unclear"), gateway=gateway)
+            await self.agent.send_text(
+                inbound.thread,
+                self._text("unclear"),
+                gateway=gateway,
+                origin=Address(str(getattr(gateway, "name", "") or ""), str(inbound.thread)),
+            )
             return
         level = clamp_level(level, self.config.default_level)
         for memory_id in ids:
             await self.agent.memory.set_privacy(memory_id, level=level, confirmed=True)
         self.agent.approvals.mark(pending.id, "approved", sender, f"level {level}")
         await self.agent.send_text(
-            inbound.thread, self._text("saved", level=level), gateway=gateway
+            inbound.thread,
+            self._text("saved", level=level),
+            gateway=gateway,
+            origin=Address(str(getattr(gateway, "name", "") or ""), str(inbound.thread)),
         )
 
     async def _resolve_disclosure(
@@ -257,17 +288,37 @@ class PrivacyService:
         kind = answer.get("kind")
         if kind == "no":
             self.agent.approvals.mark(pending.id, "denied", sender, "disclosure declined")
-            await self.agent.send_text(inbound.thread, self._text("keep"), gateway=gateway)
+            await self.agent.send_text(
+                inbound.thread,
+                self._text("keep"),
+                gateway=gateway,
+                origin=Address(str(getattr(gateway, "name", "") or ""), str(inbound.thread)),
+            )
             return
         if kind != "yes":
-            await self.agent.send_text(inbound.thread, self._text("unclear"), gateway=gateway)
+            await self.agent.send_text(
+                inbound.thread,
+                self._text("unclear"),
+                gateway=gateway,
+                origin=Address(str(getattr(gateway, "name", "") or ""), str(inbound.thread)),
+            )
             return
         self.agent.approvals.mark(pending.id, "approved", sender, "disclosure allowed")
         reply = str(pending.payload.get("reply") or "")
         if not reply.strip():
-            await self.agent.send_text(inbound.thread, self._text("empty"), gateway=gateway)
+            await self.agent.send_text(
+                inbound.thread,
+                self._text("empty"),
+                gateway=gateway,
+                origin=Address(str(getattr(gateway, "name", "") or ""), str(inbound.thread)),
+            )
             return
-        await self.agent.send_text(inbound.thread, reply, gateway=gateway)
+        await self.agent.send_text(
+            inbound.thread,
+            reply,
+            gateway=gateway,
+            origin=Address(str(getattr(gateway, "name", "") or ""), str(inbound.thread)),
+        )
 
     async def _resolve_answer(self, text: str, kind: str) -> dict:
         return self._regex_answer(str(text or ""))

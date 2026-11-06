@@ -100,6 +100,7 @@ class DeliveryFacade:
         subject: str = "",
         origin: Address | None = None,
         reason: str = "",
+        action_id: str = "",
     ) -> str:
         return await self.delivery.send_file(
             thread_id,
@@ -109,4 +110,5 @@ class DeliveryFacade:
             subject=subject,
             origin=origin,
             reason=reason,
+            action_id=action_id,
         )

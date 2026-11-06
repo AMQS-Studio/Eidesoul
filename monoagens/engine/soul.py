@@ -70,7 +70,7 @@ voice:
 # Behavior rules (ADR-0008 §4.3): a rule becomes `kind=rule` memory only from this document,
 # after it is restated on two separate days. One line each, no names and no secrets.
 rules:
-  - Reply in the language configured for this soul.
+  - Default to the soul language, or match the sender's language.
   - Prefer evidence over guesses; search when a claim is current, local, numeric, or disputed.
 """
 

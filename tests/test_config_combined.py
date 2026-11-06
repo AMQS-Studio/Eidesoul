@@ -92,6 +92,22 @@ def test_load_config_reads_all_sections(tmp_path, monkeypatch) -> None:
     assert config.memory.privacy.auditor is False
 
 
+def test_omitted_budgets_default_to_unlimited(tmp_path, monkeypatch) -> None:
+    """P2.1: an absent key means 0/off, so a fresh config never truncates by accident."""
+    monkeypatch.setenv("MONOAGENS_TEST_KEY", "x")
+    write_folder(tmp_path)
+
+    _host, paths = load_host(tmp_path / "config.yaml")
+    config = load_config(paths.config, require_key=False)
+
+    assert config.llm.max_calls_per_turn == 0
+    assert config.memory.max_chars == 0
+    assert config.skills.max_chars == 0
+    assert config.prompt.salience is False
+    assert config.prompt.max_chars == 0
+    assert config.prompt.thread_chars == 0
+
+
 def test_files_win_over_a_changed_cache(tmp_path, monkeypatch) -> None:
     monkeypatch.setenv("MONOAGENS_TEST_KEY", "x")
     write_folder(tmp_path)

@@ -130,11 +130,11 @@ async def forget_by_intent(
     """ADR-0005 §4.6: "forget that …" removes the one readable row it can mean.
 
     Only the speaker's own readable rows in `global` and this thread are candidates, matched
-    by one shared content token of at least three characters. The language's stopwords are
-    dropped first, so a request particle never turns every row into a candidate: the topic
-    token is what matches. A request with no shared token falls back to the stored embeddings
-    and possessive stems (ADR-0009 §4.4). Zero or several candidates is ambiguity, not a
-    guess: nothing is deleted and the caller logs why.
+    by one shared content token (or one CJK character). The language's stopwords are dropped
+    first, so a request particle never turns every row into a candidate: the topic token is
+    what matches. A request with no shared token falls back to the stored embeddings and
+    possessive stems (ADR-0009 §4.4). Zero or several candidates is ambiguity, not a guess:
+    nothing is deleted and the caller logs why.
     """
     if store.db is None:
         return []
@@ -144,7 +144,9 @@ async def forget_by_intent(
     suffixes = pack.possessives if pack is not None else frozenset()
     wanted = _tokens(text, stopwords)
     who = str(person_id or "").strip()
-    if not wanted or not who:
+    # A short CJK request has no Latin token to match on, and an inflection may hide the
+    # topic; the semantic pass below still finds it, so only an empty request stops here.
+    if not who or not str(text or "").strip():
         return []
     found = await io.run(_forget_candidates_sync, store, who, str(thread_id or ""))
     texts = {str(row["id"]): str(row.get("text") or "") for row in found}

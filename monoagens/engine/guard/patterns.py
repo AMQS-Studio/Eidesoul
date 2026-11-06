@@ -100,7 +100,11 @@ TOKEN_SHAPES = (
     r"(?<![A-Za-z0-9])AIza[0-9A-Za-z_\-]{35}",
     r"(?<![A-Za-z0-9])xox[baprs]-[0-9A-Za-z\-]{10,}",
     r"(?<![A-Za-z0-9])eyJ[A-Za-z0-9_\-]{10,}\.[A-Za-z0-9_\-]{10,}\.[A-Za-z0-9_\-]{10,}",
-    r"-----BEGIN [A-Z ]*PRIVATE KEY-----",
+    # The whole PEM block first: a header-only match would leave the key body in the text.
+    r"-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----[\s\S]*?-----END [A-Z0-9 ]*PRIVATE KEY-----",
+    r"-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----",
+    # A national identity number is L5 personal data even without a credential word.
+    r"(?<![A-Za-z0-9])\d{16}(?![A-Za-z0-9])",
     r"(?:postgres(?:ql)?|mysql|mongodb(?:\+srv)?|redis|amqp)://[^\s:@/]+:[^\s@/]+@",
 )
 _TOKEN_SHAPE = "(?:" + "|".join(TOKEN_SHAPES) + ")"
@@ -109,6 +113,11 @@ _TOKEN_SHAPE = "(?:" + "|".join(TOKEN_SHAPES) + ")"
 # per-character entropy; ordinary words, URLs, paths, and UUIDs stay below the floor.
 _ENTROPY_FLOOR = 4.2
 _ASSIGNED_VALUE = re.compile(r"[=:]\s*([A-Za-z0-9+/=_\-]{24,})")
+# A bare long token in prose: a pasted key has no `=` around it, so the value shape alone is
+# enough once the character classes and entropy clear the floor.
+_BARE_VALUE = re.compile(r"(?<![A-Za-z0-9+/=_\-])([A-Za-z0-9+/=_\-]{24,})(?![A-Za-z0-9+/=_\-])")
+_HEX = re.compile(r"[0-9a-fA-F]+")
+_HEX_FLOOR = 3.0  # random hex tops out at 4 bits/char; prose stays below 3
 _UUID = re.compile(
     r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}"
 )
@@ -135,16 +144,45 @@ def _char_classes(token: str) -> int:
     )
 
 
+def _path_like(token: str) -> bool:
+    """A filesystem path, not a pasted secret: absolute, home-relative, or with `//`."""
+    return token.startswith(("/", "~", "./", "../")) or "//" in token
+
+
+def _entropy_ok(token: str) -> bool:
+    """Enough entropy, with either mixed classes or a long hex run.
+
+    A random hex string tops out at four bits per character, so it can never clear the prose
+    floor; a 32+ character hex token is still a secret shape and gets its own lower floor.
+    """
+    entropy = _shannon_entropy(token)
+    if _char_classes(token) >= 3 and entropy >= _ENTROPY_FLOOR:
+        return True
+    return len(token) >= 32 and _HEX.fullmatch(token) is not None and entropy >= _HEX_FLOOR
+
+
 def entropy_secret(text: str) -> list[tuple[int, int]]:
-    """Spans of assignment values that look like random secrets, never ordinary prose."""
+    """Spans of values that look like random secrets, never ordinary prose.
+
+    Both an assigned value (`key = …`) and a bare pasted token are checked: the shape only
+    matters when the token has enough character classes and per-character entropy, so ordinary
+    words, paths, URLs, and UUIDs stay below the floor. A base64 value keeps `/` and `+`, so a
+    key body is not skipped for looking like a path.
+    """
+    body = str(text or "")
+    spans = [(match.start(1), match.end(1)) for match in _ASSIGNED_VALUE.finditer(body)]
+    spans.extend((match.start(1), match.end(1)) for match in _BARE_VALUE.finditer(body))
     found: list[tuple[int, int]] = []
-    for match in _ASSIGNED_VALUE.finditer(str(text or "")):
-        token = match.group(1)
-        if "://" in token or "/" in token or _UUID.fullmatch(token):
+    for start, end in sorted(spans):
+        token = body[start:end]
+        if "://" in token or _UUID.fullmatch(token) or _path_like(token):
             continue
-        if _char_classes(token) < 3 or _shannon_entropy(token) < _ENTROPY_FLOOR:
+        if not _entropy_ok(token):
             continue
-        found.append((match.start(1), match.end(1)))
+        if found and start <= found[-1][1]:
+            found[-1] = (found[-1][0], max(found[-1][1], end))
+            continue
+        found.append((start, end))
     return found
 
 
@@ -372,11 +410,21 @@ def is_injection(text: str, language: str) -> bool:
 
 
 def redact_credentials(text: str, language: str = "") -> str:
-    """Replace credential and entropy spans with a neutral marker."""
+    """Replace credential and entropy spans with a neutral marker.
+
+    The spans are merged first: an entropy hit inside a PEM block would otherwise shift the
+    offsets of every later span and cut the wrong text.
+    """
     body = str(text or "")
     spans = [match.span() for match in _SHAPES.finditer(body)]
     spans.extend(entropy_secret(body))
-    for start, end in sorted(spans, reverse=True):
+    merged: list[tuple[int, int]] = []
+    for start, end in sorted(spans):
+        if merged and start <= merged[-1][1]:
+            merged[-1] = (merged[-1][0], max(merged[-1][1], end))
+            continue
+        merged.append((start, end))
+    for start, end in reversed(merged):
         body = body[:start] + "[redacted]" + body[end:]
     return body
 

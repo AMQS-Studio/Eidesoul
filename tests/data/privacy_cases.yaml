@@ -4,13 +4,13 @@ cases:
     language: en
     text: "my password is hunter2"
     label: credential
-    level: 4
+    level: 5
     action: drop
   - id: credential-api-key
     language: en
     text: "api_key=abc123"
     label: credential
-    level: 4
+    level: 5
     action: drop
   - id: crime-admission
     language: en

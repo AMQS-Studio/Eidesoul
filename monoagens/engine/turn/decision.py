@@ -434,8 +434,6 @@ async def decide(
     min_call_seconds: float = 0.0,
 ) -> Decision | None:
     """One LLM decision; empty after one retry = None (no regex fallback)."""
-    from ..soul import language_line
-
     identity = soul
     system = (
         f"You are {identity.name}, a soul in chat. "
@@ -445,7 +443,6 @@ async def decide(
     )
     if identity.persona:
         system += f"\n\nYour identity:\n{identity.persona.strip()}"
-    system += "\n" + language_line(identity)
     user = build_context(
         thread_id=thread_id,
         chat_name=chat_name,

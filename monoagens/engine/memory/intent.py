@@ -43,16 +43,20 @@ DEFAULT_BANK: dict[str, tuple[str, ...]] = {
         "clear the memory of my previous address",
         "that thing I told you is not true anymore, drop it",
         "you should not keep the fact that I quit",
+        "forget my salary",
+        "delete what I told you about my phone number",
     ),
     "negative": (
         "what do you remember about me",
-        "do you remember my name",
         "I forgot what I was going to say",
         "can you remind me tomorrow morning",
         "I can't remember where I put the keys",
         "why did you forget that",
-        "forget I said anything",
         "how does your memory work",
+        "never mind, it does not matter",
+        "I forgot my keys at home",
+        "what is my name",
+        "tell me about yourself",
     ),
 }
 

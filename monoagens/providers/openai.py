@@ -5,6 +5,7 @@ Tools travel as `{"type": "function", "function": {...}}` and results come back 
 shape and nothing else: no model id is pinned, the operator chooses one at init time.
 """
 
+import re
 from collections.abc import Callable
 
 from .base import (
@@ -45,11 +46,12 @@ def normalize_response(response: object) -> ProviderResponse:
     choices = getattr(response, "choices", None) or []
     message = choices[0].message if choices else None
     content = _field(message, "content")
-    text = _content_text(content)
+    text, inline_thinking = _split_think(_content_text(content))
     thinking = str(_field(message, "reasoning_content") or "").strip()
     if not thinking:
-        # Claude's compatibility layer and native thinking blocks travel as content parts.
-        thinking = thinking_blocks(content)
+        # Claude's compatibility layer and native thinking blocks travel as content parts;
+        # some OpenAI-compatible wires inline the reasoning block in the string content.
+        thinking = thinking_blocks(content) or inline_thinking
     calls: list[ProviderToolCall] = []
     for call in getattr(message, "tool_calls", None) or []:
         call_id, name, arguments = call_parts(call)
@@ -77,6 +79,20 @@ def _field(message: object, name: str):
     if isinstance(message, dict):
         return message.get(name)
     return getattr(message, name, None)
+
+
+_THINK_BLOCK = re.compile(
+    r"<think(?:ing)?>(.*?)</think(?:ing)?>", re.DOTALL | re.IGNORECASE
+)
+
+
+def _split_think(text: str) -> tuple[str, str]:
+    """Inline reasoning out of an answer, for wires that do not split it themselves."""
+    blocks = [match.group(1).strip() for match in _THINK_BLOCK.finditer(text)]
+    if not blocks:
+        return text, ""
+    answer = _THINK_BLOCK.sub("", text).strip()
+    return answer, "\n".join(block for block in blocks if block)
 
 
 def _content_text(content: object) -> str:

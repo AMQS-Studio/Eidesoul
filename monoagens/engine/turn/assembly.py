@@ -46,8 +46,12 @@ def _find(history, thread_id: str, message_id: str, window) -> Message | None:
         return None
 
 
-def _tail(rows: list[Message], current: Message) -> list[Message]:
-    """Newest rows under the character budget, never fewer than the floor."""
+def _tail(rows: list[Message], current: Message, max_chars: int = TAIL_CHARS) -> list[Message]:
+    """Newest rows under the character budget, never fewer than the floor.
+
+    `max_chars <= 0` means the operator disabled the character budget: the tail then grows to
+    `TAIL_MAX_MESSAGES` and only that message count stops it (P2.1).
+    """
     picked: list[Message] = []
     chars = 0
     for entry in reversed(rows):
@@ -57,7 +61,7 @@ def _tail(rows: list[Message], current: Message) -> list[Message]:
             break
         picked.append(entry)
         chars += len(entry.text or "")
-        if chars >= TAIL_CHARS and len(picked) + 1 >= TAIL_MIN_MESSAGES:
+        if max_chars > 0 and chars >= TAIL_CHARS and len(picked) + 1 >= TAIL_MIN_MESSAGES:
             break
     return [*reversed(picked), current]
 
@@ -122,20 +126,24 @@ def _trim(
     """Drop the oldest rows beyond the floor until the budget fits.
 
     `current`, its anchors, and the newest `TAIL_MIN_MESSAGES` turns always stay: a short reply
-    to "three messages above" must not lose the context the budget was meant to protect.
+    to "three messages above" must not lose the context the budget was meant to protect. The
+    final row stays even when the store has not assigned the inbound message an id yet.
+    `max_chars <= 0` disables the character budget entirely (P2.1).
     """
+    if max_chars <= 0:
+        return list(merged)
     keep = floor | {entry.id for entry in (current, *anchors) if entry.id}
     sizes = [_rendered(config, thread_id, entry, current) for entry in merged]
     total = sum(sizes)
-    trimmed = list(merged)
+    last = len(merged) - 1
+    kept: list[Message] = []
     for index, entry in enumerate(merged):
-        if total <= max_chars:
-            break
-        if entry.id in keep:
+        protected = (entry.id and entry.id in keep) or entry is current or index == last
+        if total > max_chars and not protected:
+            total -= sizes[index]
             continue
-        trimmed.remove(entry)
-        total -= sizes[index]
-    return trimmed
+        kept.append(entry)
+    return kept
 
 
 def _same(entry: Message, current: Message) -> bool:
@@ -155,7 +163,7 @@ def thread(
 ) -> list[Message]:
     """The payload rows for this turn: tail, quote anchors, deduped, budget-trimmed."""
     rows = [entry for entry in _rows(history, thread_id, window) if not _newer(entry, current)]
-    tail = _tail(rows, current)
+    tail = _tail(rows, current, max_chars)
     anchors = _anchors(history, thread_id, current, window, tail)
     floor = {entry.id for entry in tail[-TAIL_MIN_MESSAGES:] if entry.id}
     return _trim(_merge([tail, anchors]), current, anchors, floor, max_chars, config, thread_id)

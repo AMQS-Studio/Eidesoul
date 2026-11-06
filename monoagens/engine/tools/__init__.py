@@ -178,7 +178,12 @@ def resolve_for(config: Config, raw: str, roles, thread_id: str) -> Path:
         target = text
     elif text == SCRATCH or text.startswith(SCRATCH + "/"):
         rest = text[len(SCRATCH) :].lstrip("/")
-        target = str(Path(SCRATCH) / safe_chat(thread_id) / rest)
+        slug = safe_chat(thread_id)
+        # The model may echo the thread slug `write` reported back to it. Strip it once so a
+        # second mapping does not nest `scratch/<slug>/scratch/<slug>/…` (ADR-0053 §4.1.3).
+        if rest == slug or rest.startswith(slug + "/"):
+            rest = rest[len(slug) :].lstrip("/")
+        target = str(Path(SCRATCH) / slug / rest)
     elif text == PRIVATE or text.startswith(PRIVATE + "/") or trusted:
         target = text
     else:
@@ -228,6 +233,16 @@ def _type_ok(value: object, kind: str) -> bool:
 
 
 def _value_errors(label: str, value: object, schema: dict) -> list[str]:
+    branches = schema.get("anyOf")
+    if isinstance(branches, list) and branches:
+        attempts = [
+            _value_errors(label, value, branch)
+            for branch in branches
+            if isinstance(branch, dict)
+        ]
+        if attempts and all(attempts):
+            return attempts[0]
+        return []
     kind = str(schema.get("type") or "")
     if kind and not _type_ok(value, kind):
         return [f"{label} must be {kind}"]

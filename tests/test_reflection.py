@@ -201,3 +201,104 @@ def test_the_worker_asks_one_question_per_pass(tmp_path) -> None:
     assert len(asked) == 1
     assert asked[0][0] == PERSON
     assert memory.disputes_asked_today(PERSON) == 0  # asking is the agent's side effect
+
+
+def _row(rid: str, text: str) -> dict:
+    return {
+        "id": rid,
+        "text": text,
+        "scope": "person",
+        "person_id": PERSON,
+        "thread_id": THREAD,
+        "subject_id": PERSON,
+        "kind": "fact",
+        "state": "ok",
+    }
+
+
+def test_a_negation_pair_in_another_language_is_a_candidate() -> None:
+    rows = [_row("a", "Pengguna suka tema gelap"), _row("b", "Pengguna tidak suka tema gelap")]
+
+    pairs = reflect.candidates(
+        rows,
+        language="id",
+        vectors={"a": [1.0, 0.0], "b": [0.8, 0.6]},
+        axis=[0.2, -0.6],
+    )
+
+    assert [pair.rule for pair in pairs] == ["vector_opposite"]
+
+
+def test_a_same_attribute_update_is_a_candidate_without_a_negation() -> None:
+    rows = [
+        _row("a", "My favorite color is blue"),
+        _row("b", "My favorite color is green"),
+    ]
+
+    pairs = reflect.candidates(
+        rows,
+        language="en",
+        vectors={"a": [1.0, 0.0], "b": [0.7, 0.7]},
+        axis=[1.0, 0.0],
+    )
+
+    assert [pair.rule for pair in pairs] == ["similar_claim"]
+
+
+def test_unrelated_or_identical_statements_are_not_candidates() -> None:
+    unrelated = [_row("a", "I have a cat named Milo"), _row("b", "I work at a bank")]
+    assert (
+        reflect.candidates(
+            unrelated,
+            language="en",
+            vectors={"a": [1.0, 0.0], "b": [0.0, 1.0]},
+            axis=[1.0, 0.0],
+        )
+        == []
+    )
+
+    identical = [_row("c", "I like coffee"), _row("d", "I like coffee")]
+    assert (
+        reflect.candidates(
+            identical,
+            language="en",
+            vectors={"c": [1.0, 0.0], "d": [1.0, 0.0]},
+            axis=[1.0, 0.0],
+        )
+        == []
+    )
+
+
+def test_a_pass_opens_a_dispute_only_the_vector_space_finds(tmp_path, monkeypatch) -> None:
+    from monoagens.engine import embed
+
+    memory = store(tmp_path)
+    left = write(memory, "Pengguna suka tema gelap")
+    right = write(memory, "Pengguna tidak suka tema gelap")
+    positive = {pair[0] for pair in reflect.POLARITY_ANCHORS}
+    negative = {pair[1] for pair in reflect.POLARITY_ANCHORS}
+    space = {
+        "Pengguna suka tema gelap": [1.0, 0.0, 0.0],
+        "Pengguna tidak suka tema gelap": [0.8, 0.6, 0.0],
+    }
+
+    def fake(texts, **kwargs):
+        found = []
+        for text in texts:
+            if text in positive:
+                found.append([1.0, 0.0, 0.0])
+            elif text in negative:
+                found.append([0.0, 1.0, 0.0])
+            else:
+                found.append(space[text])
+        return found
+
+    monkeypatch.setattr(embed, "encode", fake)
+
+    report = asyncio.run(
+        reflect.run_pass(memory, scope=f"person:{PERSON}", llm=None, language="id")
+    )
+
+    assert report.candidates == 1
+    assert report.disputes == 1
+    assert set(report.opened[0]["ids"]) == {left, right}

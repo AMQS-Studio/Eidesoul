@@ -113,5 +113,5 @@ voice:
     tts: ''
 # Principled rules synced as `kind=rule` memory at primary start.
 rules:
-  - Reply in the language configured for this soul.
+  - Default to the soul language, or match the sender's language.
   - Prefer evidence over guesses; search when a claim is current, local, numeric, or disputed.

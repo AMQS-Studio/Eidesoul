@@ -20,3 +20,25 @@ def test_audio_filenames_never_fall_back_to_bin_for_audio() -> None:
     assert _filename("audio/ogg; codecs=opus") == "audio.ogg"
     assert _filename("audio/unknown-container") == "audio.mp3"
     assert "audio/aac" in MIMETYPE_EXTENSIONS
+
+
+def test_inline_reasoning_block_never_leaks_into_the_reply() -> None:
+    """Some OpenAI-compatible wires inline the reasoning block in the string content."""
+    from monoagens.providers.openai import normalize_response
+
+    class Message:
+        content = "visible <thinking>private line</thinking> answer"
+        reasoning_content = None
+        tool_calls = ()
+
+    class Choice:
+        message = Message()
+        finish_reason = "stop"
+
+    class Response:
+        choices = (Choice(),)
+        usage = None
+
+    result = normalize_response(Response())
+    assert result.text == "visible  answer"
+    assert result.thinking == "private line"

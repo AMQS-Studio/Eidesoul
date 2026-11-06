@@ -70,6 +70,17 @@ def test_the_builtin_bank_serves_every_language() -> None:
         assert len(pack["negative"]) >= 6
 
 
+def test_the_builtin_bank_separates_commands_from_questions() -> None:
+    """P0-4: a question must never sit in the forget/remember prototype space."""
+    negatives = set(intent.DEFAULT_BANK["negative"])
+    forget = set(intent.DEFAULT_BANK["forget"])
+
+    assert "forget I said anything" not in negatives
+    assert "do you remember my name" not in negatives
+    assert {"what is my name", "never mind, it does not matter"} <= negatives
+    assert {"forget my salary", "delete what I told you about my phone number"} <= forget
+
+
 def store(tmp_path) -> MemoryStore:
     return MemoryStore(database(), build_config(tmp_path))
 

@@ -41,11 +41,29 @@ def test_ambiguous_text_goes_to_review_instead_of_a_guessed_level() -> None:
     assert decision.needs_review is True
 
 
-def test_uncalibrated_model_evidence_cannot_set_a_level_or_ask() -> None:
+def test_a_confident_model_label_sets_a_level_and_asks() -> None:
+    """P0-2: a non-English disclosure the regex layer misses must not fall back to level 2."""
     from monoagens.engine.memory.evidence import Evidence
 
     decision = decide(
-        [Evidence("encoder", "centroid-1", "digest", "crime_admission", 0.99)]
+        [Evidence("encoder", "centroid-1", "digest", "health", 0.62)]
+    )
+
+    assert decision.level == 4
+    assert decision.label == "health"
+    assert decision.ask is True
+    assert decision.action == "ask"
+
+
+def test_an_ambiguous_model_label_cannot_set_a_level_or_ask() -> None:
+    """Two close centroids are not a verdict: the model label stays audit-only."""
+    from monoagens.engine.memory.evidence import AMBIGUOUS, Evidence
+
+    decision = decide(
+        [
+            Evidence("encoder", "centroid-1", "digest", "crime_admission", 0.41),
+            Evidence("encoder", "centroid-1", "digest", AMBIGUOUS, 0.41),
+        ]
     )
 
     assert decision.level == 2

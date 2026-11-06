@@ -318,8 +318,14 @@ def test_approve_rejects_other_sender(tmp_path) -> None:
 
 
 def test_send_text_tool_wrapper_reports_ok(tmp_path) -> None:
+    from monoagens.engine.inbound import Address
+
     env = make_agent(tmp_path)
-    result = asyncio.run(env.agent.send_text("lain", "halo", gateway=env.gateway))
+    result = asyncio.run(
+        env.agent.send_text(
+            "lain", "halo", gateway=env.gateway, origin=Address(env.gateway.name, "lain")
+        )
+    )
     assert result.startswith("ok:")
     assert env.gateway.sent[0][0] == "lain"
 
@@ -465,8 +471,12 @@ def test_a_body_without_rich_or_directory_is_counted(tmp_path) -> None:
     env = make_agent(tmp_path, gateway=FakeGateway())
     assert not isinstance(env.gateway, Directory)
 
+    from monoagens.engine.inbound import Address
+
     asyncio.run(
-        env.agent.deliver_file(DM, tmp_path / "a.txt", gateway=env.gateway)
+        env.agent.deliver_file(
+            DM, tmp_path / "a.txt", gateway=env.gateway, origin=Address(env.gateway.name, DM)
+        )
     )
     assert env.agent.runtime.rich_missing_total >= 1
 

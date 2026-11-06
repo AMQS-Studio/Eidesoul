@@ -16,6 +16,7 @@ from ..soul import Soul
 from .environment import resolve_database_url
 from .host import Config
 from .load import (
+    _alerts_config,
     _automation_config,
     _capture_config,
     _cognition_config,
@@ -288,13 +289,14 @@ def load_config(
         sandbox=host.sandbox,
         safety=safety,
         mcp=host.mcp,
+        alerts=_alerts_config(_section(engine, "alerts")),
         web_search=host.web_search,
         research=research,
         memory=MemoryConfig(
             auto_capture=_bool(memory_raw.get("auto_capture"), True),
             capture=capture,
             max_items=int(_num(memory_raw.get("max_items"), 12)),
-            max_chars=int(_num(memory_raw.get("max_chars"), 3000)),
+            max_chars=int(_num(memory_raw.get("max_chars"), 0)),
             collection=str(memory_raw.get("collection") or "monoagens_memories").strip()
             or "monoagens_memories",
             extraction_model=str(memory_raw.get("extraction_model") or "").strip(),
@@ -315,9 +317,9 @@ def load_config(
         skills=skills,
         reflection=reflection,
         prompt=PromptConfig(
-            salience=_bool(prompt_raw.get("salience"), True),
-            max_chars=int(_num(prompt_raw.get("max_chars"), 9000)),
-            thread_chars=int(_num(prompt_raw.get("thread_chars"), 4000)),
+            salience=_bool(prompt_raw.get("salience"), False),
+            max_chars=int(_num(prompt_raw.get("max_chars"), 0)),
+            thread_chars=int(_num(prompt_raw.get("thread_chars"), 0)),
             pinned_blocks=_str_tuple(prompt_raw.get("pinned_blocks"))
             or PromptConfig().pinned_blocks,
             capability_index=_bool(prompt_raw.get("capability_index"), True),

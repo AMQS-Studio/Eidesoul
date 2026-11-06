@@ -36,7 +36,25 @@ def test_vad_mapping_is_negative_for_anger() -> None:
 
 
 def test_vad_below_the_floor_is_neutral() -> None:
-    assert VibeRunner.vad({"joy": 0.6, "anger": 0.2}) is None
+    assert VibeRunner.vad({"joy": 0.5, "anger": 0.2}) is None
+
+
+def test_vad_keeps_a_strong_negative_that_co_occurs_with_its_neighbour() -> None:
+    """P0-5: anger + disgust agree, so the group margin must not cancel them."""
+    point = VibeRunner.vad({"anger": 0.72, "disgust": 0.60, "fear": 0.46})
+
+    assert point is not None
+    assert point[0] < 0.35
+    assert point[1] > 0.65
+
+
+def test_vad_sharpening_reaches_the_positive_band() -> None:
+    point = VibeRunner.vad(
+        {"joy": 0.95, "trust": 0.57, "anticipation": 0.45, "anger": 0.31}
+    )
+
+    assert point is not None
+    assert point[0] >= 0.60
 
 
 def test_vad_ambiguous_top_two_is_neutral() -> None:

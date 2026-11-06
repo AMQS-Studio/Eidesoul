@@ -6,8 +6,10 @@ archive is a plain file name: a crafted member can never escape the config direc
 """
 
 
+import hashlib
 import io
 import json
+import logging
 import os
 import tarfile
 import tempfile
@@ -17,12 +19,22 @@ from pathlib import Path
 from sqlalchemy.engine import make_url
 
 from ..engine.config import ConfigError, Paths, load_host, resolve_database_url
-from .database import dump_database, restore_database
+from ..engine.db import SCHEMA_VERSION
+from .database import (
+    dump_database,
+    dump_portable,
+    pg_available,
+    restore_database,
+    restore_portable,
+)
+
+log = logging.getLogger(__name__)
 
 HOST_FILES = ("config.yaml", "roles.yaml", "soul.yaml", ".env")
 REQUIRED_FILES = ("config.yaml", "roles.yaml", "soul.yaml")
 PRIVATE_FILES = (".env", "roles.yaml")
 DUMP_NAME = "database.pgdump"
+PORTABLE_DUMP_NAME = "database.json"
 MANIFEST = "manifest.json"
 BACKUP_DIR = "backups"
 
@@ -56,13 +68,15 @@ def _database_url(config_path: str | None) -> str:
     return url
 
 
-def _manifest(url: str, present: list[str]) -> dict:
+def _manifest(url: str, present: list[str], dump: str, digest: str) -> dict:
     return {
         "format": 1,
         "created_at": time.time(),
+        "schema_version": SCHEMA_VERSION,
         "database": make_url(url).render_as_string(hide_password=True),
         "files": present,
-        "dump": DUMP_NAME,
+        "dump": dump,
+        "dump_sha256": digest,
     }
 
 
@@ -78,6 +92,8 @@ def create(
     out: str | Path | None = None,
     *,
     dump=pg_dump,
+    portable=dump_portable,
+    available=pg_available,
 ) -> Path:
     """Write one archive; the database dump and the host files share one portable bundle."""
     paths = load_host(config_path)[1]
@@ -86,10 +102,18 @@ def create(
     target.parent.mkdir(parents=True, exist_ok=True)
     present = [name for name in HOST_FILES if (paths.config.parent / name).is_file()]
     with tempfile.TemporaryDirectory(prefix="monoagens-backup-") as scratch:
-        dump_file = Path(scratch) / DUMP_NAME
-        dump(pg_dsn(url), dump_file)
+        if dump is pg_dump and not available("pg_dump", config_path=config_path):
+            dump_name = PORTABLE_DUMP_NAME
+            dump_file = Path(scratch) / dump_name
+            portable(url, dump_file)
+            log.info("pg_dump is unavailable; wrote the portable JSON dump")
+        else:
+            dump_name = DUMP_NAME
+            dump_file = Path(scratch) / dump_name
+            dump(pg_dsn(url), dump_file)
+        digest = hashlib.sha256(dump_file.read_bytes()).hexdigest()
         with tarfile.open(target, "w:gz") as archive:
-            archive.add(dump_file, arcname=DUMP_NAME, recursive=False)
+            archive.add(dump_file, arcname=dump_name, recursive=False)
             for name in present:
                 source = paths.config.parent / name
                 archive.add(
@@ -98,7 +122,9 @@ def create(
                     recursive=False,
                     filter=_private_mode,
                 )
-            body = json.dumps(_manifest(url, present), indent=2, sort_keys=True)
+            body = json.dumps(
+                _manifest(url, present, dump_name, digest), indent=2, sort_keys=True
+            )
             info = tarfile.TarInfo(MANIFEST)
             payload = body.encode("utf-8")
             info.size = len(payload)
@@ -107,8 +133,32 @@ def create(
             archive.addfile(info, io.BytesIO(payload))
     os.chmod(target, 0o600)
     print(f"backup: {target}", flush=True)
-    print(f"files: {', '.join(present) or '-'}; dump: {DUMP_NAME}", flush=True)
+    print(f"files: {', '.join(present) or '-'}; dump: {dump_name}", flush=True)
     return target
+
+
+def _verify_dump(
+    archive: tarfile.TarFile, body: dict, names: list[str], archive_path: Path
+) -> str:
+    """The dump member name, after its presence, digest, and schema ceiling check out."""
+    dump_name = str(body.get("dump") or DUMP_NAME)
+    if dump_name not in {DUMP_NAME, PORTABLE_DUMP_NAME}:
+        raise ConfigError(f"unsupported dump member: {dump_name}")
+    if dump_name not in names:
+        raise ConfigError(f"backup has no database dump ({dump_name})")
+    digest = str(body.get("dump_sha256") or "")
+    if digest:
+        member = archive.extractfile(dump_name)
+        data = member.read() if member else b""
+        if hashlib.sha256(data).hexdigest() != digest:
+            raise ConfigError(f"backup dump failed its integrity check: {archive_path}")
+    version = body.get("schema_version")
+    if isinstance(version, int) and version > SCHEMA_VERSION:
+        raise ConfigError(
+            f"backup schema {version} is newer than this code ({SCHEMA_VERSION}); "
+            "upgrade before restoring"
+        )
+    return dump_name
 
 
 def inspect(source: str | Path) -> dict:
@@ -130,8 +180,7 @@ def inspect(source: str | Path) -> dict:
                 raise ConfigError(f"backup manifest is not a mapping: {archive_path}")
             if body.get("format") != 1:
                 raise ConfigError(f"unsupported backup format: {body.get('format')!r}")
-            if DUMP_NAME not in names:
-                raise ConfigError(f"backup has no database dump ({DUMP_NAME})")
+            dump_name = _verify_dump(archive, body, names, archive_path)
             declared = body.get("files")
             wanted = [str(item) for item in declared] if isinstance(declared, list) else []
             wanted = [name for name in wanted if name in HOST_FILES]
@@ -141,6 +190,7 @@ def inspect(source: str | Path) -> dict:
     if missing:
         raise ConfigError(f"backup is missing host file(s): {', '.join(missing)}")
     body["path"] = str(archive_path)
+    body["dump"] = dump_name
     body["files"] = [name for name in HOST_FILES if name in wanted]
     return body
 
@@ -164,6 +214,7 @@ def restore(
     yes: bool = False,
     force: bool = False,
     restore_db=pg_restore,
+    portable_restore=restore_portable,
 ) -> list[str]:
     """Validate the archive, extract the host files, then optionally replace the database."""
     manifest = inspect(source)
@@ -176,10 +227,11 @@ def restore(
         for name in manifest["files"]:
             _extract_file(archive, name, paths.config.parent / name)
             extracted.append(name)
-        dump_file = Path(scratch) / DUMP_NAME
-        member = archive.extractfile(DUMP_NAME)
+        dump_name = str(manifest.get("dump") or DUMP_NAME)
+        dump_file = Path(scratch) / dump_name
+        member = archive.extractfile(dump_name)
         if member is None:
-            raise ConfigError(f"backup has no database dump ({DUMP_NAME})")
+            raise ConfigError(f"backup has no database dump ({dump_name})")
         dump_file.write_bytes(member.read())
         if not yes:
             print("database: not restored (pass --yes)", flush=True)
@@ -187,7 +239,10 @@ def restore(
             return extracted
         url = _database_url(config_path)
         _refuse_live_lease(url, force=force)
-        restore_db(pg_dsn(url), dump_file)
+        if dump_name == PORTABLE_DUMP_NAME:
+            portable_restore(url, dump_file)
+        else:
+            restore_db(pg_dsn(url), dump_file)
     print(f"restore: {', '.join(extracted)} and the database", flush=True)
     return extracted
 

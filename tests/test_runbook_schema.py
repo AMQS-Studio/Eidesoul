@@ -335,3 +335,29 @@ def test_one_chat_failing_research_does_not_stop_the_others(tmp_path) -> None:
     ambient._research = research  # type: ignore[method-assign]
     asyncio.run(ambient._tick(now=time.time()))
     assert calls == ["a", "b"]
+
+
+def test_portable_json_dump_restores_what_it_dumped(tmp_path) -> None:
+    """3.2: the no-pg_dump fallback is a real, reversible snapshot of every table."""
+    from monoagens.admin.database import dump_portable, restore_portable
+    from monoagens.engine.schema import state
+
+    db = database()
+    try:
+        with db.connect() as conn:
+            conn.execute(state.delete())
+            conn.execute(
+                state.insert().values(key="round-trip", value="kept", updated_at=time.time())
+            )
+        target = tmp_path / "portable.json"
+        dump_portable(db.url, target)
+        with db.connect() as conn:
+            conn.execute(state.delete())
+        restore_portable(db.url, target)
+        with db.connect() as conn:
+            value = conn.execute(
+                sql("SELECT value FROM state WHERE key = 'round-trip'")
+            ).scalar_one()
+        assert value == "kept"
+    finally:
+        db.dispose()

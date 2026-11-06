@@ -18,6 +18,7 @@ from sqlalchemy import text
 
 from .. import io
 from ..inbound import MESSAGE, Percept
+from ..observability import alerts
 from .automation_worker import AutomationWorker
 from .cognition import CognitionWorker
 from .lease import Lease
@@ -396,7 +397,15 @@ class Supervisor:
                 if done:
                     for task in done:
                         gateway = tasks.pop(task)
-                        log.info("gateway %s stopped", gateway.name)
+                        error = None if task.cancelled() else task.exception()
+                        if error is None:
+                            alerts.clear("gateway")
+                            log.info("gateway %s stopped", gateway.name)
+                            continue
+                        log.error("gateway %s crashed", gateway.name, exc_info=error)
+                        await alerts.emit(
+                            "gateway", f"{gateway.name}: {type(error).__name__}: {error}"
+                        )
                     self.stopping = True
                     break
                 if self.lease.frozen():
@@ -404,10 +413,12 @@ class Supervisor:
                     break
                 if self.lease.renew():
                     failures = 0
+                    alerts.clear("database")
                     self.agent.runtime.cognition = self.cognition.status()
                     continue
                 failures += 1
                 log.warning("lease renew failed (%d/%d)", failures, RENEW_FAILURES)
+                await alerts.emit("database", "lease renew failed")
                 if failures >= RENEW_FAILURES:
                     log.warning("lease lost; freeze")
                     break

@@ -24,7 +24,7 @@ class ResearchFlow:
     _challenged: Callable[..., Any]
 
     async def _research_context(
-        self, message, thread_id: str, tool_ctx
+        self, message, thread_id: str, tool_ctx, decision=None
     ) -> tuple[str, Any, str]:
         """Trigger the search when the turn needs it and render the policy block."""
         runtime = self.runtime
@@ -34,6 +34,7 @@ class ResearchFlow:
             language=runtime.soul.language,
             mode=runtime.config.research.mode,
             challenged=challenged,
+            needs_search=getattr(decision, "needs_search", None),
         )
         research_card = next(
             (
@@ -113,9 +114,11 @@ class ResearchFlow:
         if card is None and tool_ctx.research_cards:
             card = tool_ctx.research_cards[-1]
         # ADR-0009 §4.3: a turn that already used an action tool must not lose its work to a
-        # missing citation; only pure web/info turns fall back to the research abstain.
+        # missing citation; only pure web/info turns fall back to the research abstain. The
+        # exemption holds for an ok card too: a generic search result never overrides a
+        # confirmed action (P0-6).
         used = {str(name) for name in getattr(tool_ctx, "used", ()) or ()}
-        if card is not None and card.status != "ok" and used - {"web_search", "info"}:
+        if used - {"web_search", "info", "fetch"}:
             return answer
         if card is not None and (trigger or tool_ctx.research_cards):
             ok, failure = verify(

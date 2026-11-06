@@ -145,7 +145,6 @@ attachments = Table(
     Column("created_at", Float, nullable=False),
     UniqueConstraint("thread_id", "message_id", "seq", name="uq_attachments_message_seq"),
 )
-Index("ix_attachments_message", attachments.c.thread_id, attachments.c.message_id)
 Index("ix_messages_ts", messages.c.ts)
 Index("ix_messages_thread_ts", messages.c.thread_id, messages.c.ts, messages.c.id)
 Index("ix_messages_sender", messages.c.sender_address)

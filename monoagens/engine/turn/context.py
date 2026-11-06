@@ -5,15 +5,16 @@
 
 import base64
 import logging
-import re
 import time
 from dataclasses import InitVar, dataclass, field, replace
 from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from .. import io
 from ..access.permissions import normalize
 from ..character import lexicon
+from .words import words
 
 if TYPE_CHECKING:
     from ..config import Config
@@ -83,7 +84,7 @@ def entry_tag(entry: Message) -> str:
     tag = f"role={entry.author} vis=L{entry.visibility}"
     if entry.view_once:
         tag += ", view-once"
-    if entry.unreadable and not (entry.text or "").strip() and entry.media is None:
+    if entry.unreadable and not (entry.text or "").strip() and not entry.attachments:
         tag += ", undecryptable"
     return tag
 
@@ -96,7 +97,7 @@ def body_note(entry: Message) -> str:
         if entry.author == AUTHOR_BOT:
             return f"(message deleted by {entry.deleted_by or 'owner'})"
         return "(message deleted by the sender)"
-    if entry.unreadable and not (entry.text or "").strip() and entry.media is None:
+    if entry.unreadable and not (entry.text or "").strip() and not entry.attachments:
         return "(message undecryptable on this device)"
     return ""
 
@@ -207,7 +208,7 @@ class WorkingMemory:
     def _merge(old: Message, new: Message) -> Message:
         upgrade = AUTHOR_RANK.get(new.author, 0) > AUTHOR_RANK.get(old.author, 0)
         richer = (
-            (new.media and not old.media)
+            len(new.attachments) > len(old.attachments)
             or (new.quote and not old.quote)
             or (new.text and not old.text)
         )
@@ -340,13 +341,9 @@ def clean(text: str) -> str:
 
 
 def keyword_set(text: str, language: str) -> set[str]:
-    """Words of >=4 letters without the pack's stopwords: used by salience and drift."""
+    """Words of >=4 characters without the pack's stopwords: used by salience and drift."""
     stopwords = lexicon.load(language).stopwords
-    return {
-        word
-        for word in re.findall(r"[a-z0-9]{4,}", str(text or "").lower())
-        if word not in stopwords
-    }
+    return {word for word in words(text, minimum=4) if word not in stopwords}
 
 
 def sanitize(value: str, limit: int = 60) -> str:
@@ -522,8 +519,8 @@ def _media_lines(
 def fallback_content(config: Config, message: Message) -> str:
     """Minimal payload when full assembly fails: the latest message text + its attachment lines."""
     lines = [f"[{entry_tag(message)}] Latest message: {message.text}"]
-    if message.media is not None:
-        lines.extend(_media_lines(config, message.media, 0, True))
+    for media in message.attachments:
+        lines.extend(_media_lines(config, media, 0, True))
     return "\n".join(lines)
 
 
@@ -566,9 +563,9 @@ def prompt_entry(entry: Message, bot_name: str, limit: int = 300) -> str:
     note = body_note(entry)
     body = note or _flatten(entry.text, limit)
     notes: list[str] = []
-    if entry.media is not None:
-        kind = MEDIA_LABELS.get(entry.media.kind, entry.media.kind)
-        notes.append(f"[{kind}, animated]" if entry.media.animated else f"[{kind}]")
+    for media in entry.attachments:
+        kind = MEDIA_LABELS.get(media.kind, media.kind)
+        notes.append(f"[{kind}, animated]" if media.animated else f"[{kind}]")
     if entry.quote is not None and not entry.deleted:
         qwho = _flatten(entry.quote.sender_name, NAME_LIMIT) or "-"
         qtext = _flatten(entry.quote.text, 120)
@@ -589,15 +586,12 @@ def _render_order(messages: list[Message]) -> list[Media]:
     for entry in messages:
         if entry.quote is not None and entry.quote.media is not None:
             order.append(entry.quote.media)
-        if entry.media is not None:
-            order.append(entry.media)
+        order.extend(entry.attachments)
     return order
 
 
 def _choose_images(config: Config, current: Message, order: list[Media]) -> set[str]:
-    priority: list[Media] = []
-    if current.media is not None:
-        priority.append(current.media)
+    priority: list[Media] = list(current.attachments)
     if current.quote is not None and current.quote.media is not None:
         priority.append(current.quote.media)
     priority.extend(reversed(order))
@@ -665,7 +659,7 @@ def _message_lines(
         lines.append(f"  {note}")
     elif entry.text.strip():
         lines.extend(_text_lines(config, thread_id, entry, persist=persist))
-    elif entry.media is not None:
+    elif entry.attachments:
         lines.append("  (no text)")
     if entry.quote is not None and not entry.deleted:
         lines.extend(_quote_lines(config, thread_id, entry.quote, persist=persist))
@@ -677,9 +671,10 @@ def _message_lines(
                     config, media, number, entry is current, prefix="quoted attachment"
                 )
             )
-    if entry.media is not None and not entry.deleted:
-        number = numbers.get(_media_key(config, entry.media), 0)
-        lines.extend(_media_lines(config, entry.media, number, entry is current))
+    if not entry.deleted:
+        for media in entry.attachments:
+            number = numbers.get(_media_key(config, media), 0)
+            lines.extend(_media_lines(config, media, number, entry is current))
     return lines
 
 
@@ -693,34 +688,43 @@ async def build_user_content(
     """Assemble the payload: context header, then each message (name, number, time, text, quote)."""
     order = _render_order(messages)
     numbers, planned = _plan_images(config, current, order)
+    payloads: list[tuple[Media, str]] = []
+    failures: list[tuple[Media, str]] = []
+    for media in planned:
+        path = media.path
+        if path is None:  # pragma: no cover - _plan_images only plans media with a local path
+            continue
+        try:
+            raw = await io.run(path.read_bytes)
+        except OSError as exc:
+            failures.append((media, type(exc).__name__))
+            continue
+        payloads.append((media, base64.b64encode(raw).decode("ascii")))
+    if len(payloads) != len(planned):
+        # Number only the images that really attach, so a marker never points at a gap.
+        numbers = {
+            _media_key(config, media): index
+            for index, (media, _encoded) in enumerate(payloads, start=1)
+        }
 
     label = f' "{_flatten(chat_name, NAME_LIMIT)}"' if chat_name.strip() else ""
     lines = [f"Thread{label} ({len(messages)} messages, oldest → newest; local time):"]
     for entry in messages:
         lines.append("")
         lines.extend(_message_lines(config, thread_id, entry, numbers, current))
+    for media, failure in failures:
+        lines.append(f"Image {media.filename} could not be attached ({failure})")
 
-    parts: list[dict] = []
-    for media in planned:
-        number = numbers[_media_key(config, media)]
-        path = media.path
-        if path is None:  # pragma: no cover - _plan_images only plans media with a local path
-            continue
-        try:
-            raw = path.read_bytes()
-        except OSError as exc:
-            lines.append(f"Image #{number} could not be attached ({type(exc).__name__})")
-            continue
-        encoded = base64.b64encode(raw).decode("ascii")
-        parts.append(
-            {
-                "type": "image_url",
-                "image_url": {"url": f"data:{media.mimetype};base64,{encoded}", "detail": "high"},
-            }
-        )
+    parts: list[dict] = [
+        {
+            "type": "image_url",
+            "image_url": {"url": f"data:{media.mimetype};base64,{encoded}", "detail": "high"},
+        }
+        for media, encoded in payloads
+    ]
 
-    if planned:
-        label = f"#{1}..#{len(planned)}" if len(planned) > 1 else "#1"
+    if payloads:
+        label = f"#{1}..#{len(payloads)}" if len(payloads) > 1 else "#1"
         lines.append(f"Images {label} are attached in order after this text.")
     lines.append("")
     lines.append(FOOTER)

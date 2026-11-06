@@ -118,10 +118,12 @@ engine:
     utility_temperature: 0.2
     # Wall-clock budget for one turn. Default: 240.
     run_budget_seconds: 240
-    # Model calls allowed in one turn. Default: 6.
-    max_calls_per_turn: 6
+    # Model calls allowed in one turn; 0 = unlimited. Default: 0.
+    max_calls_per_turn: 0
     # Send a stable prefix first for provider prompt caching. Default: true.
     prompt_cache: true
+    # Ordered fallback targets tried after the primary fails; empty means none.
+    fallbacks: []
     # Retry policy for the turn and background paths.
     retry:
       # Turn attempts. Default: 1.
@@ -136,6 +138,27 @@ engine:
       jitter: 0.2
       # Cap on a provider Retry-After. Default: 10.
       retry_after_max_seconds: 10
+
+  # --- engine.alerts: OUT-OF-BAND ALERTING ---
+  # Consecutive failures become one admin message and one webhook POST.
+  alerts:
+    # Enable alerting; disabled by default. Default: false.
+    enabled: false
+    # Which failure sources may fire an alert.
+    sources:
+      database: true
+      llm: true
+      gateway: true
+      plugin: true
+      mcp: true
+    # Consecutive failures before one alert fires. Default: 3.
+    threshold: 3
+    # Minimum seconds between duplicate alerts per source. Default: 900.
+    cooldown_seconds: 900
+    # Send the alert to the administrator through the active body. Default: true.
+    notify_admin: true
+    # Environment variable holding an optional Slack/Discord/HTTP webhook URL.
+    webhook_url_env: ''
 
   # --- engine.turns: TURN LIFECYCLE & SHUTDOWN ---
   # Turn lifecycle, resume, and shutdown.
@@ -228,8 +251,8 @@ engine:
       novelty_threshold: 0.88
     # Memory items per prompt. Default: 12.
     max_items: 12
-    # Memory prompt budget. Default: 3000.
-    max_chars: 3000
+    # Memory prompt budget; 0 = unlimited. Default: 0.
+    max_chars: 0
     # Memory collection label.
     collection: monoagens_memories
     # Extraction model; empty uses engine.llm.model.
@@ -377,8 +400,8 @@ engine:
     idle_after_send_minutes: 3
     # Skills retrieved per episode. Default: 1.
     per_episode: 1
-    # Skill prompt budget. Default: 800.
-    max_chars: 800
+    # Skill prompt budget; 0 = unlimited. Default: 0.
+    max_chars: 0
     # Stored skill body cap. Default: 18000.
     max_body_chars: 18000
     # Renew an unused skill after this window. Default: 30.
@@ -401,12 +424,12 @@ engine:
   # --- engine.prompt: PROMPT ASSEMBLY ---
   # Prompt assembly and salience.
   prompt:
-    # Select volatile blocks by salience. Default: true.
-    salience: true
-    # Volatile prompt budget. Default: 9000.
-    max_chars: 9000
-    # Thread window budget. Default: 4000.
-    thread_chars: 4000
+    # Select volatile blocks by salience. Default: false.
+    salience: false
+    # Volatile prompt budget; 0 = unlimited. Default: 0.
+    max_chars: 0
+    # Thread window budget; 0 = unlimited. Default: 0.
+    thread_chars: 0
     # Blocks that always stay in the prompt.
     pinned_blocks:
       - base

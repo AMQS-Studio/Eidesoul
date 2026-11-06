@@ -525,7 +525,9 @@ class TurnRunner(ApprovalFlow, ResearchFlow, TurnReview):
                             turn_id=turn_id,
                         )
                         trigger, research_card, research_text = (
-                            await self._research_context(message, thread_id, tool_ctx)
+                            await self._research_context(
+                                message, thread_id, tool_ctx, decision=decision
+                            )
                         )
                         bonuses: dict[str, float] = {}
                         if runtime.affect is not None:

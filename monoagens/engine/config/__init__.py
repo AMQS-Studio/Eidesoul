@@ -25,6 +25,8 @@ from .models import QUIET_POLICIES as QUIET_POLICIES
 from .models import SPEECH_TIMEOUT_DEFAULT as SPEECH_TIMEOUT_DEFAULT
 from .models import SPEECH_TIMEOUT_HARD_LIMIT as SPEECH_TIMEOUT_HARD_LIMIT
 from .models import WEB_SEARCH_PROVIDERS as WEB_SEARCH_PROVIDERS
+from .models import AlertsConfig as AlertsConfig
+from .models import AlertSourcesConfig as AlertSourcesConfig
 from .models import AutomationConditionConfig as AutomationConditionConfig
 from .models import AutomationConfig as AutomationConfig
 from .models import AutomationResilienceConfig as AutomationResilienceConfig
@@ -36,6 +38,7 @@ from .models import FetchConfig as FetchConfig
 from .models import GrepConfig as GrepConfig
 from .models import IOConfig as IOConfig
 from .models import LLMConfig as LLMConfig
+from .models import LLMTargetConfig as LLMTargetConfig
 from .models import LoggingConfig as LoggingConfig
 from .models import MetricsConfig as MetricsConfig
 from .models import MigrationsConfig as MigrationsConfig
@@ -99,6 +102,8 @@ __all__ = [
     "SPEECH_TIMEOUT_DEFAULT",
     "SPEECH_TIMEOUT_HARD_LIMIT",
     "WEB_SEARCH_PROVIDERS",
+    "AlertSourcesConfig",
+    "AlertsConfig",
     "AmbientConfig",
     "ApprovalConfig",
     "AutomationConditionConfig",
@@ -121,6 +126,7 @@ __all__ = [
     "IOConfig",
     "IntentConfig",
     "LLMConfig",
+    "LLMTargetConfig",
     "LanguageConfig",
     "LoggingConfig",
     "MCPServerConfig",

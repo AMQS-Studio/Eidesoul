@@ -62,7 +62,7 @@ def test_send_file_iterates_a_list_of_handles(monkeypatch, tmp_path) -> None:
         seen.append(raw)
         return tmp_path / f"{raw}.txt", ""
 
-    async def fake_local(ctx, path, caption, reason):
+    async def fake_local(ctx, path, caption, reason, part=-1):
         return f"ok: {path.name}"
 
     monkeypatch.setattr(send_file_module, "_source", fake_source)

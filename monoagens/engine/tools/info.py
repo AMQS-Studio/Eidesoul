@@ -46,10 +46,19 @@ async def _info(args: dict, ctx: ToolContext) -> str:
         kind, name = "command", str(args.get("command")).strip()
     if kind not in KINDS:
         return "kind must be catalog, tool, command, family, config, self, topology, or doc"
-    if kind in {"tool", "family"} and name:
-        # ADR-0015 §4.4: activation only adds the schema; the permission gate stays in execute.
+    known = manifest(ctx)
+    if kind == "family" and name:
+        # ADR-0015 §4.4: asking for a family activates every member tool, not the family
+        # label (which is not a schema). Activation only adds schemas; the permission gate
+        # stays in `execute`.
+        ctx.activated.update(
+            str(entry["name"])
+            for entry in known.catalog_entries(ctx.roles)
+            if entry["kind"] == "tool" and str(entry["family"]) == name
+        )
+    elif kind == "tool" and name:
         ctx.activated.add(name)
-    return manifest(ctx).info(kind, name, ctx.roles, section=section)
+    return known.info(kind, name, ctx.roles, section=section)
 
 
 TOOL = Handler(

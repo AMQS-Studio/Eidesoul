@@ -104,15 +104,22 @@ def _digest(text: str) -> str:
 
 
 WORD = re.compile(r"\w+", re.UNICODE)
+# A logographic token carries a whole word in one or two characters, so the three-character
+# floor that keeps Latin noise out would erase the topic of a CJK request (ADR-0008).
+CJK = re.compile(r"[\u4e00-\u9fff\u3040-\u30ff\uac00-\ud7af]")
 
 
 def _tokens(text: str, stopwords: Iterable[str] = ()) -> set[str]:
-    """Content tokens of three characters or more, minus the caller's stopwords.
+    """Content tokens of three characters or more, or any CJK token, minus the stopwords.
 
     The length floor is language-neutral; the stopword list is data the caller supplies, so
     the engine still holds no per-language vocabulary of its own (ADR-0008).
     """
-    words = {token for token in WORD.findall(str(text or "").lower()) if len(token) >= 3}
+    words = {
+        token
+        for token in WORD.findall(str(text or "").lower())
+        if len(token) >= 3 or CJK.search(token)
+    }
     return words - set(stopwords)
 
 

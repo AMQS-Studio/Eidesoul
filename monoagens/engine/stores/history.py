@@ -13,6 +13,7 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from ..config import SearchConfig
 from ..db import Database
+from ..guard.patterns import redact_credentials
 from ..memory import CaptureJobSink
 from ..memory.store import MemoryStore
 from ..schema import memories_readable, message_media, messages, threads, turns
@@ -73,7 +74,9 @@ class HistoryStore:
             "sender_id": message.sender_id or "",
             "sender_name": message.sender_name or "",
             "sender_address": message.sender_address or "",
-            "text": message.text or "",
+            # L5 material is never persisted: the archive keeps the redacted shape, the live
+            # turn keeps the raw text in its in-memory window.
+            "text": redact_credentials(message.text or ""),
             "outgoing": bool(message.outgoing),
             "author": message.author,
             "visibility": clamp_visibility(message.visibility),

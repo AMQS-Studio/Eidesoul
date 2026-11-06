@@ -84,7 +84,7 @@ def render(hits: list, *, max_items: int, max_chars: int, tz: str) -> str:
         if not text:
             continue
         line = f"- {ident}[{label} {markers}] {text}"
-        if used + len(line) + 1 > max_chars:
+        if max_chars > 0 and used + len(line) + 1 > max_chars:
             break
         lines.append(line)
         used += len(line) + 1
@@ -100,7 +100,7 @@ async def build(
     direct: bool,
     policy,
     max_items: int = 12,
-    max_chars: int = 3000,
+    max_chars: int = 0,
     scopes: tuple[str, ...] = SCOPES,
     tz: str,
 ) -> MemoryContext:

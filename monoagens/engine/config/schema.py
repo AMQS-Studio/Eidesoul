@@ -51,6 +51,7 @@ ENGINE_SCHEMA: dict[str, object] = {
         "run_budget_seconds": None,
         "max_calls_per_turn": None,
         "prompt_cache": None,
+        "fallbacks": None,
         "retry": {
             "turn_attempts": None,
             "worker_attempts": None,
@@ -59,6 +60,20 @@ ENGINE_SCHEMA: dict[str, object] = {
             "jitter": None,
             "retry_after_max_seconds": None,
         },
+    },
+    "alerts": {
+        "enabled": None,
+        "sources": {
+            "database": None,
+            "llm": None,
+            "gateway": None,
+            "plugin": None,
+            "mcp": None,
+        },
+        "threshold": None,
+        "cooldown_seconds": None,
+        "notify_admin": None,
+        "webhook_url_env": None,
     },
     "turns": {
         "timeout_seconds": None,

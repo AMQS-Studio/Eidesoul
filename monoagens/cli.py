@@ -610,7 +610,7 @@ def _purge(current: admin_service.Service) -> None:
 
 
 def _backup(args: argparse.Namespace) -> int:
-    admin_backup.create(args.config, args.path)
+    admin_backup.create(args.config, args.output or args.path)
     return 0
 
 
@@ -1743,6 +1743,9 @@ def build_parser() -> argparse.ArgumentParser:
     doctor.add_argument("--fix", action="store_true", help="repair policy and cache problems")
     backup = sub.add_parser("backup", help="write a portable archive of database and host files")
     backup.add_argument("path", nargs="?", default=None, help="target .tar.gz")
+    backup.add_argument(
+        "--output", "-o", default=None, help="target .tar.gz (alias for the positional path)"
+    )
     restore = sub.add_parser(
         "restore", help="extract an archive and optionally restore the database"
     )

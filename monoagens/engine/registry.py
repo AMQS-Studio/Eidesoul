@@ -63,6 +63,7 @@ KEYWORDS = frozenset(
         "maxLength",
         "pattern",
         "additionalProperties",
+        "anyOf",
         "description",
         "title",
     }
@@ -76,6 +77,16 @@ def _keyword_errors(schema: dict, label: str) -> list[str]:
     unknown = sorted(set(schema) - KEYWORDS)
     if unknown:
         errors.append(f"{label}: unsupported keyword(s): {', '.join(unknown)}")
+    branches = schema.get("anyOf")
+    if branches is not None:
+        if not isinstance(branches, list) or not branches:
+            errors.append(f"{label}.anyOf must be a non-empty list of schemas")
+        else:
+            for index, branch in enumerate(branches):
+                if not isinstance(branch, dict):
+                    errors.append(f"{label}.anyOf[{index}] must be an object schema")
+                else:
+                    errors.extend(_keyword_errors(branch, f"{label}.anyOf[{index}]"))
     kind = schema.get("type")
     if kind is not None and kind not in TYPES:
         errors.append(f"{label}.type must be one of: {', '.join(sorted(TYPES))}")

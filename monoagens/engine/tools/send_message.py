@@ -38,8 +38,10 @@ def _origin(ctx: ToolContext) -> Address:
     return Address(str(getattr(ctx.gateway, "name", "") or ""), str(ctx.thread_id))
 
 
-def _action(address: Address, text: str, approval_class: str) -> Action:
-    found = tool_action_id()
+def _action(
+    address: Address, text: str, approval_class: str, part: int = -1
+) -> Action:
+    found = tool_action_id(f"chunk:{part}") if part >= 0 else tool_action_id()
     return Action(
         address=address,
         capability="send_text",
@@ -154,8 +156,9 @@ async def _send_message(args: dict, ctx: ToolContext) -> str:
     render = getattr(body, "render", None)
     rendered = str(render(text)) if callable(render) else text
     chunks = split_text(rendered, limit=MAX_TEXT) or [rendered]
-    for chunk in chunks:
-        stop = await _deliver(ctx, address, chunk, declared, reason)
+    multi = len(chunks) > 1
+    for index, chunk in enumerate(chunks):
+        stop = await _deliver(ctx, address, chunk, declared, reason, index if multi else -1)
         if stop:
             return stop
     label = _label(body, address)
@@ -179,10 +182,15 @@ async def _send_message(args: dict, ctx: ToolContext) -> str:
 
 
 async def _deliver(
-    ctx: ToolContext, address: Address, chunk: str, declared: str, reason: str
+    ctx: ToolContext,
+    address: Address,
+    chunk: str,
+    declared: str,
+    reason: str,
+    part: int = -1,
 ) -> str:
     """One bubble to the door; "" on success, the error text when it did not go."""
-    action = _action(address, chunk, declared)
+    action = _action(address, chunk, declared, part)
     try:
         receipt = await ctx.agent.dispatch(
             str(ctx.person_id or ctx.sender),

@@ -208,7 +208,7 @@ def test_a_block_named_in_pinned_blocks_defeats_the_budget(tmp_path) -> None:
     from dataclasses import replace
 
     config = build_config(tmp_path)
-    tight_prompt = replace(config.prompt, max_chars=50)
+    tight_prompt = replace(config.prompt, salience=True, max_chars=50)
     context = PromptContext(
         config=config, roles=(Role("member"),), language="id", memory="MEMORY " * 100
     )

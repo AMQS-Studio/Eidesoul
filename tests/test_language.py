@@ -67,10 +67,18 @@ def test_language_command_writes_soul_document_and_mirror(tmp_path, monkeypatch)
     assert run_command(env, "ping") == "🏓 Pong! MonoAgens hidup dan siap."
 
 
-def test_language_command_rejects_unknown_language(tmp_path, monkeypatch) -> None:
+def test_language_command_accepts_a_bare_two_letter_code(tmp_path, monkeypatch) -> None:
+    """2.7.3: `allow_any` lets `ja`, `es`, `ar`, or any bare code through."""
     env = make_runtime(tmp_path, monkeypatch, settings_approval=False)
     result = run_language(env, "xx")
-    assert result == "error: bahasa 'xx' tidak tersedia. Pilih: en, id."
+    assert result == "🗣️ Reply language set to xx."
+    assert env.agent.soul.language == "xx"
+
+
+def test_language_command_rejects_an_unknown_long_name(tmp_path, monkeypatch) -> None:
+    env = make_runtime(tmp_path, monkeypatch, settings_approval=False)
+    result = run_language(env, "not-a-language")
+    assert result == "error: bahasa 'not-a-language' tidak tersedia. Pilih: en, id."
     assert env.agent.soul.language == "id"
 
 

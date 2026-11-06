@@ -16,6 +16,7 @@ from monoagens.engine.memory.ledger import OutboundLedger
 from monoagens.engine.schema import outbound_messages, turn_steps
 from monoagens.engine.stores.turns import STEP_INTERRUPTED, turn_identity
 from monoagens.engine.tools import execute, resolve_spec
+from monoagens.engine.turn.delivery import MAX_TEXT
 from monoagens.engine.turn.steps import SideEffectAlreadyRan, TurnSteps
 
 DM = "628111@s.whatsapp.net"
@@ -256,3 +257,63 @@ def test_a_running_step_exists_before_the_tool_runs(tmp_path) -> None:
     )
     assert seen == ["running"]
     assert env.agent.turns.steps(tid)[0]["status"] == "executed"
+
+def test_a_multi_chunk_tool_send_gets_one_action_id_per_chunk(tmp_path) -> None:
+    env, _inbound, tid = setup(tmp_path)
+    ctx = context(env, tid)
+    body = "a" * MAX_TEXT + "b" * 20
+
+    token = bind_tool_action(f"turn:{tid}:tool:1")
+    try:
+        result = asyncio.run(
+            execute(
+                specs(env),
+                "send_message",
+                {"chat": DM.casefold(), "text": body},
+                ctx,
+            )
+        )
+    finally:
+        reset_tool_action(token)
+
+    assert result.startswith("ok:")
+    assert len(env.gateway.sent) == 2
+    keys = [
+        row["scope_key"]
+        for row in env.db.fetch_all(
+            select(outbound_messages.c.scope_key).order_by(outbound_messages.c.scope_key)
+        )
+    ]
+    assert keys == [f"turn:{tid}:tool:1:chunk:0", f"turn:{tid}:tool:1:chunk:1"]
+
+
+def test_a_multi_file_tool_send_gets_one_action_id_per_file(tmp_path) -> None:
+    env, _inbound, tid = setup(tmp_path)
+    ctx = context(env, tid)
+    public = env.config.workspace / "public"
+    public.mkdir(parents=True, exist_ok=True)
+    (public / "satu.txt").write_text("1")
+    (public / "dua.txt").write_text("2")
+
+    token = bind_tool_action(f"turn:{tid}:tool:1")
+    try:
+        result = asyncio.run(
+            execute(
+                specs(env),
+                "send_file",
+                {"path": ["public/satu.txt", "public/dua.txt"]},
+                ctx,
+            )
+        )
+    finally:
+        reset_tool_action(token)
+
+    assert result.startswith("ok:")
+    assert len(env.gateway.files) == 2
+    keys = [
+        row["scope_key"]
+        for row in env.db.fetch_all(
+            select(outbound_messages.c.scope_key).order_by(outbound_messages.c.scope_key)
+        )
+    ]
+    assert keys == [f"turn:{tid}:tool:1:file:0", f"turn:{tid}:tool:1:file:1"]

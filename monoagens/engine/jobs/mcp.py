@@ -12,6 +12,7 @@ from mcp.types import TextContent, Tool
 
 from ..access.permissions import tool_allowed
 from ..config import MCPServerConfig
+from ..observability import alerts
 from ..registry import Handler
 
 log = logging.getLogger(__name__)
@@ -52,6 +53,7 @@ class Hub:
                 listed = await asyncio.wait_for(client.list_tools(), START_TIMEOUT)
             except Exception as exc:  # a broken server must not break the bot
                 log.warning("MCP %s failed: %s", name, exc)
+                await alerts.emit("mcp", f"{name}: {type(exc).__name__}: {exc}")
                 continue
             for tool in listed.tools:
                 exposed = f"mcp__{_slug(name)}__{_slug(tool.name)}"

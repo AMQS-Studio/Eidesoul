@@ -182,7 +182,6 @@ skill_revisions = Table(
     Column("source_episode", String(160), nullable=True),
     PrimaryKeyConstraint("skill", "revision", name="pk_skill_revisions"),
 )
-Index("ix_skill_revisions_skill", skill_revisions.c.skill, skill_revisions.c.revision.desc())
 
 skill_files = Table(
     "skill_files",

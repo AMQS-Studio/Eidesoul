@@ -15,6 +15,7 @@ from support import FakeGateway, FakeLLM, HumanizeConfig, inbound_message, make_
 
 from monoagens.engine.config import TurnConfig
 from monoagens.engine.i18n import t
+from monoagens.engine.inbound import Address
 from monoagens.engine.memory.ledger import OutboundLedger
 from monoagens.engine.schema import turns
 from monoagens.engine.stores.turns import turn_identity
@@ -168,7 +169,11 @@ def test_a_standby_refuses_intake_and_sends_nothing(tmp_path) -> None:
     assert actions == []
     assert env.gateway.sent == []
     assert turn_row(env, "m-halo") is None
-    result = asyncio.run(env.agent.send_text(DM, "halo", gateway=env.gateway))
+    result = asyncio.run(
+        env.agent.send_text(
+            DM, "halo", gateway=env.gateway, origin=Address(env.gateway.name, DM)
+        )
+    )
     assert result.startswith("error:")
     assert env.gateway.sent == []
     assert env.agent.runtime.standby_refused >= 2
@@ -186,7 +191,11 @@ def test_a_stale_generation_is_refused(tmp_path) -> None:
             return 2
 
     env.agent.lease = StaleLease()
-    result = asyncio.run(env.agent.send_text(DM, "halo", gateway=env.gateway))
+    result = asyncio.run(
+        env.agent.send_text(
+            DM, "halo", gateway=env.gateway, origin=Address(env.gateway.name, DM)
+        )
+    )
 
     assert result.startswith("error:")
     assert env.gateway.sent == []
