@@ -22,13 +22,21 @@ from monoagens.engine.turn.prompts import (
 )
 
 
-def test_language_line_variants() -> None:
-    assert "Indonesian" in language_line(Soul(language="id", locale="id-ID", timezone="UTC"))
-    assert language_line(Soul(language="en", locale="en-US", timezone="UTC")) == "Reply in English."
+def test_language_line_variants(tmp_path) -> None:
+    indonesian = language_line(Soul(language="id", locale="id-ID", timezone="UTC"))
+    assert "Indonesian" in indonesian
+    assert "match the sender's language" in indonesian
+    english = language_line(Soul(language="en", locale="en-US", timezone="UTC"))
+    assert "Reply in English." in english
+    assert "match the sender's language" in english
     unknown = Soul(language="jv", locale="jv-ID", timezone="UTC")
     assert unknown.language == "jv"
-    with pytest.raises(ValueError, match="available"):
-        language_line(unknown)
+    assert "jv" in language_line(unknown)
+    env = make_agent(
+        tmp_path, soul=Soul(language="ja", locale="ja-JP", timezone="UTC")
+    )
+    prompt = system_prompt(env.config, (Role("member"),))
+    assert "Reply in 'ja'" in prompt
 
 
 def test_normalize_language_aliases(monkeypatch) -> None:

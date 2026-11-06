@@ -125,11 +125,12 @@ def test_the_voice_never_classifies_a_person() -> None:
     assert "avoid swearing" in block
 
 
-def test_a_language_without_a_catalog_is_refused() -> None:
+def test_a_language_without_a_catalog_uses_the_fallback_line() -> None:
     soul = Soul(language="fr", locale="fr-FR", timezone="UTC")
     assert soul.language == "fr"
-    with pytest.raises(ValueError, match="available"):
-        language_line(soul)
+    line = language_line(soul)
+    assert "Reply in 'fr'" in line
+    assert "match the sender's language" in line
 
 
 def test_stable_parts_are_pure_across_per_turn_contexts(tmp_path) -> None:

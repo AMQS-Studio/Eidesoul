@@ -16,7 +16,7 @@ from typing import Literal, overload
 import yaml
 
 from . import clock
-from .i18n import catalog, normalize_language, t
+from .i18n import available, catalog, normalize_language, t
 
 log = logging.getLogger(__name__)
 
@@ -196,8 +196,13 @@ def default_pronoun(language: str) -> str:
 
 
 def language_line(soul: Soul) -> str:
-    """Model-facing instruction from the soul catalog; no language branch lives in code."""
-    return t("soul.reply_language", normalize_language(soul.language))
+    """Model-facing instruction from the soul catalog, with a language-agnostic fallback."""
+    code = normalize_language(soul.language, allow_any=True)
+    base = t("soul.reply_language", code) if code in available() else f"Reply in '{code}'."
+    return (
+        f"{base} Use this as the default language, or match the sender's language "
+        "and casual register when they write in another language."
+    )
 
 
 def _text(value: object) -> str:
