@@ -2,6 +2,7 @@
 .monoagens/
 .sanka/
 .venv/
+.codegraph/
 .vscode/
 __pycache__/
 *.pyc
