@@ -37,12 +37,12 @@ class Access:
             return "" if self.dm else "dm_denied"
         if self.groups == "all":
             return ""
-        if self.groups in {"mention", "both"} and bool(hints.get("mention")):
+        mentioned = bool(hints.get("mention"))
+        replied = self.reply_to_bot and bool(hints.get("reply"))
+        if self.groups == "mention" and (mentioned or replied):
             return ""
-        if (
-            self.groups in {"reply", "both"}
-            and self.reply_to_bot
-            and bool(hints.get("reply"))
-        ):
+        if self.groups == "both" and (mentioned or replied):
+            return ""
+        if self.groups == "reply" and replied:
             return ""
         return f"group_{self.groups}"

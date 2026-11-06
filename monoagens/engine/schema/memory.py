@@ -144,6 +144,10 @@ memories_readable = table(
     column("thread_id", String(120)),
     column("kind", String(20)),
     column("text", Text),
+    # `SELECT *` in READABLE_VIEW_SQL exposes these derived columns too; the read-only
+    # selectable mirrors the view exactly so a select never builds SQL the view cannot answer.
+    column("embedding", Vector(MEMORY_DIM)),
+    column("search_tsv", TSVECTOR),
     column("state", String(20)),
     column("level", SmallInteger),
     column("confirmed", Boolean),

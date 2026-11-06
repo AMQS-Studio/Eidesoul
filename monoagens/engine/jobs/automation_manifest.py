@@ -7,7 +7,7 @@ when the run is due.
 """
 
 import time
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from ..config import AutomationConfig, parse_quiet_hours
 from ..schema import AUTOMATION_STEP_KINDS
@@ -500,6 +500,15 @@ def _task_moment(value: object, tz: str, now: float):
     if not text:
         raise ManifestError("an 'at' task needs a date and time")
     zoneinfo = zone(tz)
+    iso = text[:-1] + "+00:00" if text.endswith("Z") else text
+    try:
+        parsed = datetime.fromisoformat(iso)
+    except ValueError:
+        parsed = None
+    if parsed is not None:
+        if parsed.tzinfo is None:
+            return parsed.replace(tzinfo=zoneinfo)
+        return parsed.astimezone(zoneinfo)
     for pattern in ("%Y-%m-%dT%H:%M", "%Y-%m-%d %H:%M", "%Y-%m-%dT%H:%M:%S"):
         try:
             return datetime.strptime(text, pattern).replace(tzinfo=zoneinfo)
@@ -511,7 +520,10 @@ def _task_moment(value: object, tz: str, now: float):
         except ValueError as exc:
             raise ManifestError(f"invalid time: {text}") from exc
         today = datetime.fromtimestamp(float(now), zoneinfo)
-        return today.replace(hour=hour, minute=minute, second=0, microsecond=0)
+        moment = today.replace(hour=hour, minute=minute, second=0, microsecond=0)
+        if moment <= today:
+            moment += timedelta(days=1)
+        return moment
     raise ManifestError("the 'at' moment must be YYYY-MM-DD HH:MM")
 
 

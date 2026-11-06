@@ -133,7 +133,7 @@ def _numeric_signature(text: str) -> tuple[str, ...]:
     invents any of them is discarded, so `polish` can never drift a price or a meeting time.
     """
     tokens = (match.group(0) for match in NUMBER_TOKEN.finditer(str(text or "")))
-    return tuple(sorted(" ".join(token.lower().split()) for token in tokens))
+    return tuple(sorted("".join(token.lower().split()) for token in tokens))
 
 
 def _rejected(draft: str, text: str, language: str) -> bool:

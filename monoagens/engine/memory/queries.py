@@ -1,9 +1,8 @@
 """Pure SQL for canonical memory: every statement lives here, every function takes a connection.
 
-`MemoryStore` stays the single write port and the readable port (ADR-0001); this module only holds
-the statements it used to carry, so the port keeps its behaviour and loses the SQL bodies
-(ADR-0031 §4.2). Nothing here decides policy: the caller keeps the fence, the view choice, and the
-`MemoryHit` mapping.
+`MemoryStore` keeps the single write/readable port (ADR-0001); this module only holds the
+statements it used to carry (ADR-0031 §4.2). Policy, the fence, and the `MemoryHit` mapping stay
+with the caller.
 """
 
 import re
@@ -24,6 +23,9 @@ from ..schema import (
     thread_people,
 )
 from .integrity import TRUST_UNLABELED
+from .literals import like_term as _like_term
+from .literals import literal as _literal
+from .literals import vector as _vector_literal
 
 DAY = 86400.0
 
@@ -102,12 +104,12 @@ def match_rows(
         return []
     statement = select(memories_readable).where(clause)
     statement = statement.where(memories_readable.c.dispute_state != "open")
-    for term in re.findall(r"\w+", str(query or ""), re.UNICODE):
-        pattern = f"%{term}%"
+    for term in re.findall(r"\w+", _literal(query), re.UNICODE):
+        pattern = _like_term(term)
         statement = statement.where(
             or_(
-                memories_readable.c.text.ilike(pattern),
-                memories_readable.c.kind.ilike(pattern),
+                memories_readable.c.text.ilike(pattern, escape="\\"),
+                memories_readable.c.kind.ilike(pattern, escape="\\"),
             )
         )
     statement = statement.order_by(
@@ -216,12 +218,6 @@ def _scope_filter(scopes: Sequence[str], person_id: str, thread_id: str) -> str:
     return " OR ".join(clauses)
 
 
-def _vector_literal(vector: Sequence[float] | None) -> str | None:
-    if not vector:
-        return None
-    return "[" + ",".join(f"{float(item):.6f}" for item in vector) + "]"
-
-
 def hybrid_rows(
     conn,
     *,
@@ -238,7 +234,7 @@ def hybrid_rows(
     if not scope_filter:
         return []
     params: dict = {
-        "query": str(query or ""),
+        "query": _literal(query),
         "query_vec": _vector_literal(vector),
         "max_level": max(0, int(max_level)),
         "min_similarity": MIN_SIMILARITY,
@@ -649,6 +645,10 @@ def forget_candidates(conn, owner_id: str, thread_id: str) -> list[dict]:
             or_(
                 memories_readable.c.scope == "global",
                 memories_readable.c.thread_id == thread_id,
+                and_(
+                    memories_readable.c.scope == "person",
+                    memories_readable.c.audience != "group",
+                ),
             ),
         ),
     )

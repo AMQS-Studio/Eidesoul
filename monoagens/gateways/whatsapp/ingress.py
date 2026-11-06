@@ -134,7 +134,7 @@ def unreadable_message(ev, gateway) -> tuple[str, Message] | None:
         author=AUTHOR_MANUAL if source.IsFromMe else AUTHOR_UNKNOWN,
         unreadable=True,
         sender_address=sender_address,
-        sender_kind="person" if sender_address.endswith("@s.whatsapp.net") else "",
+        sender_kind="person" if sender_address.endswith(("@s.whatsapp.net", "@lid")) else "",
     )
     return thread_id, message
 
@@ -150,7 +150,10 @@ def event_to_inbound(ev, gateway) -> Percept | None:
         alt = getattr(source, "SenderAlt", None)
         alt_user = getattr(alt, "User", "")
         alt_server = getattr(alt, "Server", "")
-        mapped = f"{alt_user}@{alt_server}" if alt_user else ""
+        mapped = f"{alt_user}@{alt_server}" if alt_user and alt_server else ""
+        if mapped:
+            # Harvest the LID -> phone mapping the paired device just revealed.
+            directory.set_lid(gateway.db, sender, mapped)
         mapped = mapped or directory.pn_jid(gateway.db, sender)
     sender_address = mapped or sender
     sender_digits = normalize_jid(mapped or source.Sender.User or source.Sender.RawAgent)
@@ -175,10 +178,11 @@ def event_to_inbound(ev, gateway) -> Percept | None:
         when=event_time(ev.Info.Timestamp),
         text=text,
         media=media,
+        attachments=(media,) if media is not None else (),
         quote=quote(ev, gateway.windows, thread_id),
         outgoing=outgoing,
         sender_address=sender_address,
-        sender_kind="person" if sender_address.endswith("@s.whatsapp.net") else "",
+        sender_kind="person" if sender_address.endswith(("@s.whatsapp.net", "@lid")) else "",
         author=author,
         visibility=DEFAULT_VISIBILITY,
         view_once=views_once(ev.Message),

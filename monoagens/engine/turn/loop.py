@@ -438,6 +438,16 @@ class TurnRunner(ApprovalFlow, ResearchFlow, TurnReview):
                                     "failed to read the action ledger chat=%s", thread_id
                                 )
                         skill_block = ""
+                        # A transport hint is attacker-controlled; only the gateway's declared
+                        # app may scope skills and tool context (ADR-0053 §4.1.4).
+                        app = ""
+                        if runtime.skills is not None:
+                            try:
+                                app = runtime.skills.declared_app(
+                                    gateway.name, str(inbound.hints.get("app") or "")
+                                )
+                            except Exception:
+                                log.exception("failed to resolve the declared app")
                         if runtime.skills is not None:
                             try:
                                 skill_block = await io.run(
@@ -448,7 +458,7 @@ class TurnRunner(ApprovalFlow, ResearchFlow, TurnReview):
                                     held_tools=tuple(spec.name for spec in specs),
                                     catalog_tools=runtime.tool_index.names(gateway.name),
                                     max_chars=int(runtime.config.skills.max_chars),
-                                    app=str(inbound.hints.get("app") or ""),
+                                    app=app,
                                 )
                             except Exception:
                                 log.exception("failed to retrieve procedures")
@@ -501,7 +511,7 @@ class TurnRunner(ApprovalFlow, ResearchFlow, TurnReview):
                             request=message.text,
                             person_id=inbound.actor,
                             direct=bool(inbound.hints.get("dm")),
-                            app=str(inbound.hints.get("app") or ""),
+                            app=app,
                             turn_id=turn_id,
                         )
                         trigger, research_card, research_text = (

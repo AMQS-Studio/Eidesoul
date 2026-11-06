@@ -244,7 +244,8 @@ def test_the_same_action_id_parks_once(tmp_path) -> None:
 
 def test_approval_runs_from_the_origin_and_the_target_room(tmp_path) -> None:
     env = send_env(tmp_path, mode="default")
-    member = env.config.roles.get("member")
+    # III.3 makes any wildcard-tool role privileged, so this test needs a plain member.
+    member = role("member", users=(PERSON,), tools=("send_to",), commands=("*",))
     lang = env.config.soul.language
     foreign = t("command.approve.foreign", lang)
 

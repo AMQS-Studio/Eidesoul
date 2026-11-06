@@ -1,4 +1,4 @@
-"""Command /kirim: send a workspace file to this chat."""
+"""Command /send: send a workspace file to this chat."""
 
 
 from ..i18n import t

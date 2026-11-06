@@ -98,13 +98,15 @@ def _merge(groups: list[list[Message]]) -> list[Message]:
     return sorted(merged, key=_key)
 
 
-def _rendered(config: Config, thread_id: str, entry: Message) -> int:
+def _rendered(config: Config, thread_id: str, entry: Message, current: Message) -> int:
     """Full rendered size of one row: body, quote, and attachment lines, without writing.
 
     `thread_chars` protects the model's context window, so a short text with a long quote or an
-    inlined attachment costs what the payload actually carries (ADR-0003 §4.2).
+    inlined attachment costs what the payload actually carries (ADR-0003 §4.2). Historical rows
+    are measured with the real `current`, so their text attachments count as a summary line
+    rather than the full inlined body.
     """
-    lines = _message_lines(config, thread_id, entry, {}, entry, persist=False)
+    lines = _message_lines(config, thread_id, entry, {}, current, persist=False)
     return sum(len(line) for line in lines)
 
 
@@ -123,7 +125,7 @@ def _trim(
     to "three messages above" must not lose the context the budget was meant to protect.
     """
     keep = floor | {entry.id for entry in (current, *anchors) if entry.id}
-    sizes = [_rendered(config, thread_id, entry) for entry in merged]
+    sizes = [_rendered(config, thread_id, entry, current) for entry in merged]
     total = sum(sizes)
     trimmed = list(merged)
     for index, entry in enumerate(merged):

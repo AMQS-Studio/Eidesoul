@@ -321,7 +321,7 @@ class LLM:
         if not ctx.sent or attempts >= max_calls:
             return text or last_text
         sent_note = "\n".join(
-            f"- {entry['tool']} ke {entry['target']}: {entry['kind']} {entry['summary']}"
+            f"- {entry['tool']} to {entry['target']}: {entry['kind']} {entry['summary']}"
             for entry in ctx.sent
         )
         message = message_dict(response.message) if response.message is not None else {
@@ -604,8 +604,14 @@ class LLM:
                     or last_text
                     or t("agent.budget_notice", self.config.soul.language)
                 )
-            last_text = response.text or last_text
             calls = response.tool_calls
+            interim = (
+                bool(calls)
+                and not wrap
+                and bool(send_interim)
+                and bool(response.text.strip())
+            )
+            last_text = _round_text(response.text, last_text, interim=interim)
             if not calls:
                 return await self._final(
                     response,
@@ -743,4 +749,9 @@ class LLM:
         )
         flat = " ".join(raw.split())
         return flat if len(flat) <= 400 else flat[:399] + "…"
+
+
+def _round_text(text: str, last_text: str, *, interim: bool) -> str:
+    """Prose already delivered by send_interim must never return as the final reply."""
+    return "" if interim else text or last_text
 

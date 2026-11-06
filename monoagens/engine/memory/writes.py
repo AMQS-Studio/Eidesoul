@@ -486,13 +486,32 @@ def record_uses(
         or not store._policy.enabled
     ):
         return 0
-    wanted = list(dict.fromkeys(str(item) for item in memory_ids if str(item or "").strip()))
+    wanted = list(
+        dict.fromkeys(
+            raw.strip().lower()
+            for raw in (str(item or "") for item in memory_ids)
+            if records.FULL_UUID.match(raw.strip())
+        )
+    )
     if not wanted:
         return 0
     now = time.time()
     with store.db.connect() as conn:
         store._fence(conn, "record_uses")
         fence = store._fence_clause()
+        # ADR-0005 §4.3: only rows that still exist may take a touch. One purged or stale id
+        # must not turn the whole batch into a foreign-key failure.
+        alive = {
+            str(item).lower()
+            for item in conn.execute(
+                select(memories.c.id).where(memories.c.id.in_(wanted))
+            )
+            .scalars()
+            .all()
+        }
+        wanted = [item for item in wanted if item in alive]
+        if not wanted:
+            return 0
         touched = [
             str(item)
             for item in conn.execute(

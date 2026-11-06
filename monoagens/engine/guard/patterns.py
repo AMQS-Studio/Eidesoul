@@ -37,10 +37,35 @@ _NET_NEGATIONS = ("not", "no", "never", "dont", "don't", "cannot", "can't", "can
 
 # A credential is a shape, never a bare keyword: `key = value`, a suffixed password, a token
 # prefix, or a PEM header. A forgotten password stays ordinary talk.
-_STRONG_KEYS = r"(?:api[\s_-]?key|kata[\s_-]+sandi|kunci[\s_-]+api|kredensial)"
+_CREDENTIAL_DIR = Path(__file__).resolve().parents[2] / "library" / "guard"
+_CREDENTIAL_FALLBACK = {
+    "strong_keys": (r"api[\s_-]?key",),
+    "connectors": ("is", "are"),
+}
+
+
+@lru_cache(maxsize=1)
+def _credential_terms() -> dict[str, tuple[str, ...]]:
+    """Localized key/connector words are data in `library/guard/credentials.json`."""
+    try:
+        raw = json.loads((_CREDENTIAL_DIR / "credentials.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        raw = {}
+    terms = dict(_CREDENTIAL_FALLBACK)
+    for key in terms:
+        value = raw.get(key) if isinstance(raw, dict) else None
+        if isinstance(value, list) and value and all(
+            isinstance(item, str) and item for item in value
+        ):
+            terms[key] = tuple(value)
+    return terms
+
+
+_TERMS = _credential_terms()
+_STRONG_KEYS = "(?:" + "|".join(_TERMS["strong_keys"]) + ")"
 _SOFT_KEYS = r"(?:token|secret|otp|credential)"
 _PASSWORD = r"pass(?:word|wd)"
-_CONNECTORS = r"(?:is|are|adalah|ialah)"
+_CONNECTORS = "(?:" + "|".join(_TERMS["connectors"]) + ")"
 _STRONG_VALUE = r"(?:\s*[:=]\s*\S+|\s+\S+)"
 _EXPLICIT_VALUE = r"\s*[:=]\s*\S+"
 _VALUE_TOKEN = r"[A-Za-z0-9_+/=\-]{12,}"

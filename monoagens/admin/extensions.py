@@ -13,7 +13,7 @@ import sys
 from pathlib import Path
 
 from ..engine import plugins
-from ..engine.config import ConfigError, HostConfig, load_host
+from ..engine.config import Config, ConfigError, HostConfig, load_host
 from . import service
 from .gateway import note, update_document
 
@@ -31,7 +31,7 @@ ALWAYS_ON = (
 )
 
 
-def sandbox_enabled(host: HostConfig) -> bool:
+def sandbox_enabled(host: HostConfig | Config) -> bool:
     """The sandbox is enabled unless the operator parked its runtime at `off`."""
     return str(host.sandbox.runtime or "").strip().lower() != SANDBOX_OFF
 

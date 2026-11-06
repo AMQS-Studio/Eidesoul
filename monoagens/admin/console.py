@@ -2,7 +2,7 @@
 
 Not a gateway: no config block, no role policy, no transport. `monoagens console` builds it,
 passes it to the Agent as the only body of that process, and runs it instead of the supervisor.
-A closed stdin leaves it idle; a failed turn is logged, never raised.
+A closed stdin ends the session; a failed turn is logged, never raised.
 """
 
 
@@ -90,9 +90,11 @@ class Console(CoreDefaults):
         while not self.stopped:
             line = await lines.get()
             if not line:
-                # A closed stdin (a service, /dev/null, Ctrl-D) leaves the console idle.
-                log.info("console: stdin closed; console idle")
-                await self._stop.wait()
+                # A closed stdin (a service, /dev/null, Ctrl-D) ends the session instead of
+                # parking a process that nobody can type into.
+                log.info("console: stdin closed; exiting")
+                self.stopped = True
+                self._stop.set()
                 return
             text = line.rstrip("\n")
             if text.strip() in {"/quit", "/exit"}:

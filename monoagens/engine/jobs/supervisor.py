@@ -263,6 +263,9 @@ class Supervisor:
         bind = getattr(getattr(agent, "memory", None), "bind_guard", None)
         if bind is not None:
             bind(lease.guard)
+        # ADR-0012 §4.3: bind every fenced store now, even at generation 0, so a standby
+        # refuses canonical writes instead of executing them unfenced.
+        lease.bind_stores(agent)
         self.automations = (
             AutomationWorker(agent) if getattr(agent, "db", None) is not None else None
         )
@@ -340,6 +343,10 @@ class Supervisor:
     async def activate(self, holder) -> None:
         self.agent.draining = False
         self.agent.mode = "primary"
+        # ADR-0012 §4.3: re-bind after the takeover so every store reads the live generation.
+        lease = getattr(self, "lease", None) or getattr(self.agent, "lease", None)
+        if lease is not None:
+            lease.bind_stores(self.agent)
         # ADR-0008 §4.3: only the primary mirrors the soul's rules; a standby boot writes nothing.
         try:
             self.agent._sync_soul_rules()

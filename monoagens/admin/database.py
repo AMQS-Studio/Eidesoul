@@ -7,6 +7,7 @@ destructive operation while a primary is still alive.
 
 import logging
 import os
+import shutil
 import subprocess
 from pathlib import Path
 
@@ -35,6 +36,7 @@ from ..engine.schema import (
     topics,
 )
 from ..engine.stores.documents import DocumentStore
+from . import service
 
 log = logging.getLogger(__name__)
 
@@ -249,6 +251,66 @@ def format_check(data: dict) -> str:
 # ------------------------------------------------------------ backup/restore
 
 
+def _container_pg(tool: str, *, config_path=None) -> list[str] | None:
+    """`podman/docker exec` into the compose stack's postgres container, when it is running."""
+    try:
+        current = service.load(config_path)
+    except ConfigError:
+        return None
+    compose = service.compose_argv(current)
+    if compose is None:
+        return None
+    listing = subprocess.run(
+        [*compose, "ps", "-q", "postgres"],
+        cwd=current.root,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    container = next(
+        (line.strip() for line in listing.stdout.splitlines() if line.strip()), ""
+    )
+    if listing.returncode != 0 or not container:
+        return None
+    return [compose[0], "exec", "-i", container, tool]
+
+
+def _pg_command(tool: str, *, config_path=None) -> tuple[list[str], bool]:
+    """The host binary, or the exec prefix into the managed postgres container."""
+    binary = shutil.which(tool)
+    if binary:
+        return [binary], False
+    command = _container_pg(tool, config_path=config_path)
+    if command is not None:
+        return command, True
+    raise ConfigError(
+        f"{tool} was not found on PATH and no managed postgres container is available; "
+        "install the postgres client tools or run this inside the compose stack"
+    )
+
+
+def dump_database(dsn: str, target: Path, *, config_path=None) -> None:
+    """Custom-format dump from the host client, or streamed out of the postgres container."""
+    command, container = _pg_command("pg_dump", config_path=config_path)
+    argv = [*command, "--format=custom", *(["--file", str(target)] if not container else []), dsn]
+    if container:
+        with open(target, "wb") as handle:
+            subprocess.run(argv, stdout=handle, check=True)
+    else:
+        subprocess.run(argv, check=True)
+
+
+def restore_database(dsn: str, source: Path, *, config_path=None) -> None:
+    """Restore from the host client, or stream the archive into the postgres container."""
+    command, container = _pg_command("pg_restore", config_path=config_path)
+    argv = [*command, "--clean", "--if-exists", "--no-owner", "--dbname", dsn]
+    if container:
+        with open(source, "rb") as handle:
+            subprocess.run(argv, stdin=handle, check=True)
+    else:
+        subprocess.run([*argv, str(source)], check=True)
+
+
 def backup(config_path, out: Path) -> Path:
     """Postgres `pg_dump --format=custom`; mode 600."""
     host, _paths = _host(config_path)
@@ -257,10 +319,7 @@ def backup(config_path, out: Path) -> Path:
         raise ConfigError("database URL is empty; nothing to back up")
     target = Path(out).expanduser()
     target.parent.mkdir(parents=True, exist_ok=True)
-    subprocess.run(
-        ["pg_dump", "--format=custom", "--file", str(target), _pg_dsn(url)],
-        check=True,
-    )
+    dump_database(_pg_dsn(url), target, config_path=config_path)
     try:
         os.chmod(target, 0o600)
     except OSError:
@@ -286,18 +345,7 @@ def restore(config_path, source: Path, *, yes: bool = False, force: bool = False
         path = Path(source).expanduser()
         if not path.is_file():
             raise ConfigError(f"backup file not found: {path}")
-        subprocess.run(
-            [
-                "pg_restore",
-                "--clean",
-                "--if-exists",
-                "--no-owner",
-                "--dbname",
-                _pg_dsn(url),
-                str(path),
-            ],
-            check=True,
-        )
+        restore_database(_pg_dsn(url), path, config_path=config_path)
         log.info("database restore %s <- %s", db.label, path)
     finally:
         db.dispose()

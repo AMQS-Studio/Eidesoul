@@ -107,12 +107,12 @@ WORD = re.compile(r"\w+", re.UNICODE)
 
 
 def _tokens(text: str, stopwords: Iterable[str] = ()) -> set[str]:
-    """Content tokens of four characters or more, minus the caller's stopwords.
+    """Content tokens of three characters or more, minus the caller's stopwords.
 
     The length floor is language-neutral; the stopword list is data the caller supplies, so
     the engine still holds no per-language vocabulary of its own (ADR-0008).
     """
-    words = {token for token in WORD.findall(str(text or "").lower()) if len(token) >= 4}
+    words = {token for token in WORD.findall(str(text or "").lower()) if len(token) >= 3}
     return words - set(stopwords)
 
 

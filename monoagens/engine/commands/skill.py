@@ -121,7 +121,6 @@ ACTIONS = {
     "restore": _restore,
     "import": _import,
     "save": _save,
-    "tambah": _save,
 }
 
 

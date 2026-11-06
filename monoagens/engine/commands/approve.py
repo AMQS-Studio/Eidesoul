@@ -42,6 +42,8 @@ def decision_refusal(approval, *, thread_id: str, sender: str, roles) -> str:
     ADR-0004 §4.2: the requester decides their own row from the origin room or the target
     room; anyone else needs the `approve` command *and* authority over the target.
     """
+    if any(privileged(role) for role in roles):
+        return ""
     if str(thread_id or "") not in _rooms(approval):
         return "foreign"
     if str(sender or "") == str(approval.sender or ""):

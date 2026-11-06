@@ -24,6 +24,19 @@ def _warn_once(reason: str, message: str, *args) -> None:
     log.warning(message, *args)
 
 
+def _cached(model: str) -> bool:
+    """True when the weights are already on disk, so window startup makes no network call."""
+    try:
+        from huggingface_hub import try_to_load_from_cache
+    except Exception:
+        return False
+    try:
+        found = try_to_load_from_cache(model, "modules.json")
+    except Exception:
+        return False
+    return isinstance(found, str)
+
+
 @cache
 def encoder(model: str = MODEL):
     """The shared SentenceTransformer, or `None` when the weights cannot be loaded."""
@@ -33,7 +46,7 @@ def encoder(model: str = MODEL):
         _warn_once("import", "embed: sentence-transformers is not installed, using keywords")
         return None
     try:
-        return SentenceTransformer(model, device="cpu")
+        return SentenceTransformer(model, device="cpu", local_files_only=_cached(model))
     except Exception:
         _warn_once("load", "embed: could not load %s, using keywords", model)
         return None

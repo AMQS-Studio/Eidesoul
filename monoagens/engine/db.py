@@ -3,6 +3,8 @@
 
 import contextlib
 import logging
+import os
+import socket
 import time
 from collections.abc import Callable, Iterator, Mapping, Sequence
 from contextlib import contextmanager
@@ -22,6 +24,21 @@ MIGRATIONS = Path(__file__).resolve().parents[2] / "migrations"
 ADVISORY_LOCK_KEY = 0x45494445  # "EIDE": one migrator at a time
 MIGRATION_LOCK_TIMEOUT = 30.0
 UPSERT_BATCH_ROWS = 500
+
+
+def _pid_alive(pid: int) -> bool:
+    """A local pid is alive unless the kernel says it is gone (EPERM still means alive)."""
+    if pid <= 0:
+        return False
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    except OSError:
+        return False
+    return True
 
 
 def head_version() -> int:
@@ -177,6 +194,13 @@ class Database:
         except SQLAlchemyError:  # empty database: nothing can hold the lease yet
             return
         if row is None:
+            return
+        # A fresh heartbeat from this host is stale if the pid it names is already gone: the
+        # operator stopped the primary a moment ago and should not have to wait out the TTL.
+        if (
+            str(row.get("host") or "") == socket.gethostname()
+            and not _pid_alive(int(row.get("pid") or 0))
+        ):
             return
         if float(row.get("heartbeat_at") or 0.0) >= float(row["now"]) - float(TTL):
             raise MigrationError(

@@ -76,7 +76,11 @@ SAFE_HEADS = frozenset(
 CODE_HEADS = frozenset({"python", "python3", "node", "nodejs", "perl", "ruby", "php", "awk"})
 # Heads whose whole output is the command; their plain path arguments are file names, so a
 # read named `shutdown.log` is not a `shutdown` call (ADR-0049 §4.1.6).
-READ_ONLY_HEADS = frozenset({"cat", "head", "tail", "less", "wc", "stat", "file", "grep", "rg"})
+READ_ONLY_HEADS = frozenset(
+    {"cat", "head", "tail", "less", "wc", "stat", "file", "grep", "rg", "ls", "diff"}
+)
+# `git` subcommands whose path arguments are inputs to a read, not a command to run.
+READ_ONLY_GIT = frozenset({"diff", "log", "show", "status"})
 # Heads that need the write/exec and workspace checks below before they may run unattended.
 WORKSPACE_HEADS = frozenset({"find", "tar", "git", "base64", "xxd", "od", "sort", "uniq"})
 # Flags that turn a read-only head into a writer, an executor, or a directory escape.
@@ -163,6 +167,8 @@ def _command_view(text: str) -> str:
         head = words[0].rsplit("/", 1)[-1]
         if head in READ_ONLY_HEADS:
             words = [words[0], *(word for word in words[1:] if word.startswith("-"))]
+        elif head == "git" and len(words) > 1 and words[1] in READ_ONLY_GIT:
+            words = [words[0], words[1], *(word for word in words[2:] if word.startswith("-"))]
         kept.append(" ".join(words))
     return " ".join(kept).replace("'", " ").replace('"', " ")
 

@@ -542,7 +542,8 @@ def test_policy_matrix_reads_only_its_own_vocabulary() -> None:
     assert access.refusal({"dm": True}) == ""
     assert access.refusal({"group": True}) == "group_mention"
     assert access.refusal({"group": True, "mention": True}) == ""
-    assert access.refusal({"group": True, "reply": True}) == "group_mention"
+    # IV.8: "mention" honours reply_to_bot, so a direct reply is admitted too.
+    assert access.refusal({"group": True, "reply": True}) == ""
     assert policy.Access.parse(
         {"dm": False, "groups": "reply", "reply_to_bot": True}
     ).refusal({"group": True, "reply": True}) == ""

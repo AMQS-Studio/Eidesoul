@@ -42,20 +42,19 @@ def test_stdin_line_reaches_handle_and_quit_exits(monkeypatch, capsys) -> None:
     assert "MonoAgens: balasan" in capsys.readouterr().out
 
 
-def test_stdin_eof_keeps_the_console_idle(monkeypatch) -> None:
+def test_stdin_eof_ends_the_session_instead_of_parking_it(monkeypatch) -> None:
+    # I.1.3: a closed stdin must end the session; waiting for `stop()` used to park forever.
     console = Console()
     agent = RecordingAgent()
     monkeypatch.setattr("sys.stdin", io.StringIO(""))
 
     async def scenario() -> None:
         task = asyncio.create_task(console.run(agent))
-        await asyncio.sleep(0.05)
-        assert not task.done()
-        await console.stop()
         await asyncio.wait_for(task, 1.0)
 
     asyncio.run(scenario())
     assert agent.inbounds == []
+    assert console.stopped is True
 
 
 def test_a_failed_turn_is_logged_and_the_console_continues(monkeypatch, caplog) -> None:

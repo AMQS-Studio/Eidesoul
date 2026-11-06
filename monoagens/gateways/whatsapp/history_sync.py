@@ -145,6 +145,8 @@ def _sync_item(db, web, fallback_chat: str, fallback_ts: int = 0, self_jid: str 
         sender_address = key.participant or web.participant or ""
     else:
         sender_address = thread_id
+    mapped = directory.pn_jid(db, sender_address) if sender_address.endswith("@lid") else ""
+    sender_address = mapped or sender_address
     sender_id = normalize_jid(sender_address) if sender_address else ""
     sender = (
         directory.contact_name(db, sender_address) if sender_address else ""
@@ -161,11 +163,20 @@ def _sync_item(db, web, fallback_chat: str, fallback_ts: int = 0, self_jid: str 
             quote=quote,
             outgoing=from_me,
             sender_address=sender_address,
-            sender_kind="person" if sender_address.endswith("@s.whatsapp.net") else "",
+            sender_kind="person" if sender_address.endswith(("@s.whatsapp.net", "@lid")) else "",
+            attachments=(media,) if media is not None else (),
             author=author,
             visibility=DEFAULT_VISIBILITY,
         ),
     )
+
+
+def _dedupe_batch(batch: list[tuple[str, Message]]) -> list[tuple[str, Message]]:
+    """Keep first-seen order but the last row per (thread_id, message id)."""
+    found: dict[tuple[str, str], tuple[str, Message]] = {}
+    for thread_id, message in batch:
+        found[(str(thread_id), str(message.id))] = (thread_id, message)
+    return list(found.values())
 
 
 def ingest_sync(db, history, sync: HistorySync, self_jid: str = "") -> tuple[int, set[str], bool]:
@@ -190,10 +201,10 @@ def ingest_sync(db, history, sync: HistorySync, self_jid: str = "") -> tuple[int
             batch.append((thread_id, message))
             thread_ids.add(thread_id)
             if len(batch) >= 500:
-                total += history.add_many(batch)
+                total += history.add_many(_dedupe_batch(batch))
                 batch.clear()
     if batch:
-        total += history.add_many(batch)
+        total += history.add_many(_dedupe_batch(batch))
     done = bool(
         sync.syncType in (HistorySync.FULL, HistorySync.INITIAL_BOOTSTRAP) and sync.progress >= 100
     )

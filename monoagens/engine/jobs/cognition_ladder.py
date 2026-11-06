@@ -100,13 +100,16 @@ class CognitionLadder:
                 min_episodes=int(getattr(settings, "efficiency_min_evidence_episodes", 2)),
             ):
                 continue
-            names = await io.run(self.skills.evidence_for_signature, signature)
-            if not names:
+            # The rows keep each skill's app namespace; a bare logical name would let the
+            # ladder read and then mutate a same-named row of another app.
+            evidence = await io.run(self.skills.evidence_skills, signature)
+            if not evidence:
                 continue
+            names = list(dict.fromkeys(item.name for item in evidence))
             decided = await self._ladder_decision(found, names)
             if decided is None or str(decided.get("action")) == "keep":
                 continue
-            await self._ladder_apply(str(decided.get("action")), decided, names, found)
+            await self._ladder_apply(str(decided.get("action")), decided, evidence, found)
 
     async def _ladder_decision(self, found, names: list[str]) -> dict | None:
         if self.llm is None:
@@ -138,16 +141,17 @@ class CognitionLadder:
         return body
 
     async def _ladder_apply(
-        self, action: str, decided: dict, names: list[str], found
+        self, action: str, decided: dict, skills: list, found
     ) -> None:
         if self.skills is None:
             return
         skill = str(decided.get("skill") or "")
         reason = str(decided.get("reason") or "")[:200]
-        if action == "promote":
-            current = await io.run(self.skills.get, skill)
-            if current is None:
-                return
+        current = next((item for item in skills if item.name == skill), None)
+        if current is None and action in ("promote", "merge", "archive"):
+            return
+        if action == "promote" and current is not None:
+            # `app` comes from the evidence row itself: the same name may exist in another app.
             await io.run(
                 self.skills.revise,
                 current.name,
@@ -157,16 +161,22 @@ class CognitionLadder:
                 stated_by=current.stated_by,
                 trust=current.trust,
                 language=self.language,
+                app=current.app,
             )
-            await io.run(self.skills.set_priority, current.name, current.priority + 1)
+            await io.run(
+                self.skills.set_priority,
+                current.name,
+                current.priority + 1,
+                app=current.app,
+            )
             await io.run(self.skills.record_notice, current.name, f"promoted: {reason}")
             self.counters["distilled"] += 1
             return
-        if action == "merge":
-            survivor = await io.run(self.skills.get, skill)
-            if survivor is None:
-                return
-            others = [item for item in names if item != skill]
+        if action == "merge" and current is not None:
+            survivor = current
+            others = list(
+                dict.fromkeys(item.name for item in skills if item.name != skill)
+            )
             merged = survivor.body + "\n\n" + "\n".join(
                 f"# {item}" for item in others
             )
@@ -179,12 +189,13 @@ class CognitionLadder:
                 stated_by=survivor.stated_by,
                 trust=survivor.trust,
                 language=self.language,
+                app=survivor.app,
             )
             await io.run(self.skills.record_notice, survivor.name, f"merged: {reason}")
             return
-        if action == "archive":
+        if action == "archive" and current is not None:
             try:
-                await io.run(self.skills.archive, skill)
+                await io.run(self.skills.archive, skill, app=current.app)
             except KeyError:
                 return
             await io.run(self.skills.record_notice, skill, f"archived: {reason}")

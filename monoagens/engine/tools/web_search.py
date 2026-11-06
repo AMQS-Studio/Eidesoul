@@ -8,7 +8,7 @@ import importlib.util
 import logging
 import os
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 import httpx
 
@@ -258,6 +258,12 @@ def _required_secret(env_name: str, reason: str) -> str:
     return value
 
 
+def _provider_config(name: str, config: WebSearchConfig) -> WebSearchConfig:
+    """A provider reads its own `<PROVIDER>_API_KEY` before the shared configured name."""
+    env_name = f"{name.upper()}_API_KEY"
+    return replace(config, api_key_env=env_name) if _secret(env_name) else config
+
+
 def _payload(response: httpx.Response) -> dict:
     response.raise_for_status()
     try:
@@ -481,7 +487,7 @@ async def _attempt(
         raise ProviderError("unknown_provider")
     if client is None:
         raise ProviderError("client_missing")
-    return await adapter(client, config, query, limit)
+    return await adapter(client, _provider_config(name, config), query, limit)
 
 
 async def _search_chain(

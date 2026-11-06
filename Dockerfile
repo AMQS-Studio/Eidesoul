@@ -37,8 +37,10 @@ COPY alembic.ini ./
 COPY migrations ./migrations
 RUN uv sync --locked --no-build $EXTRAS
 
+# HF_HOME stays outside /app/.monoagens: compose bind-mounts the host data dir over that
+# path, which would otherwise shadow the model weights baked into the image (470MB).
 ENV PATH="/app/.venv/bin:$PATH" \
-    HF_HOME=/app/.monoagens/hf
+    HF_HOME=/home/monoagens/.cache/huggingface
 
 RUN useradd --create-home --uid 1000 --shell /usr/sbin/nologin monoagens \
     && mkdir -p /app/.monoagens \

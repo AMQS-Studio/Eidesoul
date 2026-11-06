@@ -60,7 +60,7 @@ def _hybrid(
     """One statement over `memories_readable`; the vector comes from the shared embedder."""
     if store.db is None:
         return []
-    body = str(query or "").strip()
+    body = str(query or "").replace("\x00", "").strip()
     vector = None
     if body:
         encoded = embed.encode([body])

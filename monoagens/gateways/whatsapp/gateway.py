@@ -30,6 +30,7 @@ from ...engine.turn.reply import FENCE, clean_prose, strip_blocks
 from ..base import BaseGateway, register_gateway
 from . import directory, history_sync, ingress, policy
 from .config import WhatsAppSettings
+from .identity import normalize_jid
 from .media import download_media, send_kind
 
 log = logging.getLogger(__name__)
@@ -91,6 +92,30 @@ class WhatsAppGateway(BaseGateway):
     def check_access(self, block: Mapping[str, object] | None, percept: Percept) -> bool:
         access = policy.Access.parse(block)
         return access is not None and not access.refusal(percept.hints)
+
+    def normalize_address(self, raw: str) -> str:
+        """Canonical WhatsApp address: digits, so LID and PN spell the same person."""
+        return normalize_jid(raw)
+
+    def link_paired_owner(self) -> str:
+        """Link the paired device's phone and LID to the administrator identity (I.3)."""
+        me = self.me
+        phone = normalize_jid(str(getattr(getattr(me, "JID", None), "User", "") or ""))
+        if not phone:
+            return ""
+        administrator = self.config.roles.get("administrator")
+        if administrator is None or not any(
+            normalize_jid(user) == phone for user in administrator.users
+        ):
+            return ""
+        lid = normalize_jid(str(getattr(getattr(me, "LID", None), "User", "") or ""))
+        if lid and lid != phone:
+            directory.set_lid(self.db, f"{lid}@lid", f"{phone}@s.whatsapp.net")
+        store = IdentityStore(self.db)
+        person = store.resolve(self.name, phone)
+        if lid and lid != phone:
+            store.link(person, self.name, lid, actor="pair")
+        return person
 
     def __init__(
         self,
@@ -247,6 +272,11 @@ class WhatsAppGateway(BaseGateway):
         async def on_connected(accepted: NewAClient, ev) -> None:
             self.me = accepted.me or self.me
             secure_db(session)
+            try:
+                if self.link_paired_owner():
+                    log.info("paired owner linked to the administrator identity")
+            except Exception:
+                log.exception("failed to link the paired owner")
             try:
                 await asyncio.to_thread(directory.import_contacts, self.db, session)
             except Exception:

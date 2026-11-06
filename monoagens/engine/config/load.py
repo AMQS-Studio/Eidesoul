@@ -176,6 +176,14 @@ def _retry_config(raw: Mapping) -> RetryConfig:
         retry_after_max_seconds=max(0.0, _num(raw.get("retry_after_max_seconds"), 10.0)),
     )
 
+def _strings(value: object) -> tuple[str, ...]:
+    """A YAML list (or single string) of non-empty names, in declaration order."""
+    items = [value] if isinstance(value, str) else value
+    if not isinstance(items, (list, tuple)):
+        return ()
+    return tuple(str(item).strip() for item in items if str(item).strip())
+
+
 def _llm_config(
     llm_raw: Mapping, *, require_key: bool, require_model: bool
 ) -> LLMConfig:
@@ -218,7 +226,11 @@ def _llm_config(
         wire=defaults.wire,
         native=defaults.wire != "openai",
         models_native=defaults.wire != "openai",
-        sampling_supported=defaults.sampling_supported,
+        sampling_supported=(
+            _strings(llm_raw.get("sampling_supported"))
+            if "sampling_supported" in llm_raw
+            else defaults.sampling_supported
+        ),
         safety_supported=defaults.safety_supported,
         run_budget_seconds=int(_num(llm_raw.get("run_budget_seconds"), 240)),
         max_calls_per_turn=max(1, int(_num(llm_raw.get("max_calls_per_turn"), 6))),

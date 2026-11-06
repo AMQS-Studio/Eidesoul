@@ -5,7 +5,7 @@
     "credential": {
       "level": 5,
       "patterns": [
-        "(?i)\\b(password\\w{0,2}|passwd)\\b\\s*(?:[:=]\\s*)?\\S+",
+        "(?i)\\b(password\\w{0,2}|passwd)\\b\\s*(?:(?:is|are)\\s+|[:=]\\s*)\\S+|\\b(?:secret|api)[\\s_-]?token\\b",
         "(?i)\\b(password|passwd|api[\\s_-]?key|token|secret)\\b\\s*[:=]\\s*\\S+",
         "(?i)(?<![A-Za-z0-9])(-----BEGIN [A-Z ]+PRIVATE KEY-----)"
       ],
@@ -29,7 +29,7 @@
     "financial": {
       "level": 3,
       "patterns": [
-        "(?i)\\b(account|balance|debt|loan|salary|bank|credit card|transfer)\\b"
+        "(?i)\\b(debt|loan|salary)\\b|\\b(?:bank|savings|checking)\\s+account\\b|\\b(?:account|card)\\s+(?:number|balance|details)\\b|\\bmy\\s+(?:bank|balance|account)\\b|\\bcredit\\s+card\\b"
       ],
       "examples": [
         "my bank account is here",
@@ -62,7 +62,7 @@
     "violence": {
       "level": 4,
       "patterns": [
-        "(?i)\\b(kill|murder|hit|punch|threat|violence)\\b"
+        "(?i)\\b(?:kill|murder)\\b\\s+(?:him|her|them|me|you|us|someone|somebody|people|a person|my\\s+\\w+)|\\b(?:hit|punch|attack)\\b\\s+(?:him|her|them|me|you|us|someone|somebody|people)|\\bthreaten(?:ed|ing|s)?\\b|\\b(?:threat|threats)\\s+(?:to|against)\\b|\\b(?:violence|violent|assault(?:ed)?)\\b"
       ],
       "examples": [
         "I want to kill him",
@@ -84,7 +84,7 @@
     "relationship_conflict": {
       "level": 3,
       "patterns": [
-        "(?i)\\b(hate|fight|conflict|breakup|cheat|affair)\\b"
+        "(?i)\\b(hate|fight|conflict|breakup|cheat|affair)\\b|\\b(?:do not|don't)\\s+like\\s+(?:him|her|them|you|my\\s+\\w+)\\b"
       ],
       "examples": [
         "I hate him",

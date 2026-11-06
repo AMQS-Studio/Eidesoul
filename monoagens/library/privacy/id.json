@@ -40,7 +40,7 @@
     "crime_admission": {
       "level": 4,
       "patterns": [
-        "(?i)\\b(nyuri|mencuri|curi|korupsi|menipu|penipuan|pidana|penjara|aku yang salah)\\b"
+        "(?i)\\b(nyuri|mencuri|curi|korupsi|menipu|penipuan|pidana|penjara)\\b"
       ],
       "examples": [
         "aku tadi nyuri di toko",
@@ -62,7 +62,7 @@
     "violence": {
       "level": 4,
       "patterns": [
-        "(?i)\\b(membunuh|bunuh|memukul|pukul|mengancam|ancaman|kekerasan)\\b"
+        "(?i)\\b(membunuh|bunuh|memukul|pukul|mengancam|ancaman|diancam|kekerasan)\\b"
       ],
       "examples": [
         "aku mau membunuh dia",
@@ -84,7 +84,7 @@
     "relationship_conflict": {
       "level": 3,
       "patterns": [
-        "(?i)\\b(gak suka|tidak suka|benci|bertengkar|konflik|putus|selingkuh)\\b"
+        "(?i)\\b(benci|bertengkar|konflik|putus|selingkuh)\\b|\\b(?:gak|tidak)\\s+suka\\s+sama\\s+(?:dia|kamu|aku|orang)\\b"
       ],
       "examples": [
         "aku benci dia",

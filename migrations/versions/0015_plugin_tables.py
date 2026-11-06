@@ -30,6 +30,16 @@ def downgrade() -> None:
         sa.Column("subject", sa.String(128), nullable=False, server_default=""),
         sa.Column("linked_at", sa.Float(), nullable=False),
     )
+    # 0011 added this foreign key once `people` existed; dropping the whole table in `upgrade`
+    # dropped it too, so a downgrade past 0015 must restore it or 0011's own downgrade fails.
+    op.create_foreign_key(
+        "fk_google_identity_person",
+        "google_identity",
+        "people",
+        ["person_id"],
+        ["person_id"],
+        ondelete="CASCADE",
+    )
     op.create_table(
         "google_device",
         sa.Column("person_id", sa.String(160), primary_key=True),

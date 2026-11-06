@@ -19,6 +19,8 @@
     "dari",
     "kamu",
     "aku",
+    "saya",
+    "anda",
     "ini",
     "itu",
     "apa",
@@ -212,7 +214,9 @@
     "setuju",
     "silakan",
     "silahkan",
-    "boleh"
+    "boleh",
+    "gass",
+    "sip"
   ],
   "reject": [
     "batal",
@@ -224,7 +228,9 @@
     "nggak",
     "gak",
     "cancel",
-    "no"
+    "no",
+    "tolak",
+    "ga"
   ],
   "modify": [
     "ganti",

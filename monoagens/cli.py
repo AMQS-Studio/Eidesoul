@@ -9,9 +9,11 @@ same host files. A mutation of `config.yaml`, `roles.yaml`, or `soul.yaml` goes 
 import argparse
 import asyncio
 import contextlib
+import difflib
 import json
 import logging
 import os
+import re
 import shutil
 import signal
 import subprocess
@@ -20,6 +22,8 @@ import time
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
+
+import yaml
 
 from .admin import backup as admin_backup
 from .admin import doctor as admin_doctor
@@ -39,11 +43,11 @@ from .engine.config import (
 log = logging.getLogger(__name__)
 
 
-def setup_logging() -> None:
+def setup_logging() -> logging.Handler:
     """Boot default: text format; `build_runtime` applies `engine.logging` once loaded."""
     from .engine.turn import observability
 
-    observability.install("text", "INFO")
+    return observability.install("text", "INFO")
 
 
 def _verdict(passed: object) -> str:
@@ -67,7 +71,9 @@ def _role(config: Config):
     return config.roles.default_role()
 
 
-async def build_runtime(config_path: str | None, *, console: bool = False):
+async def build_runtime(
+    config_path: str | None, *, console: bool = False, quiet: bool = False
+):
     """Required bootstrap: host -> DB -> documents -> config -> stores -> gateways -> agent."""
     from .engine.access.roles import RoleError
     from .engine.agent import Agent
@@ -112,6 +118,11 @@ async def build_runtime(config_path: str | None, *, console: bool = False):
     override = os.environ.get("MONOAGENS_LOG_LEVEL", "").strip().upper()
     if override:
         observability.install(config.logging.format, override)
+    if quiet:
+        for handler in logging.getLogger().handlers:
+            handler.setLevel(logging.CRITICAL)
+        logging.getLogger().setLevel(logging.CRITICAL)
+        observability.silence_third_party(debug=False)
     try:
         config.roles.require_administrator()
     except RoleError as exc:
@@ -237,15 +248,25 @@ def _write_ipc(path: Path, protocol: int = 1) -> None:
     os.chmod(path, 0o600)
 
 
-async def serve(config_path: str | None, *, console: bool = False, takeover: bool = False) -> int:
+async def serve(
+    config_path: str | None,
+    *,
+    console: bool = False,
+    takeover: bool = False,
+    quiet: bool = False,
+) -> int:
     holder: dict[str, Any] = {"agent": None, "requested": False}
     _install_reload_signal(asyncio.get_running_loop(), holder)
     ipc_path: Path | None = None
+    pid_file: Path | None = None
     try:
         _host, paths = load_host(config_path)
-        ipc_path = paths.workspace.parent / admin_service.IPC_NAME
-        _write_ipc(ipc_path)
-        runtime = await build_runtime(config_path, console=console)
+        if not console:
+            ipc_path = paths.workspace.parent / admin_service.IPC_NAME
+            _write_ipc(ipc_path)
+            pid_file = paths.workspace.parent / "run" / "monoagens.pid"
+            admin_service.write_pid(pid_file, os.getpid())
+        runtime = await build_runtime(config_path, console=console, quiet=quiet)
         agent = runtime["agent"]
         holder["agent"] = agent
         if holder.get("requested"):
@@ -270,6 +291,10 @@ async def serve(config_path: str | None, *, console: bool = False, takeover: boo
         if ipc_path is not None:
             with contextlib.suppress(OSError):
                 ipc_path.unlink()
+        if pid_file is not None:
+            with contextlib.suppress(OSError, ValueError):
+                if pid_file.read_text(encoding="utf-8").strip() == str(os.getpid()):
+                    pid_file.unlink()
 
 
 async def backfill(config_path: str | None) -> int:
@@ -351,6 +376,12 @@ def _setting(args: argparse.Namespace) -> int:
     if action == "set":
         admin_setting.set_value(args.config, args.key, args.value)
         return 0
+    if action in ("reset", "unset", "default"):
+        return _setting_reset(args.config, args.key)
+    if action == "export":
+        return _setting_export(args.config, args.path)
+    if action == "import":
+        return _setting_import(args.config, args.file)
     if action == "model":
         if not args.value:
             return admin_setting.get(args.config, "engine.llm.model")
@@ -364,6 +395,49 @@ def _setting(args: argparse.Namespace) -> int:
             return admin_setting.get(args.config, "web_search.provider")
         return admin_setting.websearch(args.config, args.value)
     raise ValueError(f"unknown setting command '{action}'")
+
+
+def _setting_reset(config_path: str | None, key: str) -> int:
+    resolved = admin_setting.canonical(key)
+    default = admin_setting._default(resolved)
+    if default is admin_setting.MISSING:
+        raise ValueError(f"setting '{resolved}' has no dataclass default")
+    admin_setting._checked_write(config_path, {resolved: default})
+    print(f"{resolved}: {default}", flush=True)
+    return 0
+
+
+def _setting_export(config_path: str | None, path: str | None) -> int:
+    body = admin_setting.read(config_path)
+    rendered = yaml.safe_dump(body, sort_keys=False)
+    if path:
+        Path(path).write_text(rendered, encoding="utf-8")
+        print(f"exported {path}", flush=True)
+    else:
+        print(rendered, flush=True)
+    return 0
+
+
+def _setting_import(config_path: str | None, source: str | None) -> int:
+    if not source:
+        return _config_import(argparse.Namespace(config=config_path))
+    body = yaml.safe_load(Path(source).read_text(encoding="utf-8"))
+    if not isinstance(body, dict):
+        raise ValueError(f"import file must be a YAML mapping: {source}")
+    updates: dict[str, object] = {}
+
+    def walk(node: dict, prefix: str = "") -> None:
+        for key, value in node.items():
+            dotted = f"{prefix}.{key}" if prefix else str(key)
+            if isinstance(value, dict) and value:
+                walk(value, dotted)
+            else:
+                updates[dotted] = value
+
+    walk(body)
+    admin_setting._checked_write(config_path, updates)
+    print(f"imported {len(updates)} settings from {source}", flush=True)
+    return 0
 
 
 def _shortcut(args: argparse.Namespace) -> int:
@@ -387,23 +461,21 @@ def _shortcut(args: argparse.Namespace) -> int:
 
 def _gateway(args: argparse.Namespace) -> int:
     command = args.gateway_command
-    if command == "list":
+    if command in ("list", "ls"):
         return admin_gateway.list_gateways(args.config)
-    if command == "add":
+    if command in ("add", "enable", "install"):
         if getattr(args, "connect", False):
             return admin_gateway.connect(args.config, args.name)
         return admin_gateway.add(args.config, args.name)
-    if command == "enable":
-        return admin_gateway.add(args.config, args.name)
-    if command in ("disable", "remove"):
+    if command == "disable":
         return admin_gateway.set_enabled(args.config, args.name, False)
-    if command == "delete":
+    if command in ("delete", "remove", "rm", "uninstall"):
         return admin_gateway.delete(args.config, args.name)
-    if command == "pair":
+    if command in ("pair", "connect", "login"):
         return admin_gateway.pair(args.config, args.name)
-    if command == "unpair":
+    if command in ("unpair", "disconnect", "logout"):
         return admin_gateway.unpair(args.config, args.name)
-    if command == "update":
+    if command in ("update", "upgrade"):
         return admin_extensions.upgrade_extras(args.config, args.name)
     if command == "doctor":
         return admin_gateway.doctor(args.config, fix=args.fix)
@@ -412,17 +484,17 @@ def _gateway(args: argparse.Namespace) -> int:
 
 def _plugins(args: argparse.Namespace) -> int:
     command = args.plugins_command
-    if command == "list":
+    if command in ("list", "ls"):
         return admin_extensions.list_plugins(args.config)
-    if command == "install":
+    if command in ("install", "add"):
         return admin_extensions.install_plugin(args.config, args.name)
     if command == "enable":
         return admin_extensions.set_plugin(args.config, args.name, True)
     if command == "disable":
         return admin_extensions.set_plugin(args.config, args.name, False)
-    if command in ("delete", "remove"):
+    if command in ("delete", "remove", "rm", "uninstall"):
         return admin_extensions.delete_plugin(args.config, args.name)
-    if command == "update":
+    if command in ("update", "upgrade"):
         return admin_extensions.update_plugins(args.config, getattr(args, "name", None))
     if command == "digest":
         return admin_extensions.digest(args.directory)
@@ -431,14 +503,13 @@ def _plugins(args: argparse.Namespace) -> int:
 
 def _tools(args: argparse.Namespace) -> int:
     command = args.tools_command
-    if command == "list":
+    if command in ("list", "ls"):
         return admin_extensions.list_tools(args.config)
-    if command in ("enable", "disable"):
-        return admin_extensions.set_tool(args.config, args.name, command == "enable")
+    if command in ("enable", "add"):
+        return admin_extensions.set_tool(args.config, args.name, True)
+    if command in ("disable", "remove", "rm"):
+        return admin_extensions.set_tool(args.config, args.name, False)
     raise ValueError(f"unknown tools command '{command}'")
-
-
-# -------------------------------------------------------------------- update
 
 
 def _update_core(root: Path) -> int:
@@ -516,7 +587,10 @@ def _confirmed(args: argparse.Namespace, current: admin_service.Service) -> bool
 
 def _purge(current: admin_service.Service) -> None:
     state = current.state.resolve()
+    config = current.paths.config.resolve()
     home = Path.home().resolve()
+    if state == config.parent or config.is_relative_to(state):
+        raise ValueError(f"refusing to remove the deployment root: {state}")
     if state == home or state == Path("/") or state.parent == state:
         raise ValueError(f"refusing to remove {state}")
     allowed = state.is_relative_to(home) or state.is_relative_to(current.paths.config.parent)
@@ -758,9 +832,24 @@ async def selftest(config: Config) -> int:
         detail = "" if passed else shell[:120]
         results.append(_report("shell", _verdict(passed), detail))
 
-        runtime = resolve_runtime(config.sandbox)
-        if runtime is None:
-            _report("sandbox", "SKIP", f"{config.sandbox.runtime or 'podman/docker'} not found")
+        sandbox_on = admin_extensions.sandbox_enabled(config)
+        runtime = resolve_runtime(config.sandbox) if sandbox_on else None
+        if not sandbox_on:
+            results.append(
+                _report(
+                    "sandbox",
+                    "SKIP",
+                    "disabled; enable via 'monoagens tools enable sandbox'",
+                )
+            )
+        elif runtime is None:
+            results.append(
+                _report(
+                    "sandbox",
+                    "SKIP",
+                    f"{config.sandbox.runtime or 'podman/docker'} not found",
+                )
+            )
         else:
             box = await execute(
                 specs,
@@ -887,16 +976,42 @@ def _db_restore(args: argparse.Namespace) -> int:
     return 0
 
 
+def _db_downgrade(args: argparse.Namespace) -> int:
+    from alembic import command
+    from alembic.config import Config as AlembicConfig
+
+    from .engine.db import MIGRATIONS, Database
+
+    host, _ = load_host(args.config)
+    url = resolve_database_url(host.database)
+    if not url:
+        raise ConfigError("database URL is empty; set it in config.yaml or MONOAGENS_DATABASE_URL")
+    db = Database(url)
+    try:
+        db.assert_migration_allowed()
+        cfg = AlembicConfig()
+        cfg.set_main_option("script_location", str(MIGRATIONS))
+        cfg.set_main_option("sqlalchemy.url", url)
+        command.downgrade(cfg, args.revision)
+    finally:
+        db.dispose()
+    print(f"db downgrade: {args.revision}", flush=True)
+    return 0
+
+
 def _db_dispatch(args: argparse.Namespace) -> int:
+    command = args.db_command
     handlers = {
         "upgrade": _db_upgrade,
+        "downgrade": _db_downgrade,
         "check": _db_check,
+        "status": _db_check,
         "backup": _db_backup,
         "restore": _db_restore,
     }
-    if args.db_command in handlers:
-        return handlers[args.db_command](args)
-    raise ValueError(f"unknown db command '{args.db_command}'")
+    if command in handlers:
+        return handlers[command](args)
+    raise ValueError(f"unknown db command '{command}'")
 
 
 def _doc_store(args: argparse.Namespace):
@@ -1108,10 +1223,51 @@ def _people_unlink(args: argparse.Namespace) -> int:
 
     db = _people_db(args)
     try:
-        removed = admin_people.unlink(db, args.person_id, args.gateway)
+        removed = admin_people.unlink(db, args.person_id, args.gateway, args.address)
     finally:
         db.dispose()
     print("unlinked" if removed else "not linked", flush=True)
+    return 0
+
+
+def _people_remove(args: argparse.Namespace) -> int:
+    from .admin import people as admin_people
+
+    _, paths = load_host(args.config)
+    db = _people_db(args)
+    try:
+        removed = admin_people.remove(
+            db, paths, args.person_or_address, role=args.role, purge=args.purge
+        )
+    finally:
+        db.dispose()
+    print(f"removed from: {', '.join(removed) or '-'}", flush=True)
+    return 0
+
+
+def _people_grant(args: argparse.Namespace) -> int:
+    from .admin import people as admin_people
+
+    _, paths = load_host(args.config)
+    db = _people_db(args)
+    try:
+        admin_people.grant(db, paths, args.person_id, args.role)
+    finally:
+        db.dispose()
+    print(f"granted {args.role}", flush=True)
+    return 0
+
+
+def _people_revoke(args: argparse.Namespace) -> int:
+    from .admin import people as admin_people
+
+    _, paths = load_host(args.config)
+    db = _people_db(args)
+    try:
+        admin_people.revoke(db, paths, args.person_id, args.role)
+    finally:
+        db.dispose()
+    print(f"revoked {args.role}", flush=True)
     return 0
 
 
@@ -1137,6 +1293,11 @@ def _people_dispatch(args: argparse.Namespace) -> int:
         "add": _people_add,
         "link": _people_link,
         "unlink": _people_unlink,
+        "remove": _people_remove,
+        "delete": _people_remove,
+        "rm": _people_remove,
+        "grant": _people_grant,
+        "revoke": _people_revoke,
         "adopt": _people_adopt,
     }
     if args.people_command in handlers:
@@ -1144,16 +1305,75 @@ def _people_dispatch(args: argparse.Namespace) -> int:
     raise ValueError(f"unknown people command '{args.people_command}'")
 
 
-def _memory_dispatch(args: argparse.Namespace) -> int:
-    if args.memory_command == "purge":
-        return _memory_purge(args)
-    raise ValueError(f"unknown memory command '{args.memory_command}'")
+def _memory_db(args: argparse.Namespace):
+    from .engine.db import Database
+
+    host, _ = load_host(args.config)
+    url = resolve_database_url(host.database)
+    if not url:
+        raise ConfigError("database URL is empty; memory commands need the configured database")
+    return Database(url)
+
+
+def _memory_list(args: argparse.Namespace) -> int:
+    from .engine.memory.store import MemoryStore
+
+    db = _memory_db(args)
+    try:
+        hits = asyncio.run(
+            MemoryStore(db).list(
+                scope=args.scope,
+                person_id=args.person,
+                thread_id=args.thread,
+                limit=args.limit,
+            )
+        )
+    finally:
+        db.dispose()
+    for hit in hits:
+        print(f"{hit.id} [{hit.scope}] {hit.text}", flush=True)
+    if not hits:
+        print("memory: no rows", flush=True)
+    return 0
+
+
+def _memory_add(args: argparse.Namespace) -> int:
+    from .engine.memory.store import MemoryStore
+
+    db = _memory_db(args)
+    try:
+        ids = asyncio.run(
+            MemoryStore(db).add(
+                args.text,
+                scope=args.scope,
+                person_id=args.person,
+                thread_id=args.thread,
+            )
+        )
+    finally:
+        db.dispose()
+    print(f"memory add: {', '.join(ids) or 'stored'}", flush=True)
+    return 0
+
+
+def _memory_remove(args: argparse.Namespace) -> int:
+    from .engine.memory.store import MemoryStore
+
+    db = _memory_db(args)
+    try:
+        removed = asyncio.run(MemoryStore(db).forget(args.memory_id))
+    finally:
+        db.dispose()
+    print("memory remove: removed" if removed else "memory remove: not found", flush=True)
+    return 0 if removed else 2
 
 
 def _memory_purge(args: argparse.Namespace) -> int:
     from .engine.db import Database
     from .engine.memory.store import MemoryStore
 
+    if args.batch <= 0:
+        raise ValueError("--batch must be >= 1")
     host, _ = load_host(args.config)
     url = resolve_database_url(host.database)
     if not url:
@@ -1169,8 +1389,37 @@ def _memory_purge(args: argparse.Namespace) -> int:
     return 0
 
 
+def _memory_dispatch(args: argparse.Namespace) -> int:
+    handlers = {
+        "list": _memory_list,
+        "ls": _memory_list,
+        "search": _memory_list,
+        "add": _memory_add,
+        "remember": _memory_add,
+        "remove": _memory_remove,
+        "delete": _memory_remove,
+        "rm": _memory_remove,
+        "forget": _memory_remove,
+        "purge": _memory_purge,
+    }
+    if args.memory_command in handlers:
+        return handlers[args.memory_command](args)
+    raise ValueError(f"unknown memory command '{args.memory_command}'")
+
+
+def _positive_int(text: str) -> int:
+    try:
+        value = int(text)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError(f"invalid integer: {text}") from exc
+    if value <= 0:
+        raise argparse.ArgumentTypeError("--batch must be >= 1")
+    return value
+
+
 def _console(args: argparse.Namespace) -> int:
-    return asyncio.run(serve(args.config, console=True))
+    quiet = not (args.verbose or args.debug or args.level)
+    return asyncio.run(serve(args.config, console=True, quiet=quiet))
 
 
 # -------------------------------------------------------------------- parser
@@ -1187,95 +1436,146 @@ def _add_verbosity(parser: argparse.ArgumentParser) -> None:
     )
 
 
-def _gateway_parser(sub) -> None:
+def _gateway_parser(sub) -> argparse.ArgumentParser:
     gateway = sub.add_parser(
         "gateway", help="list, enable, disable, pair, delete, or update a gateway"
     )
-    gateway_sub = gateway.add_subparsers(dest="gateway_command", required=True)
-    gateway_sub.add_parser("list", help="show discovered gateways and state")
-    add = gateway_sub.add_parser("add", help="enable a gateway and seed its role policy")
+    gateway.set_defaults(_group_parser=True)
+    gateway_sub = gateway.add_subparsers(dest="gateway_command", parser_class=CLIParser)
+    gateway_sub.add_parser("list", aliases=("ls",), help="show discovered gateways and state")
+    add = gateway_sub.add_parser(
+        "add", aliases=("enable", "install"), help="enable a gateway and seed its role policy"
+    )
     add.add_argument("name", help="gateway name from `gateway list`")
     add.add_argument(
         "--connect",
         action="store_true",
         help="install the extra, enable, seed roles.yaml, and run the gateway's onboarding",
     )
-    for verb, text in (
-        ("enable", "install the extra, enable the gateway, and seed its role policy"),
-        ("disable", "switch the gateway off and keep its code"),
-        ("delete", "remove code, sessions, config block, and role blocks"),
-        ("pair", "pair the gateway in this terminal"),
-        ("unpair", "remove the paired session"),
-    ):
-        item = gateway_sub.add_parser(verb, help=text)
-        item.add_argument("name", help="gateway name from `gateway list`")
-    update = gateway_sub.add_parser("update", help="reinstall the extra of an enabled gateway")
+    gateway_sub.add_parser("disable", help="switch the gateway off and keep its code")
+    pair = gateway_sub.add_parser(
+        "pair", aliases=("connect", "login"), help="pair the gateway in this terminal"
+    )
+    pair.add_argument("name", help="gateway name from `gateway list`")
+    unpair = gateway_sub.add_parser(
+        "unpair", aliases=("disconnect", "logout"), help="remove the paired session"
+    )
+    unpair.add_argument("name", help="gateway name from `gateway list`")
+    delete = gateway_sub.add_parser(
+        "delete",
+        aliases=("remove", "rm", "uninstall"),
+        help="remove code, sessions, config block, and role blocks",
+    )
+    delete.add_argument("name", help="gateway name from `gateway list`")
+    update = gateway_sub.add_parser(
+        "update", aliases=("upgrade",), help="reinstall the extra of an enabled gateway"
+    )
     update.add_argument("name", nargs="?", default=None, help="gateway name; default: all enabled")
-    remove = gateway_sub.add_parser("remove", help="alias for disable")
-    remove.add_argument("name", help="gateway name from `gateway list`")
     doctor = gateway_sub.add_parser("doctor", help="report missing role gateway policies")
     doctor.add_argument("--fix", action="store_true", help="write the missing seed blocks")
+    return gateway
 
 
-def _plugins_parser(sub) -> None:
+def _plugins_parser(sub) -> argparse.ArgumentParser:
     parser = sub.add_parser("plugins", help="plugin lifecycle")
-    plugin_sub = parser.add_subparsers(dest="plugins_command", required=True)
-    plugin_sub.add_parser("list", help="show absent, installed, enabled, and unavailable plugins")
-    for verb, text in (
-        ("install", "place verified plugin code under plugin.root"),
-        ("enable", "install if needed, then register the plugin at boot"),
-        ("disable", "switch the plugin off and keep its files"),
-        ("delete", "delete a disabled plugin's code and config entry"),
-        ("remove", "alias for delete"),
+    parser.set_defaults(_group_parser=True)
+    plugin_sub = parser.add_subparsers(dest="plugins_command", parser_class=CLIParser)
+    plugin_sub.add_parser(
+        "list", aliases=("ls",), help="show absent, installed, enabled, and unavailable plugins"
+    )
+    for verb, aliases, text in (
+        ("install", ("add",), "place verified plugin code under plugin.root"),
+        ("enable", (), "install if needed, then register the plugin at boot"),
+        ("disable", (), "switch the plugin off and keep its files"),
+        (
+            "delete",
+            ("remove", "rm", "uninstall"),
+            "delete a disabled plugin's code and config entry",
+        ),
     ):
-        item = plugin_sub.add_parser(verb, help=text)
+        item = plugin_sub.add_parser(verb, aliases=aliases, help=text)
         item.add_argument("name", help="plugin name from its manifest")
-    update = plugin_sub.add_parser("update", help="re-verify and re-enable installed plugins")
+    update = plugin_sub.add_parser(
+        "update", aliases=("upgrade",), help="re-verify and re-enable installed plugins"
+    )
     update.add_argument("name", nargs="?", default=None, help="plugin name; default: all")
     digest = plugin_sub.add_parser("digest", help="print the tree and code digests")
     digest.add_argument("directory", help="plugin directory")
+    return parser
 
 
-def _tools_parser(sub) -> None:
+def _tools_parser(sub) -> argparse.ArgumentParser:
     parser = sub.add_parser("tools", help="toggle heavy tools such as the sandbox")
-    tools_sub = parser.add_subparsers(dest="tools_command", required=True)
-    tools_sub.add_parser("list", help="show every tool and its switch")
-    for verb in ("enable", "disable"):
-        item = tools_sub.add_parser(verb, help=f"{verb} a heavy tool")
+    parser.set_defaults(_group_parser=True)
+    tools_sub = parser.add_subparsers(dest="tools_command", parser_class=CLIParser)
+    tools_sub.add_parser("list", aliases=("ls",), help="show every tool and its switch")
+    for verb, aliases, text in (
+        ("enable", ("add",), "enable a heavy tool"),
+        ("disable", ("remove", "rm"), "disable a heavy tool"),
+    ):
+        item = tools_sub.add_parser(verb, aliases=aliases, help=text)
         item.add_argument("name", help="tool name from `tools list`")
+    return parser
 
 
-def _setting_parser(sub) -> None:
-    parser = sub.add_parser(
-        "setting",
-        aliases=("settings",),
-        help="interactive settings, or get/set one value in config.yaml",
-    )
-    setting_sub = parser.add_subparsers(dest="setting_command", required=False)
-    setting_sub.add_parser("list", help="print the effective settings")
-    get = setting_sub.add_parser("get", help="print one setting")
+def _setting_subcommands(sub, *, full: bool) -> None:
+    sub.add_parser("list", help="print the effective settings")
+    get = sub.add_parser("get", help="print one setting")
     get.add_argument("key", help="dotted key, e.g. engine.llm.model")
-    setter = setting_sub.add_parser("set", help="write one setting")
+    setter = sub.add_parser("set", help="write one setting")
     setter.add_argument("key", help="dotted key, e.g. engine.llm.model")
     setter.add_argument("value", help="new value")
+    for verb in ("reset", "unset", "default"):
+        item = sub.add_parser(verb, help="restore one setting to its dataclass default")
+        item.add_argument("key", help="dotted key, e.g. engine.llm.model")
+    export = sub.add_parser("export", help="print or write config.yaml as YAML")
+    export.add_argument("path", nargs="?", default=None, help="target file; default: stdout")
+    importer = sub.add_parser("import", help="merge a YAML file into config.yaml")
+    importer.add_argument("file", nargs="?", default=None, help="source file; default: refresh DB")
+    sub.add_parser("help", help="show this help and exit 0")
+    if not full:
+        return
+    sub.add_parser("menu", help="interactive settings menu")
     for verb, text in (
         ("model", "show or set engine.llm.model"),
         ("provider", "show or set engine.llm.provider"),
         ("websearch", "show or set web_search.provider"),
     ):
-        item = setting_sub.add_parser(verb, help=text)
+        item = sub.add_parser(verb, help=text)
         item.add_argument("value", nargs="?", default="", help=f"new {verb}")
 
 
-def _people_parser(sub) -> None:
+def _setting_parser(sub) -> argparse.ArgumentParser:
+    parser = sub.add_parser(
+        "setting",
+        aliases=("settings",),
+        help="interactive settings, or get/set one value in config.yaml",
+    )
+    parser.set_defaults(_group_parser=True)
+    _setting_subcommands(
+        parser.add_subparsers(dest="setting_command", parser_class=CLIParser), full=True
+    )
+    return parser
+
+
+def _people_parser(sub) -> argparse.ArgumentParser:
     people = sub.add_parser("people", help="person identity operations")
-    people_sub = people.add_subparsers(dest="people_command", required=True)
-    people_sub.add_parser("list", help="list identities, roles, and linked addresses")
+    people.set_defaults(_group_parser=True)
+    people_sub = people.add_subparsers(dest="people_command", parser_class=CLIParser)
+    people_sub.add_parser(
+        "list", aliases=("ls",), help="list identities, roles, and linked addresses"
+    )
     add = people_sub.add_parser("add", help="create/link the first identity for a role")
     add.add_argument("gateway", help="gateway name from config.yaml")
     add.add_argument("address", help="the gateway's own address for that person")
     add.add_argument("--role", default="administrator", help="role document to append to")
     add.add_argument("--name", default="", help="display name")
+    remove = people_sub.add_parser(
+        "remove", aliases=("delete", "rm"), help="remove a person from one or all roles"
+    )
+    remove.add_argument("person_or_address", help="per_… id, address, or display name")
+    remove.add_argument("--role", default=None, help="role to remove from; default: all")
+    remove.add_argument("--purge", action="store_true", help="also delete the identity and links")
     link = people_sub.add_parser("link", help="link a gateway address to an identity")
     link.add_argument("person_id", help="per_… identity id")
     link.add_argument("gateway", help="gateway name from config.yaml")
@@ -1283,7 +1583,15 @@ def _people_parser(sub) -> None:
     unlink = people_sub.add_parser("unlink", help="remove one gateway link")
     unlink.add_argument("person_id", help="per_… identity id")
     unlink.add_argument("gateway", help="gateway name")
+    unlink.add_argument("address", nargs="?", default="", help="specific address; default: all")
+    grant = people_sub.add_parser("grant", help="append a person to a role")
+    grant.add_argument("person_id", help="per_… identity id")
+    grant.add_argument("role", help="role name from roles.yaml")
+    revoke = people_sub.add_parser("revoke", help="remove a person from a role")
+    revoke.add_argument("person_id", help="per_… identity id")
+    revoke.add_argument("role", help="role name from roles.yaml")
     people_sub.add_parser("adopt", help="move legacy raw addresses onto per_… identities")
+    return people
 
 
 def _init_parser(sub) -> None:
@@ -1360,15 +1668,33 @@ def _init_parser(sub) -> None:
     init.add_argument("--no-color", action="store_true", help="plain output (also via NO_COLOR)")
 
 
+class CLIParser(argparse.ArgumentParser):
+    """A parser that prints help when a group has no subcommand and suggests typos."""
+
+    group_parsers: dict[str, tuple[argparse.ArgumentParser, str]]
+
+    def error(self, message: str) -> None:
+        print(f"error: {message}", file=sys.stderr)
+        match = re.search(r"invalid choice: '([^']+)'", message)
+        if match:
+            bad = match.group(1)
+            known = [item for item in re.findall(r"'([^']+)'", message) if item != bad]
+            matches = difflib.get_close_matches(bad, known, n=3)
+            if matches:
+                print("did you mean: " + ", ".join(matches), file=sys.stderr)
+        self.print_help(sys.stderr)
+        self.exit(2)
+
+
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(
+    parser = CLIParser(
         prog="monoagens", description="MonoAgens persistent mono agent harness"
     )
     parser.add_argument(
         "--config", default=None, help="path to config.yaml (default: ./config.yaml)"
     )
     parser.add_argument("--env", default=".env", help="path to .env (default: ./.env)")
-    sub = parser.add_subparsers(dest="command")
+    sub = parser.add_subparsers(dest="command", parser_class=CLIParser)
     run = sub.add_parser("run", help="run the gateways enabled in config.yaml")
     run.add_argument("--takeover", action="store_true", help="take the lease from another instance")
     _add_verbosity(run)
@@ -1380,18 +1706,19 @@ def build_parser() -> argparse.ArgumentParser:
     logs.add_argument("-f", "--follow", action="store_true", help="stream new lines")
     _add_verbosity(logs)
     sub.add_parser("reload", help="validate the host files and ask the primary to reload")
-    _setting_parser(sub)
+    setting_parser = _setting_parser(sub)
     for shortcut in ("model", "provider", "websearch"):
         item = sub.add_parser(shortcut, help=f"show or switch the {shortcut}")
         item.add_argument("value", nargs="?", default="", help=f"new {shortcut}")
-    sub.add_parser(
+    console = sub.add_parser(
         "console",
         aliases=("cli",),
         help="local REPL over the same soul and database (no gateway)",
     )
-    _gateway_parser(sub)
-    _plugins_parser(sub)
-    _tools_parser(sub)
+    _add_verbosity(console)
+    gateway_parser = _gateway_parser(sub)
+    plugins_parser = _plugins_parser(sub)
+    tools_parser = _tools_parser(sub)
     update = sub.add_parser("update", aliases=("upgrade",), help="update core, extras, and schema")
     update.add_argument("--core", action="store_true", help="update only the core package")
     doctor = sub.add_parser("doctor", help="health check with an optional repair")
@@ -1412,12 +1739,21 @@ def build_parser() -> argparse.ArgumentParser:
     _init_parser(sub)
     sub.add_parser("models", help="list the model ids the configured provider serves")
     config = sub.add_parser("config", help="config operations")
-    config_sub = config.add_subparsers(dest="config_command")
-    config_sub.add_parser("import", help="refresh the DB cache from the host files")
+    config.set_defaults(_group_parser=True)
+    _setting_subcommands(
+        config.add_subparsers(dest="config_command", parser_class=CLIParser), full=False
+    )
     database = sub.add_parser("db", help="database operations")
-    database_sub = database.add_subparsers(dest="db_command", required=True)
+    database.set_defaults(_group_parser=True)
+    database_sub = database.add_subparsers(dest="db_command", parser_class=CLIParser)
     database_sub.add_parser("upgrade", help="create and seed the database schema")
-    db_check = database_sub.add_parser("check", help="schema and database content summary")
+    downgrade = database_sub.add_parser("downgrade", help="roll the schema back one revision")
+    downgrade.add_argument(
+        "revision", nargs="?", default="-1", help="target revision; default: -1"
+    )
+    db_check = database_sub.add_parser(
+        "check", aliases=("status",), help="schema and database content summary"
+    )
     db_check.add_argument("--json", action="store_true", help="emit JSON")
     db_backup = database_sub.add_parser("backup", help="pg_dump a custom-format archive")
     db_backup.add_argument("--out", required=True, help="target file")
@@ -1425,19 +1761,45 @@ def build_parser() -> argparse.ArgumentParser:
     db_restore.add_argument("file", help="backup file")
     db_restore.add_argument("--yes", action="store_true", help="confirm the restore")
     db_restore.add_argument("--force", action="store_true", help="ignore an active lease")
-    _people_parser(sub)
+    people_parser = _people_parser(sub)
     memory = sub.add_parser("memory", help="canonical memory maintenance")
-    memory_sub = memory.add_subparsers(dest="memory_command", required=True)
+    memory.set_defaults(_group_parser=True)
+    memory_sub = memory.add_subparsers(dest="memory_command", parser_class=CLIParser)
+    listing = memory_sub.add_parser(
+        "list", aliases=("ls", "search"), help="list canonical memories"
+    )
+    listing.add_argument("--scope", default="global", help="global, person, or thread")
+    listing.add_argument("--person", default="", help="person id for person scope")
+    listing.add_argument("--thread", default="", help="thread id for thread scope")
+    listing.add_argument("--limit", type=int, default=20, help="rows to print")
+    remember = memory_sub.add_parser("add", aliases=("remember",), help="store one memory")
+    remember.add_argument("text", help="memory text")
+    remember.add_argument("--scope", default="global", help="global, person, or thread")
+    remember.add_argument("--person", default="", help="person id for person scope")
+    remember.add_argument("--thread", default="", help="thread id for thread scope")
+    forget = memory_sub.add_parser(
+        "remove", aliases=("delete", "rm", "forget"), help="delete one memory by id"
+    )
+    forget.add_argument("memory_id", help="mem_… id")
     memory_purge = memory_sub.add_parser("purge", help="delete expired, unpinned memories")
     memory_purge.add_argument(
         "--dry-run", action="store_true", help="report what would be purged, change nothing"
     )
-    memory_purge.add_argument("--batch", type=int, default=500, help="rows per batch")
-    parser.group_parsers = {"config": config, "db": database, "memory": memory}  # type: ignore[attr-defined]
+    memory_purge.add_argument(
+        "--batch", type=_positive_int, default=500, help="rows per batch (>= 1)"
+    )
+    parser.group_parsers = {
+        "gateway": (gateway_parser, "gateway_command"),
+        "plugins": (plugins_parser, "plugins_command"),
+        "tools": (tools_parser, "tools_command"),
+        "setting": (setting_parser, "setting_command"),
+        "settings": (setting_parser, "setting_command"),
+        "config": (config, "config_command"),
+        "db": (database, "db_command"),
+        "people": (people_parser, "people_command"),
+        "memory": (memory, "memory_command"),
+    }
     return parser
-
-
-# ------------------------------------------------------------------ dispatch
 
 
 def _dispatch(args: argparse.Namespace, parser: argparse.ArgumentParser) -> int:
@@ -1445,6 +1807,13 @@ def _dispatch(args: argparse.Namespace, parser: argparse.ArgumentParser) -> int:
     if command is None:
         parser.print_help()
         return 0
+    group = getattr(parser, "group_parsers", {}).get(command)
+    if group is not None:
+        group_parser, dest = group
+        value = getattr(args, dest, None)
+        if value is None or value == "help":
+            group_parser.print_help()
+            return 0
     if command in {"console", "cli"}:
         return _console(args)
     if command == "run":
@@ -1456,6 +1825,9 @@ def _dispatch(args: argparse.Namespace, parser: argparse.ArgumentParser) -> int:
     if command == "reload":
         return _reload(args)
     if command in {"setting", "settings"}:
+        return _setting(args)
+    if command == "config":
+        args.setting_command = args.config_command
         return _setting(args)
     if command in {"model", "provider", "websearch"}:
         return _shortcut(args)
@@ -1475,11 +1847,6 @@ def _dispatch(args: argparse.Namespace, parser: argparse.ArgumentParser) -> int:
         return _restore(args)
     if command == "uninstall":
         return _uninstall(args)
-    if command == "config":
-        if getattr(args, "config_command", None) is None:
-            parser.group_parsers["config"].print_help()  # type: ignore[attr-defined]
-            return 2
-        return _config_dispatch(args)
     if command == "db":
         return _db_dispatch(args)
     if command == "people":
@@ -1498,10 +1865,18 @@ def _dispatch(args: argparse.Namespace, parser: argparse.ArgumentParser) -> int:
 
 
 def main(argv: list[str] | None = None) -> int:
-    setup_logging()
+    handler = setup_logging()
     parser = build_parser()
     args = parser.parse_args(argv)
-    load_env(args.env)
+    if args.command in {"console", "cli"} and not (
+        getattr(args, "verbose", False) or getattr(args, "debug", False)
+    ):
+        handler.setLevel(logging.CRITICAL)
+        from .engine.turn import observability
+
+        observability.silence_third_party(debug=False)
+    config_path = Path(args.config).resolve().parent if args.config else Path.cwd()
+    load_env(args.env, root=config_path)
     try:
         return _dispatch(args, parser)
     except ConfigError as exc:
@@ -1512,7 +1887,5 @@ def main(argv: list[str] | None = None) -> int:
         return 2
     except KeyboardInterrupt:
         return 130
-
-
 if __name__ == "__main__":
     sys.exit(main())

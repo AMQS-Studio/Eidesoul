@@ -94,6 +94,9 @@ MIMETYPE_EXTENSIONS = {
     "audio/x-wav": "wav",
     "audio/webm": "webm",
     "audio/mp4": "m4a",
+    "audio/x-m4a": "m4a",
+    "audio/m4a": "m4a",
+    "audio/aac": "m4a",
     "audio/flac": "flac",
 }
 
@@ -210,8 +213,10 @@ def _error(response: httpx.Response, label: str) -> ProviderError:
 
 
 def _filename(mimetype: str) -> str:
+    """A real audio extension, never `.bin`: Whisper rejects unknown suffixes."""
     base = str(mimetype or "").split(";", 1)[0].strip().lower()
-    return f"audio.{MIMETYPE_EXTENSIONS.get(base, 'bin')}"
+    fallback = "mp3" if base.startswith("audio/") else "bin"
+    return f"audio.{MIMETYPE_EXTENSIONS.get(base, fallback)}"
 
 
 class _HttpAdapter:

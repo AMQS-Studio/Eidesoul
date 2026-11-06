@@ -55,7 +55,7 @@ async def forget_by_intent(
     """ADR-0005 §4.6: "forget that …" removes the one readable row it can mean.
 
     Only the speaker's own readable rows in `global` and this thread are candidates, matched
-    by one shared content token of at least four characters. The language's stopwords are
+    by one shared content token of at least three characters. The language's stopwords are
     dropped first, so a request particle never turns every row into a candidate: the topic
     token is what matches. Zero or several candidates is ambiguity, not a guess: nothing is
     deleted and the caller logs why.

@@ -8,7 +8,7 @@ from .. import io
 from ..memory import assess as memory_assess
 from ..memory import evidence as privacy_layers
 from ..memory import gate, intent
-from ..schema import memories
+from ..schema import memories, memory_events
 from .cognition_queue import Job, _scope_of
 
 if TYPE_CHECKING:
@@ -109,6 +109,14 @@ class CognitionCapture:
             if fence is not None:
                 statement = statement.where(fence)
             conn.execute(statement)
+            # ADR-0002 §4.4: the journal row can repeat the raw turn, so it is redacted in
+            # the same transaction as the canonical row. The hash stays untouched: it is a
+            # digest, never the secret, and intake dedupe still keys on it.
+            conn.execute(
+                memory_events.update()
+                .where(memory_events.c.memory_id == str(memory_id))
+                .values(content=gate.REDACTED_CREDENTIAL)
+            )
         return True
 
     async def _label(self, row: Mapping, verdict) -> str:

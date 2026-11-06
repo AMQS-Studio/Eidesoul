@@ -131,7 +131,9 @@ def _insert_position(lines: list[str], start: int, end: int, indent: int) -> int
     return position
 
 
-def _render_entry(pad: str, key: str, value: object, comment: str = "") -> list[str]:
+def _render_entry(
+    pad: str, key: str, value: object, comment: str | None = ""
+) -> list[str]:
     """One mapping entry, including the nested lines a mapping, list, or block scalar needs."""
     suffix = f"  {comment}" if comment else ""
     if isinstance(value, dict):
@@ -145,8 +147,9 @@ def _render_entry(pad: str, key: str, value: object, comment: str = "") -> list[
             f"{pad}  - {_scalar(item)}" for item in value
         )]
     if isinstance(value, str) and "\n" in value:
+        chomp = "|" if value.endswith("\n") else "|-"
         body = value.rstrip("\n").split("\n")
-        return [f"{pad}{key}: |{suffix}", *(
+        return [f"{pad}{key}: {chomp}{suffix}", *(
             f"{pad}  {line}" if line else "" for line in body
         )]
     return [f"{pad}{key}: {_scalar(value)}{suffix}"]
@@ -159,7 +162,9 @@ def _render_tree(mapping: Mapping, pad: str) -> list[str]:
     return lines
 
 
-def _render_path(pad: str, parts: list[str], value: object, comment: str = "") -> list[str]:
+def _render_path(
+    pad: str, parts: list[str], value: object, comment: str | None = ""
+) -> list[str]:
     """A missing nested path: `a:` / `b:` / `c: value`."""
     if len(parts) == 1:
         return _render_entry(pad, parts[0], value, comment)
@@ -167,7 +172,23 @@ def _render_path(pad: str, parts: list[str], value: object, comment: str = "") -
     return [*head, *_render_path(pad + "  ", parts[1:], value, comment)]
 
 
-def _replace(lines: list[str], index: int, end: int, value: object, comment: str) -> list[str]:
+def _open_flow(lines: list[str], index: int) -> list[str]:
+    """Strip a trailing `{}`/`[]` so children can be inserted beneath an empty flow node."""
+    found = _KEY.match(lines[index])
+    if found is None:
+        return lines
+    value, comment = _split_comment(found.group("rest"))
+    if value not in {"{}", "[]"}:
+        return lines
+    pad = found.group("pad")
+    key = found.group("key").strip()
+    suffix = f"  {comment}" if comment else ""
+    return [*lines[:index], f"{pad}{key}:{suffix}", *lines[index + 1:]]
+
+
+def _replace(
+    lines: list[str], index: int, end: int, value: object, comment: str | None
+) -> list[str]:
     found = _KEY.match(lines[index])
     if found is None:
         raise YamlUpdateError(f"cannot rewrite line {index + 1}: {lines[index]!r}")
@@ -196,7 +217,7 @@ def _insert(
     parts: list[str],
     value: object,
     fallback_indent: int,
-    comment: str,
+    comment: str | None,
 ) -> list[str]:
     indent = _mapping_indent(lines, start, end, fallback_indent)
     position = _insert_position(lines, start, end, indent)
@@ -211,7 +232,7 @@ def _assign(
     parts: list[str],
     value: object,
     fallback_indent: int,
-    comment: str,
+    comment: str | None,
 ) -> list[str]:
     index = _find_child(lines, start, end, parts[0])
     if len(parts) == 1:
@@ -223,7 +244,8 @@ def _assign(
     child_indent = _indent(lines[index])
     nested = (child_indent if child_indent is not None else fallback_indent) + 2
     child_end = min(_block_end(lines, index), end)
-    return _assign(lines, index + 1, child_end, parts[1:], value, nested, comment)
+    opened = _open_flow(lines, index)
+    return _assign(opened, index + 1, child_end, parts[1:], value, nested, comment)
 
 
 def _flatten(updates: Mapping, prefix: str = "") -> list[tuple[str, object]]:
@@ -243,7 +265,7 @@ def render_update(text: str, updates: Mapping, *, comments: Mapping | None = Non
     for path, value in _flatten(updates):
         if not path.strip("."):
             raise YamlUpdateError("an update path cannot be empty")
-        note = (comments or {}).get(path, "")
+        note = comments.get(path) if comments else None
         lines = changed.split("\n")
         changed = "\n".join(_assign(lines, 0, len(lines), path.split("."), value, 0, note))
     return changed + ("\n" if text.endswith("\n") else "")
@@ -262,7 +284,7 @@ def _validate(text: str, validate: Validator | None) -> None:
 
 def _write_in_place(path: Path, text: str) -> None:
     """Rewrite the same inode: what a bind-mounted file needs when rename is refused."""
-    with open(path, "r+", encoding="utf-8") as handle:
+    with open(path, "r+" if path.exists() else "w", encoding="utf-8") as handle:
         handle.write(text)
         handle.truncate()
         handle.flush()

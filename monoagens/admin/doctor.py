@@ -7,9 +7,12 @@ failure.
 """
 
 
+import os
+
 import yaml
 from sqlalchemy import text
 
+from ..engine.access.roles import RoleError
 from ..engine.config import (
     ConfigError,
     HostConfig,
@@ -29,8 +32,28 @@ def _dump(body: object) -> str:
 
 
 def _config_check(paths: Paths) -> str:
-    load_config(paths.config, require_key=False, require_model=False)
-    return f"{paths.config.name}, {paths.soul_yaml.name}, and {paths.roles.name} load"
+    """Load without the boot gates, then apply the gates doctor is meant to name."""
+    config = load_config(paths.config, require_key=False, require_model=False)
+    problems: list[str] = []
+    model = str(config.llm.model or "").strip()
+    if not model:
+        problems.append(
+            "engine.llm.model is empty; choose one with `monoagens models` and set it with "
+            "`monoagens init --model <id>` or in config.yaml"
+        )
+    key_env = str(config.llm.api_key_env or "").strip()
+    if not config.llm.api_key_optional and not os.environ.get(key_env):
+        problems.append(f"env {key_env or 'engine.llm.api_key_env'} is not set (put it in .env)")
+    try:
+        config.roles.require_administrator()
+    except RoleError as exc:
+        problems.append(str(exc))
+    if problems:
+        raise ConfigError("; ".join(problems))
+    return (
+        f"{paths.config.name}, {paths.soul_yaml.name}, and {paths.roles.name} load; "
+        f"model {model}; env {key_env} set; administrator present"
+    )
 
 
 def _database(host: HostConfig) -> Database:

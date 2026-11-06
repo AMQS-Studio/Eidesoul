@@ -23,6 +23,8 @@ from .base import (
 )
 
 ANTHROPIC_VERSION = "2023-06-01"
+# `cache_control: ephemeral` is a beta feature until the provider graduates it.
+PROMPT_CACHING_BETA = "prompt-caching-2024-07-31"
 DEFAULT_MAX_TOKENS = 8192
 CACHE_CONTROL = {"type": "ephemeral"}
 FINISH = {
@@ -308,6 +310,7 @@ class AnthropicClient:
         return {
             "x-api-key": self.api_key,
             "anthropic-version": ANTHROPIC_VERSION,
+            "anthropic-beta": PROMPT_CACHING_BETA,
             "content-type": "application/json",
         }
 

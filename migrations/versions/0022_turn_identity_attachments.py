@@ -104,6 +104,10 @@ def downgrade() -> None:
     )
     op.drop_column("message_media", "seq")
 
+    # The old constraint only admits executed/failed. A turn that crashed while a step was
+    # running, or that was interrupted, still holds a row the narrower check rejects; settle
+    # those rows first so the downgrade never fails on live data.
+    op.execute("UPDATE turn_steps SET status = 'failed' WHERE status IN ('running','interrupted')")
     op.drop_constraint("ck_turn_steps_status", "turn_steps", type_="check")
     op.create_check_constraint(
         "ck_turn_steps_status", "turn_steps", "status IN ('executed','failed')"

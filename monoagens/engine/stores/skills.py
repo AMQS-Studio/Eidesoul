@@ -112,8 +112,8 @@ class SkillStore(FencedStore):
                 return key
         return slug
 
-    def evidence_for_signature(self, signature: str, *, limit: int = 5) -> list[str]:
-        """The skills distilled from the episodes of one signature, newest first."""
+    def _evidence_rows(self, signature: str, *, limit: int = 5) -> list[dict]:
+        """The skill rows distilled from the episodes of one signature, newest first."""
         if not str(signature or ""):
             return []
         wanted = [
@@ -125,7 +125,7 @@ class SkillStore(FencedStore):
         if not wanted:
             return []
         rows = self.db.fetch_all(
-            select(skills.c.name)
+            select(skills)
             .where(
                 skills.c.archived.is_(False),
                 skills.c.source_episode.in_(wanted),
@@ -133,20 +133,39 @@ class SkillStore(FencedStore):
             .order_by(skills.c.updated_at.desc())
             .limit(max(1, int(limit)))
         )
-        return [_logical(row["name"]) for row in rows]
+        return [dict(row) for row in rows]
+
+    def evidence_for_signature(self, signature: str, *, limit: int = 5) -> list[str]:
+        """The skills distilled from the episodes of one signature, newest first."""
+        return [
+            _logical(str(row["name"])) for row in self._evidence_rows(signature, limit=limit)
+        ]
+
+    def evidence_skills(self, signature: str, *, limit: int = 5) -> list[Skill]:
+        """The evidence rows with their app namespace, so a caller never guesses it."""
+        return [self._skill_row(row) for row in self._evidence_rows(signature, limit=limit)]
+
+    def _row_exists(self, key: str) -> bool:
+        """Whether this physical key exists, regardless of the current fence generation."""
+        return (
+            self.db.fetch_one(select(skills.c.name).where(skills.c.name == key)) is not None
+        )
 
     def set_priority(self, name: str, priority: int, *, app: str | None = None) -> int:
         """Set the retrieval rank of one procedure (ADR-0020 §4.6); returns the new value."""
         fence = self._fence()
+        key = self._stored_key(name, app)
         statement = (
             update(skills)
-            .where(skills.c.name == self._stored_key(name, app))
+            .where(skills.c.name == key)
             .values(priority=int(priority), updated_at=time.time())
         )
         if fence is not None:
             statement = statement.where(fence)
         with self.db.connect() as conn:
-            conn.execute(statement)
+            result = conn.execute(statement)
+        if fence is not None and not int(result.rowcount or 0) and self._row_exists(key):
+            raise Superseded("lease generation moved on: skill priority refused")
         return int(priority)
 
     def record_notice(self, name: str, summary: str) -> int:
@@ -388,6 +407,10 @@ class SkillStore(FencedStore):
             return ""
         gateways = getattr(self.config, "gateways", None) or {}
         settings = gateways.get(str(gateway or ""))
+        if settings is None:
+            # A body with no host config entry (console, tests, an ad-hoc gateway) declares
+            # nothing to contradict; the hint is the only namespace information available.
+            return wanted
         options = getattr(settings, "options", None) or {}
         declared = str(options.get("app") or "").strip().lower()
         return wanted if declared and declared == wanted else ""
@@ -512,11 +535,27 @@ class SkillStore(FencedStore):
                 "trust": tier,
             }
             statement = fenced_insert(skills, row, fence)
-            statement = statement.on_conflict_do_update(
-                index_elements=["name"], set_=changes
-            ).returning(skills.c.name)
-            if conn.execute(statement).first() is None and fence is not None:
-                raise Superseded("lease generation moved on: skill write refused")
+            # An existing live row is refused above; the conflict clause only has to replace an
+            # archived row or an overwrite. A racing creator must lose with FileExistsError, so
+            # the non-overwrite path uses DO NOTHING and reports the conflict instead.
+            if overwrite or (existing is not None and existing["archived"]):
+                statement = statement.on_conflict_do_update(
+                    index_elements=["name"], set_=changes
+                )
+            else:
+                statement = statement.on_conflict_do_nothing(index_elements=["name"])
+            created = conn.execute(statement.returning(skills.c.name)).first()
+            if created is None:
+                found = conn.execute(
+                    select(skills.c.archived, skills.c.revision).where(skills.c.name == key)
+                ).mappings().first()
+                # No row means the fence filtered the insert (the lease moved on); a row means
+                # another writer won the race this statement was meant to lose.
+                if found is None or (
+                    bool(found["archived"]) and int(found["revision"] or 0) != revision
+                ):
+                    raise Superseded("lease generation moved on: skill write refused")
+                raise FileExistsError(f"skill already exists: {slug} (use overwrite=true)")
             added = conn.execute(
                 fenced_insert(
                     skill_revisions,
@@ -607,15 +646,18 @@ class SkillStore(FencedStore):
         if skill is None:
             raise KeyError(f"skill not found: {name}")
         fence = self._fence()
+        key = _key(skill.app, skill.name)
         statement = (
             update(skills)
-            .where(skills.c.name == _key(skill.app, skill.name))
+            .where(skills.c.name == key)
             .values(archived=True, updated_at=time.time())
         )
         if fence is not None:
             statement = statement.where(fence)
         with self.db.connect() as conn:
-            conn.execute(statement)
+            result = conn.execute(statement)
+        if fence is not None and not int(result.rowcount or 0) and self._row_exists(key):
+            raise Superseded("lease generation moved on: skill archive refused")
         return skill.name
 
     def restore_archived(self, name: str, *, app: str | None = None) -> str:
@@ -632,6 +674,8 @@ class SkillStore(FencedStore):
         with self.db.connect() as conn:
             result = conn.execute(statement)
         if not int(result.rowcount or 0):
+            if fence is not None and self._row_exists(key):
+                raise Superseded("lease generation moved on: skill restore refused")
             raise KeyError(f"skill not found: {slug}")
         return slug
 
@@ -650,6 +694,8 @@ class SkillStore(FencedStore):
         with self.db.connect() as conn:
             result = conn.execute(statement)
         if not int(result.rowcount or 0):
+            if fence is not None and self._row_exists(key):
+                raise Superseded("lease generation moved on: skill pin refused")
             raise KeyError(f"skill not found: {slug}")
         return slug
 

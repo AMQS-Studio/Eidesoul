@@ -279,6 +279,18 @@ class Lease:
         except Exception as exc:
             log.warning("lease release failed: %s: %s", type(exc).__name__, exc)
 
+    def bind_stores(self, agent) -> None:
+        """Wire every store of `agent` to this lease (ADR-0012 §4.3).
+
+        Binding is safe at generation 0: a bound store then refuses mutations with
+        `Superseded` instead of writing unfenced as a standby. Re-binding after a takeover
+        is idempotent and keeps the same lease object, so the live generation is read anew.
+        """
+        for name in ("memory", "turns", "skills", "affect", "approvals", "recipes"):
+            bind = getattr(getattr(agent, name, None), "bind_lease", None)
+            if callable(bind):
+                bind(self)
+
     def holder(self) -> LeaseInfo | None:
         try:
             found = self.db.fetch_one(_HOLDER)
@@ -435,9 +447,11 @@ class FencedStore:
     @property
     def fence(self) -> Fence | None:
         lease = self._lease
+        if lease is None:
+            return None
         generation = int(getattr(lease, "generation", 0) or 0)
         if generation <= 0:
-            return None
+            raise Superseded("lease not held (generation 0)")
         return Fence(str(getattr(lease, "instance_id", "") or ""), generation)
 
     def fence_clause(self):
@@ -454,15 +468,12 @@ def bind_stores(agent) -> None:
     """Wire every store of one agent to its lease: one primary, one generation (ADR-0012).
 
     Called once the supervisor has attached the lease; a standby's generation is 0 until it
-    wins, so binding early is safe and no store needs a second constructor.
+    wins, so binding early is safe: a bound generation-0 store refuses mutations instead of
+    writing unfenced, and the same lease object exposes the new generation after takeover.
     """
     lease = getattr(agent, "lease", None)
-    if int(getattr(lease, "generation", 0) or 0) <= 0:
-        return
-    for name in ("memory", "turns", "skills", "affect", "approvals"):
-        bind = getattr(getattr(agent, name, None), "bind_lease", None)
-        if callable(bind):
-            bind(lease)
+    if lease is not None:
+        lease.bind_stores(agent)
 
 
 def lock_data_dir(path) -> object | None:

@@ -63,9 +63,14 @@ class TurnStore(FencedStore):
         match nothing. A database with no lease row at all is not fenced.
         """
         bound = self.guard_clause()
-        return bound if bound is not None else row_clause(
-            "turns.generation", unclaimed=unclaimed
-        )
+        if bound is not None:
+            return bound
+        if self._lease is None:
+            # Unbound stores (console, admin helpers, tests) hold no generation of their own;
+            # comparing the row against the live claim would refuse every console turn while
+            # `monoagens run` holds the lease. An unbound store is authoritative.
+            return None
+        return row_clause("turns.generation", unclaimed=unclaimed)
 
     @staticmethod
     def _claim_fence(owner: str, generation: int):
@@ -293,6 +298,9 @@ class TurnStore(FencedStore):
                     updated_at=now,
                 )
             )
+            # A running step lost its worker; clear it even when the turn row itself was
+            # already terminal, so a cancelled tool call is never replayed.
+            self._interrupt_running_steps(conn, str(turn_id), now)
 
     def defer(self, turn_id: str, reason: str, *, delay_seconds: float) -> None:
         """A transport failure keeps the turn resumable; the reaper waits out the backoff."""

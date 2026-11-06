@@ -124,16 +124,28 @@ HOST_KEYS: dict[str, tuple[str, ...]] = {
 }
 
 
-def host_defaults() -> dict:
-    """The host block of `config.yaml`, derived from the dataclass tree (ADR-0031 §4.6)."""
+# Only the compose stack provides this network and the proxy sidecar (compose.yaml); a native
+# host has neither, so the sandbox stays unconfigured until the operator builds them.
+COMPOSE_SANDBOX = {"network": "monoagens-sandbox", "proxy": "http://sandbox-proxy:3128"}
+
+
+def host_defaults(*, compose: bool = False) -> dict:
+    """The host block of `config.yaml`, derived from the dataclass tree (ADR-0031 §4.6).
+
+    `compose=True` opts into the network and proxy sidecar only the compose stack ships; the
+    native default keeps `sandbox.network`/`sandbox.proxy` empty so a host without that stack
+    never advertises wiring it does not have.
+    """
+    sandbox = (
+        SandboxConfig(network=COMPOSE_SANDBOX["network"], proxy=COMPOSE_SANDBOX["proxy"])
+        if compose
+        else SandboxConfig()
+    )
     raw = _tree(
         HostConfig(
             database=DatabaseConfig(),
             workspace=Path(".monoagens/workspace"),
-            # Compose ships the sandbox on its own network with the proxy sidecar (compose.yaml).
-            sandbox=SandboxConfig(
-                network="monoagens-sandbox", proxy="http://sandbox-proxy:3128"
-            ),
+            sandbox=sandbox,
             web_search=WebSearchConfig(),
             mcp={},
             roles_file=Path("roles.yaml"),
@@ -966,7 +978,8 @@ def _render_value(pad: str, key: str, value: object, lines: list[str]) -> None:
         lines.extend(f"{pad}  - {_scalar(item)}" for item in value)
         return
     if isinstance(value, str) and "\n" in value:
-        lines.append(f"{pad}{key}: |")
+        chomp = "|" if value.endswith("\n") else "|-"
+        lines.append(f"{pad}{key}: {chomp}")
         for raw in value.rstrip("\n").split("\n"):
             lines.append(f"{pad}  {raw}" if raw else "")
         return
@@ -1222,6 +1235,7 @@ def files(
     websearch_url: str = "",
     tools: tuple[str, ...] | None = None,
     gateways: tuple[str, ...] | None = None,
+    compose: bool = False,
 ) -> dict[str, str]:
     """Every scaffold file: relative path -> content.
 
@@ -1233,6 +1247,8 @@ def files(
         raise ValueError(f"unknown provider '{provider}'; available: {known}")
     defaults = PROVIDERS[provider]
     config = copy.deepcopy(CONFIG)
+    if compose:
+        config["sandbox"].update(COMPOSE_SANDBOX)
     llm = config["engine"]["llm"]
     llm["provider"] = provider
     llm["base_url"] = defaults.base_url

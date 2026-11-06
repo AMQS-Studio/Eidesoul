@@ -192,10 +192,12 @@ class CognitionWorker(CognitionCapture, CognitionSchedule, CognitionLadder, Cogn
             await self._stop_heartbeat(beat)
             observability.leave(tokens)
         for job in jobs:
-            await io.run(
+            done = await io.run(
                 self.queue.complete, job.id, results.get(job.id, ""), generation=job.generation
             )
-        self.counters["jobs_done"] += len(jobs)
+            # A refused completion means the generation moved; the job is not done here.
+            if done:
+                self.counters["jobs_done"] += 1
 
     async def _heartbeat(self: CognitionWorker, jobs: list[Job]) -> None:
         """Renew the lease and the claim leases while one model call outlasts them."""
@@ -238,6 +240,8 @@ class CognitionWorker(CognitionCapture, CognitionSchedule, CognitionLadder, Cogn
 
     async def _drain_jobs(self: CognitionWorker, jobs: list[Job]) -> dict[str, str]:
         results: dict[str, str] = {}
+        skipped: set[str] = set()
+        failed = 0
         grouped: dict[str, list[Job]] = {}
         for job in jobs:
             label = job.kind if job.kind in {"capture", "consolidate"} else job.id
@@ -249,12 +253,40 @@ class CognitionWorker(CognitionCapture, CognitionSchedule, CognitionLadder, Cogn
                 results.update(await self._consolidate(group))
             else:
                 for job in group:
-                    results[job.id] = await self._handle(job)
+                    # One bad job must not abort the rest of the batch.
+                    try:
+                        results[job.id] = await self._handle(job)
+                    except Superseded:
+                        log.warning(
+                            "cognition job %s superseded: generation moved", job.id
+                        )
+                        skipped.add(job.id)
+                    except asyncio.CancelledError:
+                        raise
+                    except Exception as exc:
+                        log.warning(
+                            "cognition job %s failed: %s: %s",
+                            job.id,
+                            type(exc).__name__,
+                            exc,
+                        )
+                        await io.run(
+                            self.queue.fail,
+                            job.id,
+                            f"{type(exc).__name__}: {exc}",
+                            generation=job.generation,
+                        )
+                        skipped.add(job.id)
+                        failed += 1
         for job in jobs:
-            await io.run(
+            if job.id in skipped:
+                continue
+            done = await io.run(
                 self.queue.complete, job.id, results.get(job.id, ""), generation=job.generation
             )
-        self.counters["jobs_done"] += len(jobs)
+            if done:
+                self.counters["jobs_done"] += 1
+        self.counters["jobs_failed"] += failed
         return results
 
     async def _handle(self: CognitionWorker, job: Job) -> str:

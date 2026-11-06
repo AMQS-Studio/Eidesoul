@@ -911,6 +911,9 @@ guard_install_dir() {
 
 prepare_dir() {
     guard_install_dir
+    if [[ -e "$dir" && ! -d "$dir" ]]; then
+        die "--dir $dir exists and is not a directory"
+    fi
     if [[ ! -e "$dir" ]] || [[ -z "$(ls -A -- "$dir" 2>/dev/null)" ]]; then
         dir_fresh=1
     fi
@@ -2043,6 +2046,10 @@ EOF
 }
 
 finish() {
+    if (( dry_run )); then
+        detail "dry-run: skipped the next-step prompt and service start"
+        return 0
+    fi
     stage "what next"
     if panel_available; then
         detail "panel: available in $dir/panel (web.enabled is true)"

@@ -17,16 +17,34 @@ def resolve_database_url(database: DatabaseConfig) -> str:
         return str(os.environ[env_name]).strip()
     return str(database.url or "").strip()
 
-def load_env(path: str | Path = ".env") -> None:
-    """Read simple KEY=VALUE lines from a file in the working directory. Missing is fine."""
-    file = Path(str(path)).expanduser()
-    if file.is_absolute() or file.name != str(path):
-        raise ConfigError(f"env file must be a bare file name in the working directory: {path}")
-    file = (Path.cwd() / file.name).resolve()
+def load_env(path: str | Path = ".env", *, root: Path | None = None) -> None:
+    """Read simple KEY=VALUE lines from an env file. Missing is fine.
+
+    A bare name or relative path resolves under the working directory. Absolute paths (and
+    paths that leave the working directory) are accepted only when the resolved file stays
+    inside the working directory, or inside `root` when the caller names the deployment
+    directory. Anything else is a refusal, not a silent read of an unrelated file.
+    """
+    cwd = Path.cwd().resolve()
+    raw = Path(str(path)).expanduser()
+    if root is None:
+        # The bare default: only a file name in the working directory, never a traversal.
+        if raw.is_absolute() or raw.name != str(path):
+            raise ConfigError(
+                f"env file must be a bare file name in the working directory: {path}"
+            )
+        file = (cwd / raw.name).resolve()
+    else:
+        boundary = Path(root).expanduser().resolve()
+        file = raw.resolve() if raw.is_absolute() else (cwd / raw).resolve()
+        if not (file.is_relative_to(cwd) or file.is_relative_to(boundary)):
+            raise ConfigError(
+                f"env file must stay inside the working directory: {path}"
+            )
     if not file.is_file():
         return
-    for raw in file.read_text(encoding="utf-8").splitlines():
-        line = raw.strip()
+    for line_raw in file.read_text(encoding="utf-8").splitlines():
+        line = line_raw.strip()
         if not line or line.startswith("#") or "=" not in line:
             continue
         key, _, value = line.partition("=")

@@ -77,8 +77,9 @@ Index("ix_automations_due", automations.c.state, automations.c.next_occurrence)
 # ADR-0014 §4.3: the message sink looks up active message automations only.
 Index(
     "ix_automations_message",
-    text("(event->>'kind')"),
-    postgresql_where=text("state = 'active'"),
+    automations.c.event["kind"].astext,
+    _table=automations,
+    postgresql_where=automations.c.state == "active",
 )
 Index("ix_automations_owner", automations.c.owner, automations.c.state)
 

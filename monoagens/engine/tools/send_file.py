@@ -144,12 +144,13 @@ async def _forward(
     return f"ok: file sent to {label}: {path.name}"
 
 
-async def _send_file(args: dict, ctx: ToolContext) -> str:
-    if ctx.agent is None or ctx.gateway is None:
-        return "error: sending is not available"
-    raw = str(args.get("path") or "").strip()
-    if not raw:
-        return "error: empty path"
+def _path_items(raw: object) -> list[str]:
+    """`path` is one string or a list of paths/handles; blank entries are dropped."""
+    items = raw if isinstance(raw, (list, tuple)) else [raw]
+    return [str(item).strip() for item in items if str(item).strip()]
+
+
+async def _send_one(args: dict, ctx: ToolContext, raw: str) -> str:
     path, refusal = _source(ctx, raw)
     if path is None:
         return refusal
@@ -167,6 +168,15 @@ async def _send_file(args: dict, ctx: ToolContext) -> str:
     if body is ctx.gateway and address.thread == ctx.thread_id:
         return await _local(ctx, path, caption, reason)
     return await _forward(ctx, address, _label(body, address), path, caption, reason)
+
+
+async def _send_file(args: dict, ctx: ToolContext) -> str:
+    if ctx.agent is None or ctx.gateway is None:
+        return "error: sending is not available"
+    items = _path_items(args.get("path"))
+    if not items:
+        return "error: empty path"
+    return "\n".join([await _send_one(args, ctx, raw) for raw in items])
 
 
 TOOL = Handler(

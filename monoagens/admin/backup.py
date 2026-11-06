@@ -9,7 +9,6 @@ archive is a plain file name: a crafted member can never escape the config direc
 import io
 import json
 import os
-import subprocess
 import tarfile
 import tempfile
 import time
@@ -18,6 +17,7 @@ from pathlib import Path
 from sqlalchemy.engine import make_url
 
 from ..engine.config import ConfigError, Paths, load_host, resolve_database_url
+from .database import dump_database, restore_database
 
 HOST_FILES = ("config.yaml", "roles.yaml", "soul.yaml", ".env")
 REQUIRED_FILES = ("config.yaml", "roles.yaml", "soul.yaml")
@@ -34,25 +34,13 @@ def pg_dsn(url: str) -> str:
 
 
 def pg_dump(dsn: str, target: Path) -> None:
-    subprocess.run(
-        ["pg_dump", "--format=custom", "--file", str(target), dsn],
-        check=True,
-    )
+    """Host `pg_dump`, or the managed postgres container when the client is not installed."""
+    dump_database(dsn, target)
 
 
 def pg_restore(dsn: str, source: Path) -> None:
-    subprocess.run(
-        [
-            "pg_restore",
-            "--clean",
-            "--if-exists",
-            "--no-owner",
-            "--dbname",
-            dsn,
-            str(source),
-        ],
-        check=True,
-    )
+    """Host `pg_restore`, or the managed postgres container when the client is not installed."""
+    restore_database(dsn, source)
 
 
 def default_path(paths: Paths) -> Path:

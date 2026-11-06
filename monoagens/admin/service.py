@@ -69,8 +69,8 @@ class Service:
 
 
 def state_dir(paths: Paths) -> Path:
-    """The host state directory: the workspace's parent (`.monoagens` by default)."""
-    return paths.workspace.parent
+    """The host state directory, always beside the config that names this deployment."""
+    return Path(paths.config).parent / ".monoagens"
 
 
 def compose_file(root: Path) -> Path | None:
@@ -146,15 +146,30 @@ def _alive(pid: int) -> bool:
 
 
 def read_pid(service: Service) -> int | None:
+    """The live primary: the PID file first, the reload IPC when it is missing or stale."""
+    pid = 0
     try:
         text = service.pid_file().read_text(encoding="utf-8").strip()
     except OSError:
-        return None
+        text = ""
+    if text:
+        with contextlib.suppress(ValueError):
+            pid = int(text)
+    if pid and _alive(pid):
+        return pid
+    ready = ipc_ready(service) or {}
     try:
-        pid = int(text)
-    except ValueError:
+        candidate = int(ready.get("pid") or 0)
+    except (TypeError, ValueError):
         return None
-    return pid if _alive(pid) else None
+    if candidate and candidate != pid and _alive(candidate) and _engine_process(candidate):
+        return candidate
+    return None
+
+
+def write_pid(path: Path, pid: int) -> None:
+    """Write a PID file whose removal belongs to the process that still holds `pid`."""
+    _write_pid(path, pid)
 
 
 def _write_pid(path: Path, pid: int) -> None:

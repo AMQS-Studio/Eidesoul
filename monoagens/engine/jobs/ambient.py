@@ -16,6 +16,7 @@ from ..config import Config
 from ..tools import ToolContext, execute
 from ..tools.web_search import TOOL as WEB_SEARCH
 from ..turn.context import keyword_set
+from .lease import Superseded
 
 log = logging.getLogger(__name__)
 
@@ -135,9 +136,19 @@ class Ambient:
                 self._spawn(self._digest(thread_id))
                 log.info("ambient digest started chat=%s pending=%d", thread_id, pending)
         for thread_id in threads:
-            if await self._research_candidate(thread_id, moment):
+            if not await self._research_candidate(thread_id, moment):
+                continue
+            try:
                 await self._research(thread_id)
+            except Superseded:
+                # The lease moved on; every further write would be refused too, so stop this
+                # tick cleanly and let the new primary do the research.
+                log.info("ambient research stopped: generation moved chat=%s", thread_id)
                 break
+            except Exception:  # one chat's failure must not stop the others
+                log.exception("ambient research failed chat=%s", thread_id)
+                continue
+            break
 
     async def _research_candidate(self, thread_id: str, moment: float) -> bool:
         if self.affect is None:

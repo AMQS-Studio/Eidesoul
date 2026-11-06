@@ -287,11 +287,21 @@ def test_restore_refuses_a_member_outside_the_archive_root(tmp_path):
 # ------------------------------------------------------------------- doctor
 
 
-def test_doctor_reports_and_fixes_a_missing_policy_block(tmp_path, capsys):
+def test_doctor_reports_and_fixes_a_missing_policy_block(tmp_path, capsys, monkeypatch):
+    # II.10 makes doctor name an empty model, a missing key, and no administrator user, so
+    # this deployment has to be bootable before the policy check can be the only failure.
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
     cfg = deployment(tmp_path)
     cfg.write_text(
-        cfg.read_text(encoding="utf-8").replace(
-            "gateways: {}", "gateways:\n  whatsapp:\n    enabled: true"
+        cfg.read_text(encoding="utf-8")
+        .replace("    model: ''", "    model: 'test-model'", 1)
+        .replace("gateways: {}", "gateways:\n  whatsapp:\n    enabled: true"),
+        encoding="utf-8",
+    )
+    roles_path = tmp_path / "roles.yaml"
+    roles_path.write_text(
+        roles_path.read_text(encoding="utf-8").replace(
+            "    users: []", "    users: [per_aaaaaaaaaa]", 1
         ),
         encoding="utf-8",
     )
@@ -375,7 +385,8 @@ def test_container_and_packaging_carry_migrations_and_extras():
 
 def test_config_without_a_subcommand_prints_help(tmp_path, capsys):
     cfg = deployment(tmp_path)
-    assert cli.main(["--config", str(cfg), "--env", "absent.env", "config"]) == 2
+    # I.5: a bare group prints its own help and exits 0, not 2.
+    assert cli.main(["--config", str(cfg), "--env", "absent.env", "config"]) == 0
     assert "usage: monoagens config" in capsys.readouterr().out
 
 

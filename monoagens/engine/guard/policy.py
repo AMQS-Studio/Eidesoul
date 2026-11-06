@@ -67,6 +67,7 @@ SHELL_WRAPPERS = frozenset(
         "command",
         "builtin",
         "exec",
+        "eval",
         "stdbuf",
         "xargs",
     }
@@ -208,6 +209,21 @@ def _tokens(text: str) -> list[str]:
     return list(lex)
 
 
+def _pipe_interpreter(tokens: list[str]) -> bool:
+    """`echo 'git push' | sh` executes the piped stream in an interpreter, bypassing the
+    per-segment judge because the command arrives on stdin rather than as arguments."""
+    after_pipe = False
+    for token in tokens:
+        if token in SHELL_OPERATORS:
+            after_pipe = token == "|"
+            continue
+        if after_pipe:
+            if os.path.basename(token) in SHELL_INTERPRETERS:
+                return True
+            after_pipe = False
+    return False
+
+
 def _segments(tokens: list[str]) -> list[list[str]]:
     found: list[list[str]] = []
     current: list[str] = []
@@ -243,8 +259,11 @@ def _wrapper_options(
     return False
 
 
-def _sensitive_segment(tokens: list[str], patterns: tuple[str, ...], depth: int) -> bool:
-    tokens = list(tokens)
+def _peel_wrappers(
+    tokens: list[str], patterns: tuple[str, ...], depth: int
+) -> bool:
+    """Strip leading assignments and wrapper heads in place; True when a wrapper operand is
+    itself sensitive (`env -S "rm -rf /"`, `eval "git push"`)."""
     while True:
         while tokens and _ASSIGNMENT.fullmatch(tokens[0]):
             tokens.pop(0)
@@ -252,8 +271,11 @@ def _sensitive_segment(tokens: list[str], patterns: tuple[str, ...], depth: int)
             return False
         head = os.path.basename(tokens[0])
         if head not in SHELL_WRAPPERS:
-            break
+            return False
         tokens.pop(0)
+        if head == "eval":
+            # `eval "git push origin main"` joins its operands into a command string.
+            return _scan(" ".join(tokens), patterns, depth + 1)
         if _wrapper_options(head, tokens, patterns, depth):
             return True
         # `timeout 5 cmd`, `flock /tmp/lock cmd`, `doas user cmd`: skip the positional operand,
@@ -263,6 +285,14 @@ def _sensitive_segment(tokens: list[str], patterns: tuple[str, ...], depth: int)
             del tokens[:positional]
             if _wrapper_options(head, tokens, patterns, depth):
                 return True
+
+
+def _sensitive_segment(tokens: list[str], patterns: tuple[str, ...], depth: int) -> bool:
+    tokens = list(tokens)
+    if _peel_wrappers(tokens, patterns, depth):
+        return True
+    if not tokens:
+        return False
     head = os.path.basename(tokens[0])
     if head in SHELL_INTERPRETERS:
         for index, token in enumerate(tokens[1:], 1):
@@ -307,6 +337,8 @@ def _scan(text: str, patterns: tuple[str, ...], depth: int = 0) -> bool:
         for segment in _segments(tokens):
             if _sensitive_segment(segment, patterns, depth):
                 return True
+        if _pipe_interpreter(tokens):
+            return True
     return False
 
 

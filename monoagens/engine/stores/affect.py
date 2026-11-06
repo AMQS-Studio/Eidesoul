@@ -425,12 +425,25 @@ class AffectStore(FencedStore):
         conn.execute(self._update(
             people.update().where(people.c.person_id == person_id).values(**values)))
 
-    def _match_person(self, name):
+    def _match_person(self, name, *, thread_id: str | None = None):
         target = " ".join(str(name or "").split()).casefold()
         if not target:
             return None
-        rows = self.db.fetch_all(select(people.c.person_id, people.c.name, people.c.aliases)
-                                 .order_by(people.c.last_seen.desc()).limit(500))
+        if thread_id is None:
+            rows = self.db.fetch_all(
+                select(people.c.person_id, people.c.name, people.c.aliases)
+                .order_by(people.c.last_seen.desc()).limit(500)
+            )
+        else:
+            # Chat-scoped resolution: only people who actually take part in this thread may
+            # answer a name here, so a stranger from another chat never leaks in.
+            rows = self.db.fetch_all(
+                select(people.c.person_id, people.c.name, people.c.aliases)
+                .select_from(thread_people.join(
+                    people, people.c.person_id == thread_people.c.person_id))
+                .where(thread_people.c.thread_id == str(thread_id))
+                .order_by(thread_people.c.last_seen.desc()).limit(500)
+            )
         exact = [row for row in rows if str(row["name"]).casefold() == target]
         alias = [row for row in rows
                  if target in [str(item).casefold() for item in _as_list(row["aliases"])]]
@@ -439,7 +452,10 @@ class AffectStore(FencedStore):
         return str(found[0]["person_id"]) if found else None
 
     def person_by_name(self, thread_id: str, name: str) -> str | None:
-        return self._match_person(name)
+        chat = str(thread_id or "").strip()
+        if not chat:
+            return None
+        return self._match_person(name, thread_id=chat)
 
     def known_people(self, thread_id: str, limit: int = 8) -> list[dict]:
         """People who actually take part in this thread, newest first; others never leak in."""

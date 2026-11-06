@@ -194,7 +194,20 @@ class HistoryStore:
         )
         return len(rows)
 
+    @staticmethod
+    def _unique(items: list, key) -> list:
+        """Keep first-seen order but the last value per key (history sync repeats rows)."""
+        found: dict = {}
+        for item in items:
+            found[key(item)] = item
+        return list(found.values())
+
     def add_many(self, items: list[tuple[str, Message]]) -> int:
+        # WhatsApp HistorySync repeats (thread_id, message id) inside one batch; a repeated
+        # primary key makes PostgreSQL raise CardinalityViolation on the multi-row upsert.
+        items = self._unique(
+            items, lambda item: (str(item[0]), str(item[1].id or ""))
+        )
         rows = [self._row(thread_id, message) for thread_id, message in items]
         if not rows:
             return 0
@@ -206,6 +219,10 @@ class HistoryStore:
 
     def _upsert_media(self, conn, items: list[tuple[str, Message]]) -> None:
         rows = [row for thread_id, message in items for row in self._media_rows(thread_id, message)]
+        rows = self._unique(
+            rows,
+            lambda row: (str(row["thread_id"]), str(row["message_id"]), int(row["seq"])),
+        )
         if not rows:
             return
         statement = pg_insert(message_media).values(rows)

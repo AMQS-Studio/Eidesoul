@@ -15,6 +15,7 @@ import yaml
 from sqlalchemy import delete, select
 
 from ..db import Database
+from ..jobs.lease import FencedStore, Superseded, fenced_insert
 from ..schema import recipes as recipes_table
 from .skills import MAX_CONTENT, MAX_DESCRIPTION, NAME
 
@@ -125,7 +126,7 @@ def _parse(name: str, data: Any) -> Recipe | None:
     )
 
 
-class RecipeStore:
+class RecipeStore(FencedStore):
     def __init__(self, db: Database):
         self.db = db
 
@@ -226,26 +227,48 @@ class RecipeStore:
             payload["prompt"] = text
         body = yaml.safe_dump(payload, sort_keys=False, allow_unicode=True)
         now = time.time()
+        fence = self.fence_clause()
+        row = {"name": slug, "body": body, "updated_at": now}
         with self.db.connect() as conn:
             existing = conn.execute(
                 select(recipes_table.c.name).where(recipes_table.c.name == slug)
             ).first()
             if existing is not None and not overwrite:
                 raise FileExistsError(f"recipe already exists: {slug} (use overwrite=true)")
-            self.db.upsert(
-                conn,
-                recipes_table,
-                [{"name": slug, "body": body, "updated_at": now}],
-                ["name"],
-                {"body": body, "updated_at": now},
-            )
+            statement = fenced_insert(recipes_table, row, fence)
+            if overwrite or existing is not None:
+                statement = statement.on_conflict_do_update(
+                    index_elements=["name"],
+                    set_={"body": body, "updated_at": now},
+                )
+            else:
+                statement = statement.on_conflict_do_nothing(index_elements=["name"])
+            created = conn.execute(statement.returning(recipes_table.c.name)).first()
+            if created is None:
+                if fence is not None:
+                    raise Superseded("lease generation moved on: recipe write refused")
+                raise FileExistsError(f"recipe already exists: {slug} (use overwrite=true)")
         return slug
+
+    def _row_exists(self, slug: str) -> bool:
+        return (
+            self.db.fetch_one(
+                select(recipes_table.c.name).where(recipes_table.c.name == slug)
+            )
+            is not None
+        )
 
     def remove(self, name: str) -> None:
         slug = str(name or "").strip().lower()
+        fence = self.fence_clause()
         with self.db.connect() as conn:
-            result = conn.execute(delete(recipes_table).where(recipes_table.c.name == slug))
+            statement = delete(recipes_table).where(recipes_table.c.name == slug)
+            if fence is not None:
+                statement = statement.where(fence)
+            result = conn.execute(statement)
         if not int(result.rowcount or 0):
+            if fence is not None and self._row_exists(slug):
+                raise Superseded("lease generation moved on: recipe removal refused")
             raise KeyError(f"recipe not found: {slug}")
 
 
@@ -268,6 +291,13 @@ async def run_recipe(
     """Run kind=recipe: every step goes through `execute` (permissions = executor role)."""
     from ..tools import REGISTRY as TOOLS
     from ..tools import execute
+
+    if recipe.kind == "prompt":
+        # A prompt recipe owns a full turn (system prompt, tools, history) that only the
+        # command surface can assemble; never silently return an empty result here.
+        if getattr(getattr(ctx, "agent", None), "llm", None) is None:
+            raise ValueError("prompt recipes need an LLM runner")
+        raise ValueError("prompt recipes must run through the command surface, not run_recipe")
 
     table = specs if specs is not None else TOOLS.by_name
     cleaned = str(args or "").strip()

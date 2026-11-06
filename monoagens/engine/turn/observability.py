@@ -39,6 +39,14 @@ _KEY_LINE = re.compile(
 )
 _BEARER = re.compile(r"\bBearer\s+[A-Za-z0-9._~+/=-]{8,}", re.IGNORECASE)
 _HANDLER_MARK = "monoagens_structured"
+NOISY_LOGGERS = (
+    "httpx",
+    "httpcore",
+    "huggingface_hub",
+    "sentence_transformers",
+    "urllib3",
+    "filelock",
+)
 
 
 def redact(text: object) -> str:
@@ -200,6 +208,13 @@ def install(fmt: str = "text", level: str = "INFO") -> logging.Handler:
     root.addHandler(handler)
     root.setLevel(level_number(level))
     return handler
+
+
+def silence_third_party(*, debug: bool = False) -> None:
+    """Keep transport and model-loading chatter off the console unless the operator asks."""
+    level = logging.DEBUG if debug else logging.ERROR
+    for name in NOISY_LOGGERS:
+        logging.getLogger(name).setLevel(level)
 
 
 def configure(log_settings) -> logging.Handler:

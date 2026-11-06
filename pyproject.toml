@@ -55,7 +55,7 @@ build-backend = "setuptools.build_meta"
 include = ["monoagens*"]
 
 [tool.setuptools.package-data]
-monoagens = ["lang/*.yaml", "library/affect/*.json", "library/privacy/*.json", "library/safety/*.json", "library/style/*.json", "library/lexicon/*.json", "library/intent/*.json"]
+monoagens = ["lang/*.yaml", "library/affect/*.json", "library/guard/*.json", "library/privacy/*.json", "library/safety/*.json", "library/style/*.json", "library/lexicon/*.json", "library/intent/*.json"]
 
 # The Alembic chain ships as data: a wheel install can run `monoagens db upgrade` without a
 # checkout. `engine.db` locates the chain beside the installed package.

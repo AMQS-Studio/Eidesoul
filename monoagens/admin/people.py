@@ -100,8 +100,129 @@ def link(db: Database, person_id: str, gateway: str, address: str) -> str:
     return identity.link(person, gateway, address, actor="admin")
 
 
-def unlink(db: Database, person_id: str, gateway: str) -> bool:
-    return IdentityStore(db).unlink(person_id, gateway)
+def unlink(db: Database, person_id: str, gateway: str, address: str = "") -> bool:
+    return IdentityStore(db).unlink(person_id, gateway, address)
+
+
+def _resolve_person(db: Database, target: str) -> str:
+    text = str(target or "").strip()
+    if not text:
+        return ""
+    if is_person_id(text):
+        return text
+    for query in (
+        select(people.c.person_id).where(people.c.person_id == text),
+        select(person_links.c.person_id).where(person_links.c.address == text),
+        select(people.c.person_id).where(people.c.name == text),
+    ):
+        row = db.fetch_one(query)
+        if row is not None:
+            return str(row[0])
+    return ""
+
+
+def _write_role(
+    db: Database, paths, role_name: str, body: dict, users: list[str], actor: str
+) -> None:
+    new_body = dict(body)
+    new_body["users"] = users
+    _update_users(paths, {f"roles.{role_name}.users": users})
+    DocumentStore(db, paths, sync=True).put(
+        f"{ROLE_PREFIX}{role_name}", yaml.safe_dump(new_body, sort_keys=False), actor=actor
+    )
+
+
+def remove(
+    db: Database,
+    paths,
+    target: str,
+    *,
+    role: str | None = None,
+    purge: bool = False,
+) -> list[str]:
+    """Remove a person from one role or all roles; never empty the administrator role."""
+    roles = _read_roles(paths)
+    person = _resolve_person(db, target)
+    if not person:
+        raise ValueError(f"unknown person or address: {target}")
+    role_name = str(role or "").strip().lower()
+    if role_name and not isinstance(roles.get(role_name), dict):
+        raise ValueError(f"role '{role_name}' does not exist")
+    if role_name:
+        affected = [role_name]
+    else:
+        affected = [
+            str(name)
+            for name, body in roles.items()
+            if isinstance(body, dict)
+            and person in [str(item) for item in body.get("users") or []]
+        ]
+    if not affected and not purge:
+        raise ValueError(f"{person} is not a member of any role")
+    if PROTECTED in affected:
+        remaining = [item for item in _administrator_users(roles) if item != person]
+        if not remaining:
+            raise ValueError("refusing to remove the last administrator user")
+    for name in affected:
+        body = roles[name]
+        users = [str(item) for item in body.get("users") or [] if str(item) != person]
+        _write_role(db, paths, name, body, users, "people remove")
+    if purge:
+        with db.connect() as conn:
+            conn.execute(person_links.delete().where(person_links.c.person_id == person))
+            conn.execute(people.delete().where(people.c.person_id == person))
+    ActionLedger(db).log_action(
+        "person", person, "config", f"people remove {target} purge={purge}"
+    )
+    _notify(paths, "people remove")
+    return affected
+
+
+def grant(db: Database, paths, person_id: str, role: str) -> str:
+    """Append one existing identity to a role; the first-user rule still applies."""
+    person = str(person_id or "").strip()
+    role_name = str(role or "").strip().lower()
+    roles = _read_roles(paths)
+    body = roles.get(role_name)
+    if not isinstance(body, dict):
+        raise ValueError(f"role '{role_name}' does not exist")
+    if not person:
+        raise ValueError("person_id is required")
+    row = db.fetch_one(select(people.c.person_id).where(people.c.person_id == person))
+    if row is None:
+        raise ValueError(f"unknown person: {person}")
+    if not _administrator_users(roles) and role_name != PROTECTED:
+        raise ValueError(
+            f"the first user must be '{PROTECTED}'; add one before seeding role '{role_name}'"
+        )
+    users = [str(item) for item in body.get("users") or []]
+    if person not in users:
+        users.append(person)
+        _write_role(db, paths, role_name, body, users, "people grant")
+    ActionLedger(db).log_action("person", person, "config", f"people grant {role_name}")
+    _notify(paths, f"people grant {role_name}")
+    return person
+
+
+def revoke(db: Database, paths, person_id: str, role: str) -> str:
+    """Remove one identity from a role; the last administrator cannot be revoked."""
+    person = str(person_id or "").strip()
+    role_name = str(role or "").strip().lower()
+    roles = _read_roles(paths)
+    body = roles.get(role_name)
+    if not isinstance(body, dict):
+        raise ValueError(f"role '{role_name}' does not exist")
+    if role_name == PROTECTED:
+        remaining = [item for item in _administrator_users(roles) if item != person]
+        if person in _administrator_users(roles) and not remaining:
+            raise ValueError("refusing to remove the last administrator user")
+    users = [str(item) for item in body.get("users") or []]
+    if person in users:
+        users = [item for item in users if item != person]
+        _write_role(db, paths, role_name, body, users, "people revoke")
+    ActionLedger(db).log_action("person", person, "config", f"people revoke {role_name}")
+    _notify(paths, f"people revoke {role_name}")
+    return person
 
 
 def _administrator_users(roles: dict) -> list[str]:
