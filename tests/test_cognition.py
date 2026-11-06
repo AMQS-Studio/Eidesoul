@@ -12,6 +12,7 @@ from support import FakeLLM, build_config, database
 
 from monoagens.admin import templates
 from monoagens.engine.jobs.cognition import CognitionQueue, CognitionWorker
+from monoagens.engine.jobs.cognition_distill import CognitionDistill
 from monoagens.engine.jobs.lease import Lease
 from monoagens.engine.memory import gate
 from monoagens.engine.memory.store import MemoryStore
@@ -52,6 +53,18 @@ def test_structural_gate_never_needs_a_model(tmp_path) -> None:
     )
     assert verdict.admit is True
     assert gate.structural("aku suka kopi", language="id").admit is True
+
+
+def test_distill_flags_only_code_shaped_unknown_tools() -> None:
+    """A procedure may only name a tool that exists, but prose parentheses are not calls."""
+
+    distill = object.__new__(CognitionDistill)
+    distill.known_tools = ("grep",)
+
+    assert distill._tools_allowed("pakai grep(pattern) dulu") is True
+    assert distill._tools_allowed("pakai made_up(pattern) dulu") is False
+    assert distill._tools_allowed("the thing (maybe) is fine") is True
+    assert distill._tools_allowed("run `made_up`") is True
 
 
 def test_intake_gate_writes_no_journal_and_no_job(tmp_path) -> None:

@@ -11,6 +11,7 @@ from monoagens.engine.turn.decision import (
     Decision,
     build_context,
     decide,
+    decision_from_row,
     ensure_reply,
     ground_tone,
     parse_decision,
@@ -63,6 +64,57 @@ def test_parse_decision_invalid() -> None:
     assert parse_decision('{"addressed":"me","act":"silence","mode":"daily","tone":"warm"}') is None
     assert parse_decision('{"addressed":"me","act":"reply","mode":"kerja","tone":"warm"}') is None
     assert parse_decision('{"addressed":"dia","act":"reply","mode":"daily","tone":"warm"}') is None
+
+
+def test_parse_decision_keeps_the_optional_routing_fields() -> None:
+    parsed = parse_decision(
+        '{"addressed":"me","act":"reply","mode":"daily","tone":"warm","bubbles":1,'
+        '"needs_search":true,"approval_intent":"confirm","reason":"cek"}'
+    )
+
+    assert parsed is not None
+    assert parsed.needs_search is True
+    assert parsed.approval_intent == "confirm"
+
+
+def test_parse_decision_defaults_and_coerces_the_optional_routing_fields() -> None:
+    parsed = parse_decision(VALID)
+    assert parsed is not None
+    assert parsed.needs_search is None
+    assert parsed.approval_intent == ""
+
+    coerced = parse_decision(
+        '{"addressed":"me","act":"reply","mode":"daily","tone":"warm","bubbles":1,'
+        '"needs_search":"false","approval_intent":"maybe","reason":"x"}'
+    )
+    assert coerced is not None
+    assert coerced.needs_search is False
+    assert coerced.approval_intent == ""
+
+
+def test_decision_from_row_and_ensure_reply_keep_the_routing_fields() -> None:
+    row = {
+        "decision_json": {
+            "addressed": "other",
+            "act": "ignore",
+            "mode": "daily",
+            "tone": "neutral",
+            "bubbles": 1,
+            "needs_search": True,
+            "approval_intent": "modify",
+            "reason": "menunggu",
+        }
+    }
+
+    parsed = decision_from_row(row)
+    assert parsed is not None
+    assert parsed.needs_search is True
+    assert parsed.approval_intent == "modify"
+
+    forced = ensure_reply(parsed)
+    assert forced.act == "reply"
+    assert forced.needs_search is True
+    assert forced.approval_intent == "modify"
 
 
 def test_parse_decision_clamps_and_truncates() -> None:

@@ -91,6 +91,7 @@ class LLMConfig:
     model: str = ""  # chosen by the operator at init; never filled from a provider default
     api_key_env: str = ""
     reasoning_effort: str = ""  # "" = the provider's own default
+    service_tier: str = ""  # "" = the provider's own default
     session_header: str = ""
     api_key_optional: bool = False
     models_url: str = ""  # "" = {base_url}/models

@@ -138,7 +138,7 @@ class OutboundLedger:
         thread_id: str,
         generation: int = 0,
     ) -> str:
-        """Write `intent` unless a row exists, then return the stored status (`new` if free)."""
+        """Write `intent` unless a row exists, then return the stored status."""
         with self.db.connect() as conn:
             conn.execute(
                 pg_insert(outbound_messages)
@@ -161,7 +161,7 @@ class OutboundLedger:
                     outbound_messages.c.chunk_index == int(chunk_index),
                 )
             ).scalar()
-        return str(found) if found is not None else "new"
+        return str(found) if found is not None else "intent"
 
     def reference(self, scope_key: str, chunk_index: int = 0) -> str:
         """The provider reference the body returned for that delivery ("" when none)."""

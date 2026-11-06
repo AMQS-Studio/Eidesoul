@@ -6,7 +6,7 @@
 - **Context:** Establishes an international, language-agnostic hybrid architecture for secret detection, privacy classification, turn-level intent/search routing, and semantic memory maintenance, replacing static per-language keyword lists (`monoagens/library/*.json`).
 - **Supersedes:** —
 - **Related:** ADR-0001 (sovereign core), ADR-0002 (unified memory and privacy), ADR-0003 (turn lifecycle), ADR-0006 (access control and guard)
-- **Implementation:** partial — structural token prefixes and multilingual embeddings are active; Shannon entropy secret gate, LLM-integrated privacy level in `assess_batch`, `decide_turn` intent routing, and semantic vector `forget_by_intent` are tracked for completion.
+- **Implementation:** implemented — structural token prefixes, the Shannon-entropy secret gate, LLM-integrated privacy levels in `assess_batch`, `decide_turn` intent routing, and semantic vector `forget_by_intent` are active.
 
 ---
 

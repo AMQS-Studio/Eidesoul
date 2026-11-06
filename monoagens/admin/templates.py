@@ -497,9 +497,9 @@ WEB_SEARCH_API_KEYS: dict[str, str] = {
 WEB_SEARCH_ENGINE_KEYS: dict[str, str] = {"google": "GOOGLE_CSE_ID"}
 
 
-def env_file(provider: str, websearch: str = "") -> str:
+def env_file(provider: str, websearch: str = "", api_key_env: str = "") -> str:
     """`.env` content: the chosen model key plus the search keys, then the shared tail."""
-    key_env = PROVIDERS[provider].api_key_env
+    key_env = str(api_key_env or "").strip() or PROVIDERS[provider].api_key_env
     names = [key_env, WEB_SEARCH_API_KEYS.get(websearch), WEB_SEARCH_ENGINE_KEYS.get(websearch)]
     head: list[str] = []
     for name in names:
@@ -565,6 +565,7 @@ COMMENTS: dict[str, str] = {
     "engine.llm.model": "Model id selected by the operator; no code default.",
     "engine.llm.api_key_env": "Environment variable that holds the provider key.",
     "engine.llm.reasoning_effort": "Reasoning effort; empty uses the provider default.",
+    "engine.llm.service_tier": "Provider service tier; empty uses the provider default.",
     "engine.llm.timeout_seconds": "Per-call model timeout. Default: 120.",
     "engine.llm.utility_temperature": (
         "Temperature for decisions, summaries, and extraction. Default: 0.2."
@@ -1236,6 +1237,8 @@ def files(
     tools: tuple[str, ...] | None = None,
     gateways: tuple[str, ...] | None = None,
     compose: bool = False,
+    base_url: str = "",
+    api_key_env: str = "",
 ) -> dict[str, str]:
     """Every scaffold file: relative path -> content.
 
@@ -1251,8 +1254,8 @@ def files(
         config["sandbox"].update(COMPOSE_SANDBOX)
     llm = config["engine"]["llm"]
     llm["provider"] = provider
-    llm["base_url"] = defaults.base_url
-    llm["api_key_env"] = defaults.api_key_env
+    llm["base_url"] = str(base_url or "").strip() or defaults.base_url
+    llm["api_key_env"] = str(api_key_env or "").strip() or defaults.api_key_env
     llm["model"] = model
     selected = _search_provider(websearch)
     _apply_websearch(config, selected, websearch_url)
@@ -1279,5 +1282,5 @@ def files(
             timezone,
             voice_parts=parts,
         ),
-        ".env": env_file(provider, selected),
+        ".env": env_file(provider, selected, llm["api_key_env"]),
     }

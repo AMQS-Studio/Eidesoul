@@ -22,6 +22,7 @@ import time
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
+from uuid import uuid4
 
 import yaml
 
@@ -850,6 +851,10 @@ async def selftest(config: Config) -> int:
                     f"{config.sandbox.runtime or 'podman/docker'} not found",
                 )
             )
+        elif not str(config.sandbox.proxy or "").strip():
+            results.append(
+                _report("sandbox", "SKIP", "sandbox.proxy is not configured")
+            )
         else:
             box = await execute(
                 specs,
@@ -872,7 +877,8 @@ async def selftest(config: Config) -> int:
         passed = bool(answer.strip()) and answer != t("agent.api_error", config.soul.language)
         results.append(_report("llm", "PASS" if passed else "FAIL", "" if passed else answer[:200]))
 
-        affect.turn_start("selftest", "selftest-1")
+        selftest_msg_id = f"selftest-{uuid4().hex[:8]}"
+        affect.turn_start("selftest", selftest_msg_id)
         affect.turn_end(
             "selftest",
             "p1",
@@ -890,7 +896,7 @@ async def selftest(config: Config) -> int:
                 relationship=RelationshipDelta(trust=-0.1, annoyance=0.15),
                 reason="hinaan",
             ),
-            "selftest-1",
+            selftest_msg_id,
         )
         hurt = affect.status("selftest", "p1")
         calmed = affect.calm("selftest", "p1")
@@ -1129,6 +1135,8 @@ def _init(args: argparse.Namespace) -> int:
                 websearch_url=args.websearch_url or "",
                 tools=tools,
                 voice_parts=voice_parts,
+                base_url=args.base_url or "",
+                api_key_env=args.api_key_env or "",
             )
     except admin_init.InitCancelled as exc:
         print(f"monoagens: {exc}", file=sys.stderr, flush=True)
@@ -1605,6 +1613,16 @@ def _init_parser(sub) -> None:
     init.add_argument("--force", action="store_true", help="replace existing files without asking")
     init.add_argument(
         "--provider", default=None, help="provider name (asked on a terminal; required when piped)"
+    )
+    init.add_argument(
+        "--base-url",
+        default=None,
+        help="override the provider endpoint written to engine.llm.base_url",
+    )
+    init.add_argument(
+        "--api-key-env",
+        default=None,
+        help="override the provider key variable written to engine.llm.api_key_env",
     )
     init.add_argument(
         "--model", default=None, help="model id to write; omitted leaves it for the operator"

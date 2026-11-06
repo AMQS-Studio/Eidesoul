@@ -15,12 +15,15 @@ CONFIRM_MAX_CHARS = 160
 def _cues(
     language: str,
 ) -> tuple[frozenset[str], frozenset[str], frozenset[str], frozenset[str]]:
-    """The pack's confirmation vocabulary, falling back to English when a pack has none."""
+    """The pack's confirmation vocabulary plus the universal English safety net."""
     pack = lexicon.load(language)
-    if pack.confirm:
-        return pack.confirm, pack.reject, pack.modify, pack.filler
     english = lexicon.load("en")
-    return english.confirm, english.reject, english.modify, english.filler
+    return (
+        frozenset(pack.confirm) | frozenset(english.confirm),
+        frozenset(pack.reject) | frozenset(english.reject),
+        frozenset(pack.modify) | frozenset(english.modify),
+        frozenset(pack.filler) | frozenset(english.filler),
+    )
 
 
 def confirmation_intent(text: object, language: str = "") -> str:

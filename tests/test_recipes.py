@@ -10,7 +10,7 @@ from support import build_config, database, inbound_message, make_agent, role
 from monoagens.engine.config import Config
 from monoagens.engine.registry import Handler
 from monoagens.engine.schema import recipes as recipes_table
-from monoagens.engine.stores.recipes import RecipeStore, run_recipe
+from monoagens.engine.stores.recipes import Recipe, RecipeStore, run_recipe
 from monoagens.engine.tools import ToolContext
 
 
@@ -28,6 +28,22 @@ def echo_specs() -> dict:
         return f"got:{args.get('q')}"
 
     return {"echo": Handler(name="echo", description="e", fn=echo)}
+
+
+def test_a_prompt_recipe_renders_its_arguments() -> None:
+    recipe = Recipe(
+        name="ringkas",
+        kind="prompt",
+        description="Ringkas.",
+        usage="",
+        roles=(),
+        steps=(),
+        prompt="Ringkas {{args}}.",
+    )
+
+    assert recipe.rendered("minggu ini") == (
+        "Ringkas minggu ini.\n\nArguments: minggu ini"
+    )
 
 
 def test_store_round_trip_and_persistence(tmp_path: Path) -> None:

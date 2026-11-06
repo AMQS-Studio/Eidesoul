@@ -426,7 +426,7 @@ class SelfKnowledge:
             handler = tools.get(name)
             by_family.setdefault(handler.family if handler else "", []).append(name)
         for family, names in sorted(by_family.items()):
-            label = family or "core"
+            label = f"{family} family" if family else "core family"
             lines.append(
                 f"- locked tools ({label}): {', '.join(names)} — "
                 f"{_role_reason(roles, names[0])}"

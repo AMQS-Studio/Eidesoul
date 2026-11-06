@@ -26,7 +26,7 @@ EXACT = re.compile(
     r"|\d+[.,]\d+\s?%"
     r"|\b\d{4}-\d{2}-\d{2}\b"
     r"|\b\d+\s?(?:kg|km|cm|mm|mb|gb|tb|ml|°c|°f)\b"
-    r"|\b\d+\s?[-:]\s?\d+\b)",
+    r"|\b\d+-\d+\b)",
     re.IGNORECASE,
 )
 

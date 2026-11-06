@@ -128,10 +128,13 @@ class CognitionDistill:
         if not self.known_tools:
             return True
         known = set(self.known_tools)
-        mentioned = set(TOOL.findall(str(body or "")))
+        body = str(body or "")
+        mentioned = set(TOOL.findall(body))
         unknown = {
             word
             for word in mentioned
-            if word not in known and re.search(rf"\b{re.escape(word)}\b\s*\(", body)
+            if word not in known
+            and ("_" in word or f"`{word}`" in body)
+            and re.search(rf"\b{re.escape(word)}\(", body)
         }
         return not unknown

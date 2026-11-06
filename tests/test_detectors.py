@@ -4,6 +4,7 @@ import pytest
 
 from monoagens.engine.guard.patterns import (
     SENSITIVE,
+    entropy_secret,
     is_crisis,
     is_injection,
     is_sensitive,
@@ -56,6 +57,48 @@ def test_token_shapes_are_credentials_and_never_stored() -> None:
         evidence, decision = classify(text, "id")
         assert "credential" in {item.label for item in evidence}, text
         assert decision.action == "drop", text
+
+
+def test_every_vendor_token_shape_is_a_credential() -> None:
+    """ADR-0009 §4.1: the shape list covers the tokens operators actually paste."""
+    for text in (
+        "sk-" + "a" * 24,
+        "ghp_" + "b" * 24,
+        "gho_" + "c" * 24,
+        "github_pat_" + "d" * 24,
+        "AKIA" + "E" * 16,
+        "AIza" + "f" * 35,
+        "xoxb-" + "1" * 12,
+        "eyJ" + "a" * 12 + "." + "b" * 12 + "." + "c" * 12,
+        "postgresql://user:secret@db.internal/app",
+        "-----BEGIN OPENSSH PRIVATE KEY-----",
+    ):
+        assert is_sensitive(text, "id") is True, text
+        evidence, decision = classify(text, "id")
+        assert "credential" in {item.label for item in evidence}, text
+        assert decision.action == "drop", text
+
+
+def test_a_high_entropy_assignment_is_a_credential_even_without_a_keyword() -> None:
+    secret = "Zx9Qw3Er7Ty1Ui5Op2As4Df6"
+
+    assert entropy_secret("catatan: " + secret)
+    assert is_sensitive("catatan: " + secret, "id") is True
+    evidence, decision = classify("catatan: " + secret, "id")
+    assert "credential" in {item.label for item in evidence}
+    assert decision.action == "drop"
+
+
+def test_entropy_never_flags_urls_paths_uuids_or_low_entropy_values() -> None:
+    for text in (
+        "catatan: https://example.com/aaaaaaaaaaaaaaaaaaaaaaaa",
+        "catatan: /var/lib/aaaaaaaaaaaaaaaaaaaaaaaa",
+        "catatan: 123e4567-e89b-12d3-a456-426614174000",
+        "catatan: aaaaaaaaaaaaaaaaaaaaaaaa",
+        "catatan: abcdef",
+    ):
+        assert entropy_secret(text) == [], text
+        assert is_sensitive(text, "id") is False, text
 
 
 def test_a_sixteen_digit_nik_is_a_credential_but_a_short_number_is_not() -> None:

@@ -11,7 +11,7 @@ from collections.abc import Mapping, Sequence
 from sqlalchemy import delete
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
-from .. import io
+from .. import embed, io
 from ..character import lexicon
 from ..schema import memories, memory_tombstones
 from . import queries, records, writes
@@ -49,6 +49,55 @@ def _forget_candidates_sync(store, owner_id: str, thread_id: str) -> list[dict]:
         return queries.forget_candidates(conn, owner_id, thread_id)
 
 
+_SEMANTIC_FLOOR = 0.55
+_SEMANTIC_MARGIN = 0.10
+
+
+def _stem(token: str, suffixes: Sequence[str]) -> str:
+    """Strip one possessive suffix from the pack so "gajiku" can meet "gaji"."""
+    for suffix in suffixes:
+        if len(token) > len(suffix) + 2 and token.endswith(suffix):
+            return token[: -len(suffix)]
+    return token
+
+
+def _stems(tokens: set[str], suffixes: Sequence[str]) -> set[str]:
+    return {_stem(token, suffixes) for token in tokens}
+
+
+def _semantic_matches_sync(
+    rows: list[dict], query: str, stopwords, suffixes: Sequence[str]
+) -> list[str]:
+    """The one row a paraphrase or a possessive form can still mean, or [].
+
+    Cosine similarity is the primary signal; a single suffix-stripped stem match is the
+    fallback for short nouns the encoder cannot separate. Ambiguity stays ambiguity.
+    """
+    wanted = _stems(_tokens(query, stopwords), suffixes)
+    stem_hits = [
+        str(row["id"])
+        for row in rows
+        if wanted & _stems(_tokens(str(row.get("text") or ""), stopwords), suffixes)
+    ]
+    vectors = embed.encode([query])
+    if not vectors:
+        return stem_hits if len(stem_hits) == 1 else []
+    scored: list[tuple[float, str]] = []
+    for row in rows:
+        vector = row.get("embedding")
+        if vector is None:
+            continue
+        scored.append((embed.cosine(vectors[0], vector), str(row["id"])))
+    if not scored:
+        return stem_hits if len(stem_hits) == 1 else []
+    scored.sort(key=lambda item: item[0], reverse=True)
+    top_score, top_id = scored[0]
+    runner_up = scored[1][0] if len(scored) > 1 else 0.0
+    if top_score >= _SEMANTIC_FLOOR and top_score - runner_up >= _SEMANTIC_MARGIN:
+        return [top_id]
+    return stem_hits if len(stem_hits) == 1 else []
+
+
 async def forget_by_intent(
     store, text: str, *, person_id: str, thread_id: str
 ) -> list[str]:
@@ -57,13 +106,16 @@ async def forget_by_intent(
     Only the speaker's own readable rows in `global` and this thread are candidates, matched
     by one shared content token of at least three characters. The language's stopwords are
     dropped first, so a request particle never turns every row into a candidate: the topic
-    token is what matches. Zero or several candidates is ambiguity, not a guess: nothing is
-    deleted and the caller logs why.
+    token is what matches. A request with no shared token falls back to the stored embeddings
+    and possessive stems (ADR-0009 §4.4). Zero or several candidates is ambiguity, not a
+    guess: nothing is deleted and the caller logs why.
     """
     if store.db is None:
         return []
     language = str(getattr(store, "_language", "") or "")
-    stopwords = lexicon.load(language).stopwords if language else frozenset()
+    pack = lexicon.load(language) if language else None
+    stopwords = pack.stopwords if pack is not None else frozenset()
+    suffixes = pack.possessives if pack is not None else frozenset()
     wanted = _tokens(text, stopwords)
     who = str(person_id or "").strip()
     if not wanted or not who:
@@ -74,6 +126,10 @@ async def forget_by_intent(
         for row in found
         if wanted & _tokens(str(row.get("text") or ""), stopwords)
     ]
+    if not matches:
+        # ADR-0009 §4.4: a paraphrase or a possessive form is still a forget request; the
+        # exact-token path stays first so ordinary requests never pay for an embedding.
+        matches = await io.run(_semantic_matches_sync, found, text, stopwords, suffixes)
     if len(matches) != 1:
         log.info("forget intent ambiguous: %d candidates", len(matches))
         return []

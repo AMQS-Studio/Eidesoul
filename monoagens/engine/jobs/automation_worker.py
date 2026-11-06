@@ -35,7 +35,7 @@ from .automation_manifest import (
     evaluate_condition,
 )
 from .automation_store import AutomationStore
-from .lease import bind_stores
+from .lease import Superseded, bind_stores
 from .schedule import in_quiet, quiet_end
 
 log = logging.getLogger(__name__)
@@ -89,9 +89,13 @@ class AutomationWorker:
 
     def interrupt(self) -> int:
         """Only this instance's in-flight runs: a takeover never closes another's work."""
-        return self.store.interrupt(
-            worker=self.worker_id, generation=self._generation()
-        )
+        try:
+            return self.store.interrupt(
+                worker=self.worker_id, generation=self._generation()
+            )
+        except Superseded:
+            # A standby (generation 0) holds no runs of its own; shutdown must still proceed.
+            return 0
 
     async def _loop(self) -> None:
         while True:
@@ -596,7 +600,17 @@ class AutomationWorker:
         from ..stores.recipes import run_recipe
 
         ctx = self._tool_context(automation, facts)
-        result = await run_recipe(recipe, str(step.get("args") or ""), ctx)
+        args = str(step.get("args") or "")
+        try:
+            if recipe.kind == "prompt":
+                runner = getattr(self.agent, "llm", None)
+                if runner is None:
+                    raise ValueError("prompt recipes need an LLM runner")
+                result = await runner.run("", recipe.rendered(args), [], ctx)
+            else:
+                result = await run_recipe(recipe, args, ctx)
+        except ValueError as exc:
+            raise StepError(str(exc), transient=False) from exc
         if str(result).startswith("error:"):
             raise StepError(str(result)[:200], transient=False)
         facts["recipe"] = str(result)[-2000:]

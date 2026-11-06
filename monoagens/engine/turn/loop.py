@@ -343,7 +343,7 @@ class TurnRunner(ApprovalFlow, ResearchFlow, TurnReview):
                 if not is_command:
                     if decision is not None and decision.act == "ignore":
                         log.info(
-                            "diam chat=%s addressed=%s reason=%s",
+                            "turn ignored chat=%s addressed=%s reason=%s",
                             thread_id,
                             decision.addressed,
                             decision.reason,
@@ -414,19 +414,20 @@ class TurnRunner(ApprovalFlow, ResearchFlow, TurnReview):
                             )
                         memory_block = ""
                         style_block = topic_block = person_style = ""
-                        try:
-                            memory_ctx = await runtime.memory.context(
-                                person_id=inbound.actor,
-                                thread_id=thread_id,
-                                query=message.text,
-                                direct=bool(inbound.hints.get("dm")),
-                                mood=mood,
-                                max_items=runtime.config.memory.max_items,
-                                max_chars=runtime.config.memory.max_chars,
-                            )
-                            memory_block = memory_ctx.text
-                        except Exception:
-                            log.exception("failed to read memory chat=%s", thread_id)
+                        if runtime.memory is not None:
+                            try:
+                                memory_ctx = await runtime.memory.context(
+                                    person_id=inbound.actor,
+                                    thread_id=thread_id,
+                                    query=message.text,
+                                    direct=bool(inbound.hints.get("dm")),
+                                    mood=mood,
+                                    max_items=runtime.config.memory.max_items,
+                                    max_chars=runtime.config.memory.max_chars,
+                                )
+                                memory_block = memory_ctx.text
+                            except Exception:
+                                log.exception("failed to read memory chat=%s", thread_id)
                         actions_block = ""
                         if runtime.ledger is not None:
                             try:

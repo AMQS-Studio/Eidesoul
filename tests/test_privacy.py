@@ -138,7 +138,9 @@ def counted(env: SimpleNamespace, table: str) -> int:
     return int(env.db.scalar(sql(f"SELECT count(*) FROM {table}")) or 0)
 
 
-def assess(level: int, *, subject: str = "", ask: bool = False) -> dict:
+def assess(
+    level: int, *, subject: str = "", ask: bool = False, category: str = "general"
+) -> dict:
     return {
         "worth": True,
         "level": level,
@@ -146,7 +148,7 @@ def assess(level: int, *, subject: str = "", ask: bool = False) -> dict:
         "kind": "fact",
         "text": "fakta",
         "supersedes": None,
-        "category": "general",
+        "category": category,
         "durability": "normal",
         "ask": ask,
     }
@@ -575,3 +577,68 @@ def test_a_credential_that_reaches_the_worker_is_redacted_before_the_drop(tmp_pa
     assert found["state"] == "not_worth"
     assert found["text"] == REDACTED_CREDENTIAL
     assert "1234567890123456" not in str(found["text"])
+
+
+def test_the_model_may_raise_the_privacy_floor(tmp_path) -> None:
+    """ADR-0009 §4.2: the model hint can raise the local floor, never lower it."""
+    seen: list[tuple] = []
+
+    async def ask(*args) -> None:
+        seen.append(args)
+
+    env = capture_env(tmp_path, [assess(4)], ask=ask)
+
+    capture(env, "aku suka kopi")
+
+    found = row(env)
+    assert int(found["level"]) == 4
+    assert found["confirmed"] is False
+    assert seen
+    assert seen[0][3] == 4
+
+
+def test_the_model_may_not_lower_the_privacy_floor(tmp_path) -> None:
+    env = capture_env(tmp_path, [assess(1)])
+
+    capture(env, "aku tadi nyuri")
+
+    found = row(env)
+    assert int(found["level"]) == 4
+    assert found["confirmed"] is False
+
+
+def test_a_model_level_five_secret_is_redacted_and_dropped(tmp_path) -> None:
+    from sqlalchemy import text as sql
+
+    from monoagens.engine.memory.gate import REDACTED_CREDENTIAL
+
+    env = capture_env(tmp_path, [assess(5)])
+
+    capture(env, "rahasia ku")
+
+    found = row(env)
+    assert found["state"] == "not_worth"
+    assert found["text"] == REDACTED_CREDENTIAL
+    events = env.db.fetch_all(sql("SELECT content FROM memory_events"))
+    assert events
+    assert all(REDACTED_CREDENTIAL in str(event["content"]) for event in events)
+
+
+def test_a_model_credential_category_is_redacted_and_dropped(tmp_path) -> None:
+    from monoagens.engine.memory.gate import REDACTED_CREDENTIAL
+
+    env = capture_env(tmp_path, [assess(2, category="credential")])
+
+    capture(env, "rahasia ku")
+
+    found = row(env)
+    assert found["state"] == "not_worth"
+    assert found["text"] == REDACTED_CREDENTIAL
+
+
+def test_the_model_category_is_kept_on_the_memory(tmp_path) -> None:
+    env = capture_env(tmp_path, [assess(2, category="preference")])
+
+    capture(env, "aku suka kopi")
+
+    assert row(env)["category"] == "preference"

@@ -121,18 +121,26 @@ class CognitionCapture:
 
     async def _label(self, row: Mapping, verdict) -> str:
         memory_id = str(row["id"])
-        if verdict is None or not verdict.valid:
-            await io.run(self.memory.fail_candidate, memory_id, "labeling failed")
-            return "dropped"
-        if not verdict.worth:
-            await io.run(self.memory.mark_not_worth, memory_id, "assess: not worth")
-            return "not worth"
-        body = str(row.get("text") or verdict.text or "")
+        body = str(row.get("text") or (verdict.text if verdict is not None else "") or "")
         evidence, decision = privacy_layers.classify(body, self.language)
+        # ADR-0009 §4.1: the deterministic credential gate runs before the verdict, so a
+        # secret in a `worth: false` or invalid turn is redacted in both the row and journal.
         if decision.action == "drop":
             await io.run(self._redact_credential, memory_id)
             await io.run(self.memory.mark_not_worth, memory_id, "privacy: credential")
             return "credential dropped"
+        if verdict is None or not verdict.valid:
+            await io.run(self.memory.fail_candidate, memory_id, "labeling failed")
+            return "dropped"
+        model_level = getattr(verdict, "level", None)
+        model_category = str(getattr(verdict, "category", "") or "").strip().lower()
+        if model_level == 5 or model_category == "credential":
+            await io.run(self._redact_credential, memory_id)
+            await io.run(self.memory.mark_not_worth, memory_id, "privacy: credential")
+            return "credential dropped"
+        if not verdict.worth:
+            await io.run(self.memory.mark_not_worth, memory_id, "assess: not worth")
+            return "not worth"
         group = str(row.get("audience") or "private") == "group"
         owner = str(row.get("owner_id") or "")
         subject = str(verdict.subject or "")
@@ -146,12 +154,18 @@ class CognitionCapture:
         if group and decision.ask and not rules.ask_in_group:
             await io.run(self.memory.defer_candidate, memory_id, reason="ask in group")
             return "ask pending"
+        # ADR-0009 §4.2: the model may raise the deterministic floor, never lower it. A
+        # level-4+ memory is always unconfirmed and asks; a level-3 one stays confirmed.
+        level = int(decision.level)
+        if model_level is not None:
+            level = max(level, int(model_level))
+        ask = bool(decision.ask or level >= 4)
         category, durability = await self._remember_hint(row, verdict)
         labelled = await io.run(
             self.memory.label_candidate,
             memory_id,
-            level=int(decision.level),
-            confirmed=not bool(decision.ask),
+            level=level,
+            confirmed=not ask,
             subject_id=subject or owner,
             category=category,
             durability=durability,
@@ -163,19 +177,19 @@ class CognitionCapture:
         if not labelled:
             return "label refused"
         self.counters["captured"] += 1
-        await self._visibility(row, int(decision.level))
-        if decision.ask and self.ask is not None:
+        await self._visibility(row, level)
+        if ask and self.ask is not None:
             try:
                 await self.ask(
                     str(row.get("thread_id") or ""),
                     owner,
                     [memory_id],
-                    int(decision.level),
+                    level,
                     "",
                 )
             except Exception:
                 log.debug("ask callback failed", exc_info=True)
-        return f"ok L{decision.level}"
+        return f"ok L{level}"
 
     async def _remember_hint(self, row: Mapping, verdict) -> tuple[str, str]:
         """ADR-0005 §4.6: "remember this" raises durability and pins only a core memory.

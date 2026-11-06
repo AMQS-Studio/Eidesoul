@@ -92,9 +92,9 @@ def test_fallback_provider_uses_its_own_api_key_env(monkeypatch) -> None:
     assert web_search._provider_config("brave", config).api_key_env == "BRAVE_API_KEY"
 
 
-def test_clock_times_and_ranges_are_not_exact_claims() -> None:
+def test_clock_times_are_not_exact_claims_but_scores_are() -> None:
     assert EXACT.search("we meet at 10:00") is None
-    assert EXACT.search("1-2 items") is None
+    assert EXACT.search("2-1") is not None
     assert EXACT.search("3.5% growth") is not None
     assert EXACT.search("2026-11-06") is not None
 

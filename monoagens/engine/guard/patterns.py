@@ -14,7 +14,9 @@ ordinary talk about passwords and tokens stays ordinary talk.
 
 
 import json
+import math
 import re
+from collections import Counter
 from collections.abc import Iterable
 from dataclasses import dataclass
 from functools import lru_cache
@@ -69,10 +71,64 @@ _CONNECTORS = "(?:" + "|".join(_TERMS["connectors"]) + ")"
 _STRONG_VALUE = r"(?:\s*[:=]\s*\S+|\s+\S+)"
 _EXPLICIT_VALUE = r"\s*[:=]\s*\S+"
 _VALUE_TOKEN = r"[A-Za-z0-9_+/=\-]{12,}"
-_TOKEN_SHAPE = (
-    r"(?<![A-Za-z0-9])(?:sk-[A-Za-z0-9]{20,}|ghp_[A-Za-z0-9]{20,}"
-    r"|-----BEGIN [A-Z ]*PRIVATE KEY-----)"
+# Provider and platform credential shapes; shared with the privacy evidence layer so both
+# boundaries recognize the same tokens (ADR-0009 §4.1).
+TOKEN_SHAPES = (
+    r"(?<![A-Za-z0-9])sk-[A-Za-z0-9_\-]{20,}",
+    r"(?<![A-Za-z0-9])gh[pousr]_[A-Za-z0-9_]{20,}",
+    r"(?<![A-Za-z0-9])github_pat_[A-Za-z0-9_]{20,}",
+    r"(?<![A-Za-z0-9])AKIA[0-9A-Z]{16}",
+    r"(?<![A-Za-z0-9])AIza[0-9A-Za-z_\-]{35}",
+    r"(?<![A-Za-z0-9])xox[baprs]-[0-9A-Za-z\-]{10,}",
+    r"(?<![A-Za-z0-9])eyJ[A-Za-z0-9_\-]{10,}\.[A-Za-z0-9_\-]{10,}\.[A-Za-z0-9_\-]{10,}",
+    r"-----BEGIN [A-Z ]*PRIVATE KEY-----",
+    r"(?:postgres(?:ql)?|mysql|mongodb(?:\+srv)?|redis|amqp)://[^\s:@/]+:[^\s@/]+@",
 )
+_TOKEN_SHAPE = "(?:" + "|".join(TOKEN_SHAPES) + ")"
+
+# A long unbroken value after `=`/`:` is a secret when it has enough character classes and
+# per-character entropy; ordinary words, URLs, paths, and UUIDs stay below the floor.
+_ENTROPY_FLOOR = 4.2
+_ASSIGNED_VALUE = re.compile(r"[=:]\s*([A-Za-z0-9+/=_\-]{24,})")
+_UUID = re.compile(
+    r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}"
+)
+
+
+def _shannon_entropy(token: str) -> float:
+    """Bits per character: uniform random text scores high, natural language scores low."""
+    if not token:
+        return 0.0
+    counts = Counter(token)
+    total = len(token)
+    return -sum(
+        (count / total) * math.log2(count / total) for count in counts.values()
+    )
+
+
+def _char_classes(token: str) -> int:
+    """How many of upper/lower/digit/symbol the token uses."""
+    return sum(
+        (
+            any(char.isupper() for char in token),
+            any(char.islower() for char in token),
+            any(char.isdigit() for char in token),
+            any(not char.isalnum() for char in token),
+        )
+    )
+
+
+def entropy_secret(text: str) -> list[tuple[int, int]]:
+    """Spans of assignment values that look like random secrets, never ordinary prose."""
+    found: list[tuple[int, int]] = []
+    for match in _ASSIGNED_VALUE.finditer(str(text or "")):
+        token = match.group(1)
+        if "://" in token or "/" in token or _UUID.fullmatch(token):
+            continue
+        if _char_classes(token) < 3 or _shannon_entropy(token) < _ENTROPY_FLOOR:
+            continue
+        found.append((match.start(1), match.end(1)))
+    return found
 
 # One crisis span is suppressed only by a negation or an idiom in the same clause.
 _NEGATION_WINDOW = 32
@@ -255,11 +311,11 @@ def _suppressed(
 
 
 def is_sensitive(text: str, language: str) -> bool:
-    """A credential shape, a token prefix, a PEM header, or a language pack's shaped pair."""
+    """A credential shape, a token prefix, a PEM header, an entropy secret, or a pack pair."""
     body = str(text or "")
     if not body:
         return False
-    if _SHAPES.search(body):
+    if _SHAPES.search(body) or entropy_secret(body):
         return True
     code = str(language or "").strip().lower()
     pattern = _sensitive(code, str(directory())) if code else None

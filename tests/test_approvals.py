@@ -586,3 +586,20 @@ def test_confirmation_classifier_reads_only_short_answers() -> None:
     assert confirmation_intent("nanti aku cek sendiri ya", "id") == ""
     assert confirmation_intent("tolong jelaskan arsitektur proyek ini", "id") == ""
     assert confirmation_intent("", "id") == ""
+
+
+def test_confirmation_cues_union_the_english_safety_net() -> None:
+    from monoagens.engine.turn.confirmations import _cues, confirmation_intent
+
+    confirm, reject, modify, filler = _cues("id")
+
+    assert "ya" in confirm
+    assert "yes" in confirm
+    assert "batal" in reject
+    assert "no" in reject
+    assert "ganti" in modify
+    assert "change" in modify
+    assert "oke" in filler or "ok" in filler
+    assert confirmation_intent("yes", "id") == "confirm"
+    assert confirmation_intent("no", "id") == "reject"
+    assert confirmation_intent("change it", "id") == "modify"

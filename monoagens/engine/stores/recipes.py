@@ -50,6 +50,11 @@ class Recipe:
     steps: tuple[dict, ...]
     prompt: str
 
+    def rendered(self, args: str = "") -> str:
+        """The prompt body with `{{args}}` filled and the call arguments appended."""
+        body = str(_render(self.prompt, str(args or "")))
+        return f"{body}\n\nArguments: {args}".strip()
+
 
 def _parse_roles(value: Any) -> tuple[str, ...] | None:
     if not isinstance(value, (list, tuple)) or not value:

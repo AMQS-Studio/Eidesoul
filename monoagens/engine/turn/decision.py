@@ -31,6 +31,11 @@ Decision rules:
 - Do not interrupt conversations clearly not meant for you. Do not lecture, blame, or invent actions,
   numbers, or reasons.
 - "bubbles": 1..3, how many short messages are reasonable if you reply.
+- "needs_search": true only when a current fact (news, price, version, schedule, score) must be
+  looked up; false when the answer is already in context. Omit when unsure.
+- "approval_intent": "confirm" when the sender approves a pending request, "reject" when they
+  refuse it, "modify" when they ask to change it, "" otherwise. This is about the pending
+  approval, not a new request.
 - "reason": <=80 chars, a short reason for your decision.
 """
 FEELINGS_RULES = """- "appraisal": your emotional reading of this message.
@@ -46,6 +51,7 @@ SCHEMA_HEAD = (
     "Reply ONLY with JSON matching the schema:\n"
     '{"addressed":"me|other|group|unknown","act":"reply|ignore|react","mode":"daily|professional",\n'
     ' "tone":"warm|neutral|playful|curt|hurt|angry","bubbles":1,\n'
+    ' "needs_search":false,"approval_intent":"",\n'
 )
 SCHEMA_FEELINGS = (
     ' "appraisal":{"label":"neutral","dP":0.0,"dA":0.0,"dD":0.0,"note":""},\n'
@@ -87,6 +93,7 @@ LABELS = frozenset(
     }
 )
 COLD_TONES = frozenset({"curt", "hurt", "angry"})
+APPROVAL_INTENTS = frozenset({"confirm", "reject", "modify"})
 DELTA_LIMIT = 0.4
 RELATION_LIMIT = 0.15
 NOTE_CHARS = 120
@@ -120,6 +127,8 @@ class Decision:
     appraisal: Appraisal
     relationship: RelationshipDelta
     reason: str
+    needs_search: bool | None = None
+    approval_intent: str = ""
 
 
 NEUTRAL = Appraisal("neutral", 0.0, 0.0, 0.0)
@@ -161,6 +170,23 @@ def _flat(value, limit: int) -> str:
     return " ".join(str(value or "").split())[:limit]
 
 
+def _needs_search(value) -> bool | None:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        text = value.strip().lower()
+        if text in {"true", "yes", "1"}:
+            return True
+        if text in {"false", "no", "0"}:
+            return False
+    return None
+
+
+def _approval_intent(value) -> str:
+    text = str(value or "").strip().lower()
+    return text if text in APPROVAL_INTENTS else ""
+
+
 log = logging.getLogger(__name__)
 
 
@@ -196,6 +222,8 @@ def decision_from_row(row: dict) -> Decision | None:
                 annoyance=float(relationship.get("annoyance") or 0.0),
             ),
             reason=str(raw.get("reason") or "resume"),
+            needs_search=_needs_search(raw.get("needs_search")),
+            approval_intent=_approval_intent(raw.get("approval_intent")),
         )
     except (TypeError, ValueError):
         return None
@@ -243,6 +271,8 @@ def parse_decision(raw: str) -> Decision | None:
         appraisal=appraisal,
         relationship=relationship,
         reason=_flat(data.get("reason"), REASON_CHARS),
+        needs_search=_needs_search(data.get("needs_search")),
+        approval_intent=_approval_intent(data.get("approval_intent")),
     )
 
 
@@ -280,6 +310,8 @@ def ensure_reply(decision: Decision) -> Decision:
         appraisal=decision.appraisal,
         relationship=decision.relationship,
         reason=_flat(f"{decision.reason};direct" if decision.reason else "direct", REASON_CHARS),
+        needs_search=decision.needs_search,
+        approval_intent=decision.approval_intent,
     )
 
 

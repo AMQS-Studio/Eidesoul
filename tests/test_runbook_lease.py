@@ -26,7 +26,7 @@ def test_unbound_store_has_no_fence() -> None:
 def test_ledger_begin_reports_new_then_the_existing_status() -> None:
     ledger = OutboundLedger(database())
     first = ledger.begin("scope-a", 0, gateway="whatsapp", thread_id="chat")
-    assert first == "new"
+    assert first == "intent"
     assert ledger.begin("scope-a", 0, gateway="whatsapp", thread_id="chat") == "intent"
 
 

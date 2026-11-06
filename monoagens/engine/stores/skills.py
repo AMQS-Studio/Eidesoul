@@ -116,12 +116,15 @@ class SkillStore(FencedStore):
         """The skill rows distilled from the episodes of one signature, newest first."""
         if not str(signature or ""):
             return []
-        wanted = [
-            f"distill:{row['id']}"
+        episode_ids = [
+            str(row["id"])
             for row in self.db.fetch_all(
                 select(episodes.c.id).where(episodes.c.signature == str(signature))
             )
         ]
+        # ADR-0009 §4.5: a distilled skill may store the bare episode id or the `distill:`
+        # namespace; both point at the same evidence.
+        wanted = episode_ids + [f"distill:{episode_id}" for episode_id in episode_ids]
         if not wanted:
             return []
         rows = self.db.fetch_all(

@@ -289,6 +289,8 @@ def build(  # noqa: C901, PLR0912, PLR0915
     natural_confirm: bool = True,
     tools: tuple[str, ...] | None = None,
     gateways: tuple[str, ...] | None = None,
+    base_url: str = "",
+    api_key_env: str = "",
 ) -> dict[str, str]:
     """The four files: `templates.files()` plus the operator's answers, nothing else."""
     locale = locale or host_locale()
@@ -338,6 +340,8 @@ def build(  # noqa: C901, PLR0912, PLR0915
         websearch_url=websearch_url,
         tools=tools,
         gateways=gateways,
+        base_url=base_url,
+        api_key_env=api_key_env,
     )
     config = yaml.safe_load(contents["config.yaml"])
     approval = config.setdefault("engine", {}).setdefault("approval", {})
@@ -360,7 +364,7 @@ def build(  # noqa: C901, PLR0912, PLR0915
     if api_key.strip():
         if "\n" in api_key or "\r" in api_key:
             raise ValueError("the API key must be one line")
-        key_env = PROVIDERS[provider].api_key_env
+        key_env = str(api_key_env or "").strip() or PROVIDERS[provider].api_key_env
         if not key_env:
             raise ValueError(f"provider '{provider}' has no API key variable")
         contents[".env"] = _set_env(contents[".env"], key_env, api_key.strip())
@@ -521,6 +525,8 @@ def init(
     natural_confirm: bool = True,
     tools: tuple[str, ...] | None = None,
     gateways: tuple[str, ...] | None = None,
+    base_url: str = "",
+    api_key_env: str = "",
 ) -> tuple[list[Path], list[Path]]:
     """Write the scaffold without prompting; return (written, skipped)."""
     error = validate_provider(provider) or validate_database_url(database_url)
@@ -545,6 +551,8 @@ def init(
         natural_confirm=natural_confirm,
         tools=tools,
         gateways=gateways,
+        base_url=base_url,
+        api_key_env=api_key_env,
     )
     decisions: dict[str, str] = dict.fromkeys(HOST_FILES, "replace" if force else "new")
     return write_files(folder, contents, decisions)

@@ -13,8 +13,10 @@ from monoagens.engine.tools import (
     ToolContext,
     argument_errors,
     execute,
+    safe_chat,
     truncate,
 )
+from monoagens.engine.tools.read import TOOL as READ
 from monoagens.engine.tools.shell import child_env
 
 SCHEMA = {
@@ -119,6 +121,25 @@ def test_per_tool_cap_is_used_not_a_global_one(tmp_path) -> None:
 
     assert len(result) <= 200
     assert "next:" in result
+
+
+def test_read_lists_a_directory_instead_of_failing(tmp_path) -> None:
+    config = build_config(tmp_path)
+    folder = config.paths.workspace / "scratch" / safe_chat("chat1")
+    folder.mkdir(parents=True)
+    (folder / "b.txt").write_text("b", encoding="utf-8")
+    (folder / "a.txt").write_text("a", encoding="utf-8")
+    (folder / ".hidden").write_text("x", encoding="utf-8")
+    ctx = ToolContext(
+        config,
+        (role("member", tools=("read",)),),
+        ("*",),
+        thread_id="chat1",
+    )
+
+    result = asyncio.run(execute({"read": READ}, "read", {"path": "scratch"}, ctx))
+
+    assert result == "a.txt\nb.txt"
 
 
 def test_shell_env_is_a_whitelist(monkeypatch) -> None:

@@ -22,6 +22,7 @@ from .base import (
 from .gemini import GOOGLE, GeminiClient
 from .openai import (
     CUSTOM,
+    DEEPINFRA,
     DEEPSEEK,
     GROQ,
     OLLAMA,
@@ -52,6 +53,7 @@ PROVIDERS: dict[str, ProviderDefaults] = {
     "anthropic": ANTHROPIC,
     "openrouter": OPENROUTER,
     "groq": GROQ,
+    "deepinfra": DEEPINFRA,
     "deepseek": DEEPSEEK,
     "ollama": OLLAMA,
     "custom": CUSTOM,

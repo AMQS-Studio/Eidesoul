@@ -83,10 +83,17 @@ class FakeClient:
         )
 
 
-def make_llm(tmp_path, monkeypatch, *, effort: str = "") -> tuple[LLM, FakeClient]:
+def make_llm(
+    tmp_path, monkeypatch, *, effort: str = "", tier: str = ""
+) -> tuple[LLM, FakeClient]:
     monkeypatch.setenv("K", "key")
     config = build_config(tmp_path)
-    llm = LLM(replace(config, llm=replace(config.llm, reasoning_effort=effort)))
+    llm = LLM(
+        replace(
+            config,
+            llm=replace(config.llm, reasoning_effort=effort, service_tier=tier),
+        )
+    )
     client = FakeClient()
     llm.client = client
     return llm, client
@@ -97,6 +104,20 @@ def test_complete_omits_reasoning_effort_so_the_provider_default_applies(tmp_pat
 
     assert asyncio.run(llm.complete("system", "user")) == "ok"
     assert "reasoning_effort" not in client.kwargs
+
+
+def test_complete_omits_service_tier_so_the_provider_default_applies(tmp_path, monkeypatch):
+    llm, client = make_llm(tmp_path, monkeypatch)
+
+    assert asyncio.run(llm.complete("system", "user")) == "ok"
+    assert "service_tier" not in client.kwargs
+
+
+def test_complete_sends_the_configured_service_tier(tmp_path, monkeypatch):
+    llm, client = make_llm(tmp_path, monkeypatch, tier="priority")
+
+    assert asyncio.run(llm.complete("system", "user")) == "ok"
+    assert client.kwargs["service_tier"] == "priority"
 
 
 def test_complete_sends_the_configured_reasoning_effort(tmp_path, monkeypatch):

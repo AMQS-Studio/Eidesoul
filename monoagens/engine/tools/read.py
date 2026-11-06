@@ -31,6 +31,19 @@ async def _read(args: dict, ctx: ToolContext) -> str:
     refusal = _refusal(path, ctx)
     if refusal:
         return refusal
+    if path.is_dir():
+        try:
+            names = sorted(
+                child.name for child in path.iterdir() if not child.name.startswith(".")
+            )
+        except OSError as exc:
+            return f"error: cannot list directory: {exc}"
+        if not names:
+            return "(empty directory)"
+        body = "\n".join(names[:100])
+        if len(names) > 100:
+            body += f"\n(more: {len(names) - 100})"
+        return body
     if not path.is_file():
         return f"error: file not found: {args.get('path')}"
     start = max(1, _int(args, "start", 1))

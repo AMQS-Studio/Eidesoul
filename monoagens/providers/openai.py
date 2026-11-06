@@ -25,6 +25,11 @@ OPENAI = ProviderDefaults("https://api.openai.com/v1", "OPENAI_API_KEY")
 OPENROUTER = ProviderDefaults("https://openrouter.ai/api/v1", "OPENROUTER_API_KEY")
 GROQ = ProviderDefaults("https://api.groq.com/openai/v1", "GROQ_API_KEY")
 DEEPSEEK = ProviderDefaults("https://api.deepseek.com/v1", "DEEPSEEK_API_KEY")
+DEEPINFRA = ProviderDefaults(
+    "https://api.deepinfra.com/v1/openai",
+    "DEEPINFRA_API_KEY",
+    models_url="https://api.deepinfra.com/v1/openai/models",
+)
 OLLAMA = ProviderDefaults("http://127.0.0.1:11434/v1", "OLLAMA_API_KEY", api_key_optional=True)
 CUSTOM = ProviderDefaults("", "")
 

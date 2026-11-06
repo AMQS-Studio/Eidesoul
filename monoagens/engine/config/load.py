@@ -218,6 +218,7 @@ def _llm_config(
         model=model,
         api_key_env=defaults.api_key_env,
         reasoning_effort=str(llm_raw.get("reasoning_effort") or "").strip(),
+        service_tier=str(llm_raw.get("service_tier") or "").strip(),
         session_header=defaults.session_header,
         api_key_optional=defaults.api_key_optional,
         models_url=defaults.models_url,

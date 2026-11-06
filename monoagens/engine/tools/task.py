@@ -117,7 +117,10 @@ TOOL = Handler(
             "at": {
                 "type": "array",
                 "items": {"type": "string"},
-                "description": "HH:MM times for cron, or one YYYY-MM-DD HH:MM for at.",
+                "description": (
+                    "HH:MM times (for cron, or next occurrence of HH:MM for at), "
+                    "or YYYY-MM-DD HH:MM."
+                ),
             },
             "days": {
                 "type": "string",
@@ -125,7 +128,7 @@ TOOL = Handler(
             },
             "every": {
                 "type": "string",
-                "description": "Interval for cron/goal, e.g. 30m, 2h, or 1d.",
+                "description": "Interval for cron/goal (at least 1h, e.g. 1h, 2h, or 1d).",
             },
             "timezone": {"type": "string", "description": "IANA zone; defaults to the soul."},
             "condition": {

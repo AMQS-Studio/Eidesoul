@@ -83,8 +83,8 @@ def test_unknown_provider_lists_the_available_names():
     with pytest.raises(
         ValueError,
         match=(
-            "unknown provider 'nope'; available: anthropic, custom, deepseek, google, groq, "
-            "ollama, openai, opencode, openrouter"
+            "unknown provider 'nope'; available: anthropic, custom, deepinfra, deepseek, "
+            "google, groq, ollama, openai, opencode, openrouter"
         ),
     ):
         resolve("nope", "", "")
@@ -144,6 +144,15 @@ def test_missing_key_for_a_hosted_provider_fails(tmp_path, monkeypatch):
         load_config(tmp_path / "config.yaml")
 
 
+def test_deepinfra_is_an_openai_wire_provider():
+    name, defaults = resolve("deepinfra", "", "")
+
+    assert name == "deepinfra"
+    assert defaults.base_url == "https://api.deepinfra.com/v1/openai"
+    assert defaults.api_key_env == "DEEPINFRA_API_KEY"
+    assert defaults.models_url == "https://api.deepinfra.com/v1/openai/models"
+
+
 def test_unknown_provider_becomes_a_config_error(tmp_path):
     write_folder(tmp_path, {"provider": "mystery", "model": "m"})
     with pytest.raises(ConfigError, match="unknown provider 'mystery'"):
@@ -162,6 +171,24 @@ def test_the_scaffold_writes_the_operator_choice():
     assert llm["api_key_env"] == "GROQ_API_KEY"
     assert llm["model"] == "operator-model"
     assert llm["reasoning_effort"] == ""
+
+
+def test_the_scaffold_can_override_the_endpoint_and_key_variable():
+    files = templates.files(
+        provider="openai",
+        language="en",
+        locale="en-US",
+        timezone="UTC",
+        base_url="https://example.test/v1",
+        api_key_env="MY_LLM_KEY",
+    )
+    body = yaml.safe_load(files["config.yaml"])
+    llm = body["engine"]["llm"]
+
+    assert llm["base_url"] == "https://example.test/v1"
+    assert llm["api_key_env"] == "MY_LLM_KEY"
+    assert "MY_LLM_KEY=\n" in files[".env"]
+    assert "OPENAI_API_KEY" not in files[".env"]
 
 
 def test_the_scaffold_ships_no_model_of_its_own():

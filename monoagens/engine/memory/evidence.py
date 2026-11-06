@@ -22,6 +22,7 @@ from pathlib import Path
 from typing import Any
 
 from .. import embed
+from ..guard.patterns import TOKEN_SHAPES, entropy_secret
 
 log = logging.getLogger(__name__)
 
@@ -60,12 +61,12 @@ LEVELS = {
 }
 ACTIONS = ("allow", "redact", "block", "ask", "drop")
 
-# A credential is a value shape, never a keyword: a 16-digit NIK, a provider token prefix, or a
-# PEM header. These run for every language, so a pack cannot hide one behind ordinary words.
+# A credential is a value shape, never a keyword: a 16-digit NIK, a provider token prefix, a
+# PEM header, a DSN, or a high-entropy assignment value. These run for every language, so a
+# pack cannot hide one behind ordinary words.
 VALUE_SHAPES = (
     (CREDENTIAL, r"(?<!\d)\d{16}(?!\d)"),
-    (CREDENTIAL, r"(?<![A-Za-z0-9])(?:sk-[A-Za-z0-9]{20,}|ghp_[A-Za-z0-9]{20,})(?![A-Za-z0-9])"),
-    (CREDENTIAL, r"-----BEGIN [A-Z ]*PRIVATE KEY-----"),
+    *((CREDENTIAL, pattern) for pattern in TOKEN_SHAPES),
 )
 _SHAPES = tuple((label, re.compile(pattern)) for label, pattern in VALUE_SHAPES)
 # An ambiguous term needs its context words nearby; the bare word alone is not evidence.
@@ -227,6 +228,17 @@ class PatternDetector:
                         (match.start(), match.end()),
                     )
                 )
+        for start, end in entropy_secret(text):
+            found.append(
+                Evidence(
+                    self.detector,
+                    "value-2",
+                    pack.digest,
+                    CREDENTIAL,
+                    1.0,
+                    (start, end),
+                )
+            )
         return found
 
 

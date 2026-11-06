@@ -163,6 +163,85 @@ def test_forget_stays_put_when_it_is_ambiguous(tmp_path) -> None:
     assert len(memory.readable()) == 2
 
 
+def test_forget_matches_a_possessive_form_of_the_topic(tmp_path) -> None:
+    """ADR-0009 §4.4: "gajiku" is still about the "gaji" memory when no token is shared."""
+    memory = store(tmp_path)
+    target = memory.write(
+        "aku dapat gaji baru bulan ini", scope="person", person_id=PERSON,
+        thread_id=THREAD, owner_id=PERSON, subject_id=PERSON, level=2,
+    )
+    memory.write(
+        "aku suka kopi pahit", scope="person", person_id=PERSON,
+        thread_id=THREAD, owner_id=PERSON, subject_id=PERSON, level=2,
+    )
+
+    removed = asyncio.run(
+        memory.forget_by_intent("lupakan gajiku", person_id=PERSON, thread_id=THREAD)
+    )
+
+    assert removed == [target]
+    assert memory.get(target) is None
+
+
+def _vec(first: float, second: float = 0.0) -> list[float]:
+    """A 384-dim vector, because the store only keeps vectors of the native dimension."""
+    return [first, second] + [0.0] * 382
+
+
+def test_forget_uses_cosine_for_a_paraphrase(tmp_path, monkeypatch) -> None:
+    memory = store(tmp_path)
+    vectors = {
+        "aku bekerja di Acme Corp": _vec(1.0),
+        "aku suka kopi pahit": _vec(0.0, 1.0),
+        "lupakan tempat kerjaku": _vec(1.0),
+    }
+    monkeypatch.setattr(
+        embed, "encode", lambda texts, **kwargs: [vectors.get(texts[0], _vec(0.0))]
+    )
+    target = memory.write(
+        "aku bekerja di Acme Corp", scope="person", person_id=PERSON,
+        thread_id=THREAD, owner_id=PERSON, subject_id=PERSON, level=2,
+    )
+    memory.write(
+        "aku suka kopi pahit", scope="person", person_id=PERSON,
+        thread_id=THREAD, owner_id=PERSON, subject_id=PERSON, level=2,
+    )
+
+    removed = asyncio.run(
+        memory.forget_by_intent("lupakan tempat kerjaku", person_id=PERSON, thread_id=THREAD)
+    )
+
+    assert removed == [target]
+    assert memory.get(target) is None
+
+
+def test_semantic_forget_stays_put_when_two_rows_are_close(tmp_path, monkeypatch) -> None:
+    memory = store(tmp_path)
+    vectors = {
+        "aku bekerja di Acme Corp": _vec(1.0),
+        "aku bekerja di Beta Labs": _vec(0.99, 0.14),
+        "lupakan tempat kerjaku": _vec(1.0),
+    }
+    monkeypatch.setattr(
+        embed, "encode", lambda texts, **kwargs: [vectors.get(texts[0], _vec(0.0))]
+    )
+    memory.write(
+        "aku bekerja di Acme Corp", scope="person", person_id=PERSON,
+        thread_id=THREAD, owner_id=PERSON, subject_id=PERSON, level=2,
+    )
+    memory.write(
+        "aku bekerja di Beta Labs", scope="person", person_id=PERSON,
+        thread_id=THREAD, owner_id=PERSON, subject_id=PERSON, level=2,
+    )
+
+    removed = asyncio.run(
+        memory.forget_by_intent("lupakan tempat kerjaku", person_id=PERSON, thread_id=THREAD)
+    )
+
+    assert removed == []
+    assert len(memory.readable()) == 2
+
+
 def test_the_audit_job_purges_with_the_configured_grace_and_batch(tmp_path) -> None:
     from monoagens.engine.jobs.cognition import CognitionWorker, Job
 

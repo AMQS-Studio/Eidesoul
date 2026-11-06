@@ -472,8 +472,9 @@ def bind_stores(agent) -> None:
     writing unfenced, and the same lease object exposes the new generation after takeover.
     """
     lease = getattr(agent, "lease", None)
-    if lease is not None:
-        lease.bind_stores(agent)
+    bind = getattr(lease, "bind_stores", None)
+    if bind is not None:
+        bind(agent)
 
 
 def lock_data_dir(path) -> object | None:

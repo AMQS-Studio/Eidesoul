@@ -199,7 +199,11 @@ TOOL = Handler(
         "properties": {
             "path": {
                 "type": "string",
-                "description": "Workspace path, or an `att_…` handle to forward.",
+                "description": (
+                    "Workspace path (e.g. 'scratch/report.csv') OR attachment handle "
+                    "(e.g. 'att_...'). Pass the att_... handle string directly to forward "
+                    "an attachment."
+                ),
             },
             "chat": {
                 "type": "string",

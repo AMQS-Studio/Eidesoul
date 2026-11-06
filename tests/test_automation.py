@@ -640,3 +640,31 @@ def test_reap_touches_only_claimed_or_running_and_only_its_own_generation(tmp_pa
     env.store.bind_lease(SimpleNamespace(instance_id="owner", generation=head.generation))
     assert env.store.reap(at(10, 7)) == 1
     assert status_of(env, claimed) == "queued"
+
+
+def test_a_prompt_recipe_runs_through_the_agent_llm(tmp_path) -> None:
+    env = build(tmp_path)
+    env.agent.recipes.save(
+        "ringkas", "prompt", "Ringkas.", prompt="Ringkas {{args}}."
+    )
+    calls: list[tuple[str, str]] = []
+
+    class Runner:
+        async def run(self, system, user, specs, ctx, **kwargs):
+            calls.append((system, user))
+            return "hasil"
+
+    env.agent.llm = Runner()
+    worker = AutomationWorker(env.agent, store=env.store)
+    facts: dict = {}
+
+    asyncio.run(
+        worker._recipe(
+            {"name": "ringkas", "args": "minggu ini"},
+            {"owner": OWNER, "event": {}},
+            facts,
+        )
+    )
+
+    assert calls == [("", "Ringkas minggu ini.\n\nArguments: minggu ini")]
+    assert facts["recipe"] == "hasil"

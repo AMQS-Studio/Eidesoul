@@ -1,6 +1,8 @@
 """ADR-0043: deterministic trigger, ephemeral card, and citation/freshness verification."""
 
+import asyncio
 from datetime import UTC, datetime, timedelta
+from types import SimpleNamespace
 
 from monoagens.engine.turn.research import (
     ResearchCard,
@@ -15,6 +17,22 @@ from monoagens.engine.turn.research import (
 def test_stable_common_knowledge_does_not_force_a_search() -> None:
     assert trigger_reason("ibukota indonesia apa", language="id") == ""
     assert trigger_reason("what is a capital city", language="en") == ""
+
+
+def test_an_action_tool_turn_keeps_its_answer_when_the_card_failed() -> None:
+    """ADR-0009 §4.3: a missing citation must not discard work an action tool already did."""
+    from monoagens.engine.turn.research_flow import ResearchFlow
+
+    flow = object.__new__(ResearchFlow)
+    flow.runtime = SimpleNamespace()
+    context = SimpleNamespace(used=["write"], research_cards=[])
+    card = SimpleNamespace(status="empty")
+
+    answer = asyncio.run(
+        flow._verify_research("isi file", card, "exact", context, None, None, "t", 0.0, 0.0)
+    )
+
+    assert answer == "isi file"
 
 
 def test_current_source_and_exact_claims_force_a_search() -> None:

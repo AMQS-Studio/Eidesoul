@@ -287,6 +287,9 @@ class LLM:
             **self._effort(),
             **self._sampling_kwargs(temperature, sampling),
         }
+        tier = self.config.llm.service_tier
+        if tier:
+            kwargs["service_tier"] = tier
         if self.config.llm.native:
             kwargs["safety"] = self.config.soul.voice.safety
         tools = None if wrap else self._tool_specs(active)
@@ -681,6 +684,9 @@ class LLM:
             **self._effort(),
             **self._sampling_kwargs(temperature),
         }
+        tier = self.config.llm.service_tier
+        if tier:
+            kwargs["service_tier"] = tier
         try:
             response = await self._call(
                 client,

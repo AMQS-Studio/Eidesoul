@@ -265,7 +265,9 @@ class Supervisor:
             bind(lease.guard)
         # ADR-0012 §4.3: bind every fenced store now, even at generation 0, so a standby
         # refuses canonical writes instead of executing them unfenced.
-        lease.bind_stores(agent)
+        bind_stores = getattr(lease, "bind_stores", None)
+        if bind_stores is not None:
+            bind_stores(agent)
         self.automations = (
             AutomationWorker(agent) if getattr(agent, "db", None) is not None else None
         )

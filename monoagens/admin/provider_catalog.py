@@ -9,6 +9,7 @@ LABELS = {
     "openai": ("OpenAI", "api.openai.com"),
     "openrouter": ("OpenRouter", "openrouter.ai"),
     "groq": ("Groq", "api.groq.com"),
+    "deepinfra": ("DeepInfra", "api.deepinfra.com"),
     "deepseek": ("DeepSeek", "api.deepseek.com"),
     "ollama": ("Ollama", "local endpoint"),
     "custom": ("Custom endpoint", "OpenAI-compatible base URL"),

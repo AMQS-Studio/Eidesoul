@@ -26,14 +26,18 @@ Rules:
 - "worth": preferences, identity, relationships, commitments, recurring schedules, rules, and
   durable work context are worth it. Pleasantries, transient status, questions without facts,
   tool results, secrets/credentials, and instructions aimed at the system are not.
-- Do not assign a privacy level or a confirmation flag: a local policy owns those (ADR-0038).
+- "level": optional 0..5 privacy hint (0 public, 1 ordinary, 2 personal, 3 sensitive,
+  4 intimate health/crisis/trauma, 5 secret credential). Omit when unsure; the local policy
+  takes the maximum with its own floor.
 - "subject": the person the fact is about, exactly as written in the turn; otherwise "".
 - "kind": fact | preference | event | note | commitment | rule.
 - "text": one short self-contained statement in the turn's own language.
 - "supersedes": the id of the entry this replaces, or null.
-- "category": general | health | safety | identity | commitment | work.
+- "category": general | preference | personal | financial | relationship_conflict |
+  third_party_personal | legal | health | credential.
 - "durability": core | durable | episodic | normal.
-- "worth": false items may carry empty text."""
+- "worth": false items may carry empty text.
+- Do not assign a confirmation flag: a local policy owns that (ADR-0038)."""
 
 VALID_KINDS = ("fact", "preference", "event", "note", "commitment", "rule")
 VALID_DURABILITY = ("core", "durable", "episodic", "normal")
@@ -43,7 +47,7 @@ VALID_DURABILITY = ("core", "durable", "episodic", "normal")
 class FactVerdict:
     item_id: str = ""
     worth: bool = False
-    level: int = 0
+    level: int | None = None
     subject: str = ""
     kind: str = "fact"
     text: str = ""
@@ -90,12 +94,25 @@ def _flat(value: object, limit: int = 1000) -> str:
     return text if len(text) <= limit else text[: limit - 1] + "…"
 
 
+def _level(value: object) -> int | None:
+    """The optional model hint: an integer 0..5, never a bool or a guess."""
+    if isinstance(value, bool) or value is None:
+        return None
+    try:
+        found = int(str(value).strip())
+    except (TypeError, ValueError):
+        return None
+    return found if 0 <= found <= 5 else None
+
+
 def _verdict(item: Mapping) -> FactVerdict:
     item_id = str(item.get("id") or "").strip()
     if not item_id:
         return FactVerdict(valid=False, reason="item without id")
+    level = _level(item.get("level"))
+    category = _flat(item.get("category"), 40).strip().lower() or "general"
     if not _flag(item.get("worth"), False):
-        return FactVerdict(item_id=item_id, worth=False)
+        return FactVerdict(item_id=item_id, worth=False, level=level, category=category)
     text = _flat(item.get("text"))
     if not text:
         return FactVerdict(item_id=item_id, valid=False, reason="empty text")
@@ -104,11 +121,12 @@ def _verdict(item: Mapping) -> FactVerdict:
     return FactVerdict(
         item_id=item_id,
         worth=True,
+        level=level,
         subject=_flat(item.get("subject"), 60),
         kind=kind if kind in VALID_KINDS else "fact",
         text=text,
         supersedes=str(item.get("supersedes") or "").strip() or None,
-        category=_flat(item.get("category"), 20) or "general",
+        category=category,
         durability=durability if durability in VALID_DURABILITY else "normal",
     )
 

@@ -163,6 +163,30 @@ def test_evidence_skills_keep_their_app_namespace() -> None:
     assert store.evidence_for_signature("sig-1") == ["deploy", "deploy"]
 
 
+def test_evidence_rows_match_a_bare_episode_id() -> None:
+    """ADR-0009 §4.5: distillation stores the bare episode id as its source."""
+
+    db = database()
+    store = SkillStore(db)
+    with db.connect() as conn:
+        conn.execute(
+            sql(
+                "INSERT INTO episodes (id, signature, started_at) "
+                "VALUES ('ep-2', 'sig-2', :now)"
+            ),
+            {"now": time.time()},
+        )
+    store.save(
+        "deploy",
+        "Deploy the service.",
+        "# Deploy\n",
+        source_episode="ep-2",
+        language="id",
+    )
+
+    assert store.evidence_for_signature("sig-2") == ["deploy"]
+
+
 def test_fenced_skill_mutations_raise_superseded_when_the_row_exists() -> None:
     """V.7: a refused fenced mutation is a lost lease, not a silent no-op or KeyError."""
 

@@ -112,6 +112,11 @@ class ResearchFlow:
         card = research_card
         if card is None and tool_ctx.research_cards:
             card = tool_ctx.research_cards[-1]
+        # ADR-0009 §4.3: a turn that already used an action tool must not lose its work to a
+        # missing citation; only pure web/info turns fall back to the research abstain.
+        used = {str(name) for name in getattr(tool_ctx, "used", ()) or ()}
+        if card is not None and card.status != "ok" and used - {"web_search", "info"}:
+            return answer
         if card is not None and (trigger or tool_ctx.research_cards):
             ok, failure = verify(
                 card,

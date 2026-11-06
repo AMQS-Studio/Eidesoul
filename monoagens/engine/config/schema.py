@@ -45,6 +45,7 @@ ENGINE_SCHEMA: dict[str, object] = {
         "model": None,
         "api_key_env": None,
         "reasoning_effort": None,
+        "service_tier": None,
         "timeout_seconds": None,
         "utility_temperature": None,
         "run_budget_seconds": None,

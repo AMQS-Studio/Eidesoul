@@ -34,7 +34,7 @@ LIST_KEYS = (
     "research_challenge",
 )
 # ADR-0006 §4.5: the conversational confirmation vocabulary is language data, never a literal.
-OPTIONAL_LIST_KEYS = ("confirm", "reject", "modify", "filler")
+OPTIONAL_LIST_KEYS = ("confirm", "reject", "modify", "filler", "possessives")
 
 
 @dataclass(frozen=True)
@@ -58,6 +58,7 @@ class Lexicon:
     reject: frozenset[str] = frozenset()
     modify: frozenset[str] = frozenset()
     filler: frozenset[str] = frozenset()
+    possessives: frozenset[str] = frozenset()
     privacy_levels: Mapping[str, int] = field(default_factory=dict)
     ok: bool = True
 
@@ -155,6 +156,7 @@ def _pack(code: str, body: object) -> Lexicon:
         reject=extra["reject"],
         modify=extra["modify"],
         filler=extra["filler"],
+        possessives=extra["possessives"],
         privacy_levels=levels,
     )
 
