@@ -6,8 +6,8 @@ Hard rules and timeless architectural invariants for changes in this repo.
 
 - English is the default for all code, comments, docstrings, log messages, internal error strings,
   CLI help, prompt scaffolding, model-facing payloads, config comments, tests, and docs.
-- Non-English is allowed only in runtime data surfaces: `monoagens/lang/<code>.yaml` (chat catalogs),
-  `soul.yaml` persona content, and detector data under `monoagens/library/**`.
+- Non-English is allowed only in runtime data surfaces: `monoagens/lang/<code>.yaml` (chat catalogs)
+  and `soul.yaml` persona content.
 - No hardcoded chat-visible string in code: call `t()` from `monoagens/engine/i18n.py` and let the
   catalog supply the text. English code strings are internal diagnostics, never chat replies.
 
