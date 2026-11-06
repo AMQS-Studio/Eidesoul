@@ -53,7 +53,10 @@ def run_polish(config, llm, draft: str) -> str:
 
 
 def long_draft() -> str:
-    return "Tentu! Berikut saran untuk acara kamu: susun rundown dulu, lalu cek konsumsi."
+    return (
+        "Sure! Here are suggestions for your event: "
+        "plan the rundown first, then check the catering."
+    )
 
 
 def test_short_natural_reply_needs_no_polish() -> None:
@@ -62,10 +65,10 @@ def test_short_natural_reply_needs_no_polish() -> None:
 
 
 def test_assistant_tell_markdown_and_lengths_trigger_polish() -> None:
-    assert needs_polish("Tentu, aku bantu ya", language="id") is True
+    assert needs_polish("Sure, I can help", language="en") is True
     assert needs_polish("- susun rundown\n- cek konsumsi", language="id") is True
     assert needs_polish(
-        "iya. kamu gimana? kabarin ya nanti sore. aku tunggu. jangan lupa.", language="id"
+        "yeah. how are you? let me know later. i will wait. do not forget.", language="en"
     ) is True
     assert needs_polish("a" * 241, language="id") is True
     assert needs_polish("x" * 401, language="id") is True
@@ -111,7 +114,7 @@ def test_empty_answer_falls_back_to_the_draft(tmp_path) -> None:
 
 
 def test_answer_that_still_sounds_like_an_assistant_falls_back(tmp_path) -> None:
-    llm = StubLLM("Tentu! Semoga membantu ya")
+    llm = StubLLM("Sure! Hope this helps")
 
     assert run_polish(config_with(tmp_path), llm, long_draft()) == long_draft()
 
@@ -167,7 +170,7 @@ def test_a_rewrite_that_invents_a_number_is_discarded(tmp_path) -> None:
 
 
 def test_a_rewrite_that_keeps_every_number_is_accepted(tmp_path) -> None:
-    draft = "Tentu! Rapat jam 14:30, diskon 50% berlaku hari ini."
-    rewrite = "rapat jam 14:30 ya, diskon 50% berlaku hari ini"
+    draft = "Sure! Meeting at 14:30, 50% discount today."
+    rewrite = "meeting at 14:30, 50% discount today"
 
     assert run_polish(config_with(tmp_path), StubLLM(rewrite), draft) == rewrite

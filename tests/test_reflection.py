@@ -38,8 +38,8 @@ def rows(memory: MemoryStore) -> list[dict]:
 
 def test_opposite_polarity_opens_a_dispute_and_hides_both(tmp_path) -> None:
     memory = store(tmp_path)
-    left = write(memory, "aku suka kopi")
-    right = write(memory, "aku tidak suka kopi")
+    left = write(memory, "I like coffee")
+    right = write(memory, "I do not like coffee")
 
     report = asyncio.run(
         reflect.run_pass(memory, scope=f"person:{PERSON}", llm=None, language="id")
@@ -76,12 +76,12 @@ def test_duplicates_merge_into_one_t2_derivative_and_never_chain(tmp_path) -> No
 
 def test_apply_reflection_refuses_empty_refs_and_a_chain(tmp_path) -> None:
     memory = store(tmp_path)
-    source_id = write(memory, "aku suka kopi")
+    source_id = write(memory, "I like coffee")
     source = memory.db.fetch_one(sql("SELECT * FROM memories WHERE id = :id"), {"id": source_id})
 
     with pytest.raises(ValueError, match="refs"):
         memory.apply_reflection(
-            "aku suka kopi",
+            "I like coffee",
             refs=[],
             sources=[source],
             scope="person",
@@ -90,7 +90,7 @@ def test_apply_reflection_refuses_empty_refs_and_a_chain(tmp_path) -> None:
         )
 
     derived = memory.apply_reflection(
-        "aku suka kopi",
+        "I like coffee",
         refs=[source_id],
         sources=[source],
         scope="person",
@@ -101,7 +101,7 @@ def test_apply_reflection_refuses_empty_refs_and_a_chain(tmp_path) -> None:
     derived_row = memory.db.fetch_one(sql("SELECT * FROM memories WHERE id = :id"), {"id": derived})
     with pytest.raises(ValueError, match="derive_depth"):
         memory.apply_reflection(
-            "aku suka kopi",
+            "I like coffee",
             refs=[derived],
             sources=[derived_row],
             scope="person",
@@ -110,7 +110,7 @@ def test_apply_reflection_refuses_empty_refs_and_a_chain(tmp_path) -> None:
         )
     with pytest.raises(ValueError, match="lower"):
         memory.apply_reflection(
-            "aku suka kopi",
+            "I like coffee",
             refs=[source_id],
             sources=[source],
             scope="person",
@@ -122,9 +122,9 @@ def test_apply_reflection_refuses_empty_refs_and_a_chain(tmp_path) -> None:
 
 def test_stale_dispute_weakens_the_inferred_side(tmp_path) -> None:
     memory = store(tmp_path)
-    left = write(memory, "aku suka kopi")
+    left = write(memory, "I like coffee")
     right = memory.write(
-        "aku tidak suka kopi",
+        "I do not like coffee",
         scope="person",
         person_id=PERSON,
         thread_id=THREAD,
@@ -148,8 +148,8 @@ def test_stale_dispute_weakens_the_inferred_side(tmp_path) -> None:
 def test_a_pass_reports_the_pairs_it_opened(tmp_path) -> None:
     """ADR-0010 §4.7: the pass hands its opened pairs to whoever asks the question."""
     memory = store(tmp_path)
-    left = write(memory, "aku suka kopi")
-    right = write(memory, "aku tidak suka kopi")
+    left = write(memory, "I like coffee")
+    right = write(memory, "I do not like coffee")
 
     report = asyncio.run(
         reflect.run_pass(memory, scope=f"person:{PERSON}", llm=None, language="id")
@@ -159,7 +159,7 @@ def test_a_pass_reports_the_pairs_it_opened(tmp_path) -> None:
     assert len(report.opened) == 1
     pair = report.opened[0]
     assert set(pair["ids"]) == {left, right}
-    assert {pair["first"], pair["second"]} == {"aku suka kopi", "aku tidak suka kopi"}
+    assert {pair["first"], pair["second"]} == {"I like coffee", "I do not like coffee"}
     assert pair["subject_id"] == PERSON
 
     open_pairs = memory.open_disputes()
@@ -174,8 +174,8 @@ def test_the_worker_asks_one_question_per_pass(tmp_path) -> None:
     from monoagens.engine.jobs.cognition import CognitionWorker, Job
 
     memory = store(tmp_path)
-    write(memory, "aku suka kopi")
-    write(memory, "aku tidak suka kopi")
+    write(memory, "I like coffee")
+    write(memory, "I do not like coffee")
     asked: list[tuple[str, dict]] = []
     worker = CognitionWorker(
         database(),

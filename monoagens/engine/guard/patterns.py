@@ -1,19 +1,15 @@
 """Shared safety boundary: crisis, injection, and secrets.
 
-Crisis and sensitive phrases are per-language data in `library/safety/<lang>.json`. The English
-net below is the only compiled list, kept as the last line when a pack is missing (ADR-0033
-§4.2/§8); every other language reads its own pack and never borrows. Injection phrases come
-from `library/lexicon/<language>.json`, so a missing pack simply has none.
+The guard is language-agnostic: credential shapes are structural, and the built-in English
+crisis/figurative nets are the last line when the turn-level decision did not classify a
+message. A credential needs a value shape (an explicit `key = value`, a token prefix, or a
+PEM header), so ordinary talk about passwords and tokens stays ordinary talk.
 
 Every phrase is matched whole: a keyword nested inside a longer ordinary word never fires, and a
 crisis phrase is suppressed when a negation or a figurative idiom owns the same clause
 (`dead battery`, `dying of laughter`).
-Credentials need a value shape (an explicit `key = value`, a token prefix, or a PEM header), so
-ordinary talk about passwords and tokens stays ordinary talk.
 """
 
-
-import json
 import math
 import re
 from collections import Counter
@@ -24,23 +20,57 @@ from pathlib import Path
 
 from ..character import lexicon
 
-SCHEMA_VERSION = 1
-SAFETY_DIR = Path(__file__).resolve().parents[2] / "library" / "safety"
-_OVERRIDE: Path | None = None
-_NET = ("self-harm", "self harm", "suicide", "kill myself", "end my life", "want to die",
-        "hurt myself", "overdose", "hang myself")
-_NET_SENSITIVE = ("api key", "api_key", "api-key", "password", "passwd", "token", "secret",
-                  "otp", "credential")
+_NET = (
+    "self-harm",
+    "self harm",
+    "suicide",
+    "kill myself",
+    "end my life",
+    "want to die",
+    "hurt myself",
+    "overdose",
+    "hang myself",
+    "no reason to live",
+)
+_NET_SENSITIVE = (
+    "api key",
+    "api_key",
+    "api-key",
+    "password",
+    "passwd",
+    "token",
+    "secret",
+    "otp",
+    "credential",
+)
 # Figurative uses of a crisis word: the phrase is the idiom, not a statement about dying.
-_NET_FIGURATIVE = ("dead battery", "dead phone", "dead tired", "dead end", "dying of laughter",
-                   "died laughing", "laughing to death", "laughed to death", "dead on arrival")
-_NET_NEGATIONS = ("not", "no", "never", "dont", "don't", "cannot", "can't", "cant", "won't",
-                  "wont")
+_NET_FIGURATIVE = (
+    "dead battery",
+    "dead phone",
+    "dead tired",
+    "dead end",
+    "dying of laughter",
+    "died laughing",
+    "laughing to death",
+    "laughed to death",
+    "dead on arrival",
+)
+_NET_NEGATIONS = (
+    "not",
+    "no",
+    "never",
+    "dont",
+    "don't",
+    "cannot",
+    "can't",
+    "cant",
+    "won't",
+    "wont",
+)
 
 # A credential is a shape, never a bare keyword: `key = value`, a suffixed password, a token
 # prefix, or a PEM header. A forgotten password stays ordinary talk.
-_CREDENTIAL_DIR = Path(__file__).resolve().parents[2] / "library" / "guard"
-_CREDENTIAL_FALLBACK = {
+_CREDENTIAL_TERMS = {
     "strong_keys": (r"api[\s_-]?key",),
     "connectors": ("is", "are"),
 }
@@ -48,31 +78,20 @@ _CREDENTIAL_FALLBACK = {
 
 @lru_cache(maxsize=1)
 def _credential_terms() -> dict[str, tuple[str, ...]]:
-    """Localized key/connector words are data in `library/guard/credentials.json`."""
-    try:
-        raw = json.loads((_CREDENTIAL_DIR / "credentials.json").read_text(encoding="utf-8"))
-    except (OSError, ValueError):
-        raw = {}
-    terms = dict(_CREDENTIAL_FALLBACK)
-    for key in terms:
-        value = raw.get(key) if isinstance(raw, dict) else None
-        if isinstance(value, list) and value and all(
-            isinstance(item, str) and item for item in value
-        ):
-            terms[key] = tuple(value)
-    return terms
+    """The English structural key/connector terms used by the credential shapes."""
+    return dict(_CREDENTIAL_TERMS)
 
 
 _TERMS = _credential_terms()
 _STRONG_KEYS = "(?:" + "|".join(_TERMS["strong_keys"]) + ")"
-_SOFT_KEYS = r"(?:token|secret|otp|credential)"
-_PASSWORD = r"pass(?:word|wd)"
+_SOFT_KEYS = r"(?:token|secret|otp|credential|bearer|authorization)"
+_PASSWORD = r"(?:pass(?:word|wd)|pwd)"
 _CONNECTORS = "(?:" + "|".join(_TERMS["connectors"]) + ")"
 _STRONG_VALUE = r"(?:\s*[:=]\s*\S+|\s+\S+)"
 _EXPLICIT_VALUE = r"\s*[:=]\s*\S+"
 _VALUE_TOKEN = r"[A-Za-z0-9_+/=\-]{12,}"
 # Provider and platform credential shapes; shared with the privacy evidence layer so both
-# boundaries recognize the same tokens (ADR-0009 §4.1).
+# boundaries recognize the same tokens (ADR-0009 §4.2).
 TOKEN_SHAPES = (
     r"(?<![A-Za-z0-9])sk-[A-Za-z0-9_\-]{20,}",
     r"(?<![A-Za-z0-9])gh[pousr]_[A-Za-z0-9_]{20,}",
@@ -101,9 +120,7 @@ def _shannon_entropy(token: str) -> float:
         return 0.0
     counts = Counter(token)
     total = len(token)
-    return -sum(
-        (count / total) * math.log2(count / total) for count in counts.values()
-    )
+    return -sum((count / total) * math.log2(count / total) for count in counts.values())
 
 
 def _char_classes(token: str) -> int:
@@ -129,6 +146,7 @@ def entropy_secret(text: str) -> list[tuple[int, int]]:
             continue
         found.append((match.start(1), match.end(1)))
     return found
+
 
 # One crisis span is suppressed only by a negation or an idiom in the same clause.
 _NEGATION_WINDOW = 32
@@ -173,7 +191,7 @@ _SHAPES = re.compile(
 
 @dataclass(frozen=True)
 class Safety:
-    """One language's phrases; `ok` is false when the pack is missing."""
+    """The built-in English safety phrases; `ok` is false only for an empty language code."""
 
     language: str
     crisis: tuple[str, ...] = ()
@@ -182,14 +200,18 @@ class Safety:
     ok: bool = True
 
 
+_ENGLISH = Safety(
+    language="en", crisis=_NET, sensitive=_NET_SENSITIVE, figurative=_NET_FIGURATIVE
+)
+
+
 def directory() -> Path:
-    return _OVERRIDE or SAFETY_DIR
+    """The guard has no data directory; kept for callers that inspect it."""
+    return Path()
 
 
 def configure(folder: str | Path | None = None) -> None:
-    """Point the guard at another pack directory; a test seam, never a runtime setting."""
-    global _OVERRIDE
-    _OVERRIDE = Path(folder).expanduser() if folder else None
+    """Compatibility seam: clear compiled caches; the guard always uses the built-in nets."""
     _pack.cache_clear()
     _crisis.cache_clear()
     _sensitive.cache_clear()
@@ -197,57 +219,44 @@ def configure(folder: str | Path | None = None) -> None:
 
 
 @lru_cache(maxsize=8)
-def _pack(code: str, folder: str) -> Safety:
-    path = Path(folder) / f"{code}.json"
-    if not path.is_file():
-        return Safety(language=code, ok=False)
-    try:
-        body = json.loads(path.read_text(encoding="utf-8"))
-        if body.get("version") != SCHEMA_VERSION or str(body.get("language")) != code:
-            return Safety(language=code, ok=False)
-        crisis = tuple(str(item).strip().casefold() for item in body.get("crisis") or ())
-        sensitive = tuple(str(item).strip().casefold() for item in body.get("sensitive") or ())
-        figurative = tuple(
-            str(item).strip().casefold() for item in body.get("figurative") or ()
-        )
-        return Safety(
-            language=code, crisis=crisis, sensitive=sensitive, figurative=figurative
-        )
-    except (OSError, ValueError):
-        return Safety(language=code, ok=False)
+def _pack(code: str) -> Safety:
+    return Safety(
+        language=code,
+        crisis=_NET,
+        sensitive=_NET_SENSITIVE,
+        figurative=_NET_FIGURATIVE,
+    )
 
 
 def safety(language: str) -> Safety:
-    """The pack for one catalog code, loaded lazily and cached; `ok` false when absent."""
+    """The built-in safety phrases for any catalog code."""
     code = str(language or "").strip().lower()
     if not code:
         return Safety(language="", ok=False)
-    return _pack(code, str(directory()))
+    return _pack(code)
 
 
 def has_pack(language: str) -> bool:
-    return safety(language).ok
+    """Every non-empty language code has the built-in baseline."""
+    return bool(str(language or "").strip())
 
 
 @lru_cache(maxsize=16)
-def _crisis(code: str, folder: str) -> re.Pattern[str] | None:
-    pack = _pack(code, folder)
-    return _bounded(pack.crisis or _NET)
+def _crisis(code: str) -> re.Pattern[str] | None:
+    return CRISIS
 
 
 @lru_cache(maxsize=16)
-def _sensitive(code: str, folder: str) -> re.Pattern[str] | None:
-    pack = _pack(code, folder)
-    phrases = _bounded(pack.sensitive)
+def _sensitive(code: str) -> re.Pattern[str] | None:
+    phrases = _bounded(_NET_SENSITIVE)
     if phrases is None:
         return None
     return re.compile(rf"(?:{phrases.pattern}){_EXPLICIT_VALUE}", re.IGNORECASE)
 
 
 @lru_cache(maxsize=16)
-def _figurative(code: str, folder: str) -> re.Pattern[str] | None:
-    pack = _pack(code, folder)
-    return _bounded(pack.figurative or _NET_FIGURATIVE)
+def _figurative(code: str) -> re.Pattern[str] | None:
+    return _bounded(_NET_FIGURATIVE)
 
 
 @lru_cache(maxsize=16)
@@ -271,7 +280,7 @@ def _injection(language: str, folder: str, stamp: int) -> re.Pattern[str] | None
 
 
 def injection(language: str) -> re.Pattern[str] | None:
-    """Compiled injection pattern for one language; None when its pack carries no phrases."""
+    """Compiled injection pattern for one language; the built-in English baseline."""
     code = str(language or "").strip().lower()
     if not code:
         return None
@@ -318,21 +327,26 @@ def is_sensitive(text: str, language: str) -> bool:
     if _SHAPES.search(body) or entropy_secret(body):
         return True
     code = str(language or "").strip().lower()
-    pattern = _sensitive(code, str(directory())) if code else None
+    pattern = _sensitive(code) if code else None
     return bool(pattern and pattern.search(body))
 
 
+def has_credential(text: str, language: str = "") -> bool:
+    """Public alias for the structural credential check."""
+    return is_sensitive(text, language)
+
+
 def is_crisis(text: str, language: str) -> bool:
-    """Crisis detection reads the language pack; the English net is the last line."""
+    """Crisis detection uses the built-in English net; `decide_turn` covers other languages."""
     body = " ".join(str(text or "").split())
     if not body:
         return False
     code = str(language or "").strip().lower()
-    folder = str(directory())
+    folder = str(lexicon.directory())
     if code:
-        idioms = _figurative(code, folder)
-        negation = _negation(code, str(lexicon.directory()), lexicon.generation())
-        patterns = (_crisis(code, folder), CRISIS)
+        idioms = _figurative(code)
+        negation = _negation(code, folder, lexicon.generation())
+        patterns = (_crisis(code), CRISIS)
     else:
         idioms = _bounded(_NET_FIGURATIVE)
         negation = None
@@ -347,9 +361,24 @@ def is_crisis(text: str, language: str) -> bool:
     return False
 
 
+def has_crisis(text: str, language: str = "") -> bool:
+    """Public alias for the crisis check."""
+    return is_crisis(text, language)
+
+
 def is_injection(text: str, language: str) -> bool:
     pattern = injection(language)
     return bool(pattern and pattern.search(str(text or "")))
+
+
+def redact_credentials(text: str, language: str = "") -> str:
+    """Replace credential and entropy spans with a neutral marker."""
+    body = str(text or "")
+    spans = [match.span() for match in _SHAPES.finditer(body)]
+    spans.extend(entropy_secret(body))
+    for start, end in sorted(spans, reverse=True):
+        body = body[:start] + "[redacted]" + body[end:]
+    return body
 
 
 def safe_text(text: str, limit: int = 400, *, language: str) -> str:

@@ -22,6 +22,24 @@ log = logging.getLogger(__name__)
 
 WORD = re.compile(r"\w+", re.UNICODE)
 DIGITS = re.compile(r"\d+", re.UNICODE)
+_AUXILIARIES = frozenset(
+    {
+        "am",
+        "are",
+        "be",
+        "been",
+        "being",
+        "did",
+        "do",
+        "does",
+        "had",
+        "has",
+        "have",
+        "is",
+        "was",
+        "were",
+    }
+)
 STATES = ("ok", "staged")
 
 VERDICT_PROMPT = """You rule on pairs of memory entries that look contradictory.
@@ -67,7 +85,7 @@ def _normal(text: str) -> str:
 
 
 def _tokens(text: str) -> list[str]:
-    return WORD.findall(_normal(text))
+    return [word for word in WORD.findall(_normal(text)) if word not in _AUXILIARIES]
 
 
 def _numbers(text: str) -> set[str]:

@@ -135,10 +135,9 @@ BENIGN = (
 )
 
 GENUINE = (
-    ("aku tadi nyuri di toko", "id", 4),
-    ("aku gak suka sama dia", "id", 3),
-    ("aku diancam", "id", 4),
-    ("passwordku hunter2", "id", 4),
+    ("I stole from the store", "en", 4),
+    ("I do not like him", "en", 3),
+    ("I was threatened", "en", 4),
     ("my password is hunter2", "en", 4),
     ("the secret token is here", "en", 4),
     ("I do not like her", "en", 3),

@@ -175,7 +175,7 @@ class Soul:
 
     def __post_init__(self) -> None:
         """Validate required values, then resolve an empty pronoun from the catalog."""
-        normalize_language(self.language)
+        normalize_language(self.language, allow_any=True)
         if not self.locale.strip():
             raise ValueError("soul locale is required; `monoagens init` writes it")
         clock.zone(self.timezone)
@@ -184,11 +184,15 @@ class Soul:
 
 
 def default_pronoun(language: str) -> str:
-    """`soul.pronoun.default` for one catalog; missing means boot fails."""
-    code = normalize_language(language)
-    if PRONOUN_KEY not in catalog(code):
+    """`soul.pronoun.default` for one catalog; a bare code falls back to English."""
+    code = normalize_language(language, allow_any=True)
+    try:
+        messages = catalog(code)
+    except ValueError:
+        messages = catalog("en")
+    if PRONOUN_KEY not in messages:
         raise ValueError(f"language catalog '{code}' is missing the required key '{PRONOUN_KEY}'")
-    return t(PRONOUN_KEY, code)
+    return messages[PRONOUN_KEY]
 
 
 def language_line(soul: Soul) -> str:
@@ -577,7 +581,7 @@ def load_soul(
     soul = Soul(
         name=name,
         description=_text(raw.get("description")),
-        language=normalize_language(raw.get("language")),
+        language=normalize_language(raw.get("language"), allow_any=True),
         pronouns=_text(raw.get("pronouns")),
         mode=mode,
         modes=modes,

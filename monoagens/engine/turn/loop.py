@@ -323,6 +323,15 @@ class TurnRunner(ApprovalFlow, ResearchFlow, TurnReview):
                         min_call_seconds=min_call,
                         annoyance=annoyance,
                     )
+                    if decision is not None and decision.crisis and not crisis:
+                        crisis = True
+                        decision = replace(
+                            decision,
+                            addressed="me",
+                            act="reply",
+                            reason="crisis",
+                        )
+                        safety = CRISIS_SAFETY
 
                 if not is_command and runtime.affect is not None and not resuming:
                     try:

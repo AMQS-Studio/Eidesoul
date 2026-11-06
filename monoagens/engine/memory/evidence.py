@@ -1,16 +1,16 @@
 """Local privacy evidence and deterministic policy (ADR-0038).
 
 Detectors report *evidence*; only `decide()` writes a level and an action. The pattern layer
-is deterministic and versioned with the language pack; the entity layer uses Presidio with the
-small multilingual spaCy model; the semantic layer reuses the one MiniLM embedder and classifies
-by label centroids. Neither layer sees affect: a sentiment score is not a confidentiality level
-(ADR-0038 §4.10).
+is deterministic and versioned with the built-in English policy; the entity layer uses Presidio
+with the small multilingual spaCy model plus structural regex fallbacks; the semantic layer
+reuses the one MiniLM embedder and classifies by English label centroids. Because MiniLM maps
+50+ languages into one vector space, the English anchors serve every language. Neither layer
+sees affect: a sentiment score is not a confidentiality level (ADR-0038 §4.10).
 """
 
 import hashlib
 import importlib.metadata
 import importlib.util
-import json
 import logging
 import re
 import sys
@@ -30,7 +30,6 @@ SCHEMA_VERSION = 1
 POLICY_VERSION = "privacy-2026-11-05.2"
 POLICY_HASH = hashlib.sha256(POLICY_VERSION.encode("utf-8")).hexdigest()
 MAX_CLASSIFY_CHARS = 4000
-DEFAULT_DIR = Path(__file__).resolve().parents[2] / "library" / "privacy"
 CREDENTIAL = "credential"
 AMBIGUOUS = "ambiguous"
 ENTITY = "entity"
@@ -63,7 +62,7 @@ ACTIONS = ("allow", "redact", "block", "ask", "drop")
 
 # A credential is a value shape, never a keyword: a 16-digit NIK, a provider token prefix, a
 # PEM header, a DSN, or a high-entropy assignment value. These run for every language, so a
-# pack cannot hide one behind ordinary words.
+# policy cannot hide one behind ordinary words.
 VALUE_SHAPES = (
     (CREDENTIAL, r"(?<!\d)\d{16}(?!\d)"),
     *((CREDENTIAL, pattern) for pattern in TOKEN_SHAPES),
@@ -71,6 +70,141 @@ VALUE_SHAPES = (
 _SHAPES = tuple((label, re.compile(pattern)) for label, pattern in VALUE_SHAPES)
 # An ambiguous term needs its context words nearby; the bare word alone is not evidence.
 AMBIGUOUS_WINDOW = 40
+
+# English-only deterministic policy. A single baseline serves every language; the semantic
+# layer matches other languages through the shared multilingual embedding space.
+_LABELS: dict[str, dict[str, object]] = {
+    "credential": {
+        "level": 5,
+        "patterns": (
+            r"(?i)\b(password\w{0,2}|passwd)\b\s*(?:(?:is|are)\s+|[:=]\s*)\S+|\b(?:secret|api)[\s_-]?token\b",
+            r"(?i)\b(password|passwd|api[\s_-]?key|token|secret)\b\s*[:=]\s*\S+",
+            r"(?i)(?<![A-Za-z0-9])(-----BEGIN [A-Z ]+PRIVATE KEY-----)",
+        ),
+        "examples": (
+            "my password is hunter2",
+            "api key: sk-abc",
+            "the secret token is here",
+        ),
+    },
+    "health": {
+        "level": 4,
+        "patterns": (
+            r"(?i)\b(sick|illness|diagnosis|hospital|depression|cancer|hiv|pregnant)\b",
+        ),
+        "examples": (
+            "I am sick and going to hospital",
+            "the doctor said I am depressed",
+            "I am pregnant",
+        ),
+    },
+    "financial": {
+        "level": 3,
+        "patterns": (
+            r"(?i)\b(debt|loan|salary)\b|\b(?:bank|savings|checking)\s+account\b|\b(?:account|card)\s+(?:number|balance|details)\b|\bmy\s+(?:bank|balance|account)\b|\bcredit\s+card\b",
+        ),
+        "examples": (
+            "my bank account is here",
+            "I have a large debt",
+            "my salary is small",
+        ),
+    },
+    "crime_admission": {
+        "level": 4,
+        "patterns": (r"(?i)\b(stole|steal|shoplift|fraud|bribe|crime|prison)\b",),
+        "examples": (
+            "I stole from the shop",
+            "I bribed the officer",
+            "I committed fraud",
+        ),
+    },
+    "self_harm": {
+        "level": 4,
+        "patterns": (r"(?i)\b(suicide|kill myself|self[\s-]?harm|hurt myself)\b",),
+        "examples": (
+            "I want to kill myself",
+            "I hurt myself",
+            "I think about suicide",
+        ),
+    },
+    "violence": {
+        "level": 4,
+        "patterns": (
+            r"(?i)\b(?:kill|murder)\b\s+"
+            r"(?:him|her|them|me|you|us|someone|somebody|people|a person|my\s+\w+)"
+            r"|\b(?:hit|punch|attack)\b\s+(?:him|her|them|me|you|us|someone|somebody|people)"
+            r"|\bthreaten(?:ed|ing|s)?\b|\b(?:threat|threats)\s+(?:to|against)\b"
+            r"|\b(?:violence|violent|assault(?:ed)?)\b",
+        ),
+        "examples": (
+            "I want to kill him",
+            "he hit me",
+            "I was threatened",
+        ),
+    },
+    "sexual": {
+        "level": 4,
+        "patterns": (r"(?i)\b(sex|sexual|nude|naked|intimate)\b",),
+        "examples": (
+            "I have a sexual problem",
+            "a naked photo",
+            "our intimate life",
+        ),
+    },
+    "relationship_conflict": {
+        "level": 3,
+        "patterns": (
+            r"(?i)\b(hate|fight|conflict|breakup|cheat|affair)\b"
+            r"|\b(?:do not|don't)\s+like\s+(?:him|her|them|you|my\s+\w+)\b",
+        ),
+        "examples": (
+            "I hate him",
+            "we fought about money",
+            "I do not like her",
+        ),
+    },
+    "third_party_personal": {
+        "level": 3,
+        "patterns": (
+            r"(?i)\b(my friend|my partner|my ex|my brother|my sister|my mother|my father)\b",
+            r"\b[\w.+-]+@[\w.-]+\.[A-Za-z]{2,}\b",
+            r"\+?\d[\d\s-]{8,}\d",
+        ),
+        "examples": (
+            "my friend has a problem",
+            "my partner is sick",
+            "my mother lives there",
+        ),
+    },
+    "legal": {
+        "level": 3,
+        "patterns": (r"(?i)\b(lawyer|legal|lawsuit|court|contract)\b",),
+        "examples": (
+            "I am handling a lawsuit",
+            "my lawyer said",
+            "this legal problem",
+        ),
+    },
+}
+_AMBIGUOUS_TERMS = ("forced", "coerced", "fell")
+_AMBIGUOUS_CONTEXT = {
+    "forced": ("to", "into", "labour", "labor", "by", "out", "quit"),
+    "coerced": ("into", "by", "confession", "sign"),
+    "fell": ("from", "down", "off", "stairs", "yesterday", "sick", "asleep"),
+}
+_AFFECT_TERMS = (
+    "sad",
+    "angry",
+    "happy",
+    "upset",
+    "afraid",
+    "tired",
+    "exhausted",
+    "ashamed",
+    "very",
+    "really",
+)
+_DIGEST = hashlib.sha256(repr(_LABELS).encode("utf-8")).hexdigest()
 
 
 @dataclass(frozen=True)
@@ -119,67 +253,27 @@ class Pack:
     ok: bool = True
 
 
-_CACHE: dict[str, Pack] = {}
-
-
 def load_pack(language: str) -> Pack:
-    code = str(language or "").strip().lower()
-    if code in _CACHE:
-        return _CACHE[code]
-    path = DEFAULT_DIR / f"{code}.json"
-    try:
-        raw = path.read_bytes()
-        body = json.loads(raw)
-        if body.get("version") != SCHEMA_VERSION:
-            raise ValueError(f"version must be {SCHEMA_VERSION}")
-        labels = body.get("labels")
-        if not isinstance(labels, dict):
-            raise ValueError("labels must be a mapping")
-        pack = Pack(
-            language=code,
-            labels=labels,
-            ambiguous_terms=tuple(str(x) for x in body.get("ambiguous_terms") or ()),
-            affect_terms=tuple(str(x) for x in body.get("affect_terms") or ()),
-            semantic_floor=_score(body.get("semantic_floor")) or 0.34,
-            semantic_margin=_score(body.get("semantic_margin")) or 0.03,
-            digest=hashlib.sha256(raw).hexdigest(),
-            ambiguous_context=_context(body.get("ambiguous_context")),
-        )
-    except (OSError, ValueError, TypeError) as exc:
-        log.warning("privacy: no usable pack for %r: %s", code, exc)
-        pack = Pack(code, {}, (), (), 1.0, 1.0, "", ok=False)
-    _CACHE[code] = pack
-    return pack
-
-
-def _score(value: object) -> float:
-    if isinstance(value, (int, float, str)):
-        try:
-            return max(0.0, min(1.0, float(value)))
-        except (TypeError, ValueError):
-            return 0.0
-    return 0.0
+    """The built-in English policy for any catalog code."""
+    code = str(language or "").strip().lower() or "en"
+    return Pack(
+        language=code,
+        labels=_LABELS,
+        ambiguous_terms=_AMBIGUOUS_TERMS,
+        affect_terms=_AFFECT_TERMS,
+        semantic_floor=0.34,
+        semantic_margin=0.03,
+        digest=_DIGEST,
+        ambiguous_context=_AMBIGUOUS_CONTEXT,
+    )
 
 
 def _strings(value: object) -> tuple[object, ...]:
     return tuple(value) if isinstance(value, (list, tuple)) else ()
 
 
-def _context(value: object) -> dict[str, tuple[str, ...]]:
-    """`{term: (word, ...)}`; a malformed entry is dropped, never guessed."""
-    if not isinstance(value, dict):
-        return {}
-    found: dict[str, tuple[str, ...]] = {}
-    for term, words in value.items():
-        name = str(term or "").strip().casefold()
-        wanted = tuple(str(item).strip().casefold() for item in _strings(words))
-        if name and wanted:
-            found[name] = tuple(item for item in wanted if item)
-    return found
-
-
 class PatternDetector:
-    """Deterministic regex layer from the versioned language pack."""
+    """Deterministic regex layer from the built-in English policy."""
 
     detector = "regex"
 
@@ -265,6 +359,14 @@ ENTITY_MAX_TOKENS = 512
 ENTITY_BATCH = 8
 ENTITY_OVERLAP = 32
 ENTITY_ENTITIES = ("PERSON", "LOCATION", "ORGANIZATION", "NRP")
+# Structural PII the NER model may miss, especially in short chat text.
+ENTITY_PATTERNS = (
+    ("email", re.compile(r"\b[\w.+-]+@[\w.-]+\.[A-Za-z]{2,}\b")),
+    ("phone", re.compile(r"\+?\d[\d\s-]{8,}\d")),
+    ("card", re.compile(r"\b(?:\d[ -]?){13,16}\b")),
+    ("iban", re.compile(r"\b[A-Z]{2}\d{2}[A-Z0-9]{10,30}\b")),
+    ("ip", re.compile(r"\b(?:\d{1,3}\.){3}\d{1,3}\b")),
+)
 
 
 def _entity_model_root() -> Path:
@@ -392,14 +494,28 @@ def _segments(nlp, text: str) -> list[tuple[int, int]]:
 
 
 class EntityDetector:
-    """Presidio + small multilingual spaCy NER; spans are evidence, never a verdict."""
+    """Presidio + small multilingual spaCy NER plus structural regex fallbacks."""
 
     detector = "ner"
 
     def detect(self, text: str, pack: Pack) -> list[Evidence]:
-        analyzer, nlp = _entity_engine()
-        version = _entity_version()
         found: dict[tuple[int, int, str], Evidence] = {}
+        for label, pattern in ENTITY_PATTERNS:
+            for match in pattern.finditer(text):
+                span = (match.start(), match.end())
+                found[(span[0], span[1], label)] = Evidence(
+                    "entity-regex",
+                    "regex-1",
+                    pack.digest,
+                    ENTITY,
+                    0.8,
+                    span,
+                )
+        try:
+            analyzer, nlp = _entity_engine()
+        except PrivacyModelError:
+            return list(found.values())
+        version = _entity_version()
         spans = _segments(nlp, text)
         for offset in range(0, len(spans), ENTITY_BATCH):
             for start, end in spans[offset : offset + ENTITY_BATCH]:
@@ -469,9 +585,7 @@ class SemanticDetector:
         if best < floor:
             return []
         ambiguous = len(scored) > 1 and best - scored[1][0] < margin
-        found = [
-            Evidence(self.detector, "centroid-1", digest, label, best, None)
-        ]
+        found = [Evidence(self.detector, "centroid-1", digest, label, best, None)]
         if ambiguous:
             found.append(
                 Evidence(self.detector, "centroid-1", digest, AMBIGUOUS, best, None)

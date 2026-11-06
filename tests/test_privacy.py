@@ -224,7 +224,7 @@ def test_disclosure_confirmation_sends_the_stored_draft(tmp_path) -> None:
 
     handled = asyncio.run(
         env.agent.privacy.handle_pending(
-            inbound_message("ya", thread="111@g.us", dm=False),
+            inbound_message("yes", thread="111@g.us", dm=False),
             env.gateway,
         )
     )
@@ -244,7 +244,7 @@ def test_other_sender_cannot_confirm(tmp_path) -> None:
     handled = asyncio.run(
         env.agent.privacy.handle_pending(
             inbound_message(
-                "ya", thread="111@g.us", dm=False, sender="628999", person_id="628999"
+                "yes", thread="111@g.us", dm=False, sender="628999", person_id="628999"
             ),
             env.gateway,
         )
@@ -262,7 +262,7 @@ def test_capture_level_4_stores_unconfirmed_and_asks(tmp_path) -> None:
         asked.append((thread_id, person_id, ids, level))
 
     env = capture_env(tmp_path, [assess(4, ask=True)], ask=ask)
-    capture(env, "aku tadi nyuri di toko")
+    capture(env, "I stole from the store")
 
     found = row(env)
     assert found["state"] == "ok"
@@ -282,7 +282,7 @@ def test_level_4_without_a_model_ask_is_still_unconfirmed(tmp_path) -> None:
         asked.append((thread_id, person_id, ids, level))
 
     env = capture_env(tmp_path, [assess(4, ask=False)], ask=ask)
-    capture(env, "aku tadi nyuri di toko")
+    capture(env, "I stole from the store")
 
     found = row(env)
     assert int(found["level"]) == 4
@@ -293,7 +293,7 @@ def test_level_4_without_a_model_ask_is_still_unconfirmed(tmp_path) -> None:
 def test_capture_persists_evidence_and_the_policy_version(tmp_path) -> None:
     env = capture_env(tmp_path, [assess(4)])
 
-    capture(env, "aku tadi nyuri di toko")
+    capture(env, "I stole from the store")
 
     found = row(env)
     assert found["privacy_evidence"]
@@ -314,7 +314,7 @@ def test_privacy_review_does_not_call_the_llm_for_audit(tmp_path) -> None:
 def test_capture_level_3_is_stored_without_a_question(tmp_path) -> None:
     env = capture_env(tmp_path, [assess(3)])
 
-    capture(env, "aku punya utang besar")
+    capture(env, "I have a large debt")
 
     found = row(env)
     assert int(found["level"]) == 3
@@ -333,7 +333,7 @@ def test_capture_skips_credentials_before_the_journal(tmp_path) -> None:
 def test_capture_drops_a_third_party_fact_in_a_group(tmp_path) -> None:
     env = capture_env(tmp_path, [assess(2, subject="Budi")])
 
-    capture(env, "budi baru pindah kerja", thread="111@g.us", audience="group")
+    capture(env, "my friend just moved to a new job", thread="111@g.us", audience="group")
 
     found = row(env)
     assert found["state"] == "not_worth"
@@ -349,7 +349,7 @@ def test_assess_budget_grows_with_the_turn_and_stays_capped() -> None:
 def test_capture_retries_assess_with_a_bigger_budget(tmp_path) -> None:
     env = capture_env(tmp_path, [None, assess(3)])
 
-    capture(env, "aku punya utang besar")
+    capture(env, "I have a large debt")
 
     found = row(env)
     assert int(found["level"]) == 3
@@ -391,7 +391,7 @@ def test_privacy_confirmation_sets_level_and_confirmation(tmp_path) -> None:
 
     handled = asyncio.run(
         env.agent.privacy.handle_pending(
-            inbound_message("rahasia", thread="628111@s.whatsapp.net"),
+            inbound_message("secret", thread="628111@s.whatsapp.net"),
             env.gateway,
         )
     )
@@ -425,7 +425,7 @@ def test_privacy_answer_uses_the_canonical_person_not_the_transport_id(tmp_path)
     handled = asyncio.run(
         env.agent.privacy.handle_pending(
             inbound_message(
-                "rahasia",
+                "secret",
                 thread="628111@s.whatsapp.net",
                 sender="628111",
                 person_id=person,
@@ -520,7 +520,7 @@ def test_agent_turn_asks_then_sends_after_confirmation(tmp_path) -> None:
     assert approval.kind == "disclosure"
 
     asyncio.run(
-        env.agent.handle(inbound_message("ya", thread="111@g.us", dm=False), env.gateway)
+        env.agent.handle(inbound_message("yes", thread="111@g.us", dm=False), env.gateway)
     )
 
     assert env.gateway.sent[-1][1] == "halo juga"
@@ -546,7 +546,7 @@ def test_vetoed_memory_is_excluded_from_context(tmp_path) -> None:
 def test_capture_raises_visibility_of_the_turn(tmp_path) -> None:
     env = capture_env(tmp_path, [assess(3)])
 
-    capture(env, "aku punya utang besar", message_id="m-capture")
+    capture(env, "I have a large debt", message_id="m-capture")
 
     assert env.history.find("628111@s.whatsapp.net", "m-capture").visibility == 3
     assert int(row(env)["level"]) == 3
@@ -571,7 +571,7 @@ def test_a_credential_that_reaches_the_worker_is_redacted_before_the_drop(tmp_pa
 
     env = capture_env(tmp_path, [assess(2)])
 
-    capture(env, "nomor ktp aku 1234567890123456")
+    capture(env, "my id number is 1234567890123456")
 
     found = row(env)
     assert found["state"] == "not_worth"
@@ -588,7 +588,7 @@ def test_the_model_may_raise_the_privacy_floor(tmp_path) -> None:
 
     env = capture_env(tmp_path, [assess(4)], ask=ask)
 
-    capture(env, "aku suka kopi")
+    capture(env, "I like coffee")
 
     found = row(env)
     assert int(found["level"]) == 4
@@ -600,7 +600,7 @@ def test_the_model_may_raise_the_privacy_floor(tmp_path) -> None:
 def test_the_model_may_not_lower_the_privacy_floor(tmp_path) -> None:
     env = capture_env(tmp_path, [assess(1)])
 
-    capture(env, "aku tadi nyuri")
+    capture(env, "I stole something")
 
     found = row(env)
     assert int(found["level"]) == 4
@@ -614,7 +614,7 @@ def test_a_model_level_five_secret_is_redacted_and_dropped(tmp_path) -> None:
 
     env = capture_env(tmp_path, [assess(5)])
 
-    capture(env, "rahasia ku")
+    capture(env, "my secret")
 
     found = row(env)
     assert found["state"] == "not_worth"
@@ -629,7 +629,7 @@ def test_a_model_credential_category_is_redacted_and_dropped(tmp_path) -> None:
 
     env = capture_env(tmp_path, [assess(2, category="credential")])
 
-    capture(env, "rahasia ku")
+    capture(env, "my secret")
 
     found = row(env)
     assert found["state"] == "not_worth"
@@ -639,6 +639,6 @@ def test_a_model_credential_category_is_redacted_and_dropped(tmp_path) -> None:
 def test_the_model_category_is_kept_on_the_memory(tmp_path) -> None:
     env = capture_env(tmp_path, [assess(2, category="preference")])
 
-    capture(env, "aku suka kopi")
+    capture(env, "I like coffee")
 
     assert row(env)["category"] == "preference"

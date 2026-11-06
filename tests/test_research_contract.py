@@ -36,17 +36,17 @@ def test_an_action_tool_turn_keeps_its_answer_when_the_card_failed() -> None:
 
 
 def test_current_source_and_exact_claims_force_a_search() -> None:
-    assert trigger_reason("harga emas hari ini", language="id") == "time"
-    assert trigger_reason("kasih sumbernya", language="id") == "source"
-    assert trigger_reason("tanggal 2026-11-04", language="id") == "exact"
-    assert trigger_reason("versi terbaru", language="id") == "time"
+    assert trigger_reason("gold price today", language="en") == "time"
+    assert trigger_reason("give me the source", language="en") == "source"
+    assert trigger_reason("date 2026-11-04", language="en") == "exact"
+    assert trigger_reason("the latest version", language="en") == "time"
 
 
 def test_mode_and_challenge_widen_the_trigger() -> None:
-    assert trigger_reason("apa kabar", language="id", mode="always") == "mode:always"
-    assert trigger_reason("kok bisa gitu", language="id", challenged=True) == "challenge"
-    assert trigger_reason("apa kabar", language="id", challenged=True) == ""
-    assert trigger_reason("harga emas hari ini", language="id", mode="off") == ""
+    assert trigger_reason("what's up", language="en", mode="always") == "mode:always"
+    assert trigger_reason("how come", language="en", challenged=True) == "challenge"
+    assert trigger_reason("what's up", language="en", challenged=True) == ""
+    assert trigger_reason("gold price today", language="en", mode="off") == ""
 
 
 def test_card_renders_untrusted_sources_with_citations() -> None:
@@ -256,7 +256,7 @@ def test_unrelated_citation_is_not_supported() -> None:
 
 
 def test_research_triggers_are_whole_words_not_substrings() -> None:
-    for text in ("teknik ini", "unik sekali", "kesimpulan rapat", "bekas sepatu"):
-        assert trigger_reason(text, language="id") == "", text
+    for text in ("technique this", "unique once", "conclusion meeting", "used shoes"):
+        assert trigger_reason(text, language="en") == "", text
 
-    assert trigger_reason("versi terbaru", language="id") == "time"
+    assert trigger_reason("the latest version", language="en") == "time"

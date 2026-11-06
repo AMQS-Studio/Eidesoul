@@ -23,13 +23,13 @@ def status_kb(key: str) -> int:
     raise RuntimeError(f"{key} is missing")
 
 
-pack = load_pack("id")
+pack = load_pack("en")
 before = status_kb("VmRSS:")
-entity = EntityDetector().detect("Nama saya Budi Santoso, tinggal di Jakarta.", pack)
+entity = EntityDetector().detect("Email me at budi@example.com or call +1 555 0100.", pack)
 mid = status_kb("VmRSS:")
 entity_torch = "torch" in sys.modules
 entity_transformers = "transformers" in sys.modules
-semantic = SemanticDetector().detect("aku tadi nyuri di toko", pack)
+semantic = SemanticDetector().detect("I stole money from the store", pack)
 after = status_kb("VmRSS:")
 print(json.dumps({
     "before_kb": before,

@@ -25,8 +25,10 @@ from monoagens.engine.turn.prompts import (
 def test_language_line_variants() -> None:
     assert "Indonesian" in language_line(Soul(language="id", locale="id-ID", timezone="UTC"))
     assert language_line(Soul(language="en", locale="en-US", timezone="UTC")) == "Reply in English."
+    unknown = Soul(language="jv", locale="jv-ID", timezone="UTC")
+    assert unknown.language == "jv"
     with pytest.raises(ValueError, match="available"):
-        Soul(language="jv", locale="jv-ID", timezone="UTC")
+        language_line(unknown)
 
 
 def test_normalize_language_aliases(monkeypatch) -> None:

@@ -29,7 +29,7 @@ def test_seed_profile_mentions_short_style(tmp_path) -> None:
 
     text = store.profile()
 
-    assert "median 34" in text
+    assert "median 42" in text
     assert "1-2 short sentences" in text
     store.close()
 

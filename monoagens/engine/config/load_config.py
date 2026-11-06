@@ -244,13 +244,6 @@ def load_config(
     _validate_voice(llm, soul)
     speech = _speech_config(_section(engine, "speech"))
     _validate_speech(speech, soul)
-    from ..guard.patterns import has_pack
-
-    if not has_pack(soul.language) and not safety.allow_degraded:
-        raise ConfigError(
-            f"no safety pack for '{soul.language}'; add library/safety/{soul.language}.json "
-            "or set engine.safety.allow_degraded: true"
-        )
     two_level_at = int(_num(prompt_raw.get("capability_index_two_level_at"), 150))
     if two_level_at < 0:
         raise ConfigError("engine.prompt.capability_index_two_level_at cannot be negative")

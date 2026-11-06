@@ -5,6 +5,7 @@ unchanged (ADR-0005, ADR-0037 §4.4).
 """
 
 import logging
+import re
 import time
 from collections.abc import Mapping, Sequence
 
@@ -50,6 +51,7 @@ def _forget_candidates_sync(store, owner_id: str, thread_id: str) -> list[dict]:
 
 
 _SEMANTIC_FLOOR = 0.55
+_SEMANTIC_NARROW_FLOOR = 0.45
 _SEMANTIC_MARGIN = 0.10
 
 
@@ -66,7 +68,11 @@ def _stems(tokens: set[str], suffixes: Sequence[str]) -> set[str]:
 
 
 def _semantic_matches_sync(
-    rows: list[dict], query: str, stopwords, suffixes: Sequence[str]
+    rows: list[dict],
+    query: str,
+    stopwords,
+    suffixes: Sequence[str],
+    floor: float = _SEMANTIC_FLOOR,
 ) -> list[str]:
     """The one row a paraphrase or a possessive form can still mean, or [].
 
@@ -93,9 +99,29 @@ def _semantic_matches_sync(
     scored.sort(key=lambda item: item[0], reverse=True)
     top_score, top_id = scored[0]
     runner_up = scored[1][0] if len(scored) > 1 else 0.0
-    if top_score >= _SEMANTIC_FLOOR and top_score - runner_up >= _SEMANTIC_MARGIN:
+    if top_score >= floor and top_score - runner_up >= _SEMANTIC_MARGIN:
         return [top_id]
     return stem_hits if len(stem_hits) == 1 else []
+
+
+def _proper_tokens(text: str) -> set[str]:
+    """Capitalized words are likely names, so a forget request can prefer them."""
+    return {word.lower() for word in re.findall(r"\b[A-Z][A-Za-z0-9_-]+\b", str(text or ""))}
+
+
+def _token_match(wanted: set[str], found: set[str], unique: set[str]) -> bool:
+    """A shared token that only one candidate owns, or a long enough prefix of one."""
+    shared = wanted & found
+    if shared & unique:
+        return True
+    return any(
+        len(left) >= 4
+        and len(right) >= 4
+        and (left.startswith(right) or right.startswith(left))
+        and (left in unique or right in unique)
+        for left in wanted
+        for right in found
+    )
 
 
 async def forget_by_intent(
@@ -121,11 +147,35 @@ async def forget_by_intent(
     if not wanted or not who:
         return []
     found = await io.run(_forget_candidates_sync, store, who, str(thread_id or ""))
-    matches = [
-        str(row["id"])
-        for row in found
-        if wanted & _tokens(str(row.get("text") or ""), stopwords)
+    texts = {str(row["id"]): str(row.get("text") or "") for row in found}
+    token_sets = {memory_id: _tokens(text, stopwords) for memory_id, text in texts.items()}
+    proper = _proper_tokens(text)
+    proper_matches = [
+        memory_id
+        for memory_id, tokens in token_sets.items()
+        if proper & tokens and proper & _proper_tokens(texts[memory_id])
     ]
+    counts: dict[str, int] = {}
+    for tokens in token_sets.values():
+        for token in tokens:
+            counts[token] = counts.get(token, 0) + 1
+    unique = {token for token, count in counts.items() if count == 1}
+    matches = proper_matches or [
+        memory_id
+        for memory_id, tokens in token_sets.items()
+        if _token_match(wanted, tokens, unique)
+    ]
+    if len(matches) > 1 and not proper_matches:
+        narrowed = await io.run(
+            _semantic_matches_sync,
+            [row for row in found if str(row["id"]) in matches],
+            text,
+            stopwords,
+            suffixes,
+            _SEMANTIC_NARROW_FLOOR,
+        )
+        if narrowed:
+            matches = narrowed
     if not matches:
         # ADR-0009 §4.4: a paraphrase or a possessive form is still a forget request; the
         # exact-token path stays first so ordinary requests never pay for an embedding.

@@ -6,7 +6,7 @@
 - **Context:** Establishes an international, language-agnostic hybrid architecture for secret detection, privacy classification, turn-level intent/search routing, room vibe/style, and semantic memory maintenance, completely retiring and deleting the static per-language JSON keyword dictionaries under `monoagens/library/**`.
 - **Supersedes:** —
 - **Related:** ADR-0001 (sovereign core), ADR-0002 (unified memory and privacy), ADR-0003 (turn lifecycle), ADR-0006 (access control and guard), ADR-0008 (code hygiene)
-- **Implementation:** partial — structural token prefixes, Shannon-entropy secret gate, `assess_batch` privacy level, `decide_turn` routing, and semantic `forget_by_intent` are active; physical deletion of `monoagens/library/**` and removal of `<lang>.json` file lock-in are tracked for completion.
+- **Implementation:** implemented — structural token prefixes, Shannon-entropy secret gate, `assess_batch` privacy levels, `decide_turn` routing, and semantic `forget_by_intent` run on built-in English anchors and universal shapes; `monoagens/library/**` and its per-language JSON packs are gone.
 
 ---
 
@@ -95,10 +95,10 @@ No breaking changes to `config.yaml`. `soul.language` now accepts any language c
 
 ## 7. Acceptance criteria
 
-- [ ] `monoagens/library/` and `scripts/affect.py`, `scripts/intent.py` are completely removed from the repository.
-- [ ] `load_config` accepts any `soul.language` (e.g. `"en"`, `"id"`, `"ja"`, `"es"`, `"ar"`) without requiring a safety JSON pack on disk.
-- [ ] L5 credentials (vendor prefixes + Shannon entropy $\ge 4.2$) are redacted in both `memories.text` and `memory_events.content` even when `verdict.worth` is `False`.
-- [ ] `assess_batch`, `decide_turn`, `vibe`, `style`, and `forget_by_intent` operate cleanly across multiple languages without any `monoagens/library/*.json` files.
+- [x] `monoagens/library/` and `scripts/affect.py`, `scripts/intent.py` are completely removed from the repository.
+- [x] `load_config` accepts any `soul.language` (e.g. `"en"`, `"id"`, `"ja"`, `"es"`, `"ar"`) without requiring a safety JSON pack on disk.
+- [x] L5 credentials (vendor prefixes + Shannon entropy $\ge 4.2$) are redacted in both `memories.text` and `memory_events.content` even when `verdict.worth` is `False`.
+- [x] `assess_batch`, `decide_turn`, `vibe`, `style`, and `forget_by_intent` operate cleanly across multiple languages without any `monoagens/library/*.json` files.
 
 ## 8. Risks and mitigations
 

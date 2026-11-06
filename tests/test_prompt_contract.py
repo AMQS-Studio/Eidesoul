@@ -9,7 +9,7 @@ from support import build_config
 from monoagens.engine.access.roles import Role
 from monoagens.engine.inbound import PROMPT_SECTION_MAX, CoreDefaults, prompt_section
 from monoagens.engine.llm import prompt_prefix_hash
-from monoagens.engine.soul import Soul
+from monoagens.engine.soul import Soul, language_line
 from monoagens.engine.turn.prompts import Prompt, PromptContext, system_prompt
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -126,8 +126,10 @@ def test_the_voice_never_classifies_a_person() -> None:
 
 
 def test_a_language_without_a_catalog_is_refused() -> None:
+    soul = Soul(language="fr", locale="fr-FR", timezone="UTC")
+    assert soul.language == "fr"
     with pytest.raises(ValueError, match="available"):
-        Soul(language="fr", locale="fr-FR", timezone="UTC")
+        language_line(soul)
 
 
 def test_stable_parts_are_pure_across_per_turn_contexts(tmp_path) -> None:

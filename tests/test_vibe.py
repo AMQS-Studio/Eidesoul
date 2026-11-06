@@ -150,9 +150,10 @@ def test_prototype_source_scores_the_shipped_bank() -> None:
     source = PrototypeSource()
 
     assert source.scores("") == {}  # no text, no score
-    assert max(source.scores("goblok banget sih kamu").items(), key=lambda kv: kv[1])[0] == "anger"
-    assert VibeRunner.vad(source.scores("besok rapat jam sembilan")) is None
-    assert VibeRunner.vad(source.scores("aku capek banget sama kerjaan")) is not None
+    top = max(source.scores("you are being ridiculous").items(), key=lambda kv: kv[1])[0]
+    assert top == "anger"
+    assert VibeRunner.vad(source.scores("the report is on the table")) is None
+    assert VibeRunner.vad(source.scores("i want to cry")) is not None
 
 
 def test_state_persists_to_database() -> None:

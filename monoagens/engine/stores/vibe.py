@@ -28,7 +28,6 @@ log = logging.getLogger(__name__)
 NEUTRAL = (0.5, 0.4, 0.5)
 CURRENT_TAU = (120.0, 45.0, 90.0)  # V, A, D seconds
 BASELINE_TAU = 14400.0  # 4 hours
-LIBRARY = Path(__file__).resolve().parent.parent.parent / "library" / "affect"
 PROTOTYPE_FLOOR = 0.73  # calibrated: neutral sentences score <= 0.54, emotional ones >= 0.92
 PROTOTYPE_MARGIN = 0.063  # calibrated: half of the smallest gap between accepted matches
 EMOTION_VAD = {
@@ -42,16 +41,87 @@ EMOTION_VAD = {
     "trust": (0.78, 0.40, 0.60),
 }
 
+# English-only semantic anchors. The shared multilingual embedder maps every language into the
+# same vector space, so one canonical bank scores all languages without per-language files.
+DEFAULT_BANK: dict[str, tuple[str, ...]] = {
+    "anger": (
+        "you are being ridiculous",
+        "that makes me furious",
+        "stop making me angry",
+        "i am so done with this",
+        "that really annoys me",
+        "don't do that again",
+    ),
+    "anticipation": (
+        "let's start tomorrow",
+        "waiting for your news",
+        "i can't wait to see you",
+        "we meet later today",
+        "hope this turns out well",
+        "counting the days",
+    ),
+    "disgust": (
+        "that is disgusting",
+        "that is gross honestly",
+        "that looks terrible frankly",
+        "i can't stand that smell",
+        "no thanks, that is nasty",
+        "eew, keep it away",
+    ),
+    "fear": (
+        "i'm scared of failing",
+        "don't leave",
+        "my hands are shaking",
+        "i am afraid of this",
+        "this feels dangerous honestly",
+        "please don't be angry",
+    ),
+    "joy": (
+        "haha that's great",
+        "we finally made it",
+        "so happy right now",
+        "this made my day",
+        "that was really funny",
+        "yes, it worked",
+    ),
+    "sadness": (
+        "i'm exhausted",
+        "that's sad",
+        "i want to cry",
+        "this hurts a lot",
+        "why does it always end",
+        "i feel so heavy",
+    ),
+    "surprise": (
+        "wait, really?",
+        "no way",
+        "oh i did not know",
+        "that came out of nowhere",
+        "wow, unexpected",
+        "huh, is that true",
+    ),
+    "trust": (
+        "thanks, i trust you",
+        "it's fine",
+        "i feel safe with you",
+        "no need to worry",
+        "you are reliable",
+        "relax, i am here",
+    ),
+}
+
 STATE_KEY = "vibe"
 SAVE_ATTEMPTS = 3
 SAVE_BACKOFF_SECONDS = 0.1  # 0.1, 0.2, 0.4 on write contention; never a busy loop
 
 
-def load_bank(folder: Path = LIBRARY) -> dict[str, tuple[str, ...]]:
-    """Merged prototypes per emotion label; every `*.json` under `folder` contributes."""
+def load_bank(folder: Path | None = None) -> dict[str, tuple[str, ...]]:
+    """English default bank, or merged prototypes from an explicit test directory."""
+    if folder is None or not Path(folder).is_dir():
+        return dict(DEFAULT_BANK)
     found: dict[str, list[str]] = {}
     dropped: list[str] = []
-    for target in sorted(Path(folder).glob("*.json")) if Path(folder).is_dir() else ():
+    for target in sorted(Path(folder).glob("*.json")):
         try:
             body = json.loads(target.read_text(encoding="utf-8"))
         except (OSError, ValueError):

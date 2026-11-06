@@ -59,8 +59,8 @@ def host_language() -> str:
     return ""
 
 
-def normalize_language(value: object) -> str:
-    """Map aliases to an installed catalog code; empty is an error, `auto` means host."""
+def normalize_language(value: object, *, allow_any: bool = False) -> str:
+    """Map aliases to an installed catalog code; `allow_any` keeps a bare language code."""
     text = str(value or "").strip().lower()
     if not text:
         raise ValueError("a language is required; pass a catalog code such as `en`")
@@ -70,6 +70,9 @@ def normalize_language(value: object) -> str:
             raise ValueError("`auto` needs a process locale; pass a catalog code instead")
     code = ALIASES.get(text, text)
     if code not in available():
+        primary = code.split("-")[0]
+        if allow_any and len(primary) == 2 and primary.isalpha():
+            return primary
         raise ValueError(
             f"language '{text}' has no catalog; available: {', '.join(available()) or 'none'}"
         )

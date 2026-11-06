@@ -95,4 +95,9 @@ def test_tiebreak_is_stable_when_nothing_matches() -> None:
 
 
 def test_keyword_set_skips_stopwords_and_short_words() -> None:
-    assert keyword_set("yang aku mau itu kopi enak", language="id") == {"kopi", "enak"}
+    assert keyword_set("the quick brown foxes jumped", language="en") == {
+        "quick",
+        "brown",
+        "foxes",
+        "jumped",
+    }

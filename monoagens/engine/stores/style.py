@@ -11,7 +11,6 @@ import re
 import threading
 import time
 from functools import lru_cache
-from pathlib import Path
 
 from sqlalchemy import select
 
@@ -26,36 +25,30 @@ TOP = 20
 MAX_TEXT = 500
 EMOJI = re.compile("[\U0001f300-\U0001faff\u2600-\u27bf\u2b00-\u2bff]")
 REPEAT = re.compile(r"([a-zA-Z])\1{2,}")
-STYLE_DIR = Path(__file__).resolve().parents[2] / "library" / "style"
 SEED_MIN = 20
+
+# English-only universal rhythm baseline. The archive then learns the chat's own short-token
+# and particle habits; no per-language file is needed.
+STYLE_SEED: dict[str, object] = {
+    "median": 42,
+    "p90": 140,
+    "lower": 0.65,
+    "emoji": 0.15,
+    "particles": (),
+    "emojis": ("😂", "🙏", "🔥", "👍", "😭", "✨", "😅", "❤️"),
+    "laughter": ("haha", "hehe", "lol", "lmao"),
+}
 
 
 @lru_cache(maxsize=8)
-def _style_pack(code: str, folder: str) -> dict:
-    """One language's rhythm baseline; an absent pack means no style block, never another's."""
-    path = Path(folder) / f"{code}.json"
-    if not path.is_file():
-        return {}
-    try:
-        body = json.loads(path.read_text(encoding="utf-8"))
-        if body.get("version") != 1 or str(body.get("language")) != code:
-            return {}
-        return {
-            "median": int(body["seed_median"]),
-            "p90": int(body["seed_p90"]),
-            "lower": float(body["seed_lower"]),
-            "emoji": float(body["seed_emoji"]),
-            "particles": tuple(str(item) for item in body["particles"]),
-            "emojis": tuple(str(item) for item in body["emojis"]),
-            "laughter": tuple(str(item) for item in body["laughter"]),
-        }
-    except (OSError, ValueError, KeyError, TypeError):
-        return {}
+def _style_pack(code: str) -> dict:
+    """The universal rhythm baseline for any non-empty catalog code."""
+    return dict(STYLE_SEED) if code else {}
 
 
 def style_pack(language: str) -> dict:
     code = str(language or "").strip().lower()
-    return _style_pack(code, str(STYLE_DIR)) if code else {}
+    return _style_pack(code) if code else {}
 PERSON_MIN = 8
 
 STATE_KEY = "style"

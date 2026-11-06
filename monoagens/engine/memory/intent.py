@@ -1,12 +1,11 @@
 """`remember`/`forget` intent prototypes on the shared embedder (ADR-0005 §4.6).
 
-A pack holds short sentences for one language and one intent; the classifier embeds the incoming
-text once, takes the best positive score per intent, and compares it against the best negative.
-An intent fires only when its score clears the configured floor **and** beats every negative by
-the configured margin, so a question ("do you remember…") or a negation never triggers a write or
-a deletion. Nothing here calls a model and nothing here writes memory.
+The classifier embeds the incoming text once, takes the best positive score per intent, and
+compares it against the best negative. An intent fires only when its score clears the configured
+floor **and** beats every negative by the configured margin, so a question ("do you remember…")
+or a negation never triggers a write or a deletion. The built-in bank is English-only; MiniLM's
+multilingual space lets it score every catalog language without per-language files.
 """
-
 
 import json
 import logging
@@ -17,11 +16,45 @@ from .. import embed
 
 log = logging.getLogger(__name__)
 
-LIBRARY = Path(__file__).resolve().parents[2] / "library" / "intent"
 KINDS = ("remember", "forget")
 NEGATIVE = "negative"
 FALLBACK = "en"
 MIN_PROTOTYPES = 6
+
+# English-only semantic anchors. The shared multilingual embedder maps every language into the
+# same vector space, so one canonical bank scores all languages without per-language files.
+DEFAULT_BANK: dict[str, tuple[str, ...]] = {
+    "remember": (
+        "remember that I like black coffee",
+        "please keep in mind that I work night shifts",
+        "note that my sister lives in Boston",
+        "for future reference I hate loud places",
+        "don't forget I am allergic to peanuts",
+        "I want you to remember my favorite color is blue",
+        "keep this in mind: I start work at seven",
+        "save this fact about me for later",
+    ),
+    "forget": (
+        "forget that I said I moved to Boston",
+        "delete the memory about my old job",
+        "please remove what I told you about my ex",
+        "stop remembering that I smoke",
+        "erase the note about my salary",
+        "clear the memory of my previous address",
+        "that thing I told you is not true anymore, drop it",
+        "you should not keep the fact that I quit",
+    ),
+    "negative": (
+        "what do you remember about me",
+        "do you remember my name",
+        "I forgot what I was going to say",
+        "can you remind me tomorrow morning",
+        "I can't remember where I put the keys",
+        "why did you forget that",
+        "forget I said anything",
+        "how does your memory work",
+    ),
+}
 
 
 def _read(path: Path) -> dict:
@@ -42,26 +75,23 @@ def _sentences(value: object) -> tuple[str, ...]:
 
 
 @cache
-def load(language: str) -> dict:
-    """One language's pack: `{kind: positives, "negative": (...)}}`; empty when absent.
-
-    A language is complete or falls back to `en` as a whole: half a pack would score `remember`
-    against a foreign negative set.
-    """
-    code = str(language or FALLBACK).strip().lower() or FALLBACK
-    for wanted in (code, FALLBACK):
-        found = _pack(wanted)
-        if found:
-            return found
-    return {}
+def load(language: str, folder: Path | None = None) -> dict:
+    """The built-in English bank, or one custom pack from an explicit test directory."""
+    if folder is not None:
+        code = str(language or FALLBACK).strip().lower() or FALLBACK
+        for wanted in (code, FALLBACK):
+            found = _pack(wanted, Path(folder))
+            if found:
+                return found
+    return dict(DEFAULT_BANK)
 
 
-def _pack(code: str) -> dict:
-    """Both intent files of one language, with one merged negative set for the margin test."""
+def _pack(code: str, folder: Path) -> dict:
+    """Both intent files of one custom pack, with one merged negative set for the margin test."""
     found: dict[str, tuple[str, ...]] = {}
     negatives: list[str] = []
     for kind in KINDS:
-        path = LIBRARY / f"{kind}.{code}.json"
+        path = folder / f"{kind}.{code}.json"
         if not path.is_file():
             return {}
         body = _read(path)
@@ -126,11 +156,9 @@ def classify(text: str, language: str = FALLBACK, settings=None) -> str:
 
 
 def stats(language: str = "") -> list[dict]:
-    """One row per kind of one language (or every installed language), for `scripts/intent.py`."""
+    """One row per kind of the built-in bank (or one explicit language), for scripts."""
     rows: list[dict] = []
-    codes = [str(language)] if language else sorted(
-        {path.stem.split(".", 1)[1] for path in LIBRARY.glob("*.json")}
-    )
+    codes = [str(language)] if language else [FALLBACK]
     for code in codes:
         body = load(code)
         for kind in (*KINDS, NEGATIVE):

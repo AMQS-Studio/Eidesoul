@@ -154,7 +154,8 @@ def test_numeric_signature_ignores_internal_spacing() -> None:
     assert _numeric_signature("10%") == _numeric_signature("10 %")
 
 
-def test_credential_terms_load_from_library_data() -> None:
+def test_credential_terms_are_english_structural_patterns() -> None:
     terms = guard_patterns._credential_terms()
-    assert r"kata[\s_-]+sandi" in terms["strong_keys"]
-    assert "adalah" in terms["connectors"]
+    assert r"api[\s_-]?key" in terms["strong_keys"]
+    assert "is" in terms["connectors"]
+    assert "are" in terms["connectors"]

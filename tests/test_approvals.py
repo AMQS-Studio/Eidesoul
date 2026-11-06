@@ -452,7 +452,7 @@ def test_natural_confirmation_runs_the_parked_action_and_completes(tmp_path) -> 
     assert [chat for chat, _text, _reply in env.gateway.sent] == [DM, DM]
     assert "pending approval" in llm.tool_results[0]
 
-    handle(env, inbound_message("Oke, kirim", thread=DM, message_id="t2"))
+    handle(env, inbound_message("Ok, send it", thread=DM, message_id="t2"))
 
     assert env.agent.approvals.get(row.id).status == "approved"
     delivered = [(chat, text) for chat, text, _ in env.gateway.sent]
@@ -474,7 +474,7 @@ def test_natural_confirmation_cancels_on_reject(tmp_path) -> None:
     handle(env, inbound_message("kirim ringkasan ke grup lain", thread=DM, message_id="r1"))
     row = env.agent.approvals.pending(DM, person_of(env))[0]
 
-    handle(env, inbound_message("batal dulu", thread=DM, message_id="r2"))
+    handle(env, inbound_message("cancel it", thread=DM, message_id="r2"))
 
     assert env.agent.approvals.get(row.id).status == "denied"
     assert all(chat != OTHER for chat, _text, _reply in env.gateway.sent)
@@ -488,7 +488,10 @@ def test_natural_modification_supersedes_and_stages_the_update(tmp_path) -> None
     handle(env, inbound_message("kirim ringkasan ke grup lain", thread=DM, message_id="m1"))
     old = env.agent.approvals.pending(DM, person_of(env))[0]
 
-    handle(env, inbound_message("ganti pesannya jadi versi pendek", thread=DM, message_id="m2"))
+    handle(
+        env,
+        inbound_message("change the message to the short version", thread=DM, message_id="m2"),
+    )
 
     assert env.agent.approvals.get(old.id).status == "superseded"
     pending = env.agent.approvals.pending(DM, person_of(env))
@@ -522,7 +525,7 @@ def test_two_staged_sends_share_a_batch_and_both_run_on_confirm(tmp_path) -> Non
     assert one.batch_id == two.batch_id
     assert [row.id for row in env.agent.approvals.pending(DM, sender)] == [one.id, two.id]
 
-    handle(env, inbound_message("ya, gas", thread=DM, message_id="b2"))
+    handle(env, inbound_message("yes, go ahead", thread=DM, message_id="b2"))
 
     assert env.agent.approvals.get(one.id).status == "approved"
     assert env.agent.approvals.get(two.id).status == "approved"
@@ -565,7 +568,7 @@ def test_a_modified_action_is_not_json_serialized_twice(tmp_path) -> None:
     env = send_env(tmp_path, llm=llm)
 
     handle(env, inbound_message("kirim ringkasan ke grup lain", thread=DM, message_id="j1"))
-    handle(env, inbound_message("ya", thread=DM, message_id="j2"))
+    handle(env, inbound_message("yes", thread=DM, message_id="j2"))
 
     block = str(llm.contents[-1]).split("## Tool result: pending_approval\n", 1)[-1]
     payload = json.loads(block.split("\n\nThread ", 1)[0])
@@ -576,30 +579,27 @@ def test_a_modified_action_is_not_json_serialized_twice(tmp_path) -> None:
 def test_confirmation_classifier_reads_only_short_answers() -> None:
     from monoagens.engine.turn.confirmations import confirmation_intent
 
-    assert confirmation_intent("Oke, kirim", "id") == "confirm"
-    assert confirmation_intent("ya", "id") == "confirm"
-    assert confirmation_intent("gas", "id") == "confirm"
-    assert confirmation_intent("lanjut", "id") == "confirm"
-    assert confirmation_intent("batal", "id") == "reject"
-    assert confirmation_intent("jangan kirim", "id") == "reject"
-    assert confirmation_intent("Ganti pesannya jadi versi pendek", "id") == "modify"
-    assert confirmation_intent("nanti aku cek sendiri ya", "id") == ""
-    assert confirmation_intent("tolong jelaskan arsitektur proyek ini", "id") == ""
+    assert confirmation_intent("Ok, send it", "id") == "confirm"
+    assert confirmation_intent("yes", "id") == "confirm"
+    assert confirmation_intent("go ahead", "id") == "confirm"
+    assert confirmation_intent("continue", "id") == "confirm"
+    assert confirmation_intent("cancel", "id") == "reject"
+    assert confirmation_intent("do not send", "id") == ""
+    assert confirmation_intent("Change the message to the short version", "id") == "modify"
+    assert confirmation_intent("I will check later", "id") == ""
+    assert confirmation_intent("please explain the project architecture", "id") == ""
     assert confirmation_intent("", "id") == ""
 
 
-def test_confirmation_cues_union_the_english_safety_net() -> None:
+def test_confirmation_cues_are_english_and_cover_short_answers() -> None:
     from monoagens.engine.turn.confirmations import _cues, confirmation_intent
 
     confirm, reject, modify, filler = _cues("id")
 
-    assert "ya" in confirm
     assert "yes" in confirm
-    assert "batal" in reject
     assert "no" in reject
-    assert "ganti" in modify
     assert "change" in modify
-    assert "oke" in filler or "ok" in filler
+    assert "go" in filler
     assert confirmation_intent("yes", "id") == "confirm"
     assert confirmation_intent("no", "id") == "reject"
     assert confirmation_intent("change it", "id") == "modify"

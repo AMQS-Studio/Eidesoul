@@ -58,21 +58,12 @@ def test_a_disabled_intent_never_fires(monkeypatch) -> None:
     assert intent.classify("ingat ya", "id", None) == ""
 
 
-def test_a_missing_pack_fails_open(tmp_path, monkeypatch) -> None:
-    monkeypatch.setattr(intent, "LIBRARY", tmp_path)
-    intent.load.cache_clear()
-    intent._encoded.cache_clear()
-    query(monkeypatch, (1.0, 0.0))
-    try:
-        assert intent.load("id") == {}
-        assert intent.classify("ingat ya aku suka kopi", "id", IntentConfig()) == ""
-    finally:
-        intent.load.cache_clear()
-        intent._encoded.cache_clear()
+def test_a_missing_custom_pack_falls_back_to_the_builtin(tmp_path) -> None:
+    assert intent.load("id", tmp_path) == intent.DEFAULT_BANK
 
 
-def test_the_shipped_packs_cover_every_language() -> None:
-    for code in ("en", "id"):
+def test_the_builtin_bank_serves_every_language() -> None:
+    for code in ("en", "id", "ja"):
         pack = intent.load(code)
         assert len(pack["remember"]) >= 6
         assert len(pack["forget"]) >= 6

@@ -236,7 +236,7 @@ class GuardConfig:
 
 @dataclass(frozen=True)
 class LanguageConfig:
-    """Language pack location; empty means the package `library/lexicon/<code>.json`."""
+    """Optional custom lexicon directory for tests; empty uses the built-in English baseline."""
 
     lexicon_dir: Path | None = None  # test-only `engine.language.lexicon_dir` override
 

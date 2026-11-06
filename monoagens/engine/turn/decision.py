@@ -36,6 +36,8 @@ Decision rules:
 - "approval_intent": "confirm" when the sender approves a pending request, "reject" when they
   refuse it, "modify" when they ask to change it, "" otherwise. This is about the pending
   approval, not a new request.
+- "crisis": true only when the message is a credible statement of self-harm or suicide by the
+  sender; false for idioms, media, and ordinary frustration.
 - "reason": <=80 chars, a short reason for your decision.
 """
 FEELINGS_RULES = """- "appraisal": your emotional reading of this message.
@@ -51,7 +53,7 @@ SCHEMA_HEAD = (
     "Reply ONLY with JSON matching the schema:\n"
     '{"addressed":"me|other|group|unknown","act":"reply|ignore|react","mode":"daily|professional",\n'
     ' "tone":"warm|neutral|playful|curt|hurt|angry","bubbles":1,\n'
-    ' "needs_search":false,"approval_intent":"",\n'
+    ' "needs_search":false,"approval_intent":"","crisis":false,\n'
 )
 SCHEMA_FEELINGS = (
     ' "appraisal":{"label":"neutral","dP":0.0,"dA":0.0,"dD":0.0,"note":""},\n'
@@ -129,6 +131,7 @@ class Decision:
     reason: str
     needs_search: bool | None = None
     approval_intent: str = ""
+    crisis: bool = False
 
 
 NEUTRAL = Appraisal("neutral", 0.0, 0.0, 0.0)
@@ -187,6 +190,14 @@ def _approval_intent(value) -> str:
     return text if text in APPROVAL_INTENTS else ""
 
 
+def _flag(value) -> bool:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        return value.strip().lower() in {"true", "yes", "1"}
+    return False
+
+
 log = logging.getLogger(__name__)
 
 
@@ -224,6 +235,7 @@ def decision_from_row(row: dict) -> Decision | None:
             reason=str(raw.get("reason") or "resume"),
             needs_search=_needs_search(raw.get("needs_search")),
             approval_intent=_approval_intent(raw.get("approval_intent")),
+            crisis=_flag(raw.get("crisis")),
         )
     except (TypeError, ValueError):
         return None
@@ -273,6 +285,7 @@ def parse_decision(raw: str) -> Decision | None:
         reason=_flat(data.get("reason"), REASON_CHARS),
         needs_search=_needs_search(data.get("needs_search")),
         approval_intent=_approval_intent(data.get("approval_intent")),
+        crisis=_flag(data.get("crisis")),
     )
 
 
@@ -312,6 +325,7 @@ def ensure_reply(decision: Decision) -> Decision:
         reason=_flat(f"{decision.reason};direct" if decision.reason else "direct", REASON_CHARS),
         needs_search=decision.needs_search,
         approval_intent=decision.approval_intent,
+        crisis=decision.crisis,
     )
 
 

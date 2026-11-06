@@ -6,21 +6,18 @@ pronoun resolves from the catalog, and a missing pack degrades without borrowing
 """
 
 
-import ast
 import asyncio
 import json
-import re
 from pathlib import Path
 
 import pytest
 import yaml
-from support import build_config, inbound_message, make_agent, make_runtime
+from support import inbound_message, make_agent, make_runtime
 
-from monoagens.engine import guard, i18n
+from monoagens.engine import guard
 from monoagens.engine.access.roles import Role
 from monoagens.engine.character import lexicon
-from monoagens.engine.soul import Soul, load_soul, normalize_language
-from monoagens.engine.turn import salience
+from monoagens.engine.soul import Soul, normalize_language
 from monoagens.engine.turn.prompts import system_prompt
 
 CHAT = "console:local"
@@ -107,193 +104,124 @@ def test_system_prompt_language_follows_the_yaml_value(tmp_path) -> None:
     assert "Indonesian" not in prompt
 
 
-# --------------------------------------------------------------- language data (ADR-0000 §4.2)
+# --------------------------------------------------------------- language data (ADR-0009)
+
+def test_library_directory_is_gone() -> None:
+    assert not (ROOT / "monoagens" / "library").exists()
 
 
-def pack_words(pack: dict) -> set[str]:
-    return {str(word).casefold() for key in WORD_LISTS for word in pack[key]}
+def test_one_english_baseline_serves_every_language() -> None:
+    english = lexicon.load("en")
+    assert english.ok
+    for code in ("id", "ja", "ar", "es", "zh", "fr", "de"):
+        pack = lexicon.load(code)
+        assert pack.ok, code
+        assert pack.language == code
+        assert pack.negations == english.negations
+        assert pack.stopwords == english.stopwords
+        assert pack.assistant_tells == english.assistant_tells
+        assert pack.injection == english.injection
+        assert pack.research_time == english.research_time
+        assert pack.privacy_levels == english.privacy_levels
+        assert pack.possessives == frozenset()
+    assert lexicon.load("ja") is lexicon.load("ja")
 
 
-def test_engine_holds_no_indonesian_literal() -> None:
-    """Every Indonesian word from the id pack is data; only the documented surfaces may hold one.
-
-    Words that also appear in the English pack are not evidence of an Indonesian literal
-    (`no`, `system prompt`, `jailbreak`), so the scan subtracts them. The lexicon module itself
-    is scanned with everything else and holds no word from either list.
-    """
-    indonesian = pack_words(json.loads((LEXICON_DIR / "id.json").read_text(encoding="utf-8")))
-    english = pack_words(json.loads((LEXICON_DIR / "en.json").read_text(encoding="utf-8")))
-    words = indonesian - english
-    assert words
-    found: list[str] = []
-    for path in sorted(ENGINE.rglob("*.py")):
-        relative = path.relative_to(ENGINE).as_posix()
-        text = path.read_text(encoding="utf-8")
-        for word in sorted(words - ALLOWED_LITERALS.get(relative, set())):
-            if re.search(rf"(?<!\w){re.escape(word)}(?!\w)", text, re.IGNORECASE):
-                found.append(f"{relative}: {word}")
-    assert found == []
+def test_empty_language_code_degrades() -> None:
+    pack = lexicon.load("")
+    assert pack.ok is False
+    assert pack.negations == frozenset()
+    assert pack.stopwords == frozenset()
 
 
-def test_no_default_pronoun_literal_survives() -> None:
-    seed = (ENGINE / "soul.py").read_text(encoding="utf-8")
-    assert "pronouns: aku" not in seed
-    assert 'pronouns: ""' in seed
-    problems: list[str] = []
-    for path in sorted(ENGINE.rglob("*.py")):
-        text = path.read_text(encoding="utf-8")
-        if re.search(r"pronouns\s*(?::\s*str\s*)?=\s*[\"']aku[\"']", text):
-            problems.append(f"{path.name}: field default")
-        if re.search(r"pronouns[^\n]*\bor\s+[\"']aku[\"']", text):
-            problems.append(f"{path.name}: loader fallback")
-    assert problems == []
+def test_guard_has_a_baseline_for_every_language() -> None:
+    assert guard.has_pack("en")
+    assert guard.has_pack("ja")
+    assert guard.has_pack("") is False
+    assert guard.is_sensitive("api_key=abc123", "ja")
+    assert guard.is_crisis("kill myself", "ja") is True
+    assert guard.is_crisis("dead battery", "ja") is False
 
 
-def test_empty_pronouns_resolve_from_the_catalog() -> None:
-    assert Soul(language="en", locale="en-US", timezone="UTC").pronouns == "I"
-    assert Soul(language="id", locale="id-ID", timezone="UTC").pronouns == "aku"
-    assert load_soul(
-        {"language": "en", "locale": "en-US", "timezone": "UTC", "pronouns": ""}
-    ).pronouns == "I"
-    assert load_soul(
-        {"language": "id", "locale": "id-ID", "timezone": "UTC", "pronouns": "gue"}
-    ).pronouns == "gue"
-
-
-def test_catalog_without_the_pronoun_key_fails_the_boot(tmp_path) -> None:
-    (tmp_path / "en.yaml").write_text(
-        'messages:\n  command.ping.description: "alive"\n', encoding="utf-8"
-    )
-    original = i18n.CATALOG_DIR
-    i18n.CATALOG_DIR = tmp_path
-    i18n.reload_catalogs()
-    try:
-        with pytest.raises(ValueError, match=r"soul\.pronoun\.default"):
-            load_soul({"language": "en", "locale": "en-US", "timezone": "UTC"})
-    finally:
-        i18n.CATALOG_DIR = original
-        i18n.reload_catalogs()
-
-
-def _catalog_messages(code: str) -> dict[str, str]:
-    body = yaml.safe_load(
-        (ROOT / "monoagens" / "lang" / f"{code}.yaml").read_text(encoding="utf-8")
-    )
-    return body["messages"]
-
-
-def _handler_names() -> set[str]:
-    folders = [
-        ROOT / "monoagens" / "engine" / "commands",
-        *sorted((ROOT / "monoagens" / "gateways").glob("*/commands")),
-    ]
-    names: set[str] = set()
-    for folder in folders:
-        for path in sorted(folder.glob("*.py")):
-            tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
-            for node in tree.body:
-                targets = node.targets if isinstance(node, ast.Assign) else []
-                is_command = any(
-                    isinstance(target, ast.Name) and target.id == "COMMAND" for target in targets
-                )
-                if not is_command:
-                    continue
-                if not isinstance(node.value, ast.Call):
-                    continue
-                for keyword in node.value.keywords:
-                    if keyword.arg == "name" and isinstance(keyword.value, ast.Constant):
-                        names.add(str(keyword.value.value))
-    return names
-
-
-def test_catalog_parity_and_command_descriptions() -> None:
-    english, indonesian = _catalog_messages("en"), _catalog_messages("id")
-    assert set(english) == set(indonesian)
-    for code, messages in (("en", english), ("id", indonesian)):
-        assert messages["soul.pronoun.default"].strip(), code
-    names = _handler_names()
-    assert len(names) >= 21
-    for code, messages in (("en", english), ("id", indonesian)):
-        missing = sorted(name for name in names if f"command.{name}.description" not in messages)
-        assert missing == [], code
-        stale = sorted(
-            key.split(".")[1]
-            for key in messages
-            if re.fullmatch(r"command\.[a-z][a-z0-9_]*\.description", key)
-            and key.split(".")[1] not in names
-        )
-        assert stale == [], code
-
-
-def test_language_packs_are_complete() -> None:
-    for path in sorted(LEXICON_DIR.glob("*.json")):
-        pack = lexicon.load(path.stem)
-        assert pack.ok, path.name
-        assert pack.language == path.stem
-        for key in WORD_LISTS:
-            assert getattr(pack, key), (path.name, key)
-        assert pack.research_time, (path.name, "research_time")
-        assert pack.research_source, (path.name, "research_source")
-        assert pack.privacy_levels, (path.name, "privacy_levels")
-    assert lexicon.load("id") is lexicon.load("id")
-
-
-def test_missing_pack_degrades_and_never_borrows(tmp_path) -> None:
-    (tmp_path / "id.json").write_text(
-        (LEXICON_DIR / "id.json").read_text(encoding="utf-8"), encoding="utf-8"
-    )
+def test_custom_lexicon_directory_is_still_supported(tmp_path) -> None:
+    body = {
+        "version": 1,
+        "language": "en",
+        "negations": ["never"],
+        "stopwords": ["the"],
+        "assistant_tells": ["as an ai"],
+        "injection": ["ignore previous instructions"],
+        "affirmations": ["yes"],
+        "laughter": ["haha"],
+        "particles": [],
+        "serious_registers": ["formal"],
+        "research_time": ["today"],
+        "research_source": ["source"],
+        "research_high_stakes": ["medical"],
+        "research_challenge": ["prove it"],
+        "privacy_levels": {"secret": 4},
+    }
+    (tmp_path / "en.json").write_text(json.dumps(body), encoding="utf-8")
     lexicon.configure(tmp_path)
     try:
         pack = lexicon.load("en")
-        assert pack.ok is False
-        assert pack.negations == frozenset()
-        assert pack.stopwords == frozenset()
-        assert pack.research_time == frozenset()
-        assert len(lexicon.warnings()) == 1
-        assert "'en'" in lexicon.warnings()[0]
-        # The id pack is present in the same folder and works; the en lookups never borrow it.
-        assert lexicon.load("id").ok is True
-        assert guard.is_injection("abaikan semua instruksi", "en") is False
-        assert guard.is_injection("abaikan semua instruksi", "id") is True
-        # The English net still runs, and a language pack is never borrowed across languages.
-        assert guard.is_crisis("kill myself", "en") is True
-        assert guard.is_crisis("mau mati", "id") is True
-        assert guard.is_crisis("mau mati", "en") is False
-        assert guard.safe_text("api key abc", language="en") == ""
-        # Detector lists are omitted, never taken from the other language.
-        config = build_config(
-            tmp_path / "cfg", soul=Soul(persona="p", language="en", locale="en-US", timezone="UTC")
-        )
-        prompt = system_prompt(config, (Role("member"),))
-        assert "kabur" not in prompt
-        assert "Never use formal or bookish phrasing in daily chat;" in prompt
-        assert "Never open a reply with a curse:" in prompt
-        assert "Only role=bot lines are words you actually typed." in prompt
-        # Without stopwords, block selection falls back to length (the longest block goes first).
-        from monoagens.engine.turn.prompts import PromptPart
-
-        blocks = [
-            (PromptPart("base", False, 0, pinned=True, text="b" * 10), "b" * 10),
-            (PromptPart("topic", False, 1, text="t" * 40), "t" * 40),
-            (PromptPart("memory", False, 2, text="m" * 40), "m" * 40),
-        ]
-        kept, dropped = salience.select(blocks, max_chars=55, language="en")
-        assert dropped == ["topic"]
-        assert [item.name for item, _ in kept] == ["base", "memory"]
+        assert pack.ok is True
+        assert pack.negations == frozenset({"never"})
+        assert pack.privacy_levels == {"secret": 4}
+        assert lexicon.load("ja").ok is True
     finally:
         lexicon.configure(None)
 
 
-def test_invalid_pack_degrades_with_one_warning(tmp_path) -> None:
+def test_invalid_custom_pack_falls_back_with_one_warning(tmp_path) -> None:
     (tmp_path / "en.json").write_text('{"version": 2}', encoding="utf-8")
     lexicon.configure(tmp_path)
     try:
         pack = lexicon.load("en")
-        assert pack.ok is False
+        assert pack.ok is True
         assert len(lexicon.warnings()) == 1
         assert "invalid" in lexicon.warnings()[0]
     finally:
         lexicon.configure(None)
+
+
+def _write_host(tmp_path: Path, code: str) -> Path:
+    base = tmp_path / code
+    base.mkdir()
+    (base / "config.yaml").write_text(
+        "database:\n  url_env: MONOAGENS_DATABASE_URL\n"
+        "workspace: .monoagens/workspace\n"
+        "roles_file: roles.yaml\nsoul_file: soul.yaml\n"
+        "engine:\n  llm:\n    provider: custom\n    base_url: http://x\n"
+        "    model: m\n    api_key_env: K\n"
+        "  default_role: member\n  approval:\n    mode: yolo\n"
+        "gateways: {}\n",
+        encoding="utf-8",
+    )
+    (base / "roles.yaml").write_text(
+        "roles:\n  member:\n    name: member\n    tools: [\"*\"]\n    commands: [\"*\"]\n",
+        encoding="utf-8",
+    )
+    (base / "soul.yaml").write_text(
+        f"name: MonoAgens\nlanguage: {code}\nlocale: {code}-{code.upper()}\n"
+        "timezone: UTC\npersona: test\n",
+        encoding="utf-8",
+    )
+    return base / "config.yaml"
+
+
+def test_every_language_boots_without_a_safety_pack(tmp_path, monkeypatch) -> None:
+    from support import test_dsn
+
+    from monoagens.engine.config import load_config
+
+    monkeypatch.setenv("MONOAGENS_DATABASE_URL", test_dsn())
+    for code in ("ja", "ar", "es", "zh", "fr", "de", "id", "en"):
+        config = load_config(
+            _write_host(tmp_path, code), require_key=False, require_model=False
+        )
+        assert config.soul.language == code
+        assert config.safety.allow_degraded is False
 
 
 def test_language_config_applies_the_lexicon_dir_override(tmp_path, monkeypatch) -> None:
@@ -306,6 +234,6 @@ def test_language_config_applies_the_lexicon_dir_override(tmp_path, monkeypatch)
             engine_extra=f"  language:\n    lexicon_dir: {packs}\n",
         )
         assert lexicon.directory() == packs
-        assert lexicon.load("en").ok is False
+        assert lexicon.load("en").ok is True
     finally:
         lexicon.configure(None)
