@@ -408,11 +408,16 @@ class FakeLLM:
         self.ctx = None
         self.calls = 0
         self.decisions = 0
+        self.judged = 0
         self.sessions: list[str] = []
 
     async def complete(self, system, user, **kwargs):
         import json
 
+        if kwargs.get("purpose") == "claim_guard":
+            # The fake model never claims an inability unless a test scripts the verdict.
+            self.judged += 1
+            return "NO"
         self.complete_system = str(system)
         self.complete_user = str(user)
         self.decisions += 1

@@ -1359,10 +1359,14 @@ def _memory_list(args: argparse.Namespace) -> int:
 def _memory_add(args: argparse.Namespace) -> int:
     from .engine.memory.store import MemoryStore
 
+    try:
+        config = load_config(args.config, require_key=False, require_model=False)
+    except ConfigError:
+        config = None
     db = _memory_db(args)
     try:
         ids = asyncio.run(
-            MemoryStore(db).add(
+            MemoryStore(db, config).add(
                 args.text,
                 scope=args.scope,
                 person_id=args.person,
@@ -1420,6 +1424,7 @@ def _memory_dispatch(args: argparse.Namespace) -> int:
         "rm": _memory_remove,
         "forget": _memory_remove,
         "purge": _memory_purge,
+        "scrub": _memory_scrub,
     }
     if args.memory_command in handlers:
         return handlers[args.memory_command](args)
@@ -1434,6 +1439,47 @@ def _positive_int(text: str) -> int:
     if value <= 0:
         raise argparse.ArgumentTypeError("--batch must be >= 1")
     return value
+
+
+def _memory_scrub(args: argparse.Namespace) -> int:
+    """Find and delete memories by keyword (`note.md` §10 §6).
+
+    There is no phrase list to guess from: the operator names the text to remove, so the
+    report can neither miss a wording nor delete an unrelated row. Every other memory stays.
+    """
+    from .engine.memory.store import MemoryStore
+
+    needle = str(getattr(args, "query", "") or "").strip().lower()
+    if not needle:
+        print(
+            "memory scrub: pass --query <text> naming the claim to remove",
+            file=sys.stderr,
+            flush=True,
+        )
+        return 2
+    db = _memory_db(args)
+    store = MemoryStore(db)
+    try:
+        rows = store.readable(limit=max(1, int(args.limit)))
+        found = [hit for hit in rows if needle in hit.text.lower()]
+        for hit in found:
+            print(f"{hit.id} [{hit.scope}] {hit.text}", flush=True)
+            if args.dry_run:
+                continue
+            asyncio.run(
+                store.forget(
+                    hit.id,
+                    requester_id=hit.person_id,
+                    thread_id=hit.thread_id,
+                    allow_global=True,
+                )
+            )
+    finally:
+        db.dispose()
+    verb = "would remove" if args.dry_run else "removed"
+    plural = "y" if len(found) == 1 else "ies"
+    print(f"memory scrub: {verb} {len(found)} matching entr{plural}", flush=True)
+    return 0
 
 
 def _console(args: argparse.Namespace) -> int:
@@ -1819,6 +1865,18 @@ def build_parser() -> argparse.ArgumentParser:
     )
     memory_purge.add_argument(
         "--batch", type=_positive_int, default=500, help="rows per batch (>= 1)"
+    )
+    memory_scrub = memory_sub.add_parser(
+        "scrub", help="find and delete memories by keyword (poisoned claims, stale facts)"
+    )
+    memory_scrub.add_argument(
+        "--dry-run", action="store_true", help="report what would be removed, change nothing"
+    )
+    memory_scrub.add_argument(
+        "--limit", type=int, default=500, help="readable rows to scan (>= 1)"
+    )
+    memory_scrub.add_argument(
+        "--query", default="", help="required: entries containing this text"
     )
     parser.group_parsers = {
         "gateway": (gateway_parser, "gateway_command"),

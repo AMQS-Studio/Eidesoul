@@ -13,7 +13,7 @@ from collections.abc import Awaitable, Callable, Mapping, Sequence
 from sqlalchemy import bindparam, extract, func, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
-from .. import embed, io
+from .. import claims, embed, io
 from ..guard import SENSITIVE, is_crisis
 from ..jobs.lease import Superseded, fenced_insert
 from ..schema import memories, memories_readable, memory_index, memory_uses
@@ -82,6 +82,12 @@ async def add(
     confirmed: bool = True,
 ) -> list[str]:
     """Conscious write (tool/command): canonical first, then the derived index."""
+    if getattr(store._limits, "claim_filter", True) and await claims.detect(
+        store.judge, text, store._language
+    ):
+        raise ValueError(
+            "text claims an access/capability limit; verify it with a tool, never store it"
+        )
     old = (
         await io.run(_superseded_row_sync, store, supersedes)
         if supersedes

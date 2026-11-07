@@ -212,6 +212,12 @@ engine:
         after_seconds: 300
       # Orchestrator stop deadline. Default: 30.
       stop_grace_period: 30
+    # Re-ask a draft that claims an inability no tool checked (note.md §10). Detection is one light yes/no model call over the draft, skipped when the turn already ran a tool.
+    claim_guard:
+      # Run the claim guard. Default: true.
+      enabled: true
+      # Extra model calls per turn when the draft still claims an inability. Default: 1.
+      max_retries: 1
 
   # --- engine.worker: BACKGROUND WORKER ---
   # Background worker retry and reaper.
@@ -346,6 +352,8 @@ engine:
         grace_days: 1.0
         # Rows removed per run. Default: 500.
         batch: 500
+    # Refuse to store claims about access, capability, or membership (note.md §10): the store asks one light yes/no model call before it writes. Default: true.
+    claim_filter: true
 
   # --- engine.approval: APPROVAL POLICY ---
   # Approval policy for sensitive commands and settings.

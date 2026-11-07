@@ -649,6 +649,14 @@ COMMENTS: dict[str, str] = {
     "engine.turns.shutdown.resume_notice": "When to announce a resumed turn.",
     "engine.turns.shutdown.resume_notice.after_seconds": "Announce after this delay. Default: 300.",
     "engine.turns.shutdown.stop_grace_period": "Orchestrator stop deadline. Default: 30.",
+    "engine.turns.claim_guard": (
+        "Re-ask a draft that claims an inability no tool checked (note.md §10). Detection is "
+        "one light yes/no model call over the draft, skipped when the turn already ran a tool."
+    ),
+    "engine.turns.claim_guard.enabled": "Run the claim guard. Default: true.",
+    "engine.turns.claim_guard.max_retries": (
+        "Extra model calls per turn when the draft still claims an inability. Default: 1."
+    ),
     "engine.worker": "Background worker retry and reaper.",
     "engine.worker.retry": "Background job retry budget.",
     "engine.worker.retry.attempts": "Attempts before dead-letter. Default: 5.",
@@ -670,6 +678,10 @@ COMMENTS: dict[str, str] = {
     ),
     "engine.memory.extraction_model": "Extraction model; empty uses engine.llm.model.",
     "engine.memory.telemetry": "Send memory telemetry. Default: false.",
+    "engine.memory.claim_filter": (
+        "Refuse to store claims about access, capability, or membership (note.md §10): the "
+        "store asks one light yes/no model call before it writes. Default: true."
+    ),
     "engine.memory.capture": "Deterministic capture gate.",
     "engine.memory.capture.mode": "off, conservative, balanced, or eager. Default: balanced.",
     "engine.memory.capture.min_chars": "Shortest text worth capturing. Default: 8.",

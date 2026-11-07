@@ -301,6 +301,7 @@ def load_config(
             or "monoagens_memories",
             extraction_model=str(memory_raw.get("extraction_model") or "").strip(),
             telemetry=_bool(memory_raw.get("telemetry"), False),
+            claim_filter=_bool(memory_raw.get("claim_filter"), True),
             privacy=privacy,
             worker=cognition,
             rooms=RoomConfig(

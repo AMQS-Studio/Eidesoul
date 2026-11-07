@@ -28,13 +28,15 @@ from .context import (
 )
 from .decision import Appraisal, Decision, RelationshipDelta, decide_turn, decision_from_row
 from .delivery import bind_origin, reset_origin
+from .facts import verified_facts
 from .progress import _progress_callbacks
 from .prompts import (
     CORE_PARTS,
     CRISIS_SAFETY,
     PromptContext,
     away_block,
-    linked_surfaces,
+    noted,
+    surfaces_block,
     system_prompt,
 )
 from .reply import plan_chunks
@@ -44,17 +46,6 @@ from .state import TurnState, actor_of
 from .steps import SideEffectAlreadyRan
 
 log = logging.getLogger(__name__)
-
-
-def _surfaces(runtime, inbound: Percept) -> str:
-    """The sender's linked accounts for the prompt; a lookup failure never blocks a turn."""
-    try:
-        links = runtime.identity.links(inbound.actor)
-    except Exception:
-        log.debug("linked surfaces lookup failed actor=%s", inbound.actor, exc_info=True)
-        return ""
-    return linked_surfaces(links, direct=bool(inbound.hints.get("dm")))
-
 
 
 class TurnRunner(ApprovalFlow, ResearchFlow, TurnReview):
@@ -583,6 +574,9 @@ class TurnRunner(ApprovalFlow, ResearchFlow, TurnReview):
                             & keyword_set(memory_block, runtime.soul.language)
                             else 0.0
                         )
+                        verified = await io.run(
+                            verified_facts, runtime, inbound, roles, gateway
+                        )
                         prompt_context = PromptContext(
                             config=runtime.config,
                             roles=roles,
@@ -612,34 +606,45 @@ class TurnRunner(ApprovalFlow, ResearchFlow, TurnReview):
                             research=research_text,
                             research_trigger=trigger,
                             person_style=person_style,
-                            surfaces=_surfaces(runtime, inbound),
+                            surfaces=surfaces_block(runtime, inbound),
+                            verified=verified,
                             bonuses=bonuses,
                         )
-                        answer = await runtime.llm.run(
-                            system_prompt(
+
+                        llm = runtime.llm
+                        assert llm is not None  # the branch above refuses a turn without one
+                        async def draft(note: str = "") -> str:
+                            """One model call for the draft; `note` is the claim guard's fix."""
+                            system = system_prompt(
                                 runtime.config,
                                 roles,
                                 context=prompt_context,
                                 parts=(*CORE_PARTS, *runtime.plugin_parts),
-                            ),
-                            content,
-                            specs,
-                            tool_ctx,
-                            session=f"monoagens-{thread_id}",
-                            turn_id=turn_id,
-                            deadline=deadline,
-                            min_call_seconds=min_call,
-                            on_step=self.steps.recorder(turn_id, "drafted"),
-                            lookup_step=self.steps.lookup(turn_id),
-                            **_progress_callbacks(
-                                runtime.dispatch, gateway, thread_id, turn_id
-                            ),
-                            temperature=(
-                                runtime.soul.voice.sampling.professional_temperature
-                                if decision is not None and decision.mode == "professional"
-                                else runtime.soul.voice.sampling.daily_temperature
-                            ),
-                            sampling=runtime.soul.voice.sampling,
+                            )
+                            return await llm.run(
+                                noted(system, note),
+                                content,
+                                specs,
+                                tool_ctx,
+                                session=f"monoagens-{thread_id}",
+                                turn_id=turn_id,
+                                deadline=deadline,
+                                min_call_seconds=min_call,
+                                on_step=self.steps.recorder(turn_id, "drafted"),
+                                lookup_step=self.steps.lookup(turn_id),
+                                **_progress_callbacks(
+                                    runtime.dispatch, gateway, thread_id, turn_id
+                                ),
+                                temperature=(
+                                    runtime.soul.voice.sampling.professional_temperature
+                                    if decision is not None and decision.mode == "professional"
+                                    else runtime.soul.voice.sampling.daily_temperature
+                                ),
+                                sampling=runtime.soul.voice.sampling,
+                            )
+
+                        answer = await self._claim_guard(
+                            await draft(), draft=draft, tool_ctx=tool_ctx
                         )
                         answer = await self._verify_research(
                             answer,

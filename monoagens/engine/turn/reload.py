@@ -89,6 +89,9 @@ def _apply(agent, hot: Config) -> None:
     configure = getattr(agent.memory, "configure_limits", None)
     if callable(configure):
         configure(hot.memory)
+    bind_judge = getattr(agent.memory, "bind_judge", None)
+    if callable(bind_judge):
+        bind_judge(agent.llm)
     agent.approvals.configure(hot.approval)
     agent.safety = build_safety(hot.approval)
     agent.sandbox_guard = SandboxGuard(

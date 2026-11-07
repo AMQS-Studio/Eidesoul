@@ -6,7 +6,7 @@ and the route row for observed messages.
 """
 
 
-from sqlalchemy import and_, select
+from sqlalchemy import and_, func, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from ..schema import messages, threads
@@ -35,6 +35,37 @@ def private_rooms(db, person_id: str) -> set[str]:
         .distinct()
     )
     return {str(row["thread_id"]) for row in rows}
+
+
+def member_rooms(db, person_ids, *, limit: int = 10) -> list[dict]:
+    """Rooms where this person is recorded, newest first: thread id, name, and gateway.
+
+    `person_ids` carries every address the sender is known by (the canonical `per_…` id, the
+    body's raw sender id, and its address), because `messages.sender_id` keeps what the body
+    wrote while `memories` and `thread_people` keep the canonical id. The archive layer of
+    ADR-0007 §4.5: the prompt's verified-facts block names these rooms, so a question about one
+    of them is continuity, not a guess. Content never leaves this query.
+    """
+    who = {
+        str(item).strip() for item in person_ids or () if str(item or "").strip()
+    }
+    if not who:
+        return []
+    last = func.max(messages.c.ts)
+    rows = db.fetch_all(
+        select(
+            messages.c.thread_id,
+            threads.c.name,
+            threads.c.gateway,
+            last.label("last"),
+        )
+        .join(threads, threads.c.thread_id == messages.c.thread_id)
+        .where(and_(messages.c.sender_id.in_(who), messages.c.thread_id != ""))
+        .group_by(messages.c.thread_id, threads.c.name, threads.c.gateway)
+        .order_by(last.desc())
+        .limit(max(1, int(limit)))
+    )
+    return [dict(row) for row in rows]
 
 
 def ensure_thread(db, thread_id: str, *, gateway: str, kind: str) -> None:

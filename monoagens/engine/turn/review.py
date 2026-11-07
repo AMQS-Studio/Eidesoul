@@ -11,7 +11,7 @@ import asyncio
 import logging
 from collections.abc import Sequence
 
-from .. import guard
+from .. import claims, guard
 from ..character.character import polish
 from ..i18n import t
 from ..inbound import GatewayCore, Percept
@@ -47,6 +47,28 @@ class TurnReview:
             config=self.runtime.config,
             window=self.runtime.windows.get(thread_id),
         )
+
+    async def _claim_guard(self, answer: str, *, draft, tool_ctx) -> str:
+        """Re-ask once when a draft claims an inability that no tool checked (`note.md` §10).
+
+        The guard never re-asks a turn that already ran a tool: a `denied:` or `error:` result
+        is the code's answer, and repeating the call would only spend the budget. A refusal the
+        code itself produced (the catalog's policy notices) is authoritative too.
+        """
+        settings = self.runtime.config.turns.claim_guard
+        language = self.runtime.soul.language
+        if not settings.enabled or tool_ctx is None or not str(answer or "").strip():
+            return answer
+        for _attempt in range(max(0, int(settings.max_retries))):
+            if tool_ctx.used or not await claims.detect(self.runtime.llm, answer, language):
+                return answer
+            if claims.official(answer, language):
+                return answer
+            log.info("claim guard: re-asking chat=%s", tool_ctx.thread_id)
+            answer = await draft(claims.NOTE)
+            if not str(answer or "").strip():
+                break
+        return answer
 
     async def _review(
         self,

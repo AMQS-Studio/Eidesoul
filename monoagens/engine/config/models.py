@@ -53,6 +53,18 @@ class ShutdownConfig:
     stop_grace_period: float = 30.0  # the orchestrator's stopped deadline (ADR-0003 §9)
 
 @dataclass(frozen=True)
+class ClaimGuardConfig:
+    """`note.md` §10: re-ask a draft that claims an inability no tool checked.
+
+    `enabled` turns the guard off for an operator who would rather send the draft as-is;
+    `max_retries` bounds the extra model calls (one by default) so a stubborn draft cannot
+    loop.
+    """
+
+    enabled: bool = True
+    max_retries: int = 1
+
+@dataclass(frozen=True)
 class TurnConfig:
     resume: bool = True
     max_attempts: int = 2
@@ -67,6 +79,7 @@ class TurnConfig:
     timeout_seconds: float = 300.0
     min_call_seconds: float = 5.0
     shutdown: ShutdownConfig = field(default_factory=ShutdownConfig)
+    claim_guard: ClaimGuardConfig = field(default_factory=ClaimGuardConfig)
 
 @dataclass(frozen=True)
 class WorkerRetryConfig:

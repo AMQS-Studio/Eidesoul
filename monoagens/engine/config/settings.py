@@ -154,6 +154,8 @@ class MemoryConfig:
     collection: str = "monoagens_memories"
     extraction_model: str = ""  # empty = llm.model
     telemetry: bool = False
+    # `note.md` §10: an access/capability claim is a tool result, never a stored fact.
+    claim_filter: bool = True
     privacy: PrivacyConfig = field(default_factory=PrivacyConfig)
     worker: CognitionConfig = field(default_factory=CognitionConfig)
     rooms: RoomConfig = field(default_factory=RoomConfig)

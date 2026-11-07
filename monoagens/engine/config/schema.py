@@ -86,6 +86,7 @@ ENGINE_SCHEMA: dict[str, object] = {
         "max_resume_per_chat": None,
         "max_resume_per_minute": None,
         "backlog_policy": None,
+        "claim_guard": {"enabled": None, "max_retries": None},
         "shutdown": {
             "grace_seconds": None,
             "drain_seconds": None,
@@ -109,6 +110,7 @@ ENGINE_SCHEMA: dict[str, object] = {
         "collection": None,
         "extraction_model": None,
         "telemetry": None,
+        "claim_filter": None,
         "capture": {"mode": None, "min_chars": None, "novelty_threshold": None},
         "privacy": {
             "enabled": None,

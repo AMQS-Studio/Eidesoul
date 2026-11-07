@@ -31,6 +31,7 @@ from .models import (
     AutomationResilienceConfig,
     AutomationRetryConfig,
     AutomationSandboxConfig,
+    ClaimGuardConfig,
     LLMConfig,
     LLMTargetConfig,
     LoggingConfig,
@@ -309,6 +310,13 @@ BACKLOG_POLICIES = frozenset(
 )
 PARTIAL_DELIVERY = frozenset({"skip", "resend"})
 
+def _claim_guard_config(raw: Mapping) -> ClaimGuardConfig:
+    """`engine.turns.claim_guard`: one bounded re-ask when a draft claims an inability."""
+    return ClaimGuardConfig(
+        enabled=_bool(raw.get("enabled"), True),
+        max_retries=max(0, min(3, int(_num(raw.get("max_retries"), 1)))),
+    )
+
 def _turn_config(raw: Mapping) -> TurnConfig:
     """`engine.turns`: the one-turn deadline, resume policy, and the shutdown budget."""
     shutdown_raw = _section(raw, "shutdown")
@@ -356,6 +364,7 @@ def _turn_config(raw: Mapping) -> TurnConfig:
         timeout_seconds=max(1.0, _num(raw.get("timeout_seconds"), 300.0)),
         min_call_seconds=max(0.0, _num(raw.get("min_call_seconds"), 5.0)),
         shutdown=shutdown,
+        claim_guard=_claim_guard_config(_section(raw, "claim_guard")),
     )
 
 def _worker_config(raw: Mapping) -> WorkerConfig:

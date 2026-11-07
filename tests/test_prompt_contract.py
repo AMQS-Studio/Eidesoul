@@ -1,5 +1,6 @@
 """Prompt contract (ADR-0001 §4.5, §6.11): properties hold per body, never per wording."""
 
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -10,7 +11,13 @@ from monoagens.engine.access.roles import Role
 from monoagens.engine.inbound import PROMPT_SECTION_MAX, CoreDefaults, prompt_section
 from monoagens.engine.llm import prompt_prefix_hash
 from monoagens.engine.soul import Soul, language_line
-from monoagens.engine.turn.prompts import Prompt, PromptContext, system_prompt
+from monoagens.engine.turn.prompts import (
+    EVIDENCE_RULE,
+    HISTORY_REMINDER,
+    Prompt,
+    PromptContext,
+    system_prompt,
+)
 
 ROOT = Path(__file__).resolve().parents[1]
 CASES = yaml.safe_load((ROOT / "tests" / "data" / "prompt_cases.yaml").read_text())[
@@ -293,3 +300,61 @@ def test_the_rule_scopes_secrecy_to_non_members(tmp_path) -> None:
     assert "The rule is membership, not secrecy" in system
     assert "answer normally" in system
     assert "you do not discuss other threads" in system
+
+
+def test_the_evidence_rule_is_stated_in_both_positions(tmp_path) -> None:
+    """`note.md` §10: the rule sits in the priority block and again right before the history."""
+    case = CASES[0]
+    config = build_config(tmp_path, soul=_soul(case))
+    verified = 'Verified facts from the runtime: rooms this sender provably belongs to: "x".\n'
+    context = PromptContext(
+        config=config,
+        roles=(Role("member"),),
+        language=case["language"],
+        query="halo",
+        verified=verified,
+    )
+    prompt = system_prompt(config, (Role("member"),), context=context)
+
+    assert EVIDENCE_RULE in prompt.stable
+    assert HISTORY_REMINDER in prompt.volatile
+    # The tail reminder follows the verified facts and every earlier block: it is the last
+    # thing the model reads before the transcript, never buried in the middle.
+    assert prompt.volatile.index(verified) > prompt.volatile.index("Current sender:")
+    after = prompt.volatile.split(HISTORY_REMINDER, 1)[1]
+    assert verified.strip() not in after
+    assert "Current sender:" not in after
+    assert "Date:" in after
+
+
+def test_the_verified_facts_block_is_pinned_against_the_budget(tmp_path) -> None:
+    case = CASES[0]
+    config = build_config(tmp_path, soul=_soul(case))
+    config = replace(
+        config, prompt=replace(config.prompt, salience=True, max_chars=1)
+    )
+    verified = "Verified facts from the runtime: room names live here.\n"
+    context = PromptContext(
+        config=config,
+        roles=(Role("member"),),
+        language=case["language"],
+        query="halo",
+        verified=verified,
+    )
+    prompt = system_prompt(config, (Role("member"),), context=context)
+
+    assert verified.strip() in prompt.volatile
+
+
+def test_memory_is_context_never_evidence(tmp_path) -> None:
+    """`note.md` §10 §6: a stored line never justifies a refusal."""
+    case = CASES[0]
+    config = build_config(tmp_path, soul=_soul(case))
+    context = PromptContext(
+        config=config, roles=(Role("member"),), language=case["language"], query="halo"
+    )
+    system = system_prompt(config, (Role("member"),), context=context).stable
+
+    assert "Memory is context about people and the outside world" in system
+    assert "never evidence about access, capability, or membership" in system
+    assert "Verify with the tool that owns the target" in system

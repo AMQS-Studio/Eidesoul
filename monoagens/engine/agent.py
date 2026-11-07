@@ -111,6 +111,10 @@ class Agent(DeliveryFacade, CrossRoomGuard):
         self.windows = windows
         self.history = history
         self.memory = memory
+        # `note.md` §10 §6: the store asks this model before it stores a claim about access.
+        bind_judge = getattr(memory, "bind_judge", None)
+        if callable(bind_judge):
+            bind_judge(llm)
         self.ledger = ledger
         self.skills = skills
         self.recipes = recipes

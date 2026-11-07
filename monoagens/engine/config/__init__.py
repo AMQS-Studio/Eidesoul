@@ -32,6 +32,7 @@ from .models import AutomationConfig as AutomationConfig
 from .models import AutomationResilienceConfig as AutomationResilienceConfig
 from .models import AutomationRetryConfig as AutomationRetryConfig
 from .models import AutomationSandboxConfig as AutomationSandboxConfig
+from .models import ClaimGuardConfig as ClaimGuardConfig
 from .models import ConcurrencyConfig as ConcurrencyConfig
 from .models import DatabaseConfig as DatabaseConfig
 from .models import FetchConfig as FetchConfig
@@ -112,6 +113,7 @@ __all__ = [
     "AutomationRetryConfig",
     "AutomationSandboxConfig",
     "CaptureConfig",
+    "ClaimGuardConfig",
     "CognitionConfig",
     "ConcurrencyConfig",
     "Config",

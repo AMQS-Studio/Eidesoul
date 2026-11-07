@@ -4,7 +4,7 @@ import logging
 from collections.abc import Mapping
 from typing import TYPE_CHECKING
 
-from .. import io
+from .. import claims, io
 from ..memory import assess as memory_assess
 from ..memory import evidence as privacy_layers
 from ..memory import gate, intent
@@ -93,6 +93,14 @@ class CognitionCapture:
                 results[job.id] = await self._label(row, verdicts.get(str(row["id"])))
         return results
 
+    async def _drop_reason(self, body: str, verdict) -> str:
+        """Why this candidate is not worth storing; "" keeps it (note.md §10 §6)."""
+        if getattr(self.config.memory, "claim_filter", True) and await claims.detect(
+            self.llm, body, self.language
+        ):
+            return "claim: not evidence"
+        return "" if verdict.worth else "assess: not worth"
+
     def _redact_credential(self, memory_id: str) -> bool:
         """ADR-0002 §4.4: no credential text survives in the row or its audit trail."""
         store = self.memory
@@ -138,8 +146,9 @@ class CognitionCapture:
             await io.run(self._redact_credential, memory_id)
             await io.run(self.memory.mark_not_worth, memory_id, "privacy: credential")
             return "credential dropped"
-        if not verdict.worth:
-            await io.run(self.memory.mark_not_worth, memory_id, "assess: not worth")
+        reason = await self._drop_reason(body, verdict)
+        if reason:
+            await io.run(self.memory.mark_not_worth, memory_id, reason)
             return "not worth"
         group = str(row.get("audience") or "private") == "group"
         owner = str(row.get("owner_id") or "")

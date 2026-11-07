@@ -5,6 +5,7 @@ import asyncio
 import hashlib
 import time
 import uuid
+from dataclasses import replace
 from datetime import datetime, timedelta
 
 import pytest
@@ -696,3 +697,70 @@ def test_soul_rules_are_mirrored_once_per_day_and_promoted_after_two(tmp_path) -
     assert promoted["kind"] == "rule"
     # idempotent: already a rule
     assert memory.promote_soul_rules(now=day + 2 * 86400.0, tz="UTC") == 0
+
+
+# ---------------------------------------------------------------- claim filter
+
+
+class Judge:
+    """The light model the store asks before it stores a claim (`note.md` §10 §6)."""
+
+    def __init__(self, answer: str = "YES") -> None:
+        self.answer = answer
+        self.calls: list[str] = []
+
+    async def complete(self, system, user, **kwargs):
+        self.calls.append(str(user))
+        return self.answer
+
+
+def test_an_access_claim_is_never_stored(tmp_path) -> None:
+    """`note.md` §10 §6: a claim about access/capability is a tool result, never a fact."""
+    judge = Judge("YES")
+    memory = store(tmp_path)
+    memory.bind_judge(judge)
+
+    with pytest.raises(ValueError, match="access/capability"):
+        asyncio.run(memory.add("bot tidak bisa membaca arsip grup itu", scope="global"))
+    with pytest.raises(ValueError, match="access/capability"):
+        asyncio.run(
+            memory.add("pengguna tidak punya akses ke ruangan itu", scope="global")
+        )
+
+    assert len(judge.calls) == 2
+    assert count(memory, "memories") == 0
+    assert readable_count(memory) == 0
+
+
+def test_an_ordinary_fact_still_stores(tmp_path) -> None:
+    judge = Judge("NO")
+    memory = store(tmp_path)
+    memory.bind_judge(judge)
+
+    ids = asyncio.run(memory.add("Budi tidak bisa hadir rapat besok", scope="global"))
+
+    assert row(memory, ids[0])["text"] == "Budi tidak bisa hadir rapat besok"
+    assert readable_count(memory) == 1
+    assert len(judge.calls) == 1
+
+
+def test_the_claim_filter_can_be_disabled(tmp_path) -> None:
+    config = build_config(tmp_path)
+    memory = MemoryStore(
+        database(),
+        replace(config, memory=replace(config.memory, claim_filter=False)),
+    )
+    memory.bind_judge(Judge("YES"))
+
+    ids = asyncio.run(memory.add("bot tidak bisa membaca arsip grup itu", scope="global"))
+
+    assert row(memory, ids[0])["text"] == "bot tidak bisa membaca arsip grup itu"
+
+
+def test_a_store_without_a_judge_cannot_decide_and_stores(tmp_path) -> None:
+    """The operator CLI writes offline: no model means no claim verdict, not a silent drop."""
+    memory = store(tmp_path)
+
+    ids = asyncio.run(memory.add("bot tidak bisa membaca arsip grup itu", scope="global"))
+
+    assert row(memory, ids[0])["text"] == "bot tidak bisa membaca arsip grup itu"

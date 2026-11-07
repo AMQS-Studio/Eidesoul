@@ -228,7 +228,7 @@ def test_the_same_group_read_from_another_group_stays_cross(tmp_path) -> None:
 def test_the_turn_frame_carries_the_senders_linked_surfaces() -> None:
     from types import SimpleNamespace
 
-    from monoagens.engine.turn.loop import _surfaces
+    from monoagens.engine.turn.prompts import surfaces_block
 
     class Identity:
         def links(self, person_id: str):
@@ -242,14 +242,14 @@ def test_the_turn_frame_carries_the_senders_linked_surfaces() -> None:
     direct = SimpleNamespace(actor="per_aaaaaaaaaa", hints={"dm": True})
     shared = SimpleNamespace(actor="per_aaaaaaaaaa", hints={"dm": False})
 
-    assert "telegram (12345)" in _surfaces(runtime, direct)
-    assert "12345" not in _surfaces(runtime, shared)
+    assert "telegram (12345)" in surfaces_block(runtime, direct)
+    assert "12345" not in surfaces_block(runtime, shared)
 
 
 def test_a_missing_identity_link_lookup_never_blocks_the_turn() -> None:
     from types import SimpleNamespace
 
-    from monoagens.engine.turn.loop import _surfaces
+    from monoagens.engine.turn.prompts import surfaces_block
 
     class Broken:
         def links(self, person_id: str):
@@ -257,4 +257,4 @@ def test_a_missing_identity_link_lookup_never_blocks_the_turn() -> None:
 
     runtime = SimpleNamespace(identity=Broken())
     inbound = SimpleNamespace(actor="per_aaaaaaaaaa", hints={})
-    assert _surfaces(runtime, inbound) == ""
+    assert surfaces_block(runtime, inbound) == ""

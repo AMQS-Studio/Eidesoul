@@ -58,6 +58,7 @@ class MemoryStore(FencedStore):
         self._tz = str(getattr(getattr(config, "soul", None), "timezone", "") or "")
         self._language = str(getattr(getattr(config, "soul", None), "language", "") or "")
         self._guard = None
+        self._llm = None
         self.available = db is not None
         self.reason = "" if db is not None else "no database"
         self.label = "postgres"
@@ -71,6 +72,18 @@ class MemoryStore(FencedStore):
 
     def configure_limits(self, memory) -> None:
         self._limits = memory
+
+    def bind_judge(self, llm) -> None:
+        """`note.md` §10 §6: the light model the claim filter asks before a stored fact.
+
+        The store stays transport-free: it holds the client, never a prompt of its own.
+        """
+        self._llm = llm
+
+    @property
+    def judge(self):
+        """The model the claim filter asks; `None` means the filter cannot decide."""
+        return self._llm
 
     def bind_guard(self, guard) -> None:
         """ADR-0002 §4.3: the lease guard fences every canonical mutation once bound."""

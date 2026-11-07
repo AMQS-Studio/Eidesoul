@@ -97,6 +97,8 @@ def test_a_turn_logs_and_cost_rows_share_one_turn_id(tmp_path, monkeypatch) -> N
             [
                 text_response(json.dumps(decision)),
                 text_response("halo, aku di sini"),
+                # The claim judge asks one yes/no question after the draft (`note.md` §10).
+                text_response("NO"),
                 text_response("ok"),
             ]
         ))
@@ -122,7 +124,7 @@ def test_a_turn_logs_and_cost_rows_share_one_turn_id(tmp_path, monkeypatch) -> N
     assert rows
     assert {row["turn_id"] for row in rows} == {turn_id}
     assert all(int(row["tokens_in"] or 0) > 0 for row in rows)
-    assert {"decision", "reply"} <= {row["purpose"] for row in rows}
+    assert {"decision", "reply", "claim_guard"} <= {row["purpose"] for row in rows}
     assert db.fetch_one(select(turns).where(turns.c.id == turn_id)) is not None
 
     observability.clear()
