@@ -14,7 +14,7 @@ roles:
     name: administrator
     # Optional display label for status lines and logs.
     label: local
-    # Locked role: it cannot be deleted, renamed, or merged by /link (ADR-0022).
+    # Locked role: it cannot be deleted, renamed, or merged by /link (ADR-0006).
     protected: true
     # One line the operator reads in `monoagens people list`.
     description: Administrator of MonoAgens
@@ -30,7 +30,7 @@ roles:
       - '*'
     # Allow memory maintenance across scopes, not only the holder's own.
     memory_admin: true
-    # Per-gateway access policy; each gateway owns its own keys (ADR-0046).
+    # Per-gateway access policy; each gateway owns its own keys (ADR-0002).
     gateways: {}
     # Extra instructions injected into the prompt when this role speaks.
     context: |
@@ -70,7 +70,7 @@ roles:
       - tools
     # Allow memory maintenance across scopes, not only the holder's own.
     memory_admin: false
-    # Per-gateway access policy; each gateway owns its own keys (ADR-0046).
+    # Per-gateway access policy; each gateway owns its own keys (ADR-0002).
     gateways: {}
     # Extra instructions injected into the prompt when this role speaks.
     context: |
@@ -99,7 +99,7 @@ roles:
       - whoami
     # Allow memory maintenance across scopes, not only the holder's own.
     memory_admin: false
-    # Per-gateway access policy; each gateway owns its own keys (ADR-0046).
+    # Per-gateway access policy; each gateway owns its own keys (ADR-0002).
     gateways: {}
     # Extra instructions injected into the prompt when this role speaks.
     context: |

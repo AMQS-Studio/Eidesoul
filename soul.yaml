@@ -103,13 +103,13 @@ voice:
   profanity: avoid
   # inherit or relaxed. Default: inherit.
   safety: inherit
-  # voice.speech — soul section.
+  # Spoken voice preferences for this soul across voice notes and calls.
   speech:
-    # voice.speech.enabled — soul setting. Default: false
+    # Allow spoken replies when a TTS provider is configured. Default: false.
     enabled: false
-    # voice.speech.stt — soul setting. Default: ''
+    # Soul-level STT language or prompt hint; empty uses engine.speech.stt.
     stt: ''
-    # voice.speech.tts — soul setting. Default: ''
+    # Soul-level TTS voice id or preset; empty uses engine.speech.tts.voice.
     tts: ''
 # Principled rules synced as `kind=rule` memory at primary start.
 rules:

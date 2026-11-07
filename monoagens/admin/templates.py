@@ -791,6 +791,22 @@ COMMENTS: dict[str, str] = {
     "engine.tools.activate_on_demand": "Load other tools on demand. Default: true.",
     "engine.shell": "Environment inherited by shell commands.",
     "engine.shell.env": "Variable names passed through to the child.",
+    "engine.speech": "Speech-to-text (STT) and text-to-speech (TTS) provider settings.",
+    "engine.speech.stt": "Speech-to-text (STT) transcription adapter settings.",
+    "engine.speech.stt.provider": "STT provider name; empty disables transcription. Default: ''.",
+    "engine.speech.stt.base_url": "Custom STT endpoint URL; empty uses the provider default.",
+    "engine.speech.stt.api_key_env": "Environment variable holding the STT API key.",
+    "engine.speech.stt.model": "STT model id; empty uses the provider default.",
+    "engine.speech.stt.language": "Default transcription language hint; empty autodetects.",
+    "engine.speech.tts": "Text-to-speech (TTS) synthesis adapter settings.",
+    "engine.speech.tts.provider": (
+        "TTS provider name; empty disables speech synthesis. Default: ''."
+    ),
+    "engine.speech.tts.base_url": "Custom TTS endpoint URL; empty uses the provider default.",
+    "engine.speech.tts.api_key_env": "Environment variable holding the TTS API key.",
+    "engine.speech.tts.model": "TTS model id; empty uses the provider default.",
+    "engine.speech.tts.voice": "Default voice id or preset when soul.yaml leaves it empty.",
+    "engine.speech.timeout_seconds": "Per-call timeout for STT/TTS requests. Default: 30.",
     "engine.search": "Full-text and trigram search limits.",
     "engine.search.fts": "Use full-text search. Default: true.",
     "engine.search.lang": "Postgres text search language. Default: simple.",
@@ -877,7 +893,7 @@ def comment_for(path: str, value: object) -> str:
         return f"'{name}' setting; that gateway's own settings dataclass owns its default."
     if isinstance(value, dict):
         return f"{path} — operator section."
-    return f"{path} — operator setting. Default: {yaml.safe_dump(value).strip()}"
+    return f"{path} — operator setting. Default: {_scalar(value)}"
 
 
 # Section banners in the order the file shows them (docs/note-post-adr0008.md).
@@ -1162,6 +1178,12 @@ SOUL_COMMENTS: dict[str, str] = {
     "voice.humanize.reaction_stickers": "Sticker reactions allowed for this soul.",
     "voice.profanity": "avoid, mirror, or allow. Default: avoid.",
     "voice.safety": "inherit or relaxed. Default: inherit.",
+    "voice.speech": "Spoken voice preferences for this soul across voice notes and calls.",
+    "voice.speech.enabled": (
+        "Allow spoken replies when a TTS provider is configured. Default: false."
+    ),
+    "voice.speech.stt": "Soul-level STT language or prompt hint; empty uses engine.speech.stt.",
+    "voice.speech.tts": "Soul-level TTS voice id or preset; empty uses engine.speech.tts.voice.",
 }
 
 

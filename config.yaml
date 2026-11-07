@@ -112,6 +112,8 @@ engine:
     api_key_env: ''
     # Reasoning effort; empty uses the provider default.
     reasoning_effort: ''
+    # Provider service tier; empty uses the provider default.
+    service_tier: ''
     # Per-call model timeout. Default: 120.
     timeout_seconds: 120
     # Temperature for decisions, summaries, and extraction. Default: 0.2.
@@ -122,8 +124,6 @@ engine:
     max_calls_per_turn: 0
     # Send a stable prefix first for provider prompt caching. Default: true.
     prompt_cache: true
-    # Ordered fallback targets tried after the primary fails; empty means none.
-    fallbacks: []
     # Retry policy for the turn and background paths.
     retry:
       # Turn attempts. Default: 1.
@@ -138,6 +138,8 @@ engine:
       jitter: 0.2
       # Cap on a provider Retry-After. Default: 10.
       retry_after_max_seconds: 10
+    # Ordered fallback targets tried after the primary fails; empty means none.
+    fallbacks: []
 
   # --- engine.alerts: OUT-OF-BAND ALERTING ---
   # Consecutive failures become one admin message and one webhook POST.
@@ -146,10 +148,15 @@ engine:
     enabled: false
     # Which failure sources may fire an alert.
     sources:
+      # Alert on database failures. Default: true.
       database: true
+      # Alert on model-provider failures. Default: true.
       llm: true
+      # Alert on gateway crashes. Default: true.
       gateway: true
+      # Alert on plugin load failures. Default: true.
       plugin: true
+      # Alert on MCP server failures. Default: true.
       mcp: true
     # Consecutive failures before one alert fires. Default: 3.
     threshold: 3
@@ -596,34 +603,33 @@ engine:
       - TERM
 
   # --- engine.speech: SPEECH ---
-  # engine.speech — operator section.
+  # Speech-to-text (STT) and text-to-speech (TTS) provider settings.
   speech:
-    # engine.speech.stt — operator section.
+    # Speech-to-text (STT) transcription adapter settings.
     stt:
-      # engine.speech.stt.provider — operator setting. Default: ''
+      # STT provider name; empty disables transcription. Default: ''.
       provider: ''
-      # engine.speech.stt.base_url — operator setting. Default: ''
+      # Custom STT endpoint URL; empty uses the provider default.
       base_url: ''
-      # engine.speech.stt.api_key_env — operator setting. Default: ''
+      # Environment variable holding the STT API key.
       api_key_env: ''
-      # engine.speech.stt.model — operator setting. Default: ''
+      # STT model id; empty uses the provider default.
       model: ''
-      # engine.speech.stt.language — operator setting. Default: ''
+      # Default transcription language hint; empty autodetects.
       language: ''
-    # engine.speech.tts — operator section.
+    # Text-to-speech (TTS) synthesis adapter settings.
     tts:
-      # engine.speech.tts.provider — operator setting. Default: ''
+      # TTS provider name; empty disables speech synthesis. Default: ''.
       provider: ''
-      # engine.speech.tts.base_url — operator setting. Default: ''
+      # Custom TTS endpoint URL; empty uses the provider default.
       base_url: ''
-      # engine.speech.tts.api_key_env — operator setting. Default: ''
+      # Environment variable holding the TTS API key.
       api_key_env: ''
-      # engine.speech.tts.model — operator setting. Default: ''
+      # TTS model id; empty uses the provider default.
       model: ''
-      # engine.speech.tts.voice — operator setting. Default: ''
+      # Default voice id or preset when soul.yaml leaves it empty.
       voice: ''
-    # engine.speech.timeout_seconds — operator setting. Default: 30
-    # ...
+    # Per-call timeout for STT/TTS requests. Default: 30.
     timeout_seconds: 30
 
   # --- engine.search: SEARCH ---
