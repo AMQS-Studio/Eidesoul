@@ -1,4 +1,4 @@
-"""Tables this plugin owns (ADR-0027, ADR-0033 §4.6): core never defines or reads them."""
+"""Tables this plugin owns (ADR-0005, ADR-0001 §4.6): core never defines or reads them."""
 
 from sqlalchemy import Column, Float, Integer, MetaData, String, Table, Text
 

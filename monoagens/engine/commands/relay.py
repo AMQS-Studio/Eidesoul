@@ -114,8 +114,8 @@ COMMAND = Handler(
         f"or revoke one. Modes: {USAGE_MODES}."
     ),
     usage=(
-        "/relay list | /relay grant <person> [mode] [scope] [days]"
-        " | /relay revoke <person> [scope]"
+        "[list | grant <person> [mode] [scope] [days]"
+        " | revoke <person> [scope]]"
     ),
     fn=relay,
 )

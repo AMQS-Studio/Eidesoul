@@ -1,1 +1,1 @@
-"""Command khusus gateway WhatsApp."""
+"""WhatsApp-gateway-only commands."""

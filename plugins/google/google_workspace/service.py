@@ -8,10 +8,12 @@ No token or email is ever logged.
 
 
 import asyncio
+import importlib
 import logging
 import os
 import time
 from pathlib import Path
+from typing import Any
 
 import httpx
 from sqlalchemy import delete, select
@@ -60,7 +62,7 @@ class GoogleWorkspace:
             raise GoogleError("GOOGLE_SERVICE_ACCOUNT_PATH is not set")
         if not Path(path).is_file():
             raise GoogleError("service account file not found")
-        from google.oauth2 import service_account
+        service_account: Any = importlib.import_module("google.oauth2.service_account")
 
         self._credentials = service_account.Credentials.from_service_account_file(
             path, scopes=SCOPES
@@ -72,7 +74,7 @@ class GoogleWorkspace:
         if cached is not None:
             return cached
         credentials = self._creds()
-        from googleapiclient.discovery import build
+        build: Any = importlib.import_module("googleapiclient.discovery").build
 
         versions = {"drive": "v3", "docs": "v1", "sheets": "v4"}
         client = build(api, versions[api], credentials=credentials, cache_discovery=False)
@@ -393,7 +395,7 @@ class GoogleWorkspace:
         drive = self._client("drive")
 
         def fetch() -> dict:
-            from googleapiclient.errors import HttpError
+            HttpError: Any = importlib.import_module("googleapiclient.errors").HttpError
 
             try:
                 return (

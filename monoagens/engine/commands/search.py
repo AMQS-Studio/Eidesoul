@@ -1,4 +1,4 @@
-"""Command /cari: search old messages in this chat archive without LLM."""
+"""Command /search: search old messages in this chat archive without LLM."""
 
 
 from ..i18n import t

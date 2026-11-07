@@ -138,10 +138,15 @@ transactional outbox.
 - **Configurable Multi-Provider `web_search`:**
   - `web_search` in `config.yaml` supports selectable search providers (`provider: "ddgs" | "searxng" | "tavily" | "brave" | "exa" | "serper" | "google"`), an ordered `fallbacks: []` list, `base_url`, `api_key_env`, `engine_id_env` (for Google CSE), and `ddgs_backend: "auto"` (removing the hardcoded `DDGS_BACKENDS = "yahoo"`).
   - HTTP-based search adapters execute via shared non-blocking `httpx.AsyncClient` (replacing synchronous `urllib.request.urlopen`) and normalize results into a uniform `SearchHit(title, url, snippet, published_at)` contract before feeding `ResearchCard` and `fetch` enrichment.
-- **Tool Contracts and Multi-Turn Context Budget:**
+- **Tool Contracts, Surgical File Edits (`sed`), and Multi-Turn Context Budget:**
   - Tool inputs are validated against JSON schemas; unknown or malformed arguments return structured tool
     errors without crashing the turn.
-  - Tool outputs are truncated per call (`max_output_chars`, default 3,000) and total tool output appended
+  - Alongside `read`/`grep` and `write`, the core `sed` tool (`monoagens/engine/tools/sed.py`, aliases
+    `edit`, `replace`) provides surgical in-place workspace file edits under the same `_resolve_write` and
+    `_refusal` guards: Mode 1 (`old` $\to$ `new` exact snippet replacement with ambiguity detection) and
+    Mode 2 (`start_line`..`end_line` with mandatory `anchor` substring or SHA-256/CRC32 hex prefix verification
+    so shifted lines are never clobbered).
+  - Tool outputs are truncated per call (`max_output_chars`, default 20,000) and total tool output appended
     to `messages` in `LLM.run` is capped per round (`max_round_chars`, `M-06`) so multi-turn tool loops
     cannot overflow the provider's context window.
 

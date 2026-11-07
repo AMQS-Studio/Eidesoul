@@ -107,8 +107,8 @@ max-complexity = 12
 "scripts/**" = ["E402"]
 "migrations/env.py" = ["E402"]
 
-# ADR-0031 §4.1 debt recorded when the ceiling landed: these functions are above it today.
-# The list is per file on purpose, so a new module is still held to the rule. ADR-0037 §4.3
+# ADR-0002 §4.1 debt recorded when the ceiling landed: these functions are above it today.
+# The list is per file on purpose, so a new module is still held to the rule. ADR-0003 §4.3
 # moved `Agent._run_turn`/`Agent._handle_message` verbatim into `turn/loop.py` and
 # `turn/intake.py`: the debt follows the function, not the file it used to sit in.
 "monoagens/cli.py" = ["C901", "PLR0912", "PLR0915"]
@@ -133,15 +133,13 @@ max-complexity = 12
 "monoagens/engine/tools/settings.py" = ["C901", "PLR0912"]
 "monoagens/gateways/whatsapp/commands/backfill.py" = ["C901", "PLR0915"]
 "monoagens/gateways/whatsapp/gateway.py" = ["C901", "PLR0915"]
-"monoagens/gateways/whatsapp/tools/chat_history.py" = ["C901", "PLR0912"]
-"monoagens/gateways/whatsapp/tools/send_to.py" = ["C901", "PLR0912"]
 
 [tool.coverage.run]
 branch = true
 source = ["monoagens"]
 
 [tool.pyright]
-include = ["monoagens", "scripts"]
+include = ["monoagens", "scripts", "plugins"]
 exclude = ["**/__pycache__"]
 typeCheckingMode = "basic"
 pythonVersion = "3.14"

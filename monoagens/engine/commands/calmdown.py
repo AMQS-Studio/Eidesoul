@@ -28,5 +28,5 @@ COMMAND = Handler(
     description="Calm MonoAgens down after it was upset or hurt (administrator).",
     fn=calmdown,
     aliases=(),
-    usage="/calmdown [name or number]",
+    usage="[name or number]",
 )

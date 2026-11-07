@@ -1,1 +1,1 @@
-"""Tool khusus gateway WhatsApp."""
+"""WhatsApp-gateway-only tools."""

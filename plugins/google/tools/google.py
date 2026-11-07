@@ -1,6 +1,6 @@
 """Google Workspace through one service account, identity per sender.
 
-A plugin tool (ADR-0028): the engine loads this module only when the `google` plugin is
+A plugin tool (ADR-0005): the engine loads this module only when the `google` plugin is
 enabled and its manifest digest verifies. The plugin service stays lazy so a host without the
 plugin dependencies keeps the module importable and inert instead of failing at import time.
 """

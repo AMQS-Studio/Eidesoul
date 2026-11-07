@@ -76,7 +76,7 @@ TOOL = Handler(
     destructive=("remove",),
     family="read",
     description=(
-        "User recipes: list/view to inspect dynamic commands, save to register one "
+        "List or view dynamic commands, save to register one "
         "(kind=recipe holds tool steps with {{args}}, kind=prompt holds one-turn LLM "
         "instructions), remove to delete. Register only when the user asks for repeated "
         "automation; quote {{args}} inside shell commands."

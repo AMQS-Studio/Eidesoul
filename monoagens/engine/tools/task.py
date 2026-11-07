@@ -91,7 +91,7 @@ TOOL = Handler(
     destructive=("cancel",),
     family="write",
     description=(
-        "Tasks: list, create, pause, resume, or cancel a scheduled reminder, a one-off "
+        "List, create, pause, resume, or cancel a scheduled reminder, a one-off "
         "moment, or a goal check that notifies only when a condition holds. A goal task "
         "needs a condition; use schedule_kind cron for a plain schedule."
     ),
