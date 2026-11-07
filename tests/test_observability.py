@@ -4,6 +4,7 @@
 import asyncio
 import json
 import logging
+import sys
 import time
 from io import StringIO
 from types import SimpleNamespace
@@ -297,3 +298,19 @@ def test_llm_calls_retention_deletes_old_rows(tmp_path) -> None:
     assert len(remaining) == 1
     assert float(remaining[0]["ts"]) >= now - 86400
 
+
+def test_a_record_with_exc_info_false_still_formats() -> None:
+    """asyncio's error handler passes `exc_info=False`; the line must not be lost in `emit`."""
+    rec = logging.LogRecord(
+        "aiohttp.client", logging.ERROR, "client.py", 1, "Unclosed client session", (), None
+    )
+    for shape in (False, True, None):
+        rec.exc_info = shape
+        assert "Unclosed client session" in observability.JsonFormatter().format(rec)
+        assert "Unclosed client session" in observability.TextFormatter().format(rec)
+    try:
+        raise ValueError("boom")
+    except ValueError:
+        rec.exc_info = sys.exc_info()
+    assert "ValueError" in observability.JsonFormatter().format(rec)
+    assert "[ValueError]" in observability.TextFormatter().format(rec)

@@ -134,6 +134,20 @@ def _stamp(record: logging.LogRecord) -> str:
     return created.strftime("%Y-%m-%dT%H:%M:%S") + f".{int(record.msecs):03d}"
 
 
+def exception_name(record: logging.LogRecord) -> str:
+    """The exception class on this record, or "" when there is none.
+
+    `record.exc_info` is not always `None` or a tuple: `logging` keeps whatever the caller
+    passed, so `exc_info=False` (asyncio's own error handler) and `exc_info=True` both reach a
+    formatter. A truthiness check on a bool would raise inside `emit` and lose the line.
+    """
+    info = record.exc_info
+    if not info or not isinstance(info, tuple):
+        return ""
+    kind = info[0]
+    return getattr(kind, "__name__", "") if kind is not None else ""
+
+
 class JsonFormatter(logging.Formatter):
     """One JSON object per line: mandatory fields plus correlation ids, never a traceback."""
 
@@ -149,8 +163,9 @@ class JsonFormatter(logging.Formatter):
             value = getattr(record, name, None)
             if value not in (None, ""):
                 body[name] = value
-        if record.exc_info is not None and record.exc_info[0] is not None:
-            body["exception"] = record.exc_info[0].__name__
+        exception = exception_name(record)
+        if exception:
+            body["exception"] = exception
         return json.dumps(body, ensure_ascii=False, separators=(",", ":"))
 
 
@@ -179,8 +194,9 @@ class TextFormatter(logging.Formatter):
             parts.append(f"duration_ms={duration_ms}")
         event = event_name(record)
         body = f"{' '.join(parts)} {event}: {redact(record.getMessage())}"
-        if record.exc_info is not None and record.exc_info[0] is not None:
-            body += f" [{record.exc_info[0].__name__}]"
+        exception = exception_name(record)
+        if exception:
+            body += f" [{exception}]"
         return body
 
 
