@@ -2,7 +2,7 @@
 
 MonoAgens active checklist. Every item is done when the listed surface exists, is covered by real-seam tests, and works end to end.
 
-## Active: v0.1.0 Remediation Roadmap (ADR-0001..0008)
+## Active: v0.1.0 Remediation Roadmap (ADR-0001..0010)
 
 ### Phase P0 — Correctness, Security, and Boot Safety (ADR-0001, ADR-0003, ADR-0006, ADR-0007, ADR-0008)
 
@@ -93,8 +93,15 @@ MonoAgens active checklist. Every item is done when the listed surface exists, i
 - [x] **Persona `mode` vs RBAC Separation (ADR-0006 §4.1–4.2):** Rename `role`/`roles` in `soul.yaml` to `mode`/`modes`, fall back across assigned roles in `RoleRegistry.policy_for`, tighten default `guest` seed, and drop `people.role`.
 - [x] **Extension DX & Unified Job Engine (ADR-0005 §4.1–4.4):** Ship `BaseGateway` + `@register_gateway` (with gateway-owned `default_role_policy`, `check_access`, and dynamic gateway config options), local plugin mode (`plugin.local`, `plugins install <dir>`, `plugins digest`, `@plugin.tool`), unified job engine (`task` kind, `/task`, step-logged recipes), and native Anthropic `/v1/messages` adapter.
 
+### Phase P3 — Language-Agnostic Routing, Deep Native Gateways, & Surgical Tooling (ADR-0004, ADR-0009, ADR-0010)
+
+- [x] **Language-Agnostic Intent & Privacy Routing (ADR-0009):** Retire static per-language JSON wordlists (`monoagens/lang/library/`) in favor of structural regex, MiniLM centroid similarity, Presidio/spaCy NER, and single-pass LLM extraction; ship workspace-scoped `grep` tool with secret-path refusal.
+- [x] **Deep Native Gateways & Boundary Prompt Options (ADR-0010):** Keep `monoagens/engine/**` 100% UI-free while adding `BaseGateway.prompt_options`, `ui_of`, and `EditDebouncer` (`1.5s`); ship pure-Python `asyncio` **Telegram**, **Discord**, and **Slack** gateways alongside completed **WhatsApp** tools/commands, plus `/thinking [on|off]` and `/steps [on|off]`.
+- [x] **Surgical File Editing (`sed`) & Operational Resilience (ADR-0003, ADR-0004):** Implement `sed` (`edit`, `replace`) with Mode 1 (`old` → `new` exact snippet replacement) and Mode 2 (`start_line..end_line` + `anchor` substring or SHA-256/CRC32 hex prefix verification); add `engine.llm.fallbacks`, `engine.alerts` + `/alerts`, unlimited `0` defaults (`max_calls_per_turn`, `daily_budget_per_thread`, `daily_runs_per_thread`), and full `monoagens backup`/`restore`.
+- [x] **CodeGraph Dead-Code Audit & Live E2E Verification:** Remove all 31 unreferenced dead-code symbols, normalize docstring ADR references to `ADR-0001..0010`, ensure Pyright 0 errors across `monoagens`, `scripts`, and `plugins`, and pass 75/75 Live Real-LLM E2E scenarios.
+
 ## Governance & Repository Invariants
 
-- [x] ADRs re-baselined to clean-slate English-only `ADR-0001..0008` (ADR-0008).
-- [x] Pre-release `README.id.md` removed; `AGENTS.md` pruned to timeless invariants.
-- [x] `scripts/adr.py --check` passing across all active ADRs.
+- [x] ADRs re-baselined and implemented across `ADR-0001..0010` (`10/10 implemented`).
+- [x] Pre-release `README.id.md` removed; `AGENTS.md` kept generic, timeless, and aligned with multi-language surfaces.
+- [x] `scripts/adr.py --check`, `scripts/selfcheck.py --check`, `scripts/types.py --check`, `ruff check`, and `pytest -q` (`1422 passed`) green.

@@ -3,9 +3,8 @@
 **Cakupan:** permukaan ekstensi engine MonoAgens: bagaimana sebuah body (gateway) dan bundel
 kemampuan yang dapat dipasang (plugin) terhubung, apa yang dimiliki masing-masing, dan apa yang
 tidak boleh dilakukan keduanya.
-**Konteks:** ditulis setelah ADR-0034 (prompt parts) dan ADR-0035 (skill ber-scope app). Klausa yang
-bergantung pada keduanya ditandai **[setelah 0034]** dan **[setelah 0035]** dan mengikat ketika ADR
-masing-masing keluar dari `draft`.
+**Konteks:** diselaraskan dengan baseline ADR v0.1.0 (`ADR-0001` hingga `ADR-0010`, khususnya
+`ADR-0004`, `ADR-0005`, dan `ADR-0010`).
 **Status:** kontrak normatif. Jarak antara berkas ini dan kode adalah cacat, bukan tafsir alternatif.
 **Versi English:** `gateway-plugin.md`.
 
@@ -14,11 +13,11 @@ masing-masing keluar dari `draft`.
 ## 1. Empat kata
 
 Sebuah **gateway** adalah body. Ia memindahkan event antara dunia luar dan engine serta memiliki aksi
-transport-specific dari body itu.
+dan presentasi transport-specific dari body itu.
 
 Sebuah **plugin** adalah unit kode kemampuan yang dapat dipasang. Ia diambil, diverifikasi,
-diaktifkan, dinonaktifkan, dan dihapus sebagai satu kesatuan; ia menyumbang tool, command, dan
-(setelah 0034) prompt part statis.
+diaktifkan, dinonaktifkan, dan dihapus sebagai satu kesatuan; ia menyumbang tool, command, prompt
+part statis, serta gateway opsional yang dikirim bersama.
 
 Sebuah **tool** adalah kemampuan yang dipanggil engine. Sebuah **command** adalah kemampuan
 operasional yang didispatch engine. Tool dan command bukan unit ekstensi: keduanya adalah *isi*
@@ -36,9 +35,9 @@ Ketiganya tidak dapat dipertukarkan:
 | Apakah ia kode yang dapat dipasang/dihapus dengan manifest dan digest? | plugin |
 | Apakah ia kemampuan yang dipanggil model atau operator? | tool atau command |
 | Apakah ia server tool eksternal yang dijangkau lewat protokol standar, tanpa langkah pemasangan? | server MCP |
-| Bolehkah gateway "sekadar plugin"? | Tidak. Ia boleh *dikirim* oleh plugin, tetapi didaftarkan dan diaktifkan sebagai gateway (ADR-0028 §4.1). |
+| Bolehkah gateway "sekadar plugin"? | Tidak. Ia boleh *dikirim* oleh plugin, tetapi didaftarkan dan diaktifkan sebagai gateway (ADR-0005 §4.2, ADR-0010 §4.1). |
 | Bolehkah plugin membuka transportnya sendiri? | Hanya lewat gateway yang ia kirim dan deklarasikan; tidak pernah sebagai efek samping saat import. |
-| Bolehkah core memuat aksi gateway? | Tidak. Aksi gateway tinggal di `monoagens/gateways/<name>/tools|commands`; aksi plugin tinggal di pohon plugin. |
+| Bolehkah core memuat aksi atau widget UI gateway? | Tidak. Aksi gateway dan widget interaktif native tinggal di `monoagens/gateways/<name>/`; aksi plugin tinggal di pohon plugin (ADR-0010 §4.1). |
 
 Uji satu baris: **gateway adalah dari mana byte datang; plugin adalah apa yang dapat dipasang;
 server MCP adalah pemasok tool yang kamu konfigurasi; tool adalah apa yang boleh dipanggil model.**
@@ -49,18 +48,22 @@ server MCP adalah pemasok tool yang kamu konfigurasi; tool adalah apa yang boleh
 
 ### 2.1 Lokasi dan penemuan
 
-- Gateway yang dikirim core adalah paket di bawah `monoagens/gateways/<name>/`.
+- Gateway yang dikirim core adalah paket di bawah `monoagens/gateways/<name>/` (gateway native
+  bawaan: `whatsapp`, `telegram`, `discord`, dan `slack`; REPL terminal operator tinggal di core
+  sebagai `monoagens console` / `monoagens cli`).
 - Gateway yang dikirim plugin adalah kode di bawah `plugins/<name>/`, dideklarasikan di
   `plugin.yaml: provides.gateways`, dan didaftarkan lewat jalur gateway. Ia tidak pernah disebut
   "plugin gateway" dan tool-nya tidak pernah masuk daftar tool plugin global.
 - Engine tidak pernah mengimpor gateway secara eager. `monoagens/engine/**` tidak boleh mengimpor
   `monoagens.gateways` atau modul plugin saat import.
 - Gateway diaktifkan lewat config (`gateways.<name>.enabled: true`), tidak pernah dengan memasang
-  plugin sebagai efek samping. Body default yang dikirim adalah `monoagens/gateways/cli`.
+  plugin sebagai efek samping.
 
-### 2.2 Permukaan wajib
+### 2.2 Permukaan wajib dan SDK `BaseGateway`
 
-Sebuah body mengimplementasikan `GatewayCore` dari `monoagens/engine/inbound.py`:
+Sebuah body mengimplementasikan `GatewayCore` dari `monoagens/engine/inbound.py` (umumnya dengan
+mewarisi `BaseGateway` dari `monoagens/gateways/base.py` dan mendekorasi dengan
+`@register_gateway`):
 
 ```python
 name: str
@@ -68,13 +71,18 @@ def tools(self) -> list[Handler]: ...
 def commands(self) -> list[Handler]: ...
 async def run(self, agent) -> None: ...
 async def stop(self) -> None: ...
-async def dispatch(self, action: Action) -> str: ...
+async def dispatch(self, action: Action) -> str | Receipt: ...
 def self_handles(self) -> set[str]: ...
-def chat_name(self, thread: str) -> str: ...      # default: thread id
+def normalize_address(self, raw: str) -> str: ...  # default: raw.strip()
+def chat_name(self, thread: str) -> str: ...       # default: thread id
 def prompt_section(self) -> str: ...               # default: ""
 ```
 
-`CoreDefaults` menyediakan `chat_name` dan `prompt_section`; sisanya wajib.
+`CoreDefaults` dan `BaseGateway` menyediakan `normalize_address`, `chat_name`, `prompt_section`,
+`check_access`, `abort` (barge-in / penghentian darurat), `EditDebouncer` (pengeditan pesan in-place
+dengan pembatasan laju untuk `send_thinking`, `send_step`, dan `send_interim`), serta
+`prompt_options(action)` (resolusi batas tombol interaktif `Approve` / `Deny` atau pilihan bernomor
+dari store tanpa mengotori `monoagens/engine/**` dengan state UI; ADR-0010 §4.1).
 
 ### 2.3 Siklus hidup
 
@@ -84,8 +92,8 @@ def prompt_section(self) -> str: ...               # default: ""
 3. `stop()` mengakhiri loop dan melepaskan sumber daya transport. Restart membangun instance baru;
    tidak ada body yang menyimpan state global proses yang bertahan setelah `stop()` kecuali yang
    sengaja ia persist.
-4. Hanya primary lease yang menjalankan body (ADR-0017). Body standby tidak dijalankan; body tidak
-   boleh melawan lease.
+4. Hanya primary lease yang menjalankan body (ADR-0001 §4.1, ADR-0003 §4.4). Body standby tidak
+   dijalankan; body tidak boleh melawan lease.
 5. `dispatch(action)` adalah satu-satunya pintu keluar untuk verb body. Capability yang tidak dikenal
    memunculkan `GatewayError`; ia tidak boleh diam-diam berhasil atau jatuh ke verb lain.
 
@@ -93,22 +101,24 @@ def prompt_section(self) -> str: ...               # default: ""
 
 - **Masuk.** Satu event body menjadi satu `Percept`: `source`, `thread`, `actor`, `kind`, `payload:
   Message`, `hints`, dan opsional `raw` (khusus transport; tidak pernah disimpan sebagai kebenaran).
-- **Hint adalah fakta yang dapat dibuktikan body.** Key yang dikenal: `dm`, `mention`, `reply`,
-  `group`, `presence`, `self`, `roles`; setelah 0035, `app`. Body tidak pernah mengarang hint yang
-  tidak dapat ia buktikan dan tidak pernah menghilangkan hint yang dibutuhkan keputusan. Engine tidak
-  pernah mewajibkan hint yang tidak dapat disediakan body.
+- **Hint adalah fakta yang dapat dibuktikan body.** Key yang dikenal (`HINT_KEYS`): `dm`, `mention`,
+  `reply`, `group`, `presence`, `self`, `roles`, `app`, `voice_call`. Body tidak pernah mengarang
+  hint yang tidak dapat ia buktikan dan tidak pernah menghilangkan hint yang dibutuhkan keputusan.
+  Engine tidak pernah mewajibkan hint yang tidak dapat disediakan body.
 - **Keluar.** Engine mengalamatkan `Address(gateway, thread, proof)` dan mengeluarkan `Action`
-  (`capability`, `payload`, `approval_class`). Body merutekan berdasarkan `capability` dan menjawab
-  dengan `Receipt(id, state, reference, reason)`.
-- Identitas adalah tugas body: ia menormalisasi id aktornya sendiri (`person_id`) sebelum mencapai
-  engine. Core tidak pernah mem-parsing JID, sufiks URL, nomor telepon, atau alamat transport.
+  (`capability`, `payload`, `approval_class`, opsional `stream_id`, `replace_id`, `meta`). Body
+  merutekan berdasarkan `capability` dan menjawab dengan `Receipt(id, state, reference, reason)`.
+- Identitas adalah tugas body: ia menormalisasi id aktornya sendiri (`person_id`) dan alamat target
+  (`normalize_address`) sebelum mencapai engine. Core tidak pernah mem-parsing JID, sufiks URL,
+  nomor telepon, atau alamat transport.
 
 ### 2.5 Apa yang dimiliki body
 
 | Dimiliki body | Tidak pernah pindah ke core |
 | --- | --- |
 | koneksi transport, sesi, reconnect, backoff | parsing alamat transport |
-| rendering teks dan quoting untuk mediumnya | aturan format chat di prompt |
+| rendering teks, quoting, dan tombol interaktif native (`prompt_options`) | aturan format chat atau pembuat widget UI di engine |
+| pengeditan progres hidup ter-debounce (`EditDebouncer` pada `stream_id`/`replace_id`) | timer rate-limit spesifik platform di `LLM.run` |
 | unduh/unggah media dan batasnya | kebijakan penanganan file untuk transport tertentu |
 | resolusi target (`Directory`) dan keanggotaan | tabel kontak/room di skema skill atau memori |
 | pemetaan private thread (`PrivateThread`) | inferensi identitas transport per orang |
@@ -122,7 +132,7 @@ def prompt_section(self) -> str: ...               # default: ""
 - `SendRefused` dan `StandbyError` adalah penolakan: pemanggil tidak pernah mencoba ulang.
 - `prompt_section()` mengembalikan teks English statis, maksimal `PROMPT_SECTION_MAX = 1200`
   karakter, tanpa data pengguna, tanpa rahasia, dan tanpa interpolasi runtime. Ia adalah satu-satunya
-  prompt part `body` (stable, pinned, tepat setelah `base`) setelah 0034.
+  prompt part `body` (stable, pinned, tepat setelah `base`; ADR-0005 §4.2).
 
 ---
 
@@ -133,23 +143,23 @@ def prompt_section(self) -> str: ...               # default: ""
 ```text
 plugins/<name>/
   plugin.yaml          # manifest: data, dibaca sebelum import apa pun
-  plugin.py            # modul entry, satu fungsi register()
+  plugin.py            # modul entry, satu fungsi register() (atau dekorator @plugin.tool)
   deps/                # dependensi plugin sendiri (tidak pernah masuk set terkunci image)
   ...                  # pohon kode plugin; digest mencakupnya
 ```
 
 `plugin.yaml` mewajibkan: `name`, `version`, `engine`, `entry`, `digest`, `provides`, `requires`,
-`secrets`, `credits`. `provides` memetakan nama ke daftar: `tools`, `commands`, `gateways`, dan
-(setelah 0034) `prompt`. `secrets` adalah *nama* environment, tidak pernah nilai. `credits` membawa
-baris yang utang tabel kredit README.
+`secrets`, `credits` (plus opsional `local: true` untuk pengembangan in-workspace). `provides`
+memetakan nama ke daftar: `tools`, `commands`, `gateways`, dan `prompt`. `secrets` adalah *nama*
+environment, tidak pernah nilai. `credits` membawa baris yang utang tabel kredit README.
 
 ### 3.2 Verifikasi sebelum import
 
 Loader melakukan, berurutan:
 
 1. membaca dan memvalidasi manifest (key tak dikenal, nama, semver, bentuk entry, daftar provides);
-2. menghitung SHA-256 pohon kode (path relatif terurut dan byte-nya; `plugin.yaml`, `deps/`, dan
-   bytecode dikecualikan) dan membandingkannya dengan digest manifest;
+2. menghitung SHA-256 pohon kode (path relatif terurut dan byte-nya, termasuk `deps/`;
+   `plugin.yaml` dan bytecode dikecualikan) dan membandingkannya dengan digest manifest;
 3. membandingkannya lagi dengan `plugins.<name>.digest` yang dipin;
 4. memeriksa rentang `engine` terhadap versi engine yang berjalan;
 5. memeriksa bahwa setiap nama secret yang dideklarasikan ada di environment;
@@ -167,7 +177,7 @@ tidak mengubah config. Tidak ada unpack parsial, tidak ada salinan cadangan, dan
 {
     "tools": [Handler, ...],      # dideklarasikan 1:1 di provides.tools
     "commands": [Handler, ...],   # dideklarasikan 1:1 di provides.commands
-    "prompts": [PromptPart, ...], # setelah 0034; dideklarasikan 1:1 di provides.prompt
+    "prompts": [PromptPart, ...], # dideklarasikan 1:1 di provides.prompt
 }
 ```
 
@@ -187,7 +197,7 @@ Aturan:
 
 ### 3.4 Siklus hidup
 
-`absent → installed → enabled ⇄ disabled → removed` (ADR-0028 §4.3).
+`absent → installed → enabled ⇄ disabled → removed` (ADR-0005 §4.3).
 
 - **installing**: ambil berdasarkan digest, verifikasi, unpack, ambil `requires` ke `deps/`.
 - **installed**: kode ada, tidak ada yang diimpor, tidak ada yang diberikan.
@@ -206,7 +216,7 @@ action ledger. Tidak ada auto-update dan tidak ada pengambilan di latar belakang
 | manifest, pohon kode, dan digest-nya | skema engine |
 | dependensinya di `deps/` | set dependensi terkunci image |
 | logika tool/command-nya | pemeriksaan izin (`execute` yang memilikinya) |
-| prompt part statisnya (setelah 0034) | urutan atau anggaran prompt (loader dan core yang memiliki) |
+| prompt part statisnya | urutan atau anggaran prompt (loader dan core yang memiliki) |
 | berkas datanya sendiri di bawah root-nya | tabel core; penulisan lewat store engine |
 
 Plugin menulis memori, skill, atau setting hanya lewat store/port publik engine. Ia tidak pernah
@@ -262,7 +272,7 @@ digest, `register()`, atau permukaan prompt. Seluruh kontribusinya adalah tool.
 
 - Ia tidak memasang kode ke engine; ia berjalan di luar pohon dan digest engine.
 - Ia tidak dapat menyediakan command, prompt part, gateway, atau skill ber-scope app.
-- Ia tidak pernah membaca `ctx.app` (setelah 0035); pengkabelan per app bersifat eksternal (entri
+- Ia tidak pernah membaca `ctx.app`; pengkabelan per app bersifat eksternal (entri
   server dan pola role terpisah).
 - Ia tidak memperoleh secret dari loader plugin. `env`-nya adalah config literal; jauhkan secret
   asli dari `config.yaml` (lihat §10).
@@ -274,11 +284,11 @@ digest, `register()`, atau permukaan prompt. Seluruh kontribusinya adalah tool.
 | --- | --- | --- |
 | Unit | manifest + digest + `register()` | server eksternal yang hidup |
 | Siklus hidup | ambil, verifikasi, enable, disable, remove | entri config, konek saat boot |
-| Menyediakan | tool, command, gateway yang dikirim, prompt part statis (setelah 0034) | tool saja |
+| Menyediakan | tool, command, gateway yang dikirim, prompt part statis | tool saja |
 | Ikatan versi | semver + rentang engine + pin digest | miliknya sendiri; engine tidak memeriksa apa pun |
 | Konteks | handler menerima `ToolContext` | argumen saja; tanpa konteks |
-| Prompt | part statis (setelah 0034) | tidak ada |
-| App (setelah 0035) | `ctx.app` | tidak terlihat |
+| Prompt | part statis | tidak ada |
+| App | `ctx.app` | tidak terlihat |
 | Kegagalan | `unavailable`, tanpa import | satu peringatan, tool absen, engine lanjut |
 | Izin | role di `execute` | role di `execute` |
 | Kepercayaan | kode dipasang operator, dipin digest | proses/endpoint eksternal yang dikonfigurasi operator; output tidak tepercaya |
@@ -305,7 +315,7 @@ Inilah aturan yang menjaga "modular" tidak berarti "tumpang tindih".
 5. **Tool tidak memilih transportnya.** Capability menerima `ToolContext`; ia tidak membaca nama
    transport untuk memutuskan perilaku. Jika ia butuh fakta body, fakta itu ada di `ctx`.
 6. **Tidak ada jalur opsional yang diam.** Gateway, plugin, atau tool yang hilang adalah
-   `unavailable`, tidak pernah sukses palsu dan tidak pernah traceback di turn (ADR-0027 §4.3).
+   `unavailable`, tidak pernah sukses palsu dan tidak pernah traceback di turn (ADR-0005 §4.2).
 7. **Penghapusan bersih.** Menonaktifkan plugin tidak pernah meninggalkan handler terdaftar;
    menghentikan gateway tidak pernah meninggalkan loop berjalan; kode plugin yang dihapus benar-benar
    dihapus, bukan ditutupi.
@@ -314,7 +324,7 @@ Inilah aturan yang menjaga "modular" tidak berarti "tumpang tindih".
    Plugin boleh membungkus server MCP, tetapi plugin tetap unit yang dapat dipasang dan tetap
    memiliki packaging.
 
-### 5.1 Setelah ADR-0034: permukaan prompt
+### 5.1 Permukaan prompt
 
 - Gateway menyumbang tepat satu bagian body statis lewat `prompt_section()`; ia tidak dapat
   mendaftarkan prompt part dan tidak dapat menambah bagian kedua.
@@ -327,9 +337,9 @@ Inilah aturan yang menjaga "modular" tidak berarti "tumpang tindih".
 - Bagian body adalah satu-satunya kontribusi prompt gateway; plugin tidak dapat berpura-pura menjadi
   body.
 
-### 5.2 Setelah ADR-0035: hint app
+### 5.2 Hint app
 
-- Gateway boleh melaporkan `Inbound.hints["app"]` (aplikasi atau korpus tempat event itu berada). Ia
+- Gateway boleh melaporkan `Percept.hints["app"]` (aplikasi atau korpus tempat event itu berada). Ia
   opsional; body yang menghilangkannya melaporkan "tanpa app".
 - Engine membaca hint hanya untuk memilih korpus ber-scope app. Ia tidak pernah menurunkan app dari
   nama body, thread id, atau URL.
@@ -445,7 +455,7 @@ Server MCP konforman ketika:
 3. setiap tool me-resolve ke `mcp__<server>__<tool>` dan mencapai model hanya di bawah grant role;
 4. argumen dan hasilnya diperlakukan sebagai data tidak tepercaya, tidak pernah instruksi;
 5. ia tidak memakai `ToolContext` dan tidak membutuhkan prompt part, command, atau gateway;
-6. secret asli tidak ditulis ke `config.yaml` (sampai celah nama-env di §10 ditutup).
+6. secret asli tidak ditulis ke `config.yaml` (lihat §10).
 
 Bentuk eksekusi pemeriksaan ini tinggal di `tests/test_gateway.py`, `tests/test_plugins.py`,
 `tests/test_mcp.py`, dan suite kontrak prompt. Body, plugin, atau server baru menambahkan kasusnya;
@@ -472,26 +482,18 @@ ia tidak menambah mekanisme baru.
 
 ---
 
-## 10. Celah yang diketahui (per 2026-11-04)
+## 10. Batasan keamanan seam
 
-Ini adalah cacat terhadap kontrak ini, bukan opsi:
+Ini adalah batasan keamanan yang disengaja pada seam MCP dan ekstensi:
 
-- `plugins.py:_register` hanya mengimpor dan mendaftarkan `tools` dan `commands`; manifest dengan
-  `provides.gateways` diterima tetapi gateway-nya tidak didaftarkan. Sampai jalur gateway itu ada,
-  gateway yang dideklarasikan harus gagal tertutup sebagai `unavailable`, bukan menghilang diam-diam.
-- `HINT_KEYS` belum memuat `app`; ADR-0035 masih draft.
-- Prompt part plugin belum ada sampai ADR-0034 mendarat; hari ini `register()` hanya mengembalikan
-  tools/commands.
-- `Inbound` muncul di prosa lama (termasuk `AGENTS.md`); seam yang hidup adalah `Percept`/`Action` di
-  `monoagens/engine/inbound.py`. Kontrak ini memakai nama yang hidup.
 - Nilai `env` MCP dibaca dari `config.yaml` sebagai string literal; berbeda dari `secrets` plugin,
-  tidak ada indireksi atau verifikasi nama env. Jauhkan secret dari mapping itu sampai celahnya
-  ditutup.
-- Handler MCP mempertahankan kelas default `authorization` dan tidak membawa metadata `target`,
-  `path_arg`, `scan`, atau `destructive`, sehingga guard tidak dapat memperlakukan satu tool MCP
-  berbeda dari yang lain lewat deklarasi.
-- Tool MCP mengabaikan `ToolContext` yang diterimanya, jadi tidak dapat membaca `ctx.app` setelah
-  0035 atau menulis skill lewat store engine.
+  tidak ada indireksi nama env. Simpan kredensial sensitif di `.env` atau secret yang dikelola
+  plugin alih-alih mapping literal di `config.yaml`.
+- Handler MCP mempertahankan kelas approval `authorization` (fail-closed) dan tidak membawa
+  metadata `target`, `path_arg`, `scan`, atau `destructive`, sehingga setiap pemanggilan MCP tunduk
+  pada kebijakan otorisasi operator.
+- Tool MCP tidak menerima `ToolContext`, sehingga server MCP eksternal tidak dapat membaca `ctx.app`
+  atau memodifikasi store engine secara langsung.
 
 ---
 
@@ -499,20 +501,20 @@ Ini adalah cacat terhadap kontrak ini, bukan opsi:
 
 - `monoagens/engine/inbound.py` — `Percept`, `Action`, `Address`, `Receipt`, `GatewayCore`, `Rich`,
   `Directory`, `PrivateThread`, `HINT_KEYS`, `PROMPT_SECTION_MAX`.
-- `monoagens/engine/plugins.py` — skema manifest, `tree_digest`, `_verify`, `_register`, status siklus
-  hidup, `PluginError`.
+- `monoagens/gateways/base.py` — `BaseGateway`, `@register_gateway`, `EditDebouncer`,
+  `prompt_options`, `ui_of`.
+- `monoagens/engine/plugins/` — skema manifest, `tree_digest`, `_verify`, `_register`, status siklus
+  hidup, `PluginError`, `@plugin.tool`.
 - `monoagens/engine/registry.py` dan `monoagens/engine/tools/__init__.py` — `Handler`, `ToolContext`,
   `execute`, satu-satunya pemeriksaan izin.
 - `monoagens/engine/agent.py` — intake `handle(percept, gateway)`, pintu keluar `dispatch(...)`,
   penggabungan tool/command gateway.
-- ADR-0027 §4.1 — gateway, tool, dan plugin adalah tiga hal berbeda.
-- ADR-0028 §4.1–4.4 — unit plugin, manifest, siklus hidup, pemuatan.
-- ADR-0032 — alamat dan command message; routing body, tanpa quoting di engine.
-- ADR-0033 §4.5 — satu `prompt_section` body.
-- ADR-0034 — prompt parts: part plugin statis, satu kontribusi body.
-- ADR-0035 — namespace app: gateway memasok `hints["app"]`, plugin membaca `ctx.app`, core memfilter.
+- `ADR-0001` — batas heksagonal dan single primary lease.
+- `ADR-0003` — siklus hidup turn, loop async non-blocking, dan aksi progres (`send_thinking`,
+  `send_step`, `send_interim`).
+- `ADR-0004` — tool lintas-gateway core, verifikasi origin, dan pengiriman universal.
+- `ADR-0005` — unified job engine, siklus hidup plugin, prompt part statis, dan namespace `app`.
+- `ADR-0010` — perwujudan gateway native mendalam (`whatsapp`, `telegram`, `discord`, `slack`),
+  resolusi batas opsi prompt (`prompt_options`), dan layer runtime.
 - `monoagens/engine/jobs/mcp.py` — `Hub`, penemuan, penamaan `mcp__<server>__<tool>`, timeout,
   rendering hasil.
-- `monoagens/engine/config.py:649-656,870-895` — `MCPServerConfig` dan validasi `mcp.servers`.
-- `monoagens/__main__.py:112-113,476` — start `Hub` saat boot proses dan stop di jalur selftest;
-  `monoagens/engine/agent.py:1796-1798` — `hub.stop()` saat agent shutdown.

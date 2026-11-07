@@ -33,4 +33,4 @@ file's own path, and an `Implementation` line (`implemented`, `partial`, or `dra
 | [0007](adr/0007-distribution-install-and-initialization.md) | Distribution, Installation, and Initialization — Terminal Wizard, Thin Bootstrap, and Container Packaging | root | implemented |
 | [0008](adr/0008-modular-architecture-and-code-hygiene.md) | Modular Architecture, Code Hygiene, and Honest Budgets — ADR Home, Typed Pipeline, and Testing Discipline | root | implemented |
 | [0009](adr/engine/0009-language-agnostic-intent-and-privacy-routing.md) | Language-Agnostic Intent, Affect, and Privacy Routing — Retiring Static Per-Language JSON Wordlists | engine | implemented |
-| [0010](adr/0010-deep-native-gateway-embodiment-and-runtime-layers.md) | Deep Native Gateway Embodiment and Runtime Layer Architecture — Discord, Telegram, Slack, WhatsApp Completeness, and Layered Extensions | root | draft |
+| [0010](adr/0010-deep-native-gateway-embodiment-and-runtime-layers.md) | Deep Native Gateway Embodiment and Runtime Layer Architecture — Discord, Telegram, Slack, WhatsApp Completeness, and Layered Extensions | root | implemented |

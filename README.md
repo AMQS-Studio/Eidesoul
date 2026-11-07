@@ -76,13 +76,13 @@ Most agent frameworks treat state as a disposable chat session and personality a
 
 ### 1. One Agent for You, Your Team, and Your Groups—Without Giving Everyone Root Access
 - **The Problem:** Most autonomous agents assume a single operator on a single system—anyone allowed to message the agent effectively inherits its full toolset, shell access, and shared memory pool. Putting them in a family group or office channel is a security and privacy hazard.
-- **In MonoAgens:** First-class **Role-Based Access Control (`roles.yaml`)** and **layered privacy (`L0–L4`)** let one Soul safely interact with dozens of people across WhatsApp, Discord, Telegram, and CLI at the same time:
-  - **You (`administrator`):** Full access to `shell`, `sandbox`, `write`, `settings`, and private `L3–L4` memories in DM.
-  - **Teammates or Family (`member` / custom roles):** Can chat with the same Soul in group rooms or DMs using safe tools (`web_search`, `read` on shared folders) without ever being able to run your shell tools, read your scratch files, or leak your private `L3–L4` memories into a group chat.
+- **In MonoAgens:** First-class **Role-Based Access Control (`roles.yaml`)** and **layered privacy (`L0–L4`)** let one Soul safely interact with dozens of people across WhatsApp, Telegram, Discord, Slack, and CLI at the same time:
+  - **You (`administrator`):** Full access to `shell`, `sandbox`, `write`, `sed`, `setting`, and private `L3–L4` memories in DM.
+  - **Teammates or Family (`member` / custom roles):** Can chat with the same Soul in group rooms or DMs using safe tools (`web_search`, `read`, `grep` on shared folders) without ever being able to run your shell tools, read your scratch files, or leak your private `L3–L4` memories into a group chat.
 
 ### 2. Switching Surfaces Mid-Workflow (Terminal $\rightarrow$ WhatsApp $\rightarrow$ Voice Call $\rightarrow$ Robot)
 - **The Problem:** Conventional harnesses bind state to a local session transcript. If you brainstorm a deployment plan in your terminal CLI, leave your desk, and message your bot on WhatsApp, you are talking to a separate session that lacks context.
-- **In MonoAgens:** Your CLI console, WhatsApp account, Discord handle, and phone number map to one canonical identity (`per_…`). Start an investigation in `monoagens cli` on your laptop, walk out the door, and send a WhatsApp voice note: *"Send the summary PDF we just drafted to the engineering group."* The same Soul recalls the turn, asks naturally in chat (*"Ready to send `infra-summary.pdf` to Engineering Group—should I proceed?"*), and dispatches it when you reply *"Yes, send it."*
+- **In MonoAgens:** Your CLI console, WhatsApp account, Telegram/Discord/Slack handle, and phone number map to one canonical identity (`per_…`). Start an investigation in `monoagens cli` on your laptop, walk out the door, and send a WhatsApp voice note: *"Send the summary PDF we just drafted to the engineering group."* The same Soul recalls the turn, asks naturally in chat (*"Ready to send `infra-summary.pdf` to Engineering Group—should I proceed?"*), and dispatches it when you reply *"Yes, send it"* or tap an interactive **Approve** button.
 
 ### 3. True Semantic + Lexical Recall Without Session Compaction Amnesia
 - **The Problem:** Session-centric memory engines rely on curated profile notes (capped by character limits and frozen at session start) plus keyword search (`FTS5`) and LLM session summarization. When older turns are compacted away or you phrase a question using different words than the original log, recall fails.
@@ -94,7 +94,7 @@ Most agent frameworks treat state as a disposable chat session and personality a
 
 ### 5. Moldable Into Any Archetype (Companion, Advisor, Developer, Periodic Sysadmin, or Robot)
 - **The Problem:** Most harnesses lock you into a single hardcoded persona—either a narrow coding utility or a generic, robotic "helpful AI assistant."
-- **In MonoAgens:** The engine is completely persona-agnostic. Through `soul.yaml` and `roles.yaml`, you can configure and tune it into **anything you want**—a **Strategic Advisor**, a **Periodic Sysadmin / DevOps Monitor**, a **Senior Developer**, a **Personal Companion**, or an **Embodied Robot**—or equip it with multiple roles (`roles: [assistant, advisor, sysadmin, companion]`) backed by a continuous PAD emotional engine, humanized bubble pacing, and your choice of Cloud or Local custom voice models (ElevenLabs, GPT-SoVITS, F5-TTS, Kokoro, Piper).
+- **In MonoAgens:** The engine is completely persona-agnostic. Through `soul.yaml` and `roles.yaml`, you can configure and tune it into **anything you want**—a **Strategic Advisor**, a **Periodic Sysadmin / DevOps Monitor**, a **Senior Developer**, a **Personal Companion**, or an **Embodied Robot**—or equip it with multiple persona modes (`modes: [assistant, advisor, sysadmin, companion]`) backed by a continuous PAD emotional engine, humanized bubble pacing, and your choice of Cloud or Local custom voice models (ElevenLabs, GPT-SoVITS, F5-TTS, Kokoro, Piper).
 
 ---
 
@@ -137,8 +137,9 @@ Modern AI agent harnesses generally fall into three architectural categories:
   - Queries are strictly scoped to `global` + `person:<sender>` + `thread:<active_thread>`. Group chats automatically cap disclosure levels, and the subject of a personal memory holds veto power.
 
 ### 3. Autonomous Routines, Goals, & Cross-Gateway Tools
-- **Core Capabilities:** `read`, `write`, `shell`, `sandbox`, `web_search` (pluggable across DuckDuckGo, SearXNG, Tavily, Brave, Exa, Serper, and Google CSE with automatic fallbacks), `memory`, `send_message`, `send_file`, `thread_history`, and `mcp`.
-- **Cross-Room & Cross-Gateway Dispatch:** Ask the agent from the CLI console or a voice call to research a topic and deliver a document to a WhatsApp group or colleague—routed through a single outbound authorization door (`Agent.dispatch()`).
+- **Core Capabilities:** `read`, `grep`, `write`, `sed` (surgical exact-snippet or anchor-verified line-range editing), `shell`, `sandbox`, `web_search` (pluggable across DuckDuckGo, SearXNG, Tavily, Brave, Exa, Serper, and Google CSE with automatic fallbacks), `memory`, `skill`, `task`, `relay`, `setting`, `send_message`, `send_file`, `thread_history`, and `mcp`.
+- **Deep Native Messaging Gateways:** Built-in pure-Python `asyncio` gateways for **WhatsApp**, **Telegram**, **Discord**, and **Slack**—complete with boundary-resolved interactive approval buttons (`Approve` / `Deny`), debounced live progress editing (`/thinking [on|off]`, `/steps [on|off]`), voice-note transcription/synthesis, and operator failure notifications (`/alerts [on|off|test]`).
+- **Cross-Room & Cross-Gateway Dispatch:** Ask the agent from the CLI console or a voice call to research a topic and deliver a document to a WhatsApp group, Telegram supergroup, Discord channel, or Slack workspace—routed through a single outbound authorization door (`Agent.dispatch()`).
 - **Unified Job Engine:** Schedule recurring routines (`cron`), one-shot reminders (`at`), and autonomous multi-step goals (`goal`) with quiet hours, daily run budgets, and automatic lease recovery.
 
 ### 4. On-Demand Extensions (Clean by Default)
@@ -152,7 +153,7 @@ Modern AI agent harnesses generally fall into three architectural categories:
 ```mermaid
 flowchart LR
   CLI["Operator Console<br/>(monoagens cli)"] -->|Percept| CORE
-  WA["Messaging Gateways<br/>(WhatsApp, Discord, Telegram)"] -->|Percept| CORE
+  WA["Messaging Gateways<br/>(WhatsApp, Telegram, Discord, Slack)"] -->|Percept| CORE
   VOICE["Voice & Telephony<br/>(Voice Notes, SIP/WebRTC Calls)"] -->|Percept / Audio| CORE
   ROBOT["Physical Embodiment<br/>(Robotics / IoT / Sensors)"] -->|Percept / Telemetry| CORE
 
@@ -276,8 +277,8 @@ language: en                    # Installed catalog: en | id
 locale: en-US
 timezone: Asia/Jakarta          # Required IANA timezone
 pronouns: I
-role: assistant
-roles: [assistant, companion]
+mode: assistant                 # Active persona mode (separate from RBAC roles)
+modes: [assistant, companion]
 
 background: |
   A thoughtful, observant counterpart with long-term memory and a calm presence.
@@ -324,6 +325,7 @@ engine:
     base_url: ""                  # Optional custom endpoint URL
     api_key_env: OPENAI_API_KEY
     utility_temperature: 0.2      # Deterministic temperature for internal extraction & routing
+    fallbacks: []                 # Optional ordered fallback chain of {provider, model, base_url, api_key_env}
 
   memory:
     enabled: true
@@ -336,7 +338,11 @@ engine:
     confirm_cross_gateway: true   # Require confirmation before messaging another room/gateway
     confirm_tasks: true           # Require confirmation before scheduling recurring tasks
 
+  alerts:
+    enabled: true                 # Deliver deduplicated failure alerts to administrator DMs (/alerts)
+
   tools:
+    max_calls_per_turn: 0         # 0 = unlimited tool calls per turn (bounded by run_budget_seconds)
     web_search:
       enabled: true
       provider: ddgs              # ddgs | searxng | tavily | brave | exa | serper | google
@@ -356,7 +362,7 @@ roles:
   member:
     priority: 10
     users: []
-    tools: [read, web_search, memory, thread_history]
+    tools: [read, grep, web_search, memory, thread_history]
     commands: [help, ping, whoami, status, link, unlink]
     memory_admin: false
     gateways:
@@ -412,6 +418,7 @@ export MONOAGENS_TEST_DATABASE_URL='postgresql+psycopg://monoagens:monoagens@127
 # Run the verification suite
 pytest -q
 ruff check monoagens scripts tests plugins migrations
+python -P scripts/selfcheck.py --check
 python -P scripts/types.py --check
 python -P scripts/adr.py --check
 ```
@@ -428,7 +435,7 @@ Every third-party component retains its original license and attribution:
 | [PostgreSQL](https://www.postgresql.org/) & [pgvector](https://github.com/pgvector/pgvector) | PostgreSQL | PostgreSQL Global Development Group & pgvector contributors | Canonical relational & vector store |
 | [SQLAlchemy](https://www.sqlalchemy.org/) & [Alembic](https://alembic.sqlalchemy.org/) | MIT | Michael Bayer & contributors | Database toolkit & schema migrations |
 | [psycopg](https://www.psycopg.org/) | LGPL-3.0-only | Daniele Varrazzo | Async/sync PostgreSQL driver & pool |
-| [httpx](https://www.python-httpx.org/) | BSD-3-Clause | Encode | Async HTTP client for LLM & search providers |
+| [httpx](https://www.python-httpx.org/) | BSD-3-Clause | Encode | Async HTTP client for LLM, Telegram, & search providers |
 | [openai-python](https://github.com/openai/openai-python) | Apache-2.0 | OpenAI | OpenAI wire client |
 | [MCP Python SDK](https://github.com/modelcontextprotocol/python-sdk) | MIT | Model Context Protocol contributors | Model Context Protocol integration |
 | [sentence-transformers](https://github.com/huggingface/sentence-transformers) | Apache-2.0 | UKP Lab / Hugging Face | Local multilingual embeddings (`MiniLM-L12-v2`) |
@@ -436,7 +443,9 @@ Every third-party component retains its original license and attribution:
 | [PyYAML](https://pyyaml.org/) | MIT | Kirill Simonov & contributors | Configuration & Soul parsing |
 | [ddgs](https://github.com/deedy5/ddgs) | MIT | deedy5 | Default zero-key web search backend |
 | [Neonize](https://github.com/krypton-byte/neonize) & [segno](https://github.com/heuer/segno) | BSD-3-Clause / Upstream | krypton-byte & Lars Heuer | Optional WhatsApp gateway & QR pairing |
-| [emotion-engine](https://github.com/pioneerjeff-labs/emotion-engine) | MIT | PioneerJeff Labs | Vendored PAD affect baseline math |
+| [discord.py](https://github.com/Rapptz/discord.py) | MIT | Rapptz & contributors | Optional Discord gateway adapter |
+| [slack-bolt](https://github.com/slackapi/bolt-python) & [slack-sdk](https://github.com/slackapi/python-slack-sdk) | MIT | Slack Technologies | Optional Slack Socket Mode gateway adapter |
+| [emotion-engine](https://github.com/pioneerjeff-labs/emotion-engine) | MIT | PioneerJeff Labs | PAD affect baseline model inspiration |
 | [Ruff](https://github.com/astral-sh/ruff) & [pytest](https://docs.pytest.org/) | MIT | Astral & pytest contributors | Linting, formatting, and test suite |
 
 ---

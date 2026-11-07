@@ -2,9 +2,8 @@
 
 **Scope:** the extension surface of the MonoAgens engine: how a body (gateway) and an installable
 capability bundle (plugin) plug in, what each owns, and what neither may do.
-**Context:** written after ADR-0034 (prompt parts) and ADR-0035 (app-scoped skills). Clauses that
-depend on those two are marked **[after 0034]** and **[after 0035]** and become binding when the
-respective ADR leaves `draft`.
+**Context:** aligned with the v0.1.0 ADR baseline (`ADR-0001` through `ADR-0010`, specifically
+`ADR-0004`, `ADR-0005`, and `ADR-0010`).
 **Status:** normative contract. A gap between this file and the code is a defect, not an
 alternative reading.
 **Indonesian version:** `gateway-plugin.id.md`.
@@ -14,10 +13,11 @@ alternative reading.
 ## 1. The four words
 
 A **gateway** is a body. It moves events between an outside world and the engine and owns the
-transport-specific actions of that body.
+transport-specific actions and presentation of that body.
 
 A **plugin** is an installable unit of capability code. It is fetched, verified, enabled, disabled,
-and removed as one thing; it contributes tools, commands, and (after 0034) static prompt parts.
+and removed as one thing; it contributes tools, commands, static prompt parts, and optionally
+shipped gateways.
 
 A **tool** is a capability the engine calls. A **command** is an operator-facing capability the
 engine dispatches. Tools and commands are not extension units: they are the *contents* a core
@@ -35,9 +35,9 @@ They are not interchangeable:
 | Is it installable/removable code with a manifest and a digest? | plugin |
 | Is it a capability the model or an operator invokes? | tool or command |
 | Is it an external tool server reached live over a standard protocol, with no install step? | MCP server |
-| Can a gateway be "just a plugin"? | No. It may be *shipped* by a plugin, but it is registered and enabled as a gateway (ADR-0028 §4.1). |
+| Can a gateway be "just a plugin"? | No. It may be *shipped* by a plugin, but it is registered and enabled as a gateway (ADR-0005 §4.2, ADR-0010 §4.1). |
 | Can a plugin open its own transport? | Only through a gateway it ships and declares; never as an import-time side effect. |
-| Can core contain a gateway's actions? | No. Gateway actions live in `monoagens/gateways/<name>/tools|commands`; a plugin's actions live in the plugin tree. |
+| Can core contain a gateway's actions or UI widgets? | No. Gateway actions and native interactive widgets live in `monoagens/gateways/<name>/`; a plugin's actions live in the plugin tree (ADR-0010 §4.1). |
 
 The one-line test: **a gateway is where bytes come from; a plugin is what can be installed; an MCP
 server is a tool supplier you configure; a tool is what the model may call.**
@@ -48,18 +48,21 @@ server is a tool supplier you configure; a tool is what the model may call.**
 
 ### 2.1 Location and discovery
 
-- A core-shipped gateway is a package under `monoagens/gateways/<name>/`.
+- A core-shipped gateway is a package under `monoagens/gateways/<name>/` (built-in native gateways:
+  `whatsapp`, `telegram`, `discord`, and `slack`; the operator terminal REPL lives in core as
+  `monoagens console` / `monoagens cli`).
 - A gateway shipped by a plugin is code under `plugins/<name>/`, declared in
   `plugin.yaml: provides.gateways`, and registered through the gateway path. It is never described
   as a "plugin gateway" and its tools never enter the global plugin tool list.
 - The engine never imports a gateway eagerly. `monoagens/engine/**` must not import
   `monoagens.gateways` or a plugin module at import time.
 - A gateway is enabled by config (`gateways.<name>.enabled: true`), never by installing a plugin as
-  a side effect. The shipped default body is `monoagens/gateways/cli`.
+  a side effect.
 
-### 2.2 Mandatory surface
+### 2.2 Mandatory surface and `BaseGateway` SDK
 
-A body implements `GatewayCore` from `monoagens/engine/inbound.py`:
+A body implements `GatewayCore` from `monoagens/engine/inbound.py` (typically by subclassing
+`BaseGateway` from `monoagens/gateways/base.py` and decorating with `@register_gateway`):
 
 ```python
 name: str
@@ -67,13 +70,18 @@ def tools(self) -> list[Handler]: ...
 def commands(self) -> list[Handler]: ...
 async def run(self, agent) -> None: ...
 async def stop(self) -> None: ...
-async def dispatch(self, action: Action) -> str: ...
+async def dispatch(self, action: Action) -> str | Receipt: ...
 def self_handles(self) -> set[str]: ...
-def chat_name(self, thread: str) -> str: ...      # default: the thread id
+def normalize_address(self, raw: str) -> str: ...  # default: raw.strip()
+def chat_name(self, thread: str) -> str: ...       # default: the thread id
 def prompt_section(self) -> str: ...               # default: ""
 ```
 
-`CoreDefaults` supplies `chat_name` and `prompt_section`; the rest are required.
+`CoreDefaults` and `BaseGateway` supply `normalize_address`, `chat_name`, `prompt_section`,
+`check_access`, `abort` (barge-in / safety stop), `EditDebouncer` (rate-limited in-place message
+editing for `send_thinking`, `send_step`, and `send_interim`), and `prompt_options(action)`
+(boundary resolution of interactive `Approve` / `Deny` or numbered choice buttons from the store
+without polluting `monoagens/engine/**` with UI state; ADR-0010 §4.1).
 
 ### 2.3 Lifecycle
 
@@ -82,8 +90,8 @@ def prompt_section(self) -> str: ...               # default: ""
    self)`; it never calls a store, the model, or a turn directly.
 3. `stop()` ends the loop and releases transport resources. A restart constructs a new instance; no
    body keeps process-global state that survives `stop()` except what it persists deliberately.
-4. Only the lease primary runs a body (ADR-0017). A standby body is not started; a body must not
-   fight the lease.
+4. Only the lease primary runs a body (ADR-0001 §4.1, ADR-0003 §4.4). A standby body is not started;
+   a body must not fight the lease.
 5. `dispatch(action)` is the one outbound door for body verbs. An unknown capability raises
    `GatewayError`; it must not silently succeed or fall back to another verb.
 
@@ -91,21 +99,24 @@ def prompt_section(self) -> str: ...               # default: ""
 
 - **In.** One body event becomes one `Percept`: `source`, `thread`, `actor`, `kind`, `payload:
   Message`, `hints`, and optionally `raw` (transport-only; never stored as truth).
-- **Hints are facts the body can prove.** Known keys: `dm`, `mention`, `reply`, `group`,
-  `presence`, `self`, `roles`; after 0035, `app`. A body never invents a hint it cannot prove and
-  never omits one a decision requires. The engine never requires a hint the body cannot supply.
+- **Hints are facts the body can prove.** Known keys (`HINT_KEYS`): `dm`, `mention`, `reply`,
+  `group`, `presence`, `self`, `roles`, `app`, `voice_call`. A body never invents a hint it cannot
+  prove and never omits one a decision requires. The engine never requires a hint the body cannot
+  supply.
 - **Out.** The engine addresses an `Address(gateway, thread, proof)` and emits an `Action`
-  (`capability`, `payload`, `approval_class`). The body routes by `capability` and answers with a
-  `Receipt(id, state, reference, reason)`.
-- Identity is the body's job: it normalizes its own actor ids (`person_id`) before they reach the
-  engine. Core never parses a JID, a URL suffix, a phone number, or a transport address.
+  (`capability`, `payload`, `approval_class`, optional `stream_id`, `replace_id`, `meta`). The body
+  routes by `capability` and answers with a `Receipt(id, state, reference, reason)`.
+- Identity is the body's job: it normalizes its own actor ids (`person_id`) and target addresses
+  (`normalize_address`) before they reach the engine. Core never parses a JID, a URL suffix, a
+  phone number, or a transport address.
 
 ### 2.5 What a body owns
 
 | Owned by the body | Never moved to core |
 | --- | --- |
 | transport connection, session, reconnect, backoff | transport address parsing |
-| text rendering and quoting for its medium | chat formatting rules in the prompt |
+| text rendering, quoting, and native interactive buttons (`prompt_options`) | chat formatting rules or UI widget builders in the engine |
+| debounced live progress editing (`EditDebouncer` on `stream_id`/`replace_id`) | platform-specific rate-limit timers in `LLM.run` |
 | media download/upload and its limits | file handling policy for a specific transport |
 | target resolution (`Directory`) and membership | contact/room tables in the skill or memory schema |
 | private-thread mapping (`PrivateThread`) | per-person inference of a transport identity |
@@ -119,7 +130,7 @@ def prompt_section(self) -> str: ...               # default: ""
 - `SendRefused` and `StandbyError` are refusals: a caller never retries them.
 - `prompt_section()` returns static English text, at most `PROMPT_SECTION_MAX = 1200` characters,
   with no user data, no secret, and no runtime interpolation. It is the single `body` prompt part
-  (stable, pinned, immediately after `base`) after 0034.
+  (stable, pinned, immediately after `base`; ADR-0005 §4.2).
 
 ---
 
@@ -130,23 +141,23 @@ def prompt_section(self) -> str: ...               # default: ""
 ```text
 plugins/<name>/
   plugin.yaml          # the manifest: data, read before any import
-  plugin.py            # entry module, one register() function
+  plugin.py            # entry module, one register() function (or @plugin.tool decorators)
   deps/                # the plugin's own dependencies (never the image's locked set)
   ...                  # the plugin's code tree; the digest covers it
 ```
 
 `plugin.yaml` requires: `name`, `version`, `engine`, `entry`, `digest`, `provides`, `requires`,
-`secrets`, `credits`. `provides` maps names to lists: `tools`, `commands`, `gateways`, and (after
-0034) `prompt`. `secrets` are environment *names*, never values. `credits` carries the rows the
-README credits table owes.
+`secrets`, `credits` (plus optional `local: true` for in-workspace development). `provides` maps
+names to lists: `tools`, `commands`, `gateways`, and `prompt`. `secrets` are environment *names*,
+never values. `credits` carries the rows the README credits table owes.
 
 ### 3.2 Verification before import
 
 The loader performs, in order:
 
 1. read and validate the manifest (unknown keys, name, semver, entry shape, provides lists);
-2. compute the SHA-256 of the code tree (sorted relative paths and bytes; `plugin.yaml`, `deps/`,
-   and bytecode excluded) and compare it to the manifest digest;
+2. compute the SHA-256 of the code tree (sorted relative paths and bytes, including `deps/`;
+   `plugin.yaml` and bytecode excluded) and compare it to the manifest digest;
 3. compare it again to the pinned `plugins.<name>.digest`;
 4. check the `engine` range against the running engine version;
 5. check that every declared secret name exists in the environment;
@@ -163,7 +174,7 @@ config. There is no partial unpack, no fallback copy, and no "installed but untr
 {
     "tools": [Handler, ...],      # declared 1:1 in provides.tools
     "commands": [Handler, ...],   # declared 1:1 in provides.commands
-    "prompts": [PromptPart, ...], # after 0034; declared 1:1 in provides.prompt
+    "prompts": [PromptPart, ...], # declared 1:1 in provides.prompt
 }
 ```
 
@@ -183,7 +194,7 @@ Rules:
 
 ### 3.4 Lifecycle
 
-`absent → installed → enabled ⇄ disabled → removed` (ADR-0028 §4.3).
+`absent → installed → enabled ⇄ disabled → removed` (ADR-0005 §4.3).
 
 - **installing**: fetch by digest, verify, unpack, fetch `requires` into `deps/`.
 - **installed**: code present, nothing imported, nothing granted.
@@ -202,7 +213,7 @@ ledger. There is no auto-update and no background fetch.
 | its manifest, code tree, and digest | the engine's schema |
 | its dependencies in `deps/` | the image's locked dependency set |
 | its tools/commands' logic | permission checks (`execute` owns them) |
-| its static prompt parts (after 0034) | the prompt assembly order or budget (loader and core own them) |
+| its static prompt parts | the prompt assembly order or budget (loader and core own them) |
 | its own data files under its root | core tables; writes go through the engine's stores |
 
 A plugin writes memory, skills, or settings only through the engine's public stores/ports. It never
@@ -260,7 +271,7 @@ digest, no `register()`, and no prompt surface. Its whole contribution is tools.
 
 - It does not install code into the engine; it runs outside the engine's tree and digest.
 - It cannot provide commands, prompt parts, gateways, or app-scoped skills.
-- It never reads `ctx.app` (after 0035); per-app wiring is external (separate server entries and
+- It never reads `ctx.app`; per-app wiring is external (separate server entries and
   role patterns).
 - It does not get secrets from the plugin loader. Its `env` is literal config; keep real secrets
   out of `config.yaml` (see §10).
@@ -272,11 +283,11 @@ digest, no `register()`, and no prompt surface. Its whole contribution is tools.
 | --- | --- | --- |
 | Unit | manifest + digest + `register()` | live external server |
 | Lifecycle | fetch, verify, enable, disable, remove | config entry, connect on boot |
-| Provides | tools, commands, a shipped gateway, static prompt parts (after 0034) | tools only |
+| Provides | tools, commands, a shipped gateway, static prompt parts | tools only |
 | Version binding | semver + engine range + digest pin | its own; the engine checks nothing |
 | Context | handler receives `ToolContext` | args only; no context |
-| Prompt | static parts (after 0034) | none |
-| App (after 0035) | `ctx.app` | not visible |
+| Prompt | static parts | none |
+| App | `ctx.app` | not visible |
 | Failure | `unavailable`, no import | one warning, tools absent, engine continues |
 | Permission | roles at `execute` | roles at `execute` |
 | Trust | operator-installed code, digest-pinned | operator-configured process/endpoint; output is untrusted |
@@ -303,7 +314,7 @@ These are the rules that keep "modular" from meaning "overlapping".
 5. **A tool does not choose its transport.** A capability receives `ToolContext`; it does not read
    a transport name to decide behavior. If it needs a body fact, the fact is in `ctx`.
 6. **No silent optional path.** A missing gateway, plugin, or tool is `unavailable`, never a
-   fabricated success and never a traceback in the turn (ADR-0027 §4.3).
+   fabricated success and never a traceback in the turn (ADR-0005 §4.2).
 7. **Removal is clean.** Disabling a plugin never leaves a registered handler; stopping a gateway
    never leaves a running loop; a removed plugin's code is deleted, not shadowed.
 8. **MCP is configured, not installed.** A server adds tools to the same index and the same
@@ -311,7 +322,7 @@ These are the rules that keep "modular" from meaning "overlapping".
    lifecycle, and no digest. A plugin may wrap an MCP server, but then the plugin is the
    installable unit and still owns the packaging.
 
-### 5.1 After ADR-0034: the prompt surface
+### 5.1 The prompt surface
 
 - A gateway contributes exactly one static body section through `prompt_section()`; it cannot
   register prompt parts and cannot add a second section.
@@ -322,9 +333,9 @@ These are the rules that keep "modular" from meaning "overlapping".
   A part that fails validation is a `PluginError` before the plugin joins the turn path.
 - The body section is the only gateway prompt contribution; a plugin cannot pretend to be a body.
 
-### 5.2 After ADR-0035: the app hint
+### 5.2 The app hint
 
-- A gateway may report `Inbound.hints["app"]` (the application or corpus the event belongs to). It
+- A gateway may report `Percept.hints["app"]` (the application or corpus the event belongs to). It
   is optional; a body that omits it reports "no app".
 - The engine reads the hint only to select an app-scoped corpus. It never derives an app from a
   body name, a thread id, or a URL.
@@ -440,7 +451,7 @@ An MCP server is conformant when:
 3. every tool resolves to `mcp__<server>__<tool>` and reaches the model only under a role grant;
 4. its arguments and results are treated as untrusted data, never as instructions;
 5. it does not use `ToolContext` and needs no prompt part, command, or gateway;
-6. real secrets are not written into `config.yaml` (until the env-name gap in §10 is closed).
+6. real secrets are not written into `config.yaml` (see §10).
 
 The executable form of these checks lives in `tests/test_gateway.py`, `tests/test_plugins.py`,
 `tests/test_mcp.py`, and the prompt contract suite. A new body, plugin, or server adds its case; it
@@ -467,26 +478,18 @@ does not add a new mechanism.
 
 ---
 
-## 10. Known gaps (as of 2026-11-04)
+## 10. Boundary constraints
 
-These are defects against this contract, not options:
+These are intentional security boundaries of the MCP and extension seams:
 
-- `plugins.py:_register` imports and registers only `tools` and `commands`; a manifest with
-  `provides.gateways` is accepted but the gateway is not registered. Until the gateway path exists,
-  a declared gateway must fail closed as `unavailable` rather than silently disappear.
-- `HINT_KEYS` does not include `app`; ADR-0035 is still draft.
-- Plugin prompt parts do not exist until ADR-0034 lands; today `register()` returns only
-  tools/commands.
-- `Inbound` appears in older prose (including `AGENTS.md`); the live seam is `Percept`/`Action` in
-  `monoagens/engine/inbound.py`. This contract uses the live names.
 - MCP `env` values are read from `config.yaml` as literal strings; unlike plugin `secrets`, there is
-  no env-name indirection or verification. Keep secrets out of that mapping until the gap is
-  closed.
-- MCP handlers keep the default `authorization` class and carry no `target`, `path_arg`, `scan`, or
-  `destructive` metadata, so the guard cannot treat one MCP tool differently from another by
-  declaration.
-- MCP tools ignore the `ToolContext` they are passed, so they cannot read `ctx.app` after 0035 nor
-  write skills through the engine's stores.
+  no env-name indirection. Keep sensitive credentials in `.env` or plugin-managed secrets rather
+  than literal `config.yaml` mappings.
+- MCP handlers keep the fail-closed `authorization` approval class and carry no `target`,
+  `path_arg`, `scan`, or `destructive` metadata, so every MCP invocation is subject to operator
+  authorization policy.
+- MCP tools do not receive `ToolContext`, so external MCP servers cannot read `ctx.app` or mutate
+  engine stores directly.
 
 ---
 
@@ -494,20 +497,20 @@ These are defects against this contract, not options:
 
 - `monoagens/engine/inbound.py` — `Percept`, `Action`, `Address`, `Receipt`, `GatewayCore`, `Rich`,
   `Directory`, `PrivateThread`, `HINT_KEYS`, `PROMPT_SECTION_MAX`.
-- `monoagens/engine/plugins.py` — manifest schema, `tree_digest`, `_verify`, `_register`,
-  lifecycle states, `PluginError`.
+- `monoagens/gateways/base.py` — `BaseGateway`, `@register_gateway`, `EditDebouncer`,
+  `prompt_options`, `ui_of`.
+- `monoagens/engine/plugins/` — manifest schema, `tree_digest`, `_verify`, `_register`,
+  lifecycle states, `PluginError`, `@plugin.tool`.
 - `monoagens/engine/registry.py` and `monoagens/engine/tools/__init__.py` — `Handler`, `ToolContext`,
   `execute`, the one permission check.
 - `monoagens/engine/agent.py` — `handle(percept, gateway)` intake, `dispatch(...)` outbound door,
   the gateway tool/command merge.
-- ADR-0027 §4.1 — a gateway, a tool, and a plugin are three different things.
-- ADR-0028 §4.1–4.4 — plugin unit, manifest, lifecycle, loading.
-- ADR-0032 — address and command message; body routing, no engine-side quoting.
-- ADR-0033 §4.5 — one body `prompt_section`.
-- ADR-0034 — prompt parts: static plugin parts, one body contribution.
-- ADR-0035 — app namespace: gateway supplies `hints["app"]`, plugin reads `ctx.app`, core filters.
+- `ADR-0001` — hexagonal boundaries and single primary lease.
+- `ADR-0003` — turn lifecycle, non-blocking async loop, and progress actions (`send_thinking`,
+  `send_step`, `send_interim`).
+- `ADR-0004` — core cross-gateway tools, origin verification, and universal delivery.
+- `ADR-0005` — unified job engine, plugin lifecycle, static prompt parts, and `app` namespace.
+- `ADR-0010` — deep native gateway embodiment (`whatsapp`, `telegram`, `discord`, `slack`),
+  boundary prompt option resolution (`prompt_options`), and runtime layers.
 - `monoagens/engine/jobs/mcp.py` — the `Hub`, discovery, `mcp__<server>__<tool>` naming, timeouts,
   result rendering.
-- `monoagens/engine/config.py:649-656,870-895` — `MCPServerConfig` and `mcp.servers` validation.
-- `monoagens/__main__.py:112-113,476` — `Hub` start at process boot and stop in the selftest path;
-  `monoagens/engine/agent.py:1796-1798` — `hub.stop()` on agent shutdown.
