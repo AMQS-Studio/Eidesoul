@@ -493,11 +493,25 @@ def write_extras(root: Path) -> str:
     return value
 
 
+def _heal_podman_ownership(engine: str, root: Path) -> None:
+    """Reclaim files a pre-override rootless container created under a subordinate uid."""
+    if not Path(engine).name.startswith("podman") or getattr(os, "geteuid", lambda: 0)() == 0:
+        return
+    state = root / ".monoagens"
+    try:
+        needs_heal = state.exists() and state.stat().st_uid != os.geteuid()
+    except OSError:
+        needs_heal = True
+    if needs_heal:
+        subprocess.run([engine, "unshare", "chown", "-R", "0:0", str(root)], check=False)
+
+
 def compose_update(service: Service) -> int:
     """Rebuild, migrate, and recreate the stack after the host code changed."""
     argv = compose_argv(service)
     if argv is None:
         raise ConfigError("stack is compose but no podman/docker binary was found")
+    _heal_podman_ownership(argv[0], service.root)
     extras = write_extras(service.root)
     if extras:
         print(f"monoagens: EXTRAS={extras}", flush=True)
