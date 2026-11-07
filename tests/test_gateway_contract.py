@@ -349,3 +349,75 @@ def test_a_permitted_command_bypasses_the_gateway_refusal(tmp_path) -> None:
         for _, text, _ in gateway.sent
     )
 
+
+
+def test_every_shipped_body_meets_the_core_contract_and_resolves_prompts(tmp_path) -> None:
+    """ADR-0010 §4.1-§4.5: all four bodies share one core surface and one prompt boundary."""
+    from test_discord_gateway import FakeTransport as FakeDiscord
+    from test_slack_gateway import FakeTransport as FakeSlack
+    from test_telegram_gateway import FakeBot as FakeTelegram
+    from test_whatsapp_gateway import make_gateway
+
+    from monoagens.engine.inbound import Action, Address, GatewayCore, missing_core
+    from monoagens.gateways.base import PROGRESS_FLAGS, BaseGateway
+    from monoagens.gateways.discord.gateway import DiscordGateway
+    from monoagens.gateways.slack.gateway import SlackGateway
+    from monoagens.gateways.telegram.gateway import TelegramGateway
+
+    config = build_config(tmp_path)
+    db = database()
+    history = HistoryStore(db)
+    windows = WorkingMemory(store=history)
+    config.workspace.mkdir(parents=True, exist_ok=True)
+    bodies = [
+        make_gateway(tmp_path),
+        TelegramGateway(
+            config,
+            db,
+            history,
+            windows,
+            settings=GatewaySettings("telegram", True, {}),
+            transport=FakeTelegram(),
+        ),
+        DiscordGateway(
+            config,
+            db,
+            history,
+            windows,
+            settings=GatewaySettings("discord", True, {}),
+            transport=FakeDiscord(),
+        ),
+        SlackGateway(
+            config,
+            db,
+            history,
+            windows,
+            settings=GatewaySettings("slack", True, {}),
+            transport=FakeSlack(),
+        ),
+    ]
+    badge = Action(
+        address=Address("body", "chat"),
+        capability="send_text",
+        payload='done\n\n🕓 Waiting: /approve 42 (or just reply "ok, send").',
+    )
+
+    for body in bodies:
+        assert isinstance(body, BaseGateway), body.name
+        assert isinstance(body, GatewayCore), body.name
+        assert missing_core(body) == [], body.name
+        assert set(PROGRESS_FLAGS) <= set(body.default_settings()), body.name
+        assert body.default_role_policy("administrator")["dm"] is True, body.name
+        block = body.ui_of(badge)
+        assert block["kind"] == "approval", body.name
+        assert [item["command"] for item in block["buttons"]] == [
+            "/approve #42",
+            "/deny #42",
+        ], body.name
+        body.set_progress("show_steps", True)
+        assert body.progress_enabled("show_steps") is True, body.name
+        assert body.ui_of(Action(Address("body", "c"), "send_text", "plain")) == {}
+
+    for body in bodies[1:]:
+        with pytest.raises(ValueError, match="role policy needs"):
+            body.validate_role_policy({"dm": True})

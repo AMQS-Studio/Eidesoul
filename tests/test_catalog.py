@@ -15,7 +15,8 @@ def test_core_and_gateway_tools_are_indexed_without_a_hand_list(tmp_path):
 
 def test_gateways_are_discovered_from_packages_and_pairing_is_indexed():
     names = {item.name for item in catalog.gateways()}
-    assert names == {"whatsapp"}
+    # ADR-0010 §4.3-4.5: Telegram, Discord, and Slack are first-class packages beside WhatsApp.
+    assert names == {"whatsapp", "telegram", "discord", "slack"}
     from monoagens.gateways import gateway_index
 
     info = gateway_index()["whatsapp"]

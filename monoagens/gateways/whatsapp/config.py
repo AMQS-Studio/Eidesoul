@@ -12,6 +12,9 @@ class WhatsAppSettings:
     enabled: bool = True
     session_db: Path = Path(".monoagens/whatsapp.db")
     backlog_seconds: float = 600.0
+    show_thinking: bool = False
+    show_steps: bool = False
+    interim_updates: bool = False
 
     @classmethod
     def from_mapping(cls, enabled: bool, options: dict, base: Path) -> WhatsAppSettings:
@@ -27,4 +30,11 @@ class WhatsAppSettings:
             backlog = float(options.get("backlog_seconds") or 600)
         except (TypeError, ValueError):
             backlog = 600.0
-        return cls(enabled=bool(enabled), session_db=session, backlog_seconds=max(0.0, backlog))
+        return cls(
+            enabled=bool(enabled),
+            session_db=session,
+            backlog_seconds=max(0.0, backlog),
+            show_thinking=bool(options.get("show_thinking", False)),
+            show_steps=bool(options.get("show_steps", False)),
+            interim_updates=bool(options.get("interim_updates", False)),
+        )

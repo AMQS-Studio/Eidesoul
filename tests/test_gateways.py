@@ -117,7 +117,9 @@ def test_base_defaults_declare_the_progress_flags_and_fail_closed() -> None:
 
 def test_whatsapp_is_discovered_and_registered() -> None:
     pytest.importorskip("neonize")
-    module = importlib.import_module("monoagens.gateways.whatsapp.gateway")
+    # The registry fixture restores a per-test snapshot, so re-run the decorator on the cached
+    # module instead of assuming a previous test left it registered.
+    module = importlib.reload(importlib.import_module("monoagens.gateways.whatsapp.gateway"))
 
     info = gateway_index()["whatsapp"]
 

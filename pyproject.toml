@@ -29,6 +29,11 @@ dependencies = [
 
 [project.optional-dependencies]
 whatsapp = ["neonize>=0.5.2,<0.6", "segno>=1.6"]
+# ADR-0010 §8: each body's SDK is installed only when the operator enables that gateway.
+# Telegram talks the HTTP Bot API directly, so its extra is the client already in core deps.
+telegram = ["httpx>=0.27,<1"]
+discord = ["discord.py>=2.4"]
+slack = ["slack-bolt>=1.20", "slack-sdk>=3.31"]
 
 [dependency-groups]
 dev = [

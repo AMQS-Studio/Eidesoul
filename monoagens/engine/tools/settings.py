@@ -290,6 +290,37 @@ def _atomic(path: Path, text: str) -> None:
     os.replace(tmp, path)
 
 
+def write_gateway_flag(
+    agent, gateway_name: str, flag: str, enabled: bool
+) -> dict[str, object]:
+    """Set one `gateways.<name>.<flag>` value in config.yaml, the operator file.
+
+    The host file stays the source of truth (AGENTS §3); the in-memory settings follow it so
+    the next turn reads the switch without a reload. The write is offloaded by the caller.
+    """
+    name = str(gateway_name or "").strip()
+    if not name:
+        raise ValueError("a gateway name is required")
+    key = str(flag or "").strip()
+    if not key or key == "enabled":
+        raise ValueError("a gateway flag name is required")
+    body = _read_config(agent)
+    gateways = body.get("gateways")
+    if not isinstance(gateways, dict):
+        gateways = {}
+    block = gateways.get(name)
+    if not isinstance(block, dict):
+        block = {}
+    block[key] = bool(enabled)
+    gateways[name] = block
+    body["gateways"] = gateways
+    _write_config(agent, body)
+    settings = agent.config.gateways.get(name)
+    if settings is not None:
+        settings.options[key] = bool(enabled)
+    return dict(block)
+
+
 async def _commit(agent, file: str, name: str, text: str, actor: str) -> None:
     """ADR-0046 §4.1: write the operator file first, then refresh its cache row."""
     if file == "host":

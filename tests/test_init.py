@@ -225,13 +225,17 @@ def test_a_non_interactive_cli_run_writes_into_dir_with_every_flag(tmp_path, cap
 
 def test_the_wizard_shows_the_rail_and_the_review_then_writes(tmp_path, monkeypatch):
     monkeypatch.setattr(admin_init, "model_ids", lambda provider, api_key="": [])
+    # The rail lists every discovered body, so the answer names the position of WhatsApp.
+    from monoagens.admin import catalog
+
+    rail = [item.name for item in catalog.gateways()]
     answer = scripted(
         database_url="postgresql+psycopg://monoagens:MARKER-PASSWORD@127.0.0.1:5433/monoagens",
         websearch="tavily",
         search_key="tvly-SEARCH",
         approval="strict",
         natural="no",
-        gateways="1",
+        gateways=str(rail.index("whatsapp") + 1),
     )
     stdin = Tty(answer)
     stdout = io.StringIO()

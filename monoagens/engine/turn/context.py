@@ -313,6 +313,31 @@ class WorkingMemory:
             return False
         return self.store.mark_deleted(thread_id, message_id, by_address, by_name)
 
+    def replace_text(self, thread_id: str, message_id: str, text: str) -> bool:
+        """Rewrite one entry's text after an inbound edit; False when the row is unknown.
+
+        ADR-0010 §4.2: the live window and the archive keep the same row identity, so an edit
+        never becomes a second message and never loses the attachments the row already holds.
+        """
+        self._ensure(thread_id)
+        body = str(text or "")
+        for index, entry in enumerate(self._data.get(thread_id, [])):
+            if entry.id != message_id:
+                continue
+            updated = replace(entry, text=body)
+            self._data[thread_id][index] = updated
+            if self.store is not None:
+                try:
+                    self.store.add(thread_id, updated)
+                except Exception:
+                    log.exception(
+                        "failed to save the edit chat=%s id=%s", thread_id, message_id
+                    )
+            return True
+        if self.store is None:
+            return False
+        return self.store.replace_text(thread_id, message_id, body)
+
     def set_visibility(self, thread_id: str, message_ids: tuple[str, ...], level: int) -> int:
         self._ensure(thread_id)
         wanted = {str(item) for item in message_ids if item}

@@ -108,6 +108,147 @@ def revoke_target(ev, gateway) -> tuple[str, str] | None:
     return protocol.key.ID, mapped or address
 
 
+# ADR-0010 §4.2: the two reactions a pending prompt accepts as a decision.
+APPROVE_REACTIONS = frozenset({"\U0001f44d", "\u2705"})
+DENY_REACTIONS = frozenset({"\U0001f44e", "\u274c"})
+
+
+def reaction_verb(emoji: str) -> str:
+    """`approve`, `deny`, or "" for any other emoji."""
+    value = str(emoji or "").strip()
+    if value in APPROVE_REACTIONS:
+        return "approve"
+    if value in DENY_REACTIONS:
+        return "deny"
+    return ""
+
+
+def edit_target(ev) -> tuple[str, str] | None:
+    """(target message id, new text) for protocolMessage MESSAGE_EDIT; None otherwise."""
+    protocol = getattr(ev.Message, "protocolMessage", None)
+    if protocol is None or not protocol.ListFields():
+        return None
+    if protocol.type != ProtocolMessage.MESSAGE_EDIT or not protocol.key.ID:
+        return None
+    edited = getattr(protocol, "editedMessage", None)
+    if edited is None:
+        return None
+    return str(protocol.key.ID), message_text(edited)
+
+
+def _sender(ev, gateway) -> tuple[str, str, str]:
+    """(sender address, sender digits, display name) exactly as `event_to_inbound` derives them."""
+    source = ev.Info.MessageSource
+    sender = f"{source.Sender.User}@{source.Sender.Server}"
+    mapped = ""
+    if sender.endswith("@lid"):
+        mapped = directory.pn_jid(gateway.db, sender)
+    address = mapped or sender
+    digits = normalize_jid(mapped or source.Sender.User or source.Sender.RawAgent)
+    name = sender_name(ev, digits, sender)
+    return address, digits, name
+
+
+def _command_percept(ev, gateway, command: str) -> Percept | None:
+    """One reaction or click turned into the exact chat command the engine already reads."""
+    source = ev.Info.MessageSource
+    thread_id = f"{source.Chat.User}@{source.Chat.Server}"
+    address, digits, name = _sender(ev, gateway)
+    if not digits:
+        return None
+    known = directory.contact_name(gateway.db, address)
+    message = Message(
+        id=ev.Info.ID or f"event-{time.time_ns()}",
+        sender_name=known or name,
+        sender_id=digits,
+        when=event_time(ev.Info.Timestamp),
+        text=str(command),
+        sender_address=address,
+        sender_kind="person" if address.endswith(("@s.whatsapp.net", "@lid")) else "",
+        author=AUTHOR_UNKNOWN,
+    )
+    group = is_group(thread_id)
+    return Percept(
+        source="whatsapp",
+        thread=thread_id,
+        actor=digits,
+        kind="message",
+        payload=message,
+        hints={"dm": not group, "group": group, "interactive": True},
+        raw=ev,
+    )
+
+
+def reaction_target(ev, gateway) -> Percept | None:
+    """A 👍/👎 reaction on a pending prompt becomes `/approve #id` or `/deny #id`.
+
+    ADR-0010 §4.2: Meta restricts native buttons on many accounts, so the reaction is the
+    quick-confirm path, and it resolves to the same command the button would send.
+    """
+    reaction = getattr(ev.Message, "reactionMessage", None)
+    if reaction is None or not reaction.ListFields():
+        return None
+    command = gateway.approval_command(
+        getattr(reaction, "text", ""), str(getattr(reaction.key, "ID", "") or "")
+    )
+    return _command_percept(ev, gateway, command) if command else None
+
+
+def _edited_mention(edited, bots: set[str]) -> tuple[bool, bool]:
+    """(mentioned, replied) read from the edited payload, not the outer protocol envelope."""
+    found = list(contexts(edited))
+    mentioned_bot = any(
+        normalize_jid(jid) in bots for context in found for jid in context.mentionedJID
+    )
+    replied = any(
+        normalize_jid(context.participant) in bots for context in found if context.participant
+    )
+    return mentioned_bot, replied
+
+
+def edit_to_inbound(ev, gateway, target_id: str, text: str) -> Percept | None:
+    """The percept for an edited message, only when the edit is addressed to the bot."""
+    protocol = getattr(ev.Message, "protocolMessage", None)
+    edited = getattr(protocol, "editedMessage", None)
+    if edited is None:
+        return None
+    source = ev.Info.MessageSource
+    thread_id = f"{source.Chat.User}@{source.Chat.Server}"
+    bots = gateway.self_handles()
+    mentioned_bot, replied = _edited_mention(edited, bots)
+    if not (mentioned_bot or replied):
+        # An edit refreshes the window; it is a new turn only when it is addressed to the bot.
+        return None
+    address, digits, name = _sender(ev, gateway)
+    known = directory.contact_name(gateway.db, address)
+    message = Message(
+        id=str(target_id),
+        sender_name=known or name,
+        sender_id=digits,
+        when=event_time(ev.Info.Timestamp),
+        text=str(text),
+        sender_address=address,
+        sender_kind="person" if address.endswith(("@s.whatsapp.net", "@lid")) else "",
+        author=AUTHOR_UNKNOWN,
+    )
+    group = is_group(thread_id)
+    return Percept(
+        source="whatsapp",
+        thread=thread_id,
+        actor=digits,
+        kind="message",
+        payload=message,
+        hints={
+            "dm": not group,
+            "group": group,
+            "mention": mentioned_bot,
+            "reply": replied,
+            "edit": True,
+        },
+        raw=ev,
+    )
+
+
 def unreadable_message(ev, gateway) -> tuple[str, Message] | None:
     """Placeholder row for a stanza without <enc> (e.g. view-once from another device)."""
     source = ev.Info.MessageSource

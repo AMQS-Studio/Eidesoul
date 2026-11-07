@@ -6,7 +6,7 @@
 - **Context:** Defines the full native capability contract for Discord, Telegram, Slack, and WhatsApp gateways—including interactive UI blocks (`Action.meta`), native `/` command menus, progressive streaming edits, threads, reactions, and media—and records the forward-compatible Runtime Layer Extension architecture (`layer` hooks) for future deep plugins without modifying core code.
 - **Supersedes:** —
 - **Related:** ADR-0001 (sovereign harness and appendage seam), ADR-0003 (turn progress and streaming), ADR-0004 (cross-gateway delivery), ADR-0005 (extensions and `BaseGateway`), ADR-0006 (RBAC and approvals)
-- **Implementation:** draft
+- **Implementation:** implemented
 
 ---
 
@@ -47,35 +47,19 @@ While the core engine (`monoagens/engine/`) and the foundational `BaseGateway` c
 
 ## 4. Decision
 
-### 4.1 Transport-Neutral Interactive Block Contract (`Action.meta` $\leftrightarrow$ `Percept`)
+### 4.1 Pure Core & Gateway-Side Universal Interactive Options (`BaseGateway` $\leftrightarrow$ `Percept`)
 
-The engine and tools stay 100% transport-agnostic by attaching optional structured UI metadata to `Action.meta` (`monoagens/engine/inbound.py:167`) while keeping `Action.payload` as the canonical human-readable fallback text:
+`monoagens/engine/**` remains 100% pure and free of UI widget builders (`inbound.py`, `TurnState`, and `Delivery` never construct button styles or approval UI cards). Instead, interactive prompt rendering lives in `BaseGateway` (`monoagens/gateways/base.py`):
 
-1. **Interactive Approval & Confirmation Block (`meta["ui"]`):**
-   When `ApprovalStore` or natural confirmation requests user consent/authorization (`shell`, `sandbox`, `settings`, cross-room send, or L4 memory consent), the outbound `Action` carriesboth readable text and a structured block:
-   ```json
-   {
-     "ui": {
-       "kind": "approval",
-       "approval_id": 42,
-       "approval_class": "authorization",
-       "title": "Shell command requires approval",
-       "summary": "rm -rf scratch/temp_build",
-       "buttons": [
-         {"id": "approve:42", "label": "Approve", "command": "/approve #42", "style": "primary"},
-         {"id": "deny:42", "label": "Deny", "command": "/deny #42", "style": "danger"}
-       ]
-     }
-   }
-   ```
-   - **Gateway Rendering:** Discord renders `discord.ui.View` (`ButtonStyle.success` / `ButtonStyle.danger`), Telegram renders `InlineKeyboardMarkup`, Slack renders Block Kit `actions` buttons, and WhatsApp renders native interactive reply buttons (or numbered/reaction quick-confirm where restricted by Meta).
-   - **Inbound Click Normalization:** When a user clicks `[ Approve ]` in the client app, the gateway verifies the clicker's identity, updates/disables the button state on the message, and hands `agent.handle` a standard `Percept(kind="message", payload=Message(text="/approve #42"), hints={"interactive": True, ...})`. The engine processes it through the exact same RBAC and `ApprovalStore` path with zero special cases.
+1. **Universal Interactive Options (`options` in `Action.meta` & Automatic `/approve #<id>` Detection in `BaseGateway`):**
+   - Any tool, plugin, or command can attach generic prompt choices via `Action.meta["options"]` (e.g. `[{"id": "...", "label": "...", "command": "..."}]`).
+   - For pending approvals and L4 memory consent, the engine emits its standard human-readable `/approve #<id>` text without any special UI plumbing in `monoagens/engine/**`; `BaseGateway` automatically detects `/approve #<id>` in the outbound `Action` and synthesizes the localized `Approve` (`/approve #<id>`) and `Deny` (`/deny #<id>`) interactive options at the gateway boundary.
+   - **Gateway Rendering:** Discord renders `discord.ui.View` (`ui.Button` / `ui.Select`), Telegram renders `InlineKeyboardMarkup`, Slack renders Block Kit `actions` buttons, and WhatsApp maps reaction quick-confirm (👍 / 👎) or reply options.
+   - **Inbound Click Normalization:** When a user clicks an option in the client app, the gateway verifies the clicker's identity, updates/disables the button state on the message, and hands `agent.handle` a standard `Percept(kind="message", payload=Message(text=command), hints={"interactive": True, ...})`. The engine processes it through the exact same RBAC and `ApprovalStore` path with zero special cases.
 2. **Progressive Streaming, Thinking, & Tool Step Blocks (`send_thinking`, `send_step`, `send_interim`):**
-   - `Action.stream_id` and `Action.replace_id` identify an in-flight turn bubble.
+   - `Action.stream_id` and `Action.replace_id` identify an in-flight turn bubble (`turn:<turn_id>:progress`).
    - When `show_thinking: true` or `show_steps: true` is enabled on a gateway:
-     - Gateways that support fast message editing (Discord, Telegram, Slack, WhatsApp edit) maintain a single live status message per turn (`replace_id`), rendering `thinking` inside a native collapsible spoiler/blockquote (`> ||...||` on Discord, `<tg-spoiler>` / expandable blockquote on Telegram, context block on Slack) and updating tool steps (`🔧 read -> ✅ executed`) in place before replacing or following with the final answer.
-3. **Structured Choice / Poll / List Blocks (`meta["ui"]["kind"] == "choices"`):**
-   - Tools and commands (`ask`, `/models`, `/skills`, `/language`, `/alerts`) may attach `choices: [{"id": ..., "label": ..., "command": ...}]` so gateways render native select menus (`discord.ui.Select`, Telegram inline keyboards, Slack static select, WhatsApp list messages).
+     - Gateways that support fast message editing (Discord, Telegram, Slack, WhatsApp edit) maintain a single live status message per turn (`replace_id`), rendering `thinking` inside a native collapsible spoiler/blockquote (`> ||...||` on Discord, `<blockquote expandable>` on Telegram, context block on Slack) and updating tool steps (`🔧 read -> ✅ executed`) in place before replacing or following with the final answer.
 
 ### 4.2 WhatsApp Gateway Completeness (`monoagens/gateways/whatsapp/`)
 
@@ -187,17 +171,17 @@ gateways:
 ## 6. Metrics and gates
 
 - `python -P scripts/adr.py --check` and `python -P scripts/selfcheck.py --check` pass with zero errors.
-- Gateway contract suite (`tests/test_gateway_contract.py`) verifies `whatsapp`, `telegram`, `discord`, and `slack` against `BaseGateway`, central `access_refusal`, multi-attachment `Message.attachments`, `Action.meta["ui"]` rendering, and interactive button callback $\rightarrow$ `Percept` routing.
+- Gateway contract suite (`tests/test_gateway_contract.py`) verifies `whatsapp`, `telegram`, `discord`, and `slack` against `BaseGateway`, central `access_refusal`, multi-attachment `Message.attachments`, `BaseGateway.ui_of` prompt rendering (explicit `meta["ui"]` plus the synthesized `/approve #<id>` pair), and interactive button callback $\rightarrow$ `Percept` routing.
 - `monoagens/engine/**` imports zero symbols from `monoagens.gateways`, `neonize`, `aiogram`, `discord`, or `slack_bolt` (`AGENTS.md §2`).
 
 ## 7. Acceptance criteria
 
-- [ ] `Action.meta["ui"]` carries transport-neutral interactive block descriptors (`approval`, `choices`, `step`, `thinking`) without leaking transport vocabulary into `monoagens/engine/`.
-- [ ] `monoagens/gateways/whatsapp/` supports multi-attachment `prepare_media`, native voice notes (`ptt`), video send, emoji reactions, message edits (`replace_id` & inbound `MESSAGE_EDIT`), and location/contact/poll extraction.
-- [ ] `monoagens/gateways/telegram/` implements polling/webhook ingress, `setMyCommands` native `/` sync, Forum Topic routing, `InlineKeyboardMarkup` approval buttons, album grouping, and live edit streaming.
-- [ ] `monoagens/gateways/discord/` implements Gateway WebSocket events, Slash Command sync, `ui.View` interactive buttons/selects, thread/forum routing, and multi-attachment ingress.
-- [ ] `monoagens/gateways/slack/` implements Socket Mode, Block Kit interactive approval/step blocks, `thread_ts` routing, and multi-file ingress.
-- [ ] Runtime Layer Extension contract (`§4.6`) is documented as the sole sanctioned path for future deep plugins so `monoagens/engine/**` stays untouched.
+- [x] `BaseGateway.ui_of` resolves universal interactive options from `Action.meta["options"]`/`meta["ui"]` and synthesizes the localized `Approve`/`Deny` pair from the engine's own `/approve #<id>` badge, so `monoagens/engine/` carries no UI widget builder and no transport vocabulary.
+- [x] `monoagens/gateways/whatsapp/` supports multi-attachment `prepare_media`, native voice notes (`ptt`), video send, emoji reactions, message edits (`replace_id` & inbound `MESSAGE_EDIT`), and location/contact/poll extraction.
+- [x] `monoagens/gateways/telegram/` implements polling/webhook ingress, `setMyCommands` native `/` sync, Forum Topic routing, `InlineKeyboardMarkup` approval buttons, album grouping, and live edit streaming.
+- [x] `monoagens/gateways/discord/` implements Gateway WebSocket events, Slash Command sync, `ui.View` interactive buttons/selects, thread/forum routing, and multi-attachment ingress.
+- [x] `monoagens/gateways/slack/` implements Socket Mode, Block Kit interactive approval/step blocks, `thread_ts` routing, and multi-file ingress.
+- [x] Runtime Layer Extension contract (`§4.6`) is documented as the sole sanctioned path for future deep plugins so `monoagens/engine/**` stays untouched.
 
 ## 8. Risks and mitigations
 
@@ -220,9 +204,9 @@ gateways:
 - `monoagens/engine/inbound.py` — `Percept`, `Address`, `Action`, `Receipt`, `action_json`.
 - `monoagens/gateways/base.py` — `BaseGateway` and `@register_gateway`.
 - `monoagens/gateways/whatsapp/` — `gateway.py`, `ingress.py`, `media.py`, `directory.py`, `policy.py`.
-- `monoagens/gateways/telegram/` — Telegram gateway package (planned).
-- `monoagens/gateways/discord/` — Discord gateway package (planned).
-- `monoagens/gateways/slack/` — Slack gateway package (planned).
+- `monoagens/gateways/telegram/` — `config.py`, `policy.py`, `render.py`, `ingress.py`, `transport.py`, `webhook.py`, `gateway.py`.
+- `monoagens/gateways/discord/` — `config.py`, `policy.py`, `render.py`, `ingress.py`, `transport.py`, `gateway.py`.
+- `monoagens/gateways/slack/` — `config.py`, `policy.py`, `render.py`, `ingress.py`, `transport.py`, `gateway.py`.
 - `monoagens/engine/plugins/loader.py` — `PluginLoader` and reserved runtime layer seam (§4.6).
 
 ---

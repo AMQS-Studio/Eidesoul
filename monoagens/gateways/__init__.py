@@ -180,11 +180,15 @@ def _builtin_index() -> dict[str, GatewayInfo]:
         attribute = _class_name(module_path, folder.name)
         if attribute is None:
             continue
+        descriptor = _descriptor(folder)
         found[folder.name] = GatewayInfo(
             folder.name,
             f"{__name__}.{folder.name}.gateway",
             attribute,
-            descriptor=_descriptor(folder),
+            descriptor=descriptor,
+            # The package's own descriptor is the stable source of the install extra: a
+            # registered body only confirms it, so import order never changes discovery.
+            extra=descriptor.extra,
         )
     return found
 

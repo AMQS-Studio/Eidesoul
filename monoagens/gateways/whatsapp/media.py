@@ -55,6 +55,9 @@ EXT_FOR_MIME = {
 }
 PHOTO_MAGIC = (b"\xff\xd8\xff", b"\x89PNG\r\n\x1a\n")
 STICKER_MAX_SIDE = 512
+VOICE_EXT = frozenset({".ogg", ".opus"})
+AUDIO_EXT = frozenset({".mp3", ".m4a", ".wav", ".aac", ".flac"})
+VIDEO_EXT = frozenset({".mp4", ".mov", ".webm", ".mkv"})
 
 
 def _webp_shape(head: bytes) -> tuple[int, int, bool] | None:
@@ -77,19 +80,31 @@ def _webp_shape(head: bytes) -> tuple[int, int, bool] | None:
 
 
 def send_kind(path: Path) -> str:
-    """Classify file content for the send path: `sticker`, `photo`, or `file`."""
+    """Classify a file for the send path: `sticker`, `photo`, `voice`, `audio`, `video`, `file`.
+
+    Image kinds come from the bytes, because a WebP sticker is not a photo and a JPEG is never
+    a sticker. Voice notes, plain audio, and video are recognised by extension, which is the
+    same fact the platform routes on.
+    """
     try:
         with path.open("rb") as handle:
             head = handle.read(30)
     except OSError:
-        return "file"
+        head = b""
     if head.startswith(PHOTO_MAGIC):
         return "photo"
-    shape = _webp_shape(head)
-    if shape is None:
-        return "file"
-    width, height, marked = shape
-    return "sticker" if marked and max(width, height) <= STICKER_MAX_SIDE else "photo"
+    shape = _webp_shape(head) if head else None
+    if shape is not None:
+        width, height, marked = shape
+        return "sticker" if marked and max(width, height) <= STICKER_MAX_SIDE else "photo"
+    suffix = Path(path).suffix.lower()
+    if suffix in VOICE_EXT:
+        return "voice"
+    if suffix in AUDIO_EXT:
+        return "audio"
+    if suffix in VIDEO_EXT:
+        return "video"
+    return "file"
 
 
 def sanitize(value: str, limit: int = 60) -> str:
@@ -136,7 +151,77 @@ def contexts(message):
 
 
 def message_text(message) -> str:
-    return clean(extract_text(unwrap_message(message)) or "")
+    body = unwrap_message(message)
+    parts = [clean(extract_text(body) or "")]
+    parts.extend(_structured_text(body))
+    return clean(" ".join(part for part in parts if part.strip()))
+
+
+# ADR-0010 §4.2: a location, a contact card, and a poll carry no prose; the engine still
+# needs one readable line for the window, the archive, and the prompt.
+STRUCTURED_FIELDS = (
+    "locationMessage",
+    "liveLocationMessage",
+    "contactMessage",
+    "contactsArrayMessage",
+    "pollCreationMessage",
+    "pollCreationMessageV2",
+    "pollCreationMessageV3",
+)
+
+
+def _location_text(content) -> str:
+    latitude = float(getattr(content, "degreesLatitude", 0.0) or 0.0)
+    longitude = float(getattr(content, "degreesLongitude", 0.0) or 0.0)
+    label = str(
+        getattr(content, "name", "") or getattr(content, "address", "") or ""
+    ).strip()
+    coords = f"{latitude:.6f}, {longitude:.6f}"
+    return f"[location: {coords} — {label}]" if label else f"[location: {coords}]"
+
+
+def _contact_text(content) -> str:
+    name = str(getattr(content, "displayName", "") or "").strip()
+    return f"[contact: {name}]" if name else "[contact]"
+
+
+def _contacts_text(content) -> str:
+    found = [
+        str(getattr(item, "displayName", "") or "").strip()
+        for item in getattr(content, "contacts", [])
+    ]
+    names = [name for name in found if name]
+    return f"[contacts: {', '.join(names)}]" if names else "[contacts]"
+
+
+def _poll_text(content) -> str:
+    name = str(getattr(content, "name", "") or "").strip()
+    options = [
+        str(getattr(item, "optionName", "") or "").strip()
+        for item in getattr(content, "options", [])
+    ]
+    choices = " / ".join(option for option in options if option)
+    if name and choices:
+        return f"[poll: {name} — {choices}]"
+    return f"[poll: {name}]" if name else "[poll]"
+
+
+def _structured_text(body) -> list[str]:
+    """One line per structured stanza the plain extractor cannot read (ADR-0010 §4.2)."""
+    found: list[str] = []
+    for field_name in STRUCTURED_FIELDS:
+        content = getattr(body, field_name, None)
+        if content is None or not content.ListFields():
+            continue
+        if field_name in ("locationMessage", "liveLocationMessage"):
+            found.append(_location_text(content))
+        elif field_name == "contactMessage":
+            found.append(_contact_text(content))
+        elif field_name == "contactsArrayMessage":
+            found.append(_contacts_text(content))
+        else:
+            found.append(_poll_text(content))
+    return found
 
 
 def _base_name(message_id: str, content) -> str:

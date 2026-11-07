@@ -434,6 +434,15 @@ class HistoryStore:
         self.add(thread_id, entry)
         return True
 
+    def replace_text(self, thread_id: str, message_id: str, text: str) -> bool:
+        """Rewrite one archived row's text after an inbound edit; False when it is unknown."""
+        entry = self.find(thread_id, message_id)
+        if entry is None:
+            return False
+        entry.text = str(text or "")
+        self.add(thread_id, entry)
+        return True
+
     def set_chat_name(self, thread_id: str, name: str) -> None:
         if not thread_id:
             return

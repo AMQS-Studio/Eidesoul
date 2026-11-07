@@ -792,7 +792,7 @@ def test_dry_run_reads_the_catalogs_and_never_starts_a_container(tmp_path, stack
     [
         ("--provider", "mystery", "unknown provider 'mystery'"),
         ("--web-search", "bing", "unknown web search provider 'bing'"),
-        ("--gateway", "telegram", "unknown gateway 'telegram'"),
+        ("--gateway", "carrier-pigeon", "unknown gateway 'carrier-pigeon'"),
     ],
 )
 def test_an_unknown_catalog_choice_exits_two(tmp_path, flag, value, message):

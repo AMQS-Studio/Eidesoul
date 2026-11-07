@@ -23,11 +23,12 @@ from neonize.utils.jid import build_jid
 
 from ...engine.access.identity import IdentityStore
 from ...engine.config import Config, GatewaySettings, secure_db
+from ...engine.i18n import t
 from ...engine.inbound import Action, GatewayError, Percept
 from ...engine.registry import Handler, discover
 from ...engine.turn.context import Message, human_size
 from ...engine.turn.reply import FENCE, clean_prose, strip_blocks
-from ..base import BaseGateway, register_gateway
+from ..base import BaseGateway, progress_text, register_gateway, transcribe_media
 from . import directory, history_sync, ingress, policy
 from .config import WhatsAppSettings
 from .identity import normalize_jid
@@ -139,6 +140,9 @@ class WhatsAppGateway(BaseGateway):
         self.reactions: dict[str, float] = {}
         self.name_retry: dict[str, float] = {}
         self._sent: dict[str, float] = {}
+        # ADR-0010 §4.1: one editable status bubble per turn, and the prompt a reaction decides.
+        self._status: dict[str, str] = {}
+        self.approvals_by_message: dict[str, int] = {}
         self.backfill = None
         self._stopping = False
         base = Path(__file__).parent
@@ -200,13 +204,26 @@ class WhatsAppGateway(BaseGateway):
         async def on_message(accepted: NewAClient, ev) -> None:
             self.me = accepted.me or self.me
             try:
-                if ev.Info.MessageSource.Chat.Server == "g.us":
-                    await self.ensure_group_name(ev.Info.MessageSource.Chat.User + "@g.us")
+                source = ev.Info.MessageSource
+                thread = f"{source.Chat.User}@{source.Chat.Server}"
+                if source.Chat.Server == "g.us":
+                    await self.ensure_group_name(thread)
+                # ADR-0010 §4.2: a reaction decides a pending prompt; an edit rewrites the row.
+                reaction = ingress.reaction_target(ev, self)
+                if reaction is not None:
+                    await agent.handle(reaction, self)
+                    return
+                edited = ingress.edit_target(ev)
+                if edited is not None:
+                    target_id, text = edited
+                    self.windows.replace_text(thread, target_id, text)
+                    updated = ingress.edit_to_inbound(ev, self, target_id, text)
+                    if updated is not None:
+                        await agent.handle(updated, self)
+                    return
                 revoked = ingress.revoke_target(ev, self)
                 if revoked is not None:
                     target_id, by_address = revoked
-                    source = ev.Info.MessageSource
-                    thread = f"{source.Chat.User}@{source.Chat.Server}"
                     name = directory.contact_name(self.db, by_address) or (
                         ev.Info.Pushname or ""
                     ).strip()
@@ -368,7 +385,11 @@ class WhatsAppGateway(BaseGateway):
         thread = action.address.thread
         match action.capability:
             case "send_text":
-                return await self.send_text(thread, str(action.payload or ""))
+                return await self.send_text(
+                    thread, str(action.payload or ""), action=action
+                )
+            case "send_thinking" | "send_step" | "send_interim":
+                return await self.send_progress(thread, action)
             case "send_file":
                 payload = action.payload if isinstance(action.payload, dict) else {}
                 return await self.send_file(
@@ -376,6 +397,18 @@ class WhatsAppGateway(BaseGateway):
                     Path(str(payload.get("path") or "")),
                     str(payload.get("caption") or ""),
                 )
+            case "send_voice":
+                payload = action.payload if isinstance(action.payload, dict) else {}
+                path = payload.get("path") if payload else action.payload
+                return await self.send_voice(thread, Path(str(path or "")))
+            case "react":
+                payload = action.payload if isinstance(action.payload, dict) else {}
+                await self.react(
+                    thread,
+                    str(payload.get("message_id") or ""),
+                    str(payload.get("emoji") or ""),
+                )
+                return ""
             case "send_sticker":
                 return await self.send_sticker(thread, str(action.payload or "")) or ""
             case "typing":
@@ -386,12 +419,94 @@ class WhatsAppGateway(BaseGateway):
                     f"body '{self.name}' does not support '{action.capability}'"
                 )
 
+    def approval_command(self, emoji: str, message_id: str) -> str:
+        """The command a reaction stands for, when it lands on a pending approval prompt."""
+        approval_id = self.approvals_by_message.get(str(message_id or ""))
+        if approval_id is None:
+            return ""
+        verb = ingress.reaction_verb(str(emoji or "").strip())
+        return f"/{verb} #{approval_id}" if verb else ""
+
+    def remember_approval(self, message_id: str, block) -> None:
+        """Keep the prompt id a reaction must resolve to (bounded; the oldest entry leaves)."""
+        if not message_id or not isinstance(block, dict):
+            return
+        if block.get("kind") != "approval":
+            return
+        raw = block.get("approval_id")
+        if not isinstance(raw, int | str):
+            return
+        try:
+            approval_id = int(raw)
+        except (TypeError, ValueError):
+            return
+        self.approvals_by_message[str(message_id)] = approval_id
+        while len(self.approvals_by_message) > 256:
+            self.approvals_by_message.pop(next(iter(self.approvals_by_message)))
+
+    async def send_progress(self, thread: str, action: Action) -> str:
+        """Coalesce thinking, steps, and interim prose into one editable status bubble."""
+        text = progress_text(action.capability, action.payload)
+        if not text:
+            return ""
+        key = action.replace_id or action.stream_id or f"{thread}:progress"
+        message_id = self._status.get(key)
+        if not message_id:
+            message_id = await self.send_text(thread, text)
+            self._status[key] = message_id
+            return message_id
+
+        async def apply() -> None:
+            await self.edit_text(thread, message_id, text)
+
+        await self.edit_debouncer().submit(key, apply)
+        return message_id
+
+    async def edit_text(self, thread: str, message_id: str, text: str) -> None:
+        """Edit a bubble in place; an edit the platform refuses is advisory, never a failure."""
+        if self.client is None or not message_id:
+            return
+        try:
+            await self.client.edit_message(
+                self._jid(thread), str(message_id), e2e.Message(conversation=self.render(text))
+            )
+        except Exception:
+            log.debug("failed to edit message %s in %s", message_id, thread, exc_info=True)
+
+    async def react(self, thread: str, message_id: str, emoji: str) -> None:
+        """A native emoji reaction on one message; failure is advisory."""
+        if self.client is None or not message_id or not emoji:
+            return
+        try:
+            me = await self.client.get_me()
+            built = await self.client.build_reaction(
+                self._jid(thread), me.JID, str(message_id), str(emoji)
+            )
+            await self.client.send_message(self._jid(thread), built)
+        except Exception:
+            log.debug("failed to react to %s in %s", message_id, thread, exc_info=True)
+
+    async def send_voice(self, thread: str, path: Path) -> str:
+        """A playable voice note (`ptt=True`), not a document."""
+        return await self.send_file(thread, path, voice=True)
+
     async def send_text(
-        self, thread: str, text: str, *, reply: Percept | None = None
+        self,
+        thread: str,
+        text: str,
+        *,
+        reply: Percept | None = None,
+        action: Action | None = None,
     ) -> str:
         if self.client is None:
             raise GatewayError("WhatsApp client is not available")
         body, mentions = self._resolve_mentions(str(text or ""), thread)
+        block = self.ui_of(action)
+        if block.get("kind") == "approval":
+            # ADR-0010 §4.2: Meta restricts native buttons on many accounts, so the prompt
+            # carries a readable quick-reply line and a reaction decides it.
+            hint = t("approval.reaction_hint", self.config.soul.language)
+            body = f"{body}\n{hint}" if body else hint
         payload = (
             ExtendedTextMessage(text=body, contextInfo=ContextInfo(mentionedJID=mentions))
             if mentions
@@ -415,6 +530,8 @@ class WhatsAppGateway(BaseGateway):
             raise GatewayError(f"{type(exc).__name__}: {exc}") from exc
         message_id = getattr(sent, "ID", "") or f"text-{time.time_ns()}"
         self.remember_sent(message_id)
+        if block:
+            self.remember_approval(message_id, block)
         return message_id
 
     async def send_file(
@@ -424,6 +541,7 @@ class WhatsAppGateway(BaseGateway):
         caption: str = "",
         *,
         reply: Percept | None = None,
+        voice: bool = False,
     ) -> str:
         if self.client is None:
             raise GatewayError("WhatsApp client is not available")
@@ -438,7 +556,7 @@ class WhatsAppGateway(BaseGateway):
             raise GatewayError(
                 f"file too large ({human_size(size)}; max {human_size(MAX_SEND_BYTES)})"
             )
-        kind = send_kind(target)
+        kind = "voice" if voice else send_kind(target)
         jid = self._jid(thread)
         try:
             if kind == "sticker":
@@ -447,6 +565,15 @@ class WhatsAppGateway(BaseGateway):
                     await self.client.send_message(jid, caption)
             elif kind == "photo":
                 sent = await self.client.send_image(jid, str(target), caption=caption or None)
+            elif kind in ("voice", "audio"):
+                # A voice note is playable in the chat; a plain audio file is a file.
+                sent = await self.client.send_audio(
+                    jid, str(target), ptt=kind == "voice"
+                )
+            elif kind == "video":
+                sent = await self.client.send_video(
+                    jid, str(target), caption=caption or None
+                )
             else:
                 sent = await self.client.send_document(
                     jid, str(target), caption=caption or None, filename=target.name
@@ -505,23 +632,24 @@ class WhatsAppGateway(BaseGateway):
             log.debug("presence update failed", exc_info=True)
 
     async def prepare_media(self, thread: str, message: Message) -> None:
-        if message.media is not None:  # pyright: ignore[reportAttributeAccessIssue]
-            await download_media(  # pyright: ignore[reportAttributeAccessIssue]
-                self.client,
-                self.config,
-                thread,
-                message.id,
-                message.media,  # pyright: ignore[reportAttributeAccessIssue]
-            )
-        if message.quote is not None and message.quote.media is not None:  # pyright: ignore[reportAttributeAccessIssue]
-            quote_id = message.quote.id or f"{message.id}-quote"
+        """Download every attachment (and the quoted ones), then transcribe voice notes."""
+        for index, media in enumerate(message.attachments):
+            key = message.id if index == 0 else f"{message.id}-{index}"
+            await download_media(self.client, self.config, thread, key, media)
+        quote = message.quote
+        if quote is not None and quote.media is not None:
             await download_media(
                 self.client,
                 self.config,
                 thread,
-                quote_id,
-                message.quote.media,  # pyright: ignore[reportAttributeAccessIssue]
+                quote.id or f"{message.id}-quote",
+                quote.media,
             )
+        await self.transcribe(message)
+
+    async def transcribe(self, message: Message) -> None:
+        """A voice note becomes text when the operator configured an STT provider."""
+        await transcribe_media(self.config, message)
 
     # -------------------------------------------------------------- display
 
