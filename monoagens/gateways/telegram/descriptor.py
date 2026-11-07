@@ -1,4 +1,4 @@
-"""Telegram gateway descriptor (ADR-0046 §4.5): the install extra and no body-only tools."""
+"""Telegram gateway descriptor (ADR-0002 §4.5): the install extra and no body-only tools."""
 
 
 from ..descriptor import GatewayDescriptor

@@ -1,7 +1,7 @@
 """Reflection, disputes, soul rules, and staged promotion behind `MemoryStore`.
 
 Derivation stays in reflection (ADR-0010); functions take the facade first
-(ADR-0037 §4.4).
+(ADR-0007 §4.4).
 """
 
 import logging

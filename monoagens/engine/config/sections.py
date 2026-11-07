@@ -193,7 +193,7 @@ def _sandbox(raw: Mapping, base: Path) -> SandboxConfig:
 REDACT_MODES = frozenset({"non_administrator", "never", "always"})
 
 def _redact_mode(raw: Mapping) -> str:
-    """`engine.prompt.self_block.redact_infra` (ADR-0015 §4.5)."""
+    """`engine.prompt.self_block.redact_infra` (ADR-0001 §4.5)."""
     value = str(raw.get("redact_infra") or "non_administrator").strip().lower()
     if value not in REDACT_MODES:
         raise ConfigError(
@@ -231,7 +231,7 @@ def _web_search_config(raw: Mapping) -> WebSearchConfig:
     )
 
 def _fetch_config(raw: Mapping) -> FetchConfig:
-    """`web_search.fetch` (ADR-0021 §4.3); the SSRF ranges are code, never config."""
+    """`web_search.fetch` (ADR-0003 §4.3); the SSRF ranges are code, never config."""
     ports: list[int] = []
     for item in raw.get("allow_ports") or ():
         try:
@@ -250,7 +250,7 @@ def _fetch_config(raw: Mapping) -> FetchConfig:
     )
 
 def _read_config_section(raw: Mapping) -> ReadConfig:
-    """`read.grep` (ADR-0021 §4.2)."""
+    """`read.grep` (ADR-0003 §4.2)."""
     grep_raw = _section(raw, "grep")
     return ReadConfig(
         grep=GrepConfig(
@@ -261,7 +261,7 @@ def _read_config_section(raw: Mapping) -> ReadConfig:
     )
 
 def _tools_config(raw: Mapping) -> ToolsConfig:
-    """`engine.tools` (ADR-0024 §5): validation has no `off`."""
+    """`engine.tools` (ADR-0003 §5): validation has no `off`."""
     body = _section(raw, "tools")
     mode = str(body.get("args") or "strict").strip().lower()
     if mode != "strict":
@@ -275,7 +275,7 @@ def _tools_config(raw: Mapping) -> ToolsConfig:
     )
 
 def _shell_config(raw: Mapping) -> ShellConfig:
-    """`engine.shell.env` (ADR-0024 §4.6): a wildcard is a boot failure, not a shortcut."""
+    """`engine.shell.env` (ADR-0003 §4.6): a wildcard is a boot failure, not a shortcut."""
     body = _section(raw, "shell")
     if "env" not in body:
         return ShellConfig()
@@ -285,7 +285,7 @@ def _shell_config(raw: Mapping) -> ShellConfig:
     return ShellConfig(env=names)
 
 def _search_config(raw: Mapping) -> SearchConfig:
-    """`engine.search` (ADR-0026 §5)."""
+    """`engine.search` (ADR-0002 §5)."""
     return SearchConfig(
         fts=_bool(raw.get("fts"), True),
         lang=str(raw.get("lang") or "simple").strip() or "simple",
@@ -296,7 +296,7 @@ def _search_config(raw: Mapping) -> SearchConfig:
     )
 
 def _self_knowledge_config(raw: Mapping) -> SelfKnowledgeConfig:
-    """`engine.self_knowledge` (ADR-0015 §4.8/§5)."""
+    """`engine.self_knowledge` (ADR-0001 §4.8/§5)."""
     defaults = SelfKnowledgeConfig()
     topics = _str_tuple(raw.get("topics")) or defaults.topics
     docs = _str_tuple(raw.get("docs"))
@@ -313,7 +313,7 @@ def _self_knowledge_config(raw: Mapping) -> SelfKnowledgeConfig:
     )
 
 def _plugin_config(raw: Mapping, base: Path, workspace: Path) -> PluginConfig:
-    """`plugin` (ADR-0027 §5): root, fetch, and the operator-named source."""
+    """`plugin` (ADR-0005 §5): root, fetch, and the operator-named source."""
     body = _section(raw, "plugin")
     root_text = str(body.get("root") or "").strip()
     return PluginConfig(
@@ -345,7 +345,7 @@ def _retention_config(raw: Mapping) -> RetentionConfig:
     )
 
 def _plugins_config(raw: Mapping) -> dict[str, PluginSettings]:
-    """`plugins.<name>` (ADR-0028 §5): enabled and the pinned digest, both operator choices."""
+    """`plugins.<name>` (ADR-0005 §5): enabled and the pinned digest, both operator choices."""
     body = _section(raw, "plugins")
     result: dict[str, PluginSettings] = {}
     for name, value in body.items():

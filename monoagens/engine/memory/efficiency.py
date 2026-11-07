@@ -1,4 +1,4 @@
-"""Efficiency evidence for one episode signature (ADR-0020 §4.6).
+"""Efficiency evidence for one episode signature (ADR-0001 §4.6).
 
 The comparison is deterministic and reads only rows the engine already keeps: token cost from
 `llm_calls` joined by the episode's turns, tool steps and their failures from `turn_steps`, the

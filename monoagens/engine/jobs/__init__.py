@@ -1,1 +1,1 @@
-"""Background work and lifecycle: cognition, automation, lease, ambient, MCP (ADR-0031 §4.3)."""
+"""Background work and lifecycle: cognition, automation, lease, ambient, MCP (ADR-0002 §4.3)."""

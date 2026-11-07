@@ -1,4 +1,4 @@
-"""ADR-0043 §6: the 40-case research eval and its gates."""
+"""ADR-0003 §6: the 40-case research eval and its gates."""
 
 from datetime import UTC, datetime, timedelta
 from pathlib import Path

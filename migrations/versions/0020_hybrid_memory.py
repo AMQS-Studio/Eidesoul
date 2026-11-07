@@ -4,7 +4,7 @@ Revision ID: 0020
 Revises: 0019
 Create Date: 2026-11-05
 
-ADR-0051 §4.1/§4.2: `memories` carries its own retrieval index. The embedding is the shared
+ADR-0007 §4.1/§4.2: `memories` carries its own retrieval index. The embedding is the shared
 384-dimension MiniLM vector of `text`; `search_tsv` is derived by Postgres so a row can never
 disagree with its lexical index. The readable view is recreated last: an existing `SELECT *`
 view pins the column list, so the new columns only reach it through a fresh definition.

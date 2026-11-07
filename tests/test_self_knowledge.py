@@ -1,4 +1,4 @@
-"""Self knowledge: generated-first topics, info, documents, and the guard (ADR-0015)."""
+"""Self knowledge: generated-first topics, info, documents, and the guard (ADR-0001)."""
 
 
 import asyncio

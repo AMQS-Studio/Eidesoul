@@ -1,4 +1,4 @@
-"""Automation rows and their run log (ADR-0014)."""
+"""Automation rows and their run log (ADR-0001)."""
 
 
 from sqlalchemy import (
@@ -20,7 +20,7 @@ from sqlalchemy.dialects.postgresql import JSONB
 from .base import metadata
 
 # ---------------------------------------------------------------- automation
-# ADR-0014 §4.1/§4.13: the row is the declarative promise; the owner is the authority source.
+# ADR-0001 §4.1/§4.13: the row is the declarative promise; the owner is the authority source.
 # `state` is the automation life cycle, `automation_runs.status` is one occurrence.
 AUTOMATION_STATES = ("draft", "active", "paused", "stopped", "expired")
 AUTOMATION_TERMINAL = frozenset({"stopped", "expired"})
@@ -74,7 +74,7 @@ automations = Table(
     ),
 )
 Index("ix_automations_due", automations.c.state, automations.c.next_occurrence)
-# ADR-0014 §4.3: the message sink looks up active message automations only.
+# ADR-0001 §4.3: the message sink looks up active message automations only.
 Index(
     "ix_automations_message",
     automations.c.event["kind"].astext,
@@ -101,7 +101,7 @@ automation_runs = Table(
     Column("deferred", Boolean, nullable=False, server_default=text("false")),
     Column("detail", Text, nullable=False, server_default=""),
     Column("apology_sent_at", Float, nullable=True),
-    # ADR-0014 §4.4: what the occurrence carries for the condition and step payloads.
+    # ADR-0001 §4.4: what the occurrence carries for the condition and step payloads.
     Column("payload", JSONB, nullable=False, server_default=text("'{}'::jsonb")),
     Column("started_at", Float, nullable=True),
     Column("finished_at", Float, nullable=True),

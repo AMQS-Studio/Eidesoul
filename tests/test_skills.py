@@ -1,4 +1,4 @@
-"""Derived-procedure contract (ADR-0020): retrieval, revisions, scope, decay, owner command."""
+"""Derived-procedure contract (ADR-0001): retrieval, revisions, scope, decay, owner command."""
 
 
 import asyncio

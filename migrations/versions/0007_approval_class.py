@@ -1,6 +1,6 @@
 """approval class: `approvals.approval_class` and the `scope_proof` snapshot (ADR-0007 §4.7).
 
-Revision 7 lands ADR-0016 §4.8 exactly: the class is derived from the action target
+Revision 7 lands ADR-0002 §4.8 exactly: the class is derived from the action target
 (`consent` inside the requester's scope, `authorization` outside it), and `scope_proof` keeps the
 deterministic target list + role-root snapshot computed when the approval was requested so
 execution can re-check it. Neither column grants a permission: `/approve` still recomputes the

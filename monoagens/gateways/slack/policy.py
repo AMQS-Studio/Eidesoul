@@ -1,4 +1,4 @@
-"""Slack role policy: the `gateways.slack` block of one role (ADR-0046 §4.2).
+"""Slack role policy: the `gateways.slack` block of one role (ADR-0002 §4.2).
 
 Slack separates a channel from a thread inside it; the block names both, plus the DM switch and
 whether the bot has to be addressed. A malformed block denies.

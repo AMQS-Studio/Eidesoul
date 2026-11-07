@@ -1,4 +1,4 @@
-"""pgvector through the memory port: a real nearest neighbour and a real miss (ADR-0051)."""
+"""pgvector through the memory port: a real nearest neighbour and a real miss (ADR-0007)."""
 
 
 import asyncio

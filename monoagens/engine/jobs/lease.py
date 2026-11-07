@@ -3,7 +3,7 @@
 Acquisition is a compare-and-swap on `engine_lease.id = 1`; every takeover raises
 `generation`, and renew/release are keyed on the pair (instance_id, generation) so an
 instance that was replaced can never write again. Expiry is judged by the database clock
-(`clock_timestamp()`), never by the application clock (ADR-0012).
+(`clock_timestamp()`), never by the application clock (ADR-0002).
 """
 
 
@@ -23,7 +23,7 @@ log = logging.getLogger(__name__)
 
 TTL = 30.0
 
-# The one fence every canonical write carries (ADR-0012 §4.3): the row is written only while
+# The one fence every canonical write carries (ADR-0002 §4.3): the row is written only while
 # the calling instance still holds the live generation, judged by the database clock.
 FENCE_SQL = (
     "EXISTS (SELECT 1 FROM engine_lease WHERE id = 1 AND instance_id = :fence_owner "
@@ -191,13 +191,13 @@ class Lease:
         """The live generation in the database, or `None` when it cannot answer."""
         try:
             found = self._control_one(text("SELECT generation FROM engine_lease WHERE id = 1"))
-        except Exception as exc:  # a DB error is a lease failure, not a crash (ADR-0012 §4.5)
+        except Exception as exc:  # a DB error is a lease failure, not a crash (ADR-0002 §4.5)
             log.warning("lease read failed: %s: %s", type(exc).__name__, exc)
             return None
         return int(found["generation"]) if found is not None else None
 
     def record_superseded(self, operation: str, live: int | None) -> None:
-        """Record a refused side effect in the action ledger (ADR-0012 §4.3)."""
+        """Record a refused side effect in the action ledger (ADR-0002 §4.3)."""
         summary = (
             f"superseded {operation}: held generation {self.generation}, "
             f"live {live if live is not None else 'unknown'}"
@@ -249,7 +249,7 @@ class Lease:
                             target=self.instance_id,
                         )
                 return self._info(row)
-        except Exception as exc:  # a DB error is a lease failure, not a crash (ADR-0012 §4.5)
+        except Exception as exc:  # a DB error is a lease failure, not a crash (ADR-0002 §4.5)
             log.warning("lease acquire failed: %s: %s", type(exc).__name__, exc)
             return None
 
@@ -280,7 +280,7 @@ class Lease:
             log.warning("lease release failed: %s: %s", type(exc).__name__, exc)
 
     def bind_stores(self, agent) -> None:
-        """Wire every store of `agent` to this lease (ADR-0012 §4.3).
+        """Wire every store of `agent` to this lease (ADR-0002 §4.3).
 
         Binding is safe at generation 0: a bound store then refuses mutations with
         `Superseded` instead of writing unfenced as a standby. Re-binding after a takeover
@@ -310,13 +310,6 @@ class Lease:
         except Exception as exc:
             log.warning("freeze request failed: %s: %s", type(exc).__name__, exc)
 
-    def clear_freeze(self) -> None:
-        try:
-            with self.db.connect() as conn:
-                conn.execute(_UNFREEZE)
-        except Exception as exc:
-            log.warning("freeze clear failed: %s: %s", type(exc).__name__, exc)
-
     def frozen(self) -> bool:
         try:
             found = self.db.fetch_one(_FROZEN)
@@ -327,7 +320,7 @@ class Lease:
 
 
 class LeaseGuard:
-    """The single port every side effect asks before touching the real world (ADR-0012 §4.3).
+    """The single port every side effect asks before touching the real world (ADR-0002 §4.3).
 
     The old holder must not finish a send, a canonical memory write, or a job update after
     being replaced. Call `require` immediately before the transport/write call, never after.
@@ -381,7 +374,7 @@ class Fence:
 
 
 def fence_clause(instance_id, generation, ttl: float = TTL):
-    """The atomic lease predicate for a canonical mutation (ADR-0012 §4.3).
+    """The atomic lease predicate for a canonical mutation (ADR-0002 §4.3).
 
     A store with no bound generation (CLI, admin, a test database) gets `None`, so its
     statement carries no predicate at all: the fence is omitted, never faked.
@@ -465,7 +458,7 @@ class FencedStore:
 
 
 def bind_stores(agent) -> None:
-    """Wire every store of one agent to its lease: one primary, one generation (ADR-0012).
+    """Wire every store of one agent to its lease: one primary, one generation (ADR-0002).
 
     Called once the supervisor has attached the lease; a standby's generation is 0 until it
     wins, so binding early is safe: a bound generation-0 store refuses mutations instead of

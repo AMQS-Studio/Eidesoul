@@ -1,4 +1,4 @@
-"""Relay consent: forward another person's answer only with a grant from that person (ADR-0023).
+"""Relay consent: forward another person's answer only with a grant from that person (ADR-0004).
 
 One row per `(task_id, from_person, to_person)` in `relay_grants`; the row records the decision
 (`full|summary|anonymous|none`), its scope, its expiry, a revocation, and how it was decided — it
@@ -275,7 +275,7 @@ class RelayStore:
         via: str = CONSENT,
         now: float | None = None,
     ) -> RelayGrant:
-        """Record the owner's answer; only the content owner may decide (ADR-0023 §4.5)."""
+        """Record the owner's answer; only the content owner may decide (ADR-0004 §4.5)."""
         chosen = _mode(mode)
         payload = approval.payload if isinstance(approval.payload, dict) else {}
         task = _text(payload.get("task_id"), "task_id")
@@ -320,7 +320,7 @@ class RelayStore:
         days: float | None = DEFAULT_EXPIRES_DAYS,
         now: float | None = None,
     ) -> RelayGrant:
-        """The content owner allows one target one scope (ADR-0023 §4.5).
+        """The content owner allows one target one scope (ADR-0004 §4.5).
 
         `scope_ref` is the room the forwarded answer may reach; the task key defaults to that
         scope, so one grant per `(owner, recipient, scope)` is updated in place and expires.
@@ -414,7 +414,7 @@ class RelayStore:
         by: str,
         now: float | None = None,
     ) -> bool:
-        """Stop the next report; an already-sent report is not withdrawn (ADR-0023 §4.4)."""
+        """Stop the next report; an already-sent report is not withdrawn (ADR-0004 §4.4)."""
         if str(by or "").strip() != str(from_person or "").strip():
             raise RelayRefused("only the content owner can revoke a relay grant")
         moment = time.time() if now is None else float(now)

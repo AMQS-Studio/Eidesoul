@@ -4,7 +4,7 @@ Revision ID: 0018
 Revises: 0017
 Create Date: 2026-11-04
 
-ADR-0038 §4.2/§4.6: the evidence array and the policy version are part of the decision record, so
+ADR-0007 §4.2/§4.6: the evidence array and the policy version are part of the decision record, so
 a reviewer can reconstruct a level without calling a model again. The readable view is replaced
 because it was created with `SELECT *` and must expose the appended columns.
 """

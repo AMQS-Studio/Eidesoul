@@ -1,4 +1,4 @@
-"""P0-3 foreign keys, checks, and indexes (ADR-0016 §4.5).
+"""P0-3 foreign keys, checks, and indexes (ADR-0002 §4.5).
 
 Nothing was deployed when these landed, but the chain still treats them as a normal revision so a
 database created from revision 1 can be upgraded in place. `message_media` lands separately in

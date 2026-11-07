@@ -1,4 +1,4 @@
-"""Prompt block competition: pinned blocks win, references compete (ADR-0015, ADR-0034).
+"""Prompt block competition: pinned blocks win, references compete (ADR-0001, ADR-0003).
 
 The registry owns names, order, and salience weight. This module only answers one question:
 which non-pinned, non-stable blocks fit the budget after stable parts have already been placed?

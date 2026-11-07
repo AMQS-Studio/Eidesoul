@@ -1,4 +1,4 @@
-"""Defaults, not examples (ADR-0027 §4.6): the shipped host files are usable as they stand.
+"""Defaults, not examples (ADR-0005 §4.6): the shipped host files are usable as they stand.
 
 The guard is deliberately narrow: it checks the surfaces we ship (the repository root plus the
 documentation, script, test, and package trees) so it stays fast and never walks `.venv`.

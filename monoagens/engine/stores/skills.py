@@ -1,4 +1,4 @@
-"""Derived procedures (ADR-0020): retrieval, append-only revisions, and usage-based decay.
+"""Derived procedures (ADR-0001): retrieval, append-only revisions, and usage-based decay.
 
 A skill is not a tool and never enters the prompt as an index: `retrieve()` injects at most
 `max_chars` of procedures that the requester may read in this scope and whose tools the role
@@ -90,7 +90,7 @@ class SkillStore(FencedStore):
         self._vectors: dict[tuple[str, int], list[float]] = {}
 
     def _fence(self):
-        """Every procedure mutation carries the live lease (ADR-0012 §4.3, ADR-0020)."""
+        """Every procedure mutation carries the live lease (ADR-0002 §4.3, ADR-0001)."""
         return self.fence_clause()
 
     # ------------------------------------------------------------ query
@@ -155,7 +155,7 @@ class SkillStore(FencedStore):
         )
 
     def set_priority(self, name: str, priority: int, *, app: str | None = None) -> int:
-        """Set the retrieval rank of one procedure (ADR-0020 §4.6); returns the new value."""
+        """Set the retrieval rank of one procedure (ADR-0001 §4.6); returns the new value."""
         fence = self._fence()
         key = self._stored_key(name, app)
         statement = (
@@ -216,7 +216,7 @@ class SkillStore(FencedStore):
     def _visible(
         self, skill: Skill, *, app: str, thread_id: str, person_id: str
     ) -> bool:
-        """ADR-0035: app first, then the ADR-0006 audience ceiling."""
+        """ADR-0005: app first, then the ADR-0006 audience ceiling."""
         if skill.app and skill.app != str(app or ""):
             return False
         if skill.scope == "global":
@@ -271,7 +271,7 @@ class SkillStore(FencedStore):
         limit: int = 3,
         app: str = "",
     ) -> str:
-        """ADR-0020 §4.6: relevance inside the readable scope; `max_chars <= 0` is unbounded."""
+        """ADR-0001 §4.6: relevance inside the readable scope; `max_chars <= 0` is unbounded."""
         if self.db is None or not str(query or "").strip():
             return ""
         app = str(app or "").strip().lower()
@@ -301,7 +301,7 @@ class SkillStore(FencedStore):
         return self._inject(scored, max_chars=max_chars, limit=limit)
 
     def _inject(self, scored: list[tuple[float, Skill]], *, max_chars: int, limit: int) -> str:
-        # ADR-0020 §4.6: the efficiency ladder's priority outranks score, then usage.
+        # ADR-0001 §4.6: the efficiency ladder's priority outranks score, then usage.
         scored.sort(
             key=lambda item: (item[1].priority, item[0], item[1].uses), reverse=True
         )
@@ -404,7 +404,7 @@ class SkillStore(FencedStore):
         return f"{clean}:\n{content.decode('utf-8', errors='replace')}"
 
     def declared_app(self, gateway: str, hint: object = "") -> str:
-        """ADR-0053 §4.1.4: a hint selects a corpus only when its gateway declares that app."""
+        """ADR-0005 §4.1.4: a hint selects a corpus only when its gateway declares that app."""
         wanted = str(hint or "").strip().lower()
         if not wanted:
             return ""
@@ -460,7 +460,7 @@ class SkillStore(FencedStore):
         if tier not in TRUST:
             tier = "T2"
         if wanted == "global" and tier != "T0" and not approved:
-            raise ValueError("global needs a T0 source or an approval (ADR-0020 §4.4)")
+            raise ValueError("global needs a T0 source or an approval (ADR-0001 §4.4)")
         return slug, desc, text, wanted, tier, namespace
 
     def save(
@@ -483,7 +483,7 @@ class SkillStore(FencedStore):
         """Owner/import write: one row plus one append-only revision, never a silent overwrite.
 
         The row key is `(app, name)`; a gateway-supplied `app` is kept only when that gateway
-        declares it in its configuration (ADR-0053 §4.1.4).
+        declares it in its configuration (ADR-0005 §4.1.4).
         """
         slug, desc, text, wanted, tier, namespace = self._check(
             name,

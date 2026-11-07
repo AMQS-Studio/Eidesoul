@@ -1,4 +1,4 @@
-"""The one MetaData, the pgvector shim, and the core archive tables (ADR-0029)."""
+"""The one MetaData, the pgvector shim, and the core archive tables (ADR-0002)."""
 
 
 from sqlalchemy import (
@@ -93,7 +93,7 @@ messages = Table(
     Column("deleted_by", String(160), nullable=False, default="", server_default=""),
     Column("deleted_admin", Boolean, nullable=False, default=False, server_default=text("false")),
     Column("data", JSONB, nullable=False, default=dict),
-    # ADR-0026 §4.1: one generated column, no application-side write path.
+    # ADR-0002 §4.1: one generated column, no application-side write path.
     Column(
         "text_tsv",
         TSVECTOR,
@@ -105,7 +105,7 @@ messages = Table(
     UniqueConstraint("thread_id", "msg_id", name="uq_messages_thread_msg"),
     CheckConstraint("visibility >= 0 AND visibility <= 4", name="ck_messages_visibility"),
 )
-# Media blobs separated from the row (ADR-0016 §4.5); the message keeps its metadata in `data`.
+# Media blobs separated from the row (ADR-0002 §4.5); the message keeps its metadata in `data`.
 # `seq` numbers the attachments of one message, so a multi-attachment envelope keeps every
 # row: `kind` is the role of the row ("media" or "quote"), never part of the identity.
 message_media = Table(
@@ -163,7 +163,7 @@ threads = Table(
     Column("name", String(200), nullable=False, default=""),
     Column("reset_ts", Float, nullable=False, default=0.0),
     Column("kind", String(20), nullable=False, default="dm"),
-    # ADR-0014 §4.6: the first body that sees a thread owns its route; "" means unclaimed.
+    # ADR-0001 §4.6: the first body that sees a thread owns its route; "" means unclaimed.
     Column("gateway", String(40), nullable=False, default="", server_default=""),
 )
 
@@ -208,7 +208,7 @@ approvals = Table(
     Column("decided_by", String(160), nullable=False, default=""),
     Column("decided_at", Float, nullable=True),
     Column("result", Text, nullable=False, default=""),
-    # ADR-0007 §4.7 / ADR-0016 §4.8: the class is derived from the target, the proof is
+    # ADR-0007 §4.7 / ADR-0002 §4.8: the class is derived from the target, the proof is
     # recomputed at execution; neither column grants a permission.
     Column(
         "approval_class",
@@ -245,7 +245,7 @@ Index(
 )
 Index("ix_approvals_batch", approvals.c.batch_id)
 
-# ADR-0019 / ADR-0016 §4.6: ids and numbers only, never prompt text; no FK so metrics never
+# ADR-0003 / ADR-0002 §4.6: ids and numbers only, never prompt text; no FK so metrics never
 # block entity deletion, and a failure before a turn still leaves a row.
 llm_calls = Table(
     "llm_calls",
@@ -265,7 +265,7 @@ llm_calls = Table(
 Index("ix_llm_calls_ts", llm_calls.c.ts)
 Index("ix_llm_calls_turn", llm_calls.c.turn_id)
 
-# ADR-0023 §4.1 / ADR-0016 §4.9: one row per (task, from, to); the row holds the decision and
+# ADR-0004 §4.1 / ADR-0002 §4.9: one row per (task, from, to); the row holds the decision and
 # never the message content. `mode='none'` is stored too, so a refusal stays auditable.
 relay_grants = Table(
     "relay_grants",

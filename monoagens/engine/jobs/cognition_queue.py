@@ -159,7 +159,7 @@ class CognitionQueue:
         now: float | None = None,
         generation: int = 0,
     ) -> list[Job]:
-        """`FOR UPDATE SKIP LOCKED`: two workers never take the same job (ADR-0012 §4.4).
+        """`FOR UPDATE SKIP LOCKED`: two workers never take the same job (ADR-0002 §4.4).
 
         The claim lease is never shorter than one model call plus a minute of slack, so a slow
         LLM answer cannot let the reaper hand the same job to the next primary mid-call. Every
@@ -274,7 +274,7 @@ class CognitionQueue:
         )
 
     def _set(self, job_id: str, *, generation: int | None = None, **values) -> bool:
-        """Update one job; `False` when the lease generation moved on (ADR-0012 §4.4).
+        """Update one job; `False` when the lease generation moved on (ADR-0002 §4.4).
 
         A lease-bound worker checks the live generation on its own connection and matches the
         row's claim generation, so a replaced primary can neither finish nor retry a job the
@@ -287,7 +287,7 @@ class CognitionQueue:
         with self.db.connect() as conn:
             if generation:
                 # The job row carries the generation it was claimed under; comparing it with
-                # the live one inside the statement makes the fence atomic (ADR-0012 §4.4).
+                # the live one inside the statement makes the fence atomic (ADR-0002 §4.4).
                 statement = statement.where(
                     cognition_jobs.c.generation == int(generation),
                     row_clause("cognition_jobs.generation"),

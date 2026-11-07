@@ -27,19 +27,6 @@ def clamp_level(value: object, default: int = 2) -> int:
 
 
 @dataclass(frozen=True)
-class PrivacyVerdict:
-    level: int = 2
-    subject: str = ""
-    ask: bool = False
-    question: str = ""
-    reason: str = ""
-    worth: bool = True
-    valid: bool = True
-    category: str = ""
-    durability: str = ""
-
-
-@dataclass(frozen=True)
 class AuditResult:
     mentions: tuple[str, ...] = ()
     verdict: str = "allow"  # allow|ask|redact|deny

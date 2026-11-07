@@ -1,6 +1,6 @@
 """ADR home gate: `scripts/adr.py` must accept the shipped set and reject real breakage.
 
-The ADR sources are English (ADR-0055 §4.2.1). The tool is pure text work for
+The ADR sources are English (ADR-0001 §4.2.1). The tool is pure text work for
 `--check` (no model, no network), so these tests are cheap and deterministic. Every check runs
 against a copy of the ADR home so a failure never edits the repository.
 """

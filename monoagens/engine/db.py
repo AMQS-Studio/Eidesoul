@@ -1,4 +1,4 @@
-"""Single database: Postgres+pgvector through SQLAlchemy Core (ADR-0029)."""
+"""Single database: Postgres+pgvector through SQLAlchemy Core (ADR-0002)."""
 
 
 import contextlib
@@ -90,7 +90,7 @@ class Database:
         backend = make_url(self.url).get_backend_name()
         if backend != "postgresql":
             raise ValueError(
-                f"database must be Postgres+pgvector (ADR-0029), not '{backend}'"
+                f"database must be Postgres+pgvector (ADR-0002), not '{backend}'"
             )
         self.label = redact_dsn(self.url)
         # `DatabaseConfig` sizes the turn pool; overflow stays 0 by default so a burst waits
@@ -117,7 +117,7 @@ class Database:
     # ------------------------------------------------------------- schema
 
     def create_all(self) -> None:
-        # ADR-0026 §4.6/ADR-0051 §4.1: the trigram and vector types need their extensions
+        # ADR-0002 §4.6/ADR-0007 §4.1: the trigram and vector types need their extensions
         # before the tables are created.
         with self.engine.connect().execution_options(isolation_level="AUTOCOMMIT") as conn:
             conn.execute(text("CREATE EXTENSION IF NOT EXISTS pg_trgm"))
@@ -210,7 +210,7 @@ class Database:
             )
 
     def upgrade(self, revision: str = "head", *, timeout: float = MIGRATION_LOCK_TIMEOUT) -> int:
-        """Run the Alembic chain to `revision` under the advisory lock (ADR-0016)."""
+        """Run the Alembic chain to `revision` under the advisory lock (ADR-0002)."""
         if not (MIGRATIONS / "env.py").exists():
             raise MigrationError(f"migrations tree is missing at {MIGRATIONS}")
         self.assert_migration_allowed()

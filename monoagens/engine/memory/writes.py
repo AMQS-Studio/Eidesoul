@@ -1,7 +1,7 @@
 """Canonical write preparation, validation, supersede selection, and the index.
 
 Every function takes the facade as its first argument; `MemoryStore` remains the one
-write port (ADR-0001, ADR-0037 §4.4).
+write port (ADR-0001, ADR-0007 §4.4).
 """
 
 import inspect
@@ -285,7 +285,7 @@ def _values(
         "created_at": now,
         "updated_at": now,
     }
-    # ADR-0051 §4.1: the shared 384-dim embedder owns the vector; a failure leaves it NULL and
+    # ADR-0007 §4.1: the shared 384-dim embedder owns the vector; a failure leaves it NULL and
     # the row stays reachable through its lexical arm.
     vector = embed.encode([params.body]) if params.body else []
     if vector and len(vector[0]) == queries.MEMORY_DIM:

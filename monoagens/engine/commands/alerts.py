@@ -1,4 +1,4 @@
-"""Command /alerts: the failure-alerting state, read-only (ADR-0047)."""
+"""Command /alerts: the failure-alerting state, read-only (ADR-0009)."""
 
 from ..access.roles import PROTECTED, privileged
 from ..i18n import t

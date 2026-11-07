@@ -1,4 +1,4 @@
-"""The typed dependencies of one turn pipeline (ADR-0037 §4.3).
+"""The typed dependencies of one turn pipeline (ADR-0007 §4.3).
 
 `TurnRuntime` holds the immutable references a turn needs: the config and soul, the stores, the
 model, the facade callbacks the `Agent` owns, and the two accessors that change while the
@@ -63,7 +63,7 @@ class BodyLookup(Protocol):
 
 
 class RolePolicyFn(Protocol):
-    """Identity selects roles; a body may never name one (ADR-0036 §4.4)."""
+    """Identity selects roles; a body may never name one (ADR-0006 §4.4)."""
 
     def __call__(self, inbound: Percept) -> tuple[Role, ...]: ...
 

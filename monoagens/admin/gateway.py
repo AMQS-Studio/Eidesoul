@@ -175,13 +175,6 @@ def update_document(path: Path, updates: dict, *, comments: dict | None = None) 
     return changed
 
 
-def _value_at(body: dict, leaf: list[str]):
-    value: object = body
-    for part in leaf:
-        value = value[part]  # type: ignore[index]
-    return value
-
-
 def _seed(gateway: str, role: str) -> dict:
     """The body's own role vocabulary, with the shipped matrix as the fallback."""
     try:
@@ -219,7 +212,7 @@ def missing_policies(config_path: str | None) -> list[tuple[str, str]]:
 
 
 def materialize(config_path: str | None, gateway: str) -> int:
-    """Write the seed block for every role that lacks one (ADR-0046 §4.4)."""
+    """Write the seed block for every role that lacks one (ADR-0002 §4.4)."""
     path = _path(config_path)
     roles_path = _roles_path(path)
     roles = _read_roles(roles_path)
@@ -332,7 +325,7 @@ def _onboarding(config_path: str | None, name: str, command: str) -> int:
 
 
 def connect(config_path: str | None, name: str) -> int:
-    """ADR-0046 §4.5: install, enable, seed policy, then run the gateway's own onboarding."""
+    """ADR-0002 §4.5: install, enable, seed policy, then run the gateway's own onboarding."""
     code = add(config_path, name)
     if code:
         return code
@@ -433,7 +426,7 @@ def _remove_session(name: str) -> Path | None:
 
 
 def doctor(config_path: str | None = None, *, fix: bool = False) -> int:
-    """Report missing gateway policy blocks; `--fix` writes the seed (ADR-0046 §4.4)."""
+    """Report missing gateway policy blocks; `--fix` writes the seed (ADR-0002 §4.4)."""
     path = _path(config_path)
     if not path.is_file():
         print(f"config.yaml not found: {path}", flush=True)

@@ -90,7 +90,7 @@ class CognitionWorker(CognitionCapture, CognitionSchedule, CognitionLadder, Cogn
         log.info("cognition worker %s started", self.worker_id)
 
     async def stop(self: CognitionWorker, *, close_episodes: bool = False) -> None:
-        """Stop taking jobs; a job in flight is finished, then the loop exits (ADR-0011 §4.4)."""
+        """Stop taking jobs; a job in flight is finished, then the loop exits (ADR-0001 §4.4)."""
         self.running = False
         if close_episodes:
             closed = await io.run(memory_episodes.close_all, self.db, signal="shutdown")
@@ -156,7 +156,7 @@ class CognitionWorker(CognitionCapture, CognitionSchedule, CognitionLadder, Cogn
     async def _run_batch(self: CognitionWorker, label: str, jobs: list[Job]) -> None:
         if not jobs:
             return
-        # Background work carries its own run id and never a turn id (ADR-0019 §4.2).
+        # Background work carries its own run id and never a turn id (ADR-0003 §4.2).
         tokens = observability.enter(run_id=f"job:{label}")
         beat = asyncio.create_task(self._heartbeat(jobs), name=f"cognition-beat:{label}")
         try:
@@ -168,7 +168,7 @@ class CognitionWorker(CognitionCapture, CognitionSchedule, CognitionLadder, Cogn
                 results = {jobs[0].id: await self._handle(jobs[0])}
         except Superseded:
             # The lease moved on mid-batch: the writes were refused, so the job stays claimed
-            # and the reaper hands it to the new primary (ADR-0012 §4.4).
+            # and the reaper hands it to the new primary (ADR-0002 §4.4).
             log.warning("cognition %s superseded: generation moved", label)
             return
         except asyncio.CancelledError:

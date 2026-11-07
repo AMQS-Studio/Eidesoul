@@ -25,7 +25,7 @@ def info_only(calls, by_name: dict[str, Handler]) -> bool:
 
 
 class DeadlineExceeded(RuntimeError):
-    """The turn deadline is exhausted; no new call is started (ADR-0017 §4.3)."""
+    """The turn deadline is exhausted; no new call is started (ADR-0003 §4.3)."""
 
 BUDGET_TEXT = (
     "Time is up. Write the best answer from the tool results you already have; "
@@ -106,17 +106,6 @@ def parse_digest(text: str, language: str) -> dict:
     }
 
 
-def _id(value) -> int | None:
-    """ID from the model JSON: positive integers only (bools and odd strings are rejected)."""
-    if isinstance(value, bool):
-        return None
-    try:
-        number = int(value)
-    except (TypeError, ValueError):
-        return None
-    return number if number > 0 else None
-
-
 def _has_images(content: object) -> bool:
     return isinstance(content, list) and any(
         isinstance(part, dict) and part.get("type") == "image_url" for part in content
@@ -161,7 +150,7 @@ async def _emit(callback, *payload) -> None:
 
 
 def prompt_prefix_hash(system: str, specs: list[Handler]) -> str:
-    """ADR-0025 §4.2: stable prefix + ordered tool schema + active tool names."""
+    """ADR-0003 §4.2: stable prefix + ordered tool schema + active tool names."""
     parts = [str(system or "")]
     for spec in sorted(specs, key=lambda item: item.name):
         schema = json.dumps(spec.parameters, sort_keys=True, default=str)

@@ -1,4 +1,4 @@
-"""Tool contracts: argument validation (ADR-0024) and per-tool output caps (ADR-0021)."""
+"""Tool contracts: argument validation (ADR-0003) and per-tool output caps (ADR-0003)."""
 
 
 import asyncio

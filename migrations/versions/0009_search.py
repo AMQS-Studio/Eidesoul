@@ -1,12 +1,12 @@
-"""search: `messages.text_tsv`, its GIN index, and the trigram net (ADR-0026 §4.1-§4.6).
+"""search: `messages.text_tsv`, its GIN index, and the trigram net (ADR-0002 §4.1-§4.6).
 
 Revision 9 replaces `ILIKE` over the whole table with a generated `tsvector` and `pg_trgm` as the
 second net. The column is derived by Postgres, so no application write path changes and a row
 can never disagree with its index. `pg_trgm` is required: when the extension cannot be created,
-boot fails with a clear message instead of silently degrading to `LIKE` (ADR-0026 §4.6).
+boot fails with a clear message instead of silently degrading to `LIKE` (ADR-0002 §4.6).
 
 The trigram index on `people.name` is the same net for a person's display name; the ADR calls the
-column `display_name`, the canonical schema names it `name` (ADR-0016 §4.1).
+column `display_name`, the canonical schema names it `name` (ADR-0002 §4.1).
 """
 
 

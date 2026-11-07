@@ -1,4 +1,4 @@
-"""Automation manifest: the closed vocabulary a person may author (ADR-0014).
+"""Automation manifest: the closed vocabulary a person may author (ADR-0001).
 
 A manifest is `event` -> `condition` -> `steps`, with an owner and a policy (quiet hours,
 daily budget). Validation refuses unknown fields and step kinds while authoring; the
@@ -105,7 +105,7 @@ def _validate_event(raw: object, config: AutomationConfig) -> dict:
     event: dict = {"kind": kind, "tz": str(raw.get("tz") or "").strip()}
     zone(event["tz"])
     if kind == "message":
-        # ADR-0014 §4.3: the sink queues a run per matching message; there is no clock.
+        # ADR-0001 §4.3: the sink queues a run per matching message; there is no clock.
         event.update(_message_event(raw))
         return event
     marker = str(raw.get("schedule_kind") or "").strip().lower()

@@ -1,4 +1,4 @@
-"""turn cost: the `llm_calls` metrics table (ADR-0025 §4.5, ADR-0016 §4.6, ADR-0019).
+"""turn cost: the `llm_calls` metrics table (ADR-0003 §4.5, ADR-0002 §4.6, ADR-0003).
 
 Revision 8 lands the one place tokens are recorded. One row per attempt, including a retry and a
 failed call: `ok=false` is data, not a reason to hide the cost. No FK to `turns`,

@@ -1,4 +1,4 @@
-"""The tool index is per body: names are scoped, the prompt lists one body (ADR-0032 §4.6)."""
+"""The tool index is per body: names are scoped, the prompt lists one body (ADR-0004 §4.6)."""
 
 
 from support import FakeGateway, make_agent

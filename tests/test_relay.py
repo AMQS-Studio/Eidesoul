@@ -1,4 +1,4 @@
-"""ADR-0023 relay consent: no grant, no content; `none`, expiry, and revocation refuse.
+"""ADR-0004 relay consent: no grant, no content; `none`, expiry, and revocation refuse.
 
 The grant row is keyed `(task, from, to)` and holds the decision only. The consent question uses
 the existing approval path, and only the content owner may decide or revoke it.
@@ -311,7 +311,7 @@ def test_anonymous_hides_the_source_name(tmp_path) -> None:
 def test_a_plain_cross_send_needs_no_grant(tmp_path) -> None:
     env, ctx = build(tmp_path)
     # ADR-0007 §4.5: the requester must be provable in the target room; the grant is the
-    # ADR-0023 concern this test is about.
+    # ADR-0004 concern this test is about.
     env.gateway.participants = lambda thread: {FROM, TO} if thread == TARGET else None
 
     result = send(env, ctx, relay=False, text="halo dari B", reason="menjawab A")

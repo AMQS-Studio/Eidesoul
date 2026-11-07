@@ -1,4 +1,4 @@
-"""ADR-0041/0045: one soul.voice section, master off, and capability-checked sampling."""
+"""ADR-0001/0045: one soul.voice section, master off, and capability-checked sampling."""
 
 from pathlib import Path
 

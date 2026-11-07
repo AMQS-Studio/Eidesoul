@@ -1,4 +1,4 @@
-"""One door: addresses, receipts, the ledger, refusals, and approvals (ADR-0032 §4.4)."""
+"""One door: addresses, receipts, the ledger, refusals, and approvals (ADR-0004 §4.4)."""
 
 
 import asyncio

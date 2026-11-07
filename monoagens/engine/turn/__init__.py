@@ -1,1 +1,1 @@
-"""One message becomes one reply: the turn domain (ADR-0031 §4.3)."""
+"""One message becomes one reply: the turn domain (ADR-0002 §4.3)."""

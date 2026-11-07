@@ -1,4 +1,4 @@
-"""Admin view of the gateway index: one discovery implementation (ADR-0046 §4.5)."""
+"""Admin view of the gateway index: one discovery implementation (ADR-0002 §4.5)."""
 
 
 import importlib.util

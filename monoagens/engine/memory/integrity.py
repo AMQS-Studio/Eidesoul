@@ -85,13 +85,6 @@ def quarantine_kind(
     return "fact"
 
 
-def can_govern_behavior(*, kind: str, trust: int, via: str) -> bool:
-    """Hard limit: rules/persona/style/tool decisions only from T0 + the soul document."""
-    if str(kind) == "rule":
-        return int(trust) == TRUST_SELF and str(via) == "soul_doc"
-    return int(trust) == TRUST_SELF
-
-
 @dataclass(frozen=True)
 class WriteQuota:
     """ADR-0008 §4.4 A: tiered volume quota per person and per thread."""

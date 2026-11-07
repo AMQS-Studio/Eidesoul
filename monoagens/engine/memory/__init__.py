@@ -132,56 +132,6 @@ class MemoryBackend(Protocol):
     async def close(self) -> None: ...
 
 
-class MemoryExtractor(Protocol):
-    """An optional extractor turns a conversation into structured facts (ADR-0001)."""
-
-    available: bool
-
-    async def capture(
-        self,
-        messages: list[dict],
-        *,
-        person_id: str,
-        thread_id: str,
-        audience: str,
-        source: str = "turn",
-        level: int = 2,
-        owner_id: str = "",
-        subject_id: str = "",
-        confirmed: bool = True,
-    ) -> list[MemoryHit]: ...
-
-
-class MemoryIndex(Protocol):
-    """The derived semantic index; rebuildable from canonical and never read as truth."""
-
-    available: bool
-
-    async def add(
-        self,
-        text: str,
-        *,
-        scope: str,
-        kind: str,
-        person_id: str,
-        thread_id: str,
-        audience: str,
-        source: str,
-        metadata: dict | None = None,
-        infer: bool = False,
-        level: int = 2,
-        owner_id: str = "",
-        subject_id: str = "",
-        confirmed: bool = True,
-    ) -> list[str]: ...
-
-    async def delete(self, external_id: str) -> bool: ...
-
-    def purge_library(self, external_id: str, text: str) -> int: ...
-
-    async def close(self) -> None: ...
-
-
 class CaptureJobSink(Protocol):
     """W3.2/ADR-0003 writes `cognition_jobs` on the open intake transaction."""
 

@@ -1,4 +1,4 @@
-"""Observability: one turn id, a parseable JSON switch, cost rows, and `/status` (ADR-0019)."""
+"""Observability: one turn id, a parseable JSON switch, cost rows, and `/status` (ADR-0003)."""
 
 
 import asyncio

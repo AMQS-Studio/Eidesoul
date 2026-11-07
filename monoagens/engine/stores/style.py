@@ -243,44 +243,7 @@ class StyleStore:
             del self._data["people"][source]
             self._flush()
 
-    def seed_from_history(self, history) -> bool:
-        """Once: learn human message samples from the archive, then lock `seeded`."""
-        with self._lock:
-            if self._data.get("seeded"):
-                return False
-        try:
-            rows = history.style_sample(2000) if history is not None else []
-        except Exception:
-            log.exception("failed to read the style samples from the archive")
-            rows = []
-        with self._lock:
-            for row in rows:
-                item = row if isinstance(row, dict) else {"text": row}
-                body = str(item.get("text") or "")
-                if not body.strip() or body.startswith("/") or len(body) > MAX_TEXT:
-                    continue
-                self._count(self._data["global"], body)
-                thread_id = str(item.get("thread_id") or "")
-                if thread_id:
-                    self._count(self._data["threads"].setdefault(thread_id, _empty()), body)
-                person_id = ""
-                address = str(item.get("sender_address") or "")
-                if address and history is not None:
-                    try:
-                        person_id = history.resolve_person(address)
-                    except Exception:
-                        person_id = ""
-                person_id = person_id or str(item.get("sender_id") or "")
-                if person_id:
-                    self._count(self._data["people"].setdefault(person_id, _empty()), body)
-            self._data["seeded"] = True
-            self._flush()
-        return True
-
     # ------------------------------------------------------------------ profile
-
-    def seed_profile(self) -> dict:
-        return dict(self._seed)
 
     def _bucket(self, thread_id: str = "") -> dict:
         with self._lock:
@@ -329,7 +292,7 @@ class StyleStore:
         return text if len(text) <= limit else text[: limit - 1] + "…"
 
     def profile(self, thread_id: str = "") -> str:
-        """Chat style prompt block; a language without a pack gets none (ADR-0033 §4.2)."""
+        """Chat style prompt block; a language without a pack gets none (ADR-0001 §4.2)."""
         if not self._seed:
             return ""
         bucket = self._bucket(thread_id)

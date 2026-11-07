@@ -1,4 +1,4 @@
-"""Turn checkpoints and the step log (ADR-0013 §6-§7, ADR-0011 §4.5).
+"""Turn checkpoints and the step log (ADR-0003 §6-§7, ADR-0001 §4.5).
 
 One `turns` row per incoming message; `id` is the namespaced turn identity
 (`<gateway>:<thread>:<message_id>`) and is therefore the idempotency key. The state machine only
@@ -19,7 +19,7 @@ from ..db import Database
 from ..jobs.lease import FencedStore, Superseded, fence_clause, fenced_insert, row_clause
 from ..schema import TURN_TERMINAL, outbound_messages, turn_steps, turns
 
-# ADR-0013 §8.2: a step whose handler declared state is never replayed.
+# ADR-0003 §8.2: a step whose handler declared state is never replayed.
 MAX_RESULT_CHARS = 4000
 # A step row that is still `running` when the turn is claimed again lost its worker.
 STEP_RUNNING = "running"
@@ -56,7 +56,7 @@ class TurnStore(FencedStore):
     # ------------------------------------------------------------- fence
 
     def _fence(self, *, unclaimed: bool = False):
-        """The predicate every turn mutation carries (ADR-0012 §4.3).
+        """The predicate every turn mutation carries (ADR-0002 §4.3).
 
         A bound store fences with its own (instance, generation); an unbound one compares the
         row's recorded claim generation with the live one, so a deposed instance's checkpoints
@@ -175,7 +175,7 @@ class TurnStore(FencedStore):
             if found is None:
                 return None
             # A crash between "intent" and "sent" leaves an honest `unknown`, never a
-            # second send by default (ADR-0013 §8.3). The scope prefix covers every row of the
+            # second send by default (ADR-0003 §8.3). The scope prefix covers every row of the
             # turn: reply chunks (`:0`, `:1`) and the actions a tool emitted (`:tool:1`).
             conn.execute(
                 update(outbound_messages)
@@ -355,7 +355,7 @@ class TurnStore(FencedStore):
         """Return claimed but unselected turns to `received` without burning an attempt.
 
         A backlog pass claims more than the minute's budget allows; the rest must not look like
-        a failed attempt, so the attempt counter is given back (ADR-0013 §11).
+        a failed attempt, so the attempt counter is given back (ADR-0003 §11).
         """
         wanted = [str(item) for item in turn_ids if str(item or "").strip()]
         if not wanted:
@@ -548,11 +548,3 @@ class TurnStore(FencedStore):
             statement = statement.where(fence)
         with self.db.connect() as conn:
             conn.execute(statement)
-
-    def unfinished_threads(self) -> list[dict]:
-        statement = (
-            select(turns.c.thread_id, turns.c.id, turns.c.status, turns.c.updated_at)
-            .where(turns.c.status.in_(("received", "running", "sending")))
-            .order_by(turns.c.updated_at)
-        )
-        return self.db.fetch_all(statement)

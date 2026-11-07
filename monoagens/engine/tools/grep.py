@@ -1,4 +1,4 @@
-"""Tool grep: file-content search under the same roots as `read` (ADR-0021 §4.2)."""
+"""Tool grep: file-content search under the same roots as `read` (ADR-0003 §4.2)."""
 
 
 import fnmatch

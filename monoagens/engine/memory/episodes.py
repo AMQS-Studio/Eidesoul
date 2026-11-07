@@ -1,4 +1,4 @@
-"""ADR-0020 §4.2 episodes: deterministic open/close from the turn log, then one `distill` job.
+"""ADR-0001 §4.2 episodes: deterministic open/close from the turn log, then one `distill` job.
 
 An episode is the assessment unit: a run of turns in one thread that may do one job. Nothing
 here calls a model. The six closure signals are computed from `turns`, `turn_steps`,
@@ -148,7 +148,7 @@ def _evidence(
 
 
 def _target_of(tool: str) -> str:
-    """ADR-0020 §4.6: the target comes from the handler's declaration, not a table."""
+    """ADR-0001 §4.6: the target comes from the handler's declaration, not a table."""
     try:
         from ..tools import REGISTRY
 
@@ -348,7 +348,7 @@ def close_all(db: Database, *, now: float | None = None, signal: str = "shutdown
 
 
 def admission(episode: Episode, steps: list[dict]) -> tuple[bool, str]:
-    """ADR-0020 §4.3: ordinary chat is never assessed; tool work or a repair is."""
+    """ADR-0001 §4.3: ordinary chat is never assessed; tool work or a repair is."""
     if episode.tool_calls >= 1:
         return True, "tool_work"
     if _correction(steps):

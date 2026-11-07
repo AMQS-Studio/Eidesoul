@@ -185,7 +185,7 @@ def test_unknown_author_values_fall_back_to_unknown(tmp_path) -> None:
     assert item.author == "unknown"
     assert item.visibility == 2
 
-    # ADR-0016 §4.5: the database rejects a visibility outside 0-4.
+    # ADR-0002 §4.5: the database rejects a visibility outside 0-4.
     with pytest.raises(IntegrityError), store.db.connect() as conn:
         conn.execute(messages.update().values(visibility=9))
 
@@ -299,7 +299,7 @@ def test_intake_hard_exclusion_keeps_the_archive_only(tmp_path) -> None:
 
 
 def test_a_second_body_cannot_claim_an_owned_thread(tmp_path) -> None:
-    """ADR-0032 §4.7: the route is claimed once; the second body writes nothing."""
+    """ADR-0004 §4.7: the route is claimed once; the second body writes nothing."""
     import pytest
     from sqlalchemy import select
 

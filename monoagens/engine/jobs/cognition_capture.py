@@ -199,7 +199,7 @@ class CognitionCapture:
 
         The hint never overrides a verdict: a `not worth` candidate is dropped before this runs,
         and the hard exclusion already refused credentials and instructions at intake. The
-        embedding runs on the bounded pool, never on the event loop (ADR-0017 §4.1).
+        embedding runs on the bounded pool, never on the event loop (ADR-0003 §4.1).
         """
         category = str(verdict.category or "")
         durability = str(verdict.durability or "")

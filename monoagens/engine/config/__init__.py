@@ -1,6 +1,6 @@
 """Load .env plus the combined config.yaml (host, engine, gateways, soul) and roles.yaml.
 
-Validation is strict and never touches the filesystem beyond reading. ADR-0046 §4.1: the
+Validation is strict and never touches the filesystem beyond reading. ADR-0002 §4.1: the
 operator files are authoritative; the DB documents are a derived cache the loader never reads.
 
 The dataclasses, the engine schema, the section readers, and the two entry points live in

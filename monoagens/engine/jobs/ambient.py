@@ -166,14 +166,6 @@ class Ambient:
             return False
         return int(topic["research_count"]) < int(settings.research_per_day)
 
-    async def _search(self, query: str, results: int) -> str:
-        return await execute(
-            {"web_search": WEB_SEARCH},
-            "web_search",
-            {"query": query, "max_results": int(results)},
-            self._tool_ctx(""),
-        )
-
     # ------------------------------------------------------------------ actions
 
     async def _digest(self, thread_id: str) -> None:

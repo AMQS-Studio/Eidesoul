@@ -39,7 +39,7 @@ def route(db: Database, roles: RoleRegistry) -> tuple[str, str, str] | None:
 
 
 async def notify_admin(agent: Agent, text: str) -> None:
-    """Deliver one alert through the one door, with an explicit origin (ADR-0047)."""
+    """Deliver one alert through the one door, with an explicit origin (ADR-0009)."""
     from ..inbound import Address
 
     found = await io.run(route, agent.db, agent.config.roles)

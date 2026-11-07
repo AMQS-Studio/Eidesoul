@@ -1,4 +1,4 @@
-"""grep contract: same roots as read, deterministic order, compact modes, caps (ADR-0021)."""
+"""grep contract: same roots as read, deterministic order, compact modes, caps (ADR-0003)."""
 
 
 import asyncio

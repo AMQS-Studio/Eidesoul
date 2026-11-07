@@ -1,6 +1,6 @@
 """ADR home tool (ADR-0009): check structure and scaffold new records.
 
-English is the language of all ADRs (ADR-0055 §4.2.1).
+English is the language of all ADRs (ADR-0001 §4.2.1).
 Gate: `python -P scripts/adr.py --check`.
 """
 

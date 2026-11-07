@@ -1,4 +1,4 @@
-"""WhatsApp gateway descriptor (ADR-0046 §4.5): extra, onboarding, schema, and capabilities."""
+"""WhatsApp gateway descriptor (ADR-0002 §4.5): extra, onboarding, schema, and capabilities."""
 
 
 from ..descriptor import GatewayDescriptor

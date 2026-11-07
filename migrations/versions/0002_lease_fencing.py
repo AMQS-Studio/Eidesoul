@@ -1,7 +1,7 @@
-"""lease fencing: engine_lease.generation and the single-row CHECK (ADR-0012).
+"""lease fencing: engine_lease.generation and the single-row CHECK (ADR-0002).
 
 Revision 2 raises the fencing token on every acquisition and pins the lease table to one
-row. ADR-0016 §4.5 owns the CHECK; ADR-0012 §5 owns the column and its default.
+row. ADR-0002 §4.5 owns the CHECK; ADR-0002 §5 owns the column and its default.
 """
 
 

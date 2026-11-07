@@ -1,7 +1,7 @@
 """Intake, capture, the unlabeled state machine, and the labeling queue.
 
 The facade owns the transaction and the fence; these helpers take it as their first
-argument (ADR-0002/0004, ADR-0037 §4.4).
+argument (ADR-0002/0004, ADR-0007 §4.4).
 """
 
 import logging
@@ -183,7 +183,7 @@ def _transition_values(
             str(row.get("subject_id") or ""),
         )
         values["last_error"] = ""
-        # ADR-0051 §4.1: the row becomes readable here, so it gains its vector here.
+        # ADR-0007 §4.1: the row becomes readable here, so it gains its vector here.
         values["embedding"] = _vector(str(row.get("text") or ""))
     elif to_state in {"failed", "not_worth"}:
         values["level"] = None

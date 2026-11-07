@@ -1,4 +1,4 @@
-"""Research trigger, search, and citation verification for one turn (ADR-0043)."""
+"""Research trigger, search, and citation verification for one turn (ADR-0003)."""
 
 import logging
 from collections.abc import Callable

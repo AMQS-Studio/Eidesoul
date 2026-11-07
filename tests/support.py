@@ -42,7 +42,7 @@ def test_dsn() -> str:
 
 
 def stub_vector(text: str) -> list[float]:
-    """Deterministic 384-dim bag-of-token-hashes vector: no model, no network (ADR-0029 §4.3)."""
+    """Deterministic 384-dim bag-of-token-hashes vector: no model, no network (ADR-0002 §4.3)."""
     vector = [0.0] * EMBED_DIM
     for token in TOKEN.findall(str(text or "").lower()):
         digest = hashlib.blake2b(token.encode(), digest_size=8).digest()
@@ -144,7 +144,7 @@ def database() -> Database:
 
 
 class FakeGateway(CoreDefaults):
-    """Core only: text delivery and the catalog, no media and no directory (ADR-0018 §4.1)."""
+    """Core only: text delivery and the catalog, no media and no directory (ADR-0004 §4.1)."""
 
     name = "fake"
     backlog_seconds = 0.0
@@ -551,7 +551,7 @@ def make_agent(
 
 
 def specs(env) -> dict:
-    """Every tool the test's current body may call: core, plugins, and its own (ADR-0032 §4.6)."""
+    """Every tool the test's current body may call: core, plugins, and its own (ADR-0004 §4.6)."""
     index = getattr(env.agent, "tool_index", None)
     if index is None:
         return dict(env.agent.tools.by_name)

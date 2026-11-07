@@ -1,6 +1,6 @@
 """Turn step bookkeeping: the tool-step writer and the resume lookup.
 
-ADR-0037 §4.3: the writer the model's tool loop uses, and the lookup a resumed turn reads
+ADR-0007 §4.3: the writer the model's tool loop uses, and the lookup a resumed turn reads
 before it repeats a side-effecting call. The row is opened as `running` *before* the tool runs
 and finalized after, so a crash leaves evidence instead of a gap (ADR-0003 §4.3). The service
 never imports `agent.py`; the turn store and the tool registry are injected.

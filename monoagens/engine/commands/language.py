@@ -1,7 +1,7 @@
 """Command /language: switch MonoAgens's reply language to any installed catalog code.
 
 The language lives in soul.yaml, the operator file; the `soul` cache row follows the file
-(ADR-0046 §4.1). The catalog in `monoagens/lang/<code>.yaml` supplies every chat-visible string.
+(ADR-0002 §4.1). The catalog in `monoagens/lang/<code>.yaml` supplies every chat-visible string.
 """
 
 

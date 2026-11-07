@@ -1,7 +1,7 @@
 """Shared constants, result types, and row/UUID helpers behind `MemoryStore`.
 
 No SQL lives here: each helper reads through the store's one database handle and
-`memory/queries.py` (ADR-0001, ADR-0037 §4.4).
+`memory/queries.py` (ADR-0001, ADR-0007 §4.4).
 """
 
 import hashlib

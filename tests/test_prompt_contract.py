@@ -1,4 +1,4 @@
-"""Prompt contract (ADR-0033 §4.5, §6.11): properties hold per body, never per wording."""
+"""Prompt contract (ADR-0001 §4.5, §6.11): properties hold per body, never per wording."""
 
 from pathlib import Path
 

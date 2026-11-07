@@ -54,7 +54,7 @@ def decision_refusal(approval, *, thread_id: str, sender: str, roles) -> str:
 
 
 def _relay_decision(ctx: CommandContext, approval, extra: str) -> str:
-    """ADR-0023: the owner's chosen mode becomes the grant; the question itself is the consent."""
+    """ADR-0004: the owner's chosen mode becomes the grant; the question itself is the consent."""
     agent = ctx.agent
     lang = ctx.lang
     mode = extra.lower()
@@ -71,7 +71,7 @@ def _relay_decision(ctx: CommandContext, approval, extra: str) -> str:
 
 
 async def _automation_decision(agent, approval, *, sender: str, lang: str) -> str:
-    """ADR-0014 §4.8: the row is stored only here, by the approval that authorises it."""
+    """ADR-0001 §4.8: the row is stored only here, by the approval that authorises it."""
     from ..jobs.automation_store import AutomationStore
     from ..jobs.schedule import ManifestError
 

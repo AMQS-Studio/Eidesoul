@@ -275,7 +275,7 @@ def test_capture_level_4_stores_unconfirmed_and_asks(tmp_path) -> None:
 
 
 def test_level_4_without_a_model_ask_is_still_unconfirmed(tmp_path) -> None:
-    """ADR-0038: `ask` is policy-owned; a model field is not part of the decision."""
+    """ADR-0007: `ask` is policy-owned; a model field is not part of the decision."""
     asked: list[tuple] = []
 
     async def ask(thread_id, person_id, ids, level, question):
@@ -553,7 +553,7 @@ def test_capture_raises_visibility_of_the_turn(tmp_path) -> None:
 
 
 def test_an_unmentioned_private_hit_never_triggers_a_disclosure(tmp_path) -> None:
-    """ADR-0038 §4.4: an unmentioned memory is not a leak, whatever its level."""
+    """ADR-0007 §4.4: an unmentioned memory is not a leak, whatever its level."""
     env = make_agent(tmp_path)
     env.agent.llm = ScriptLLM()
     inbound = inbound_message("halo", thread="111@g.us", dm=False)

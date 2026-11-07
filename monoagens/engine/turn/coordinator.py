@@ -1,4 +1,4 @@
-"""Per-thread serialization and the one place a turn is interrupted (ADR-0013 §7.1).
+"""Per-thread serialization and the one place a turn is interrupted (ADR-0003 §7.1).
 
 The coordinator owns the three maps the `Agent` used to hold: the per-thread lock, the active
 turn task (plus the pending task still waiting for the lock), and the body that owns each

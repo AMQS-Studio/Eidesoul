@@ -1,4 +1,4 @@
-"""Discord gateway descriptor (ADR-0046 §4.5): the install extra and no body-only tools."""
+"""Discord gateway descriptor (ADR-0002 §4.5): the install extra and no body-only tools."""
 
 
 from ..descriptor import GatewayDescriptor

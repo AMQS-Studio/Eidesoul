@@ -1,4 +1,4 @@
-"""Turns, their step log, and outbound message rows (ADR-0013)."""
+"""Turns, their step log, and outbound message rows (ADR-0003)."""
 
 
 from sqlalchemy import (
@@ -19,7 +19,7 @@ from sqlalchemy.dialects.postgresql import JSONB
 from .base import metadata
 
 # ---------------------------------------------------------------- turns
-# ADR-0013 §6: one row per incoming message; `id` is the namespaced identity
+# ADR-0003 §6: one row per incoming message; `id` is the namespaced identity
 # `<gateway>:<thread>:<message_id>`, and `message_id` keeps the raw transport id a resume
 # needs to re-read the row from the archive (ADR-0001 §4.3).
 
@@ -44,7 +44,7 @@ turns = Table(
     Column("lease_owner", String(80), nullable=False, default="", server_default=""),
     Column("lease_until", Float, nullable=False, default=0.0, server_default="0"),
     Column("generation", BigInteger, nullable=False, default=0, server_default="0"),
-    # ADR-0013 §11: `action` turns are never consolidated away by the backlog selector.
+    # ADR-0003 §11: `action` turns are never consolidated away by the backlog selector.
     Column("category", String(20), nullable=False, default="chat", server_default="chat"),
     # ADR-0001/ADR-0003: the body's percept hints ride on the turn so a resume can restore them.
     Column("hints", JSONB, nullable=False, default=dict, server_default=text("'{}'::jsonb")),
@@ -71,7 +71,7 @@ Index("ix_turns_status_lease", turns.c.status, turns.c.lease_until)
 Index("ix_turns_thread_created", turns.c.thread_id, turns.c.created_at)
 
 # `turn_steps` is the one step log named by ADR-0009/0011/0016: it carries the columns
-# ADR-0013 §6 assigns to `turn_actions` plus the checkpoint name and its timestamps.
+# ADR-0003 §6 assigns to `turn_actions` plus the checkpoint name and its timestamps.
 turn_steps = Table(
     "turn_steps",
     metadata,

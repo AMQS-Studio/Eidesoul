@@ -1,4 +1,4 @@
-"""Tool fetch: read a public web page as untrusted text (ADR-0021 §4.3).
+"""Tool fetch: read a public web page as untrusted text (ADR-0003 §4.3).
 
 The SSRF rule lives here, in code: every hop resolves first, every resolved address is checked
 against the private/loopback/link-local ranges, and the connection goes to the resolved address

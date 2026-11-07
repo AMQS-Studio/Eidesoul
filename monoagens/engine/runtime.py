@@ -37,12 +37,12 @@ class RuntimeFacts:
     turn_timeout_total: int = 0
     notice_failed: int = 0
     last_notice_error: str = ""
-    # ADR-0014 §4.5: body capabilities are counted, never assumed.
+    # ADR-0001 §4.5: body capabilities are counted, never assumed.
     gateway_core_ok: int = 0
     rich_missing_total: int = 0
     directory_missing_total: int = 0
     participants_unknown_total: int = 0
-    phase: str = "running"  # running | draining | noticed | stopped (ADR-0011 §4.4)
+    phase: str = "running"  # running | draining | noticed | stopped (ADR-0001 §4.4)
     paths: Paths | None = None
 
     @property
@@ -58,7 +58,7 @@ class RuntimeFacts:
     def surface(self) -> str:
         return ", ".join(self.gateways) or "-"
 
-    # Counters: one method per fact, so callers never edit a field inline (ADR-0031 §4.2).
+    # Counters: one method per fact, so callers never edit a field inline (ADR-0002 §4.2).
     def refuse_standby(self) -> None:
         self.standby_refused += 1
 

@@ -1,4 +1,4 @@
-"""Plugin loader: one manifest, one digest, one import (ADR-0028).
+"""Plugin loader: one manifest, one digest, one import (ADR-0005).
 
 A plugin is an installable unit fetched at enable time, never a core tool and never a
 build-time extra. The manifest is data: it is read and verified before anything is imported.

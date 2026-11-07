@@ -1,6 +1,6 @@
 """Turn coordinator contract: one thread's turn is cancelled without touching another.
 
-ADR-0013 §7.1: `interrupt_thread` is the one implementation behind `/stop` and a barge-in. The
+ADR-0003 §7.1: `interrupt_thread` is the one implementation behind `/stop` and a barge-in. The
 tests drive the real store, so the `turns` row (status, step, reason) is the record, and the
 body's structural `abort()` is observed on the fake.
 """

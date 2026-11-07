@@ -1,4 +1,4 @@
-"""Separate media bytes from `messages` (ADR-0016 §4.5).
+"""Separate media bytes from `messages` (ADR-0002 §4.5).
 
 `messages` keeps the metadata (`data.media`/`data.quote.media`) and the bytes move to
 `message_media`, keyed by the message identity so a delete cascades. Nothing was deployed, but the

@@ -1,4 +1,4 @@
-"""Claude on Anthropic's native `/v1/messages` wire (ADR-0044 §4.4).
+"""Claude on Anthropic's native `/v1/messages` wire (ADR-0003 §4.4).
 
 The compatibility layer is test-oriented and loses the features Claude is chosen for: content
 blocks (image, `thinking`, `tool_use`, `tool_result`), prompt caching (`cache_control: ephemeral`

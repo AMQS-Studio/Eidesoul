@@ -1,4 +1,4 @@
-"""ADR-0028 §7: plugin manifests, digest verification, one import, and the lifecycle."""
+"""ADR-0005 §7: plugin manifests, digest verification, one import, and the lifecycle."""
 
 
 import asyncio

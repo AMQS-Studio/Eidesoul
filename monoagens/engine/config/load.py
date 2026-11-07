@@ -111,14 +111,14 @@ def load_host(path: str | Path | None = None) -> tuple[HostConfig, Paths]:
     return host, paths
 
 def _engine(raw: Mapping, override: Mapping | None = None) -> dict:
-    """ADR-0046 §4.1: the `engine` section of config.yaml is authoritative."""
+    """ADR-0002 §4.1: the `engine` section of config.yaml is authoritative."""
     body = override if override is not None else _section(raw, "engine")
     if not isinstance(body, Mapping):
         raise ConfigError("config.yaml: 'engine' must be a mapping")
     return dict(body)
 
 def _soul(raw: Mapping, paths: Paths, override: Mapping | None = None) -> Soul:
-    """ADR-0046 §4.1: soul.yaml is authoritative; config.yaml carries no soul keys."""
+    """ADR-0002 §4.1: soul.yaml is authoritative; config.yaml carries no soul keys."""
     source: Path | Mapping[str, object] = override if override is not None else paths.soul_yaml
     try:
         return load_soul(source, source_path=paths.soul_yaml)
@@ -128,7 +128,7 @@ def _soul(raw: Mapping, paths: Paths, override: Mapping | None = None) -> Soul:
 def _roles(
     raw: Mapping, paths: Paths, default_role: str, override: Mapping | None = None
 ) -> RoleRegistry:
-    """ADR-0046 §4.1: roles.yaml holds the definitions and the membership list."""
+    """ADR-0002 §4.1: roles.yaml holds the definitions and the membership list."""
     source: Mapping[str, str | dict] = override if override is not None else _roles_file(paths)
     if not source:
         raise ConfigError(f"no roles found: {paths.roles} (run `monoagens init`)")
@@ -523,7 +523,7 @@ def _speech_config(raw: Mapping) -> SpeechConfig:
     )
 
 def _automation_config(raw: Mapping) -> AutomationConfig:
-    """ADR-0014 §5; a hard limit is a boot failure, never a silent truncation."""
+    """ADR-0001 §5; a hard limit is a boot failure, never a silent truncation."""
     sandbox_raw = _section(raw, "sandbox")
     condition_raw = _section(raw, "condition")
     retry_raw = _section(raw, "retry")

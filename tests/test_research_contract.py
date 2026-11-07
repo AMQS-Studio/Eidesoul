@@ -1,4 +1,4 @@
-"""ADR-0043: deterministic trigger, ephemeral card, and citation/freshness verification."""
+"""ADR-0003: deterministic trigger, ephemeral card, and citation/freshness verification."""
 
 import asyncio
 from datetime import UTC, datetime, timedelta

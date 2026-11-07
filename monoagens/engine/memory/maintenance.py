@@ -1,7 +1,7 @@
 """Forget, purge, veto, privacy changes, and rekey behind `MemoryStore`.
 
 Each function takes the facade first so the fence and the one database handle stay
-unchanged (ADR-0005, ADR-0037 §4.4).
+unchanged (ADR-0005, ADR-0007 §4.4).
 """
 
 import logging
@@ -286,7 +286,7 @@ def _purge_rows_sync(store, rows: Sequence[Mapping], cutoff: float, moment: floa
 
 
 def _purge_metrics(store, conn, now: float) -> int:
-    """ADR-0005 §4.7 / ADR-0019: cost rows expire by `engine.metrics.retention_days`."""
+    """ADR-0005 §4.7 / ADR-0003: cost rows expire by `engine.metrics.retention_days`."""
     try:
         return queries.purge_metrics(conn, now, retention_days_from(store.config))
     except Exception as exc:  # a metrics table problem never blocks memory retention

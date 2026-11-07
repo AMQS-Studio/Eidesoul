@@ -1,4 +1,4 @@
-"""Command /skill: the owner's surface for derived procedures (ADR-0020 §4.1).
+"""Command /skill: the owner's surface for derived procedures (ADR-0001 §4.1).
 
 Members get nothing: a procedure enters their prompt only through retrieval. The owner can
 inspect, pin, forget, restore a revision, and import a procedure file.

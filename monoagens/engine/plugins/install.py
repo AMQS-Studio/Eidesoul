@@ -1,4 +1,4 @@
-"""Install, enable, disable, and remove plugin trees (ADR-0028)."""
+"""Install, enable, disable, and remove plugin trees (ADR-0005)."""
 
 
 import io

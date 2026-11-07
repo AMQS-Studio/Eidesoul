@@ -6,7 +6,7 @@ import importlib
 import inspect
 import pkgutil
 import re
-from collections.abc import Awaitable, Callable, Sequence
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -37,18 +37,14 @@ class Handler:
     destructive: tuple[str, ...] = ()  # actions that destroy state
     path_arg: str = ""  # the argument that names a filesystem target
     scan: tuple[str, ...] = ()  # arguments a credential/injection scan must read
-    max_output_chars: int = 20_000  # ADR-0021 §4.1: per tool, cut by `execute`
-
-    @property
-    def perm(self) -> str:
-        return self.pattern or self.name
+    max_output_chars: int = 20_000  # ADR-0003 §4.1: per tool, cut by `execute`
 
 
 def allows(patterns: tuple[str, ...], name: str) -> bool:
     return any(fnmatch.fnmatchcase(name, pattern) for pattern in patterns)
 
 
-# ADR-0024 §4.2: the validator's whole vocabulary. `description`/`title` are annotations, not
+# ADR-0003 §4.2: the validator's whole vocabulary. `description`/`title` are annotations, not
 # assertions, so they are allowed everywhere; anything else is a boot failure, never ignored.
 KEYWORDS = frozenset(
     {
@@ -174,7 +170,7 @@ def validate(handler: Handler, source: str, kind: str) -> list[str]:
     if handler.fn is not None and callable(handler.fn) and not inspect.iscoroutinefunction(
         handler.fn
     ):
-        # ADR-0024 §4.5: both callers `await` the handler; a sync one is a boot-time bug.
+        # ADR-0003 §4.5: both callers `await` the handler; a sync one is a boot-time bug.
         add("fn must be async")
     if handler.fn is None:
         if kind == "command":
@@ -233,7 +229,7 @@ class Registry:
         return sorted(self.by_name)
 
     def reserved(self) -> tuple[str, ...]:
-        """Every name a new handler may not claim: canonical names plus aliases (ADR-0028)."""
+        """Every name a new handler may not claim: canonical names plus aliases (ADR-0005)."""
         return tuple(sorted({*self.by_name, *self.aliases}))
 
     def patterns(self, explicit: tuple[str, ...] | None) -> tuple[str, ...]:
@@ -272,24 +268,6 @@ def discover(
         errors.extend(handler_errors)
         if not handler_errors:
             found.append(handler)
-    if errors:
-        raise RegistryError("invalid handler:\n- " + "\n- ".join(errors))
-    return found
-
-
-def discover_many(
-    sources: Sequence[tuple[str, Path]],
-    attribute: str,
-    kind: str,
-) -> list[Handler]:
-    """Merge discovery across several packages (core + gateway) with aggregated errors."""
-    found: list[Handler] = []
-    errors: list[str] = []
-    for package, folder in sources:
-        try:
-            found.extend(discover(package, Path(folder), attribute, kind))
-        except RegistryError as exc:
-            errors.append(str(exc).split(":\n- ", 1)[-1])
     if errors:
         raise RegistryError("invalid handler:\n- " + "\n- ".join(errors))
     return found

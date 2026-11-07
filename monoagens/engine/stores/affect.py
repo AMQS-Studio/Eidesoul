@@ -199,7 +199,7 @@ class AffectStore(FencedStore):
         return None
 
     def _upsert(self, table, row, keys, names):
-        """One fenced upsert: a deposed instance's heartbeat refuses the row (ADR-0012)."""
+        """One fenced upsert: a deposed instance's heartbeat refuses the row (ADR-0002)."""
         stmt = fenced_insert(table, row, self.fence_clause())
         return stmt.on_conflict_do_update(
             index_elements=keys, set_={name: getattr(stmt.excluded, name) for name in names})

@@ -1,6 +1,6 @@
 """The one outbound path: text, file, sticker, typing, notices, and the shutdown drain.
 
-ADR-0017 §4.4, ADR-0032 §4.4, ADR-0037 §4.3: every send goes through the door
+ADR-0003 §4.4, ADR-0004 §4.4, ADR-0007 §4.3: every send goes through the door
 (`Agent.dispatch`), is ledgered before it leaves, and never retries on its own. The service never
 imports `agent.py`; it is injected with the `TurnRuntime` and the `TurnCoordinator`.
 """
@@ -75,7 +75,7 @@ def typing_delay(text: str, config, rng=random) -> float:
 
 
 def file_fallback_text(path: Path, caption: str, language: str) -> str:
-    """What a body without `Rich` delivers instead of the file (ADR-0018 §4.2)."""
+    """What a body without `Rich` delivers instead of the file (ADR-0004 §4.2)."""
     label = t(
         "agent.file_fallback",
         language,
@@ -464,7 +464,7 @@ class Delivery:
         if status == "sent":
             return False
         if status == "unknown":
-            # It may already be visible; a notice must never duplicate (ADR-0013 §10).
+            # It may already be visible; a notice must never duplicate (ADR-0003 §10).
             return False
         attempts = max(1, int(retry.attempts))
         origin = Address(str(gateway.name), str(thread_id))

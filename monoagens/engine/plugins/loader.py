@@ -134,7 +134,7 @@ def _layout(base: Path, manifest: Manifest) -> None:
                 )
     if manifest.provides.gateways:
         raise PluginError(
-            "plugins cannot register gateways; install a gateway instead (ADR-0018)"
+            "plugins cannot register gateways; install a gateway instead (ADR-0004)"
         )
 
 

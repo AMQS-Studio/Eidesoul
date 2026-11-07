@@ -36,7 +36,7 @@ CUSTOM = ProviderDefaults("", "")
 
 
 def normalize_response(response: object) -> ProviderResponse:
-    """OpenAI SDK/fake response -> the one shape the loop consumes (ADR-0044 §4.2).
+    """OpenAI SDK/fake response -> the one shape the loop consumes (ADR-0003 §4.2).
 
     A native adapter already answers in that shape; it is returned unchanged instead of being
     read as an empty OpenAI response.

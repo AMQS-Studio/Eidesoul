@@ -106,7 +106,7 @@ class ActionLedger:
 
 
 class OutboundLedger:
-    """Delivery ledger (ADR-0011 §4.3): one row per chunk, `scope_key` covers automations.
+    """Delivery ledger (ADR-0001 §4.3): one row per chunk, `scope_key` covers automations.
 
     Status is `intent` before the transport call, `sent` with the provider id after it, and
     `unknown` for the gap between the two. A resumed turn sends only chunks that are not

@@ -1,6 +1,6 @@
 """Agent: the handle, the door, and the turn phases wired behind one facade.
 
-ADR-0037 §4.3: the identity, the body/address lookup, the tool and command contexts, the
+ADR-0007 §4.3: the identity, the body/address lookup, the tool and command contexts, the
 lifecycle, and the public `handle`/`dispatch` signatures stay here; the turn phases live in
 `turn/loop.py`, `turn/intake.py`, `turn/delivery.py`, `turn/commands.py`, and `turn/steps.py`.
 """
@@ -171,7 +171,7 @@ class Agent(DeliveryFacade, CrossRoomGuard):
         if config.memory.privacy.enabled:
             privacy_evidence.verify_entities()
         self.privacy = PrivacyService(self)
-        # ADR-0037 §4.3: the turn pipeline reads one typed runtime, and the coordinator owns
+        # ADR-0007 §4.3: the turn pipeline reads one typed runtime, and the coordinator owns
         # the per-thread locks and the in-flight task registry. The Agent stays the facade.
         self.turn_runtime = TurnRuntime(
             _live=self,
@@ -275,7 +275,7 @@ class Agent(DeliveryFacade, CrossRoomGuard):
     # ------------------------------------------------------------- gate
 
     def _send_gate(self) -> int:
-        """Primary gate before every transport call (ADR-0017 §4.4, ADR-0012 §4.3)."""
+        """Primary gate before every transport call (ADR-0003 §4.4, ADR-0002 §4.3)."""
         expected = int(ACTIVE_GENERATION.get() or 0)
         if self.mode != "primary":
             self.runtime.refuse_standby()
@@ -302,7 +302,7 @@ class Agent(DeliveryFacade, CrossRoomGuard):
     # ----------------------------------------------------------- turns
 
     async def cancel_turn(self, thread_id: str, *, reason: str = "user_stop") -> bool:
-        """Cancel the task running in this thread only (ADR-0013 §7.1)."""
+        """Cancel the task running in this thread only (ADR-0003 §7.1)."""
         return await self.coordinator.interrupt_thread(thread_id, reason=reason)
 
     @property
@@ -316,7 +316,7 @@ class Agent(DeliveryFacade, CrossRoomGuard):
         return self.delivery.shutdown_gateways
 
     def private_thread(self, person_id: str) -> str:
-        """Ask the bodies for the one private thread a person holds (ADR-0033 §4.5)."""
+        """Ask the bodies for the one private thread a person holds (ADR-0001 §4.5)."""
         return body_private_thread(self.gateways, person_id)
 
     async def _notice(
@@ -338,16 +338,10 @@ class Agent(DeliveryFacade, CrossRoomGuard):
             params=params,
         )
 
-    async def _notice_timeout(self, thread_id: str, turn_id: str, gateway) -> None:
-        await self.delivery.notice_timeout(thread_id, turn_id, gateway)
-
-    async def _notice_interrupted(self, turn_id: str, thread_id: str, gateway) -> None:
-        await self.delivery.notice_interrupted(turn_id, thread_id, gateway)
-
     # --------------------------------------------------------- shutdown
 
     def begin_drain(self) -> int:
-        """Enter `draining`; intake stops before the drain clock starts (ADR-0011 §4.4)."""
+        """Enter `draining`; intake stops before the drain clock starts (ADR-0001 §4.4)."""
         self.draining = True
         self.shutdown_epoch = int(time.time() * 1000)
         self.runtime.phase = "draining"
@@ -374,7 +368,7 @@ class Agent(DeliveryFacade, CrossRoomGuard):
             return None
 
     def address_of(self, thread_id: str) -> Address:
-        """The body that owns a thread: the turn map, then the durable route (ADR-0032 §4.1).
+        """The body that owns a thread: the turn map, then the durable route (ADR-0004 §4.1).
 
         Membership is proven separately at the door (`refusal`); this only resolves the owner.
         A thread nobody owns is a refusal, never a fallback to the first registered body.
@@ -410,7 +404,7 @@ class Agent(DeliveryFacade, CrossRoomGuard):
         origin: Address,
         reason: str = "",
     ) -> Receipt:
-        """The one door to a body: policy, then ledger, then `dispatch` (ADR-0032 §4.4)."""
+        """The one door to a body: policy, then ledger, then `dispatch` (ADR-0004 §4.4)."""
         body = self.body(address.gateway)
         if body is None:
             return Receipt(
@@ -530,7 +524,7 @@ class Agent(DeliveryFacade, CrossRoomGuard):
         return Receipt(action.id, "sent", reference)
 
     async def recover(self) -> int:
-        """Recovery pass on the primary (ADR-0011 §4.5, ADR-0013 §8)."""
+        """Recovery pass on the primary (ADR-0001 §4.5, ADR-0003 §8)."""
         return await supervisor.recover(self)
 
     def start_reaper(self) -> None:
@@ -557,7 +551,7 @@ class Agent(DeliveryFacade, CrossRoomGuard):
                 log.exception("reaper pass failed")
 
     def _role_set(self, inbound: Percept) -> tuple[Role, ...]:
-        """ADR-0036 §4.4: identity selects roles; a body may never name one."""
+        """ADR-0006 §4.4: identity selects roles; a body may never name one."""
         return self.config.roles.for_person(inbound.actor)
 
     @staticmethod
@@ -635,7 +629,7 @@ class Agent(DeliveryFacade, CrossRoomGuard):
         *,
         claimed: dict | None = None,
     ) -> list[Action]:
-        """Intake + watchdog with the turn's correlation ids bound (ADR-0019 §4.2)."""
+        """Intake + watchdog with the turn's correlation ids bound (ADR-0003 §4.2)."""
         message_id = str(getattr(inbound.payload, "id", "") or "")
         token = (
             turn_identity(
@@ -725,28 +719,6 @@ class Agent(DeliveryFacade, CrossRoomGuard):
             )
         return True
 
-    async def _run_turn(
-        self,
-        inbound: Percept,
-        gateway: GatewayCore,
-        turn_id: str,
-        *,
-        deadline: float,
-        is_command: bool,
-        body: str,
-        claimed: dict | None = None,
-    ) -> list[Action]:
-        """One turn, checkpointed; a resumed turn starts from `turns.step`."""
-        return await self.turn_runner.run(
-            inbound,
-            gateway,
-            turn_id,
-            deadline=deadline,
-            is_command=is_command,
-            body=body,
-            claimed=claimed,
-        )
-
     async def _command(
         self,
         name: str,
@@ -766,7 +738,7 @@ class Agent(DeliveryFacade, CrossRoomGuard):
             self.lease.request_freeze(self.lease.instance_id)
 
     async def reload(self) -> str:
-        """ADR-0046 §4.9: validate the three files, swap the hot runtime, report the rest."""
+        """ADR-0002 §4.9: validate the three files, swap the hot runtime, report the rest."""
         from .turn.reload import reload_runtime
 
         return await reload_runtime(self)

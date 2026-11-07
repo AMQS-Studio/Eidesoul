@@ -1,4 +1,4 @@
-"""Native hybrid retrieval (ADR-0051): vector, lexical, RRF fusion, and strict scope.
+"""Native hybrid retrieval (ADR-0007): vector, lexical, RRF fusion, and strict scope.
 
 Every row is read through `memories_readable`; the deterministic stub embedder keeps the test
 offline. A vector that must not come from the text is written explicitly.

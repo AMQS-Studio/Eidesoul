@@ -1,4 +1,4 @@
-"""Automation store: the row, its runs, and the transition log (ADR-0014).
+"""Automation store: the row, its runs, and the transition log (ADR-0001).
 
 Persistence and scheduling only; no delivery lives here. A run is claimed with `SKIP LOCKED`
 and fenced with the lease generation, and the occurrence key makes a duplicate tick, restart,
@@ -91,7 +91,7 @@ class AutomationStore(FencedStore):
     # --------------------------------------------------------------- write
 
     async def propose(self, agent, manifest: dict, *, thread_id: str, gateway=None):
-        """Create the approval that must exist before a row is stored (ADR-0014 §4.8)."""
+        """Create the approval that must exist before a row is stored (ADR-0001 §4.8)."""
         body = validate_manifest(manifest, self.config)
         summary = describe(body)
         approval = await agent.approvals.create(
@@ -216,7 +216,7 @@ class AutomationStore(FencedStore):
         actor: str = "",
         now: float | None = None,
     ) -> dict | None:
-        """One legal transition, one log row; terminal states never reopen (ADR-0014 §4.13)."""
+        """One legal transition, one log row; terminal states never reopen (ADR-0001 §4.13)."""
         target = str(state or "").strip().lower()
         if target not in AUTOMATION_STATES:
             raise ManifestError(f"automation state '{target}' does not exist")
@@ -293,7 +293,7 @@ class AutomationStore(FencedStore):
         person_id: str,
         now: float,
     ) -> int:
-        """ADR-0014 §4.3: one queued run per active message automation that matches.
+        """ADR-0001 §4.3: one queued run per active message automation that matches.
 
         The sink runs inside the intake transaction, so the run and the message commit together
         or not at all. The occurrence key is the message id: a redelivered message inserts
@@ -493,7 +493,7 @@ class AutomationStore(FencedStore):
 
         Only `claimed`/`running` rows are touched, and each update repeats the row's own
         `claimed_by`/`generation`, so a claim another instance took meanwhile is never
-        interrupted or released by this pass (ADR-0012 §4.3).
+        interrupted or released by this pass (ADR-0002 §4.3).
         """
         moment = time.time() if now is None else float(now)
         stale = self.db.fetch_all(
@@ -658,7 +658,7 @@ class AutomationStore(FencedStore):
     ) -> int:
         """Runs already spent on the occurrence's local day; skipped/missed do not count.
 
-        Only an executed outcome spends the budget (ADR-0014 §4.13: `budget_per_day` counts
+        Only an executed outcome spends the budget (ADR-0001 §4.13: `budget_per_day` counts
         runs, not attempts); the currently claimed run is excluded until it finishes.
         """
         event = _mapping(automation.get("event"))
@@ -690,7 +690,7 @@ class AutomationStore(FencedStore):
         )
 
     def maybe_expire(self, automation_id: int | str, *, now: float | None = None) -> bool:
-        """A finished schedule expires after its last run, never before it (ADR-0014 §4.13)."""
+        """A finished schedule expires after its last run, never before it (ADR-0001 §4.13)."""
         row = self.get(automation_id)
         if row is None or row["state"] != "active":
             return False

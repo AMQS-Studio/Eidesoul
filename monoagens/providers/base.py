@@ -39,7 +39,7 @@ class ProviderUsage:
 
 @dataclass(frozen=True)
 class ProviderResponse:
-    """The one response shape the turn loop consumes (ADR-0044 §4.2)."""
+    """The one response shape the turn loop consumes (ADR-0003 §4.2)."""
 
     text: str = ""
     thinking: str = ""

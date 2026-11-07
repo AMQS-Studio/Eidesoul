@@ -4,7 +4,7 @@ Revision ID: 0017
 Revises: 0016
 Create Date: 2026-11-04
 
-ADR-0035: app is provenance above audience. A turn records the body's `app` hint, an episode
+ADR-0005: app is provenance above audience. A turn records the body's `app` hint, an episode
 copies it from its first turn, and a skill carries the corpus it belongs to. The empty string
 means shared, so existing rows backfill without a table rewrite.
 """

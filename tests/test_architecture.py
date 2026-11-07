@@ -26,7 +26,7 @@ ENGINE = ROOT / "monoagens" / "engine"
 COMPOSITION = {
     "monoagens/__main__.py",
     "monoagens/admin/database.py",
-    # ADR-0046 §4.5: the admin CLI is a composition root; it indexes gateway descriptors and
+    # ADR-0002 §4.5: the admin CLI is a composition root; it indexes gateway descriptors and
     # runs a gateway-owned onboarding hook, exactly like `__main__.py` composes the bodies.
     "monoagens/admin/gateway.py",
     "monoagens/admin/gateway_index.py",
@@ -140,7 +140,7 @@ FORBIDDEN_FUTURE = "from __future__ " + "import annotations"
 
 
 def test_no_module_relies_on_future_annotations() -> None:
-    """ADR-0031 §4.7: on 3.14 annotations are lazy, so the import is dead weight and banned."""
+    """ADR-0002 §4.7: on 3.14 annotations are lazy, so the import is dead weight and banned."""
     roots = [ROOT / name for name in ("monoagens", "tests", "scripts", "plugins", "migrations")]
     offenders = sorted(
         path.relative_to(ROOT).as_posix()
@@ -212,7 +212,7 @@ def test_core_defaults_labels_a_thread_by_its_id() -> None:
 
 
 def test_no_blocking_db_block_inside_an_async_def() -> None:
-    """ADR-0017 §4.1: `with db.connect()` belongs in an offloaded helper, never in `async def`."""
+    """ADR-0003 §4.1: `with db.connect()` belongs in an offloaded helper, never in `async def`."""
     offenders: list[str] = []
     for path in ENGINE.rglob("*.py"):
         tree = ast.parse(path.read_text(encoding="utf-8"))

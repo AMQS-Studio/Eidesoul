@@ -7,7 +7,7 @@ from .. import io
 from ..registry import Handler
 from . import ToolContext, _int, _resolve
 
-# ADR-0015 §4.7: configuration and secrets have their own door (`settings`), never `read`.
+# ADR-0001 §4.7: configuration and secrets have their own door (`settings`), never `read`.
 SECRET_FILE = re.compile(r"(^|/)(\.env(\.[^/]*)?|[^/]*\.env|[^/]*\.pem|[^/]*\.key)$")
 CONFIG_FILES = frozenset({"config.yaml", "roles.yaml", "soul.yaml"})
 

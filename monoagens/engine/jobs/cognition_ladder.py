@@ -1,4 +1,4 @@
-"""The episode ladder and dispute question (ADR-0020): compare, decide, apply, propose."""
+"""The episode ladder and dispute question (ADR-0001): compare, decide, apply, propose."""
 
 import json
 import logging
@@ -80,7 +80,7 @@ class CognitionLadder:
         )
 
     async def _ladder(self) -> None:
-        """ADR-0020 §4.6: compare eligible signatures and apply one deterministic action."""
+        """ADR-0001 §4.6: compare eligible signatures and apply one deterministic action."""
         settings = self.config.skills
         if not getattr(settings, "efficiency_enabled", False) or self.skills is None:
             return

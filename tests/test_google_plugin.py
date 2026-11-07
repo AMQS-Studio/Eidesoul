@@ -1,4 +1,4 @@
-"""Google plugin contract: one service account, identity-linked, per-file permission (ADR-0028)."""
+"""Google plugin contract: one service account, identity-linked, per-file permission (ADR-0005)."""
 
 
 import asyncio

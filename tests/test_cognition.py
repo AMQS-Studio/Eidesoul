@@ -211,7 +211,7 @@ def test_template_keys_load_and_are_read(tmp_path) -> None:
 
 
 def test_a_claimed_job_cannot_complete_after_the_generation_moves(tmp_path) -> None:
-    """A replaced primary's job update is refused; the reaper hands the job on (ADR-0012 §4.4)."""
+    """A replaced primary's job update is refused; the reaper hands the job on (ADR-0002 §4.4)."""
 
     db = database()
     config = build_config(tmp_path)
@@ -296,7 +296,7 @@ def test_a_claim_lease_covers_one_llm_call_plus_a_minute(tmp_path) -> None:
 
 
 def test_the_heartbeat_renews_the_claim_during_a_slow_call(tmp_path) -> None:
-    """ADR-0003 §6/ADR-0012 §4.4: a slow call must not lose its lease to the reaper."""
+    """ADR-0003 §6/ADR-0002 §4.4: a slow call must not lose its lease to the reaper."""
     db = database()
     config = build_config(tmp_path)
     queue = CognitionQueue(db, config)

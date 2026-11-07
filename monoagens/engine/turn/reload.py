@@ -1,4 +1,4 @@
-"""Runtime reload: validate the files, swap the hot snapshot, report the rest (ADR-0046 §4.9).
+"""Runtime reload: validate the files, swap the hot snapshot, report the rest (ADR-0002 §4.9).
 
 The agent is the host; this module owns the one reload path so `agent.py` stays under the module
 cap and `/reload`, the settings tool, and `/language` share the same behaviour.
@@ -100,7 +100,7 @@ def _apply(agent, hot: Config) -> None:
         agent.ambient.settings = hot.ambient
         agent.ambient.llm = agent.llm
     for gateway in agent.gateways:
-        # ADR-0046 §4.3: a body reads role policy through its own config; a reload must reach it.
+        # ADR-0002 §4.3: a body reads role policy through its own config; a reload must reach it.
         if hasattr(gateway, "config"):
             gateway.config = hot
     agent.runtime.paths = hot.paths
@@ -109,7 +109,7 @@ def _apply(agent, hot: Config) -> None:
 
 
 async def reload_runtime(agent) -> str:
-    """ADR-0046 §4.9: validate the three files, swap the hot runtime, report the rest.
+    """ADR-0002 §4.9: validate the three files, swap the hot runtime, report the rest.
 
     The cache is refreshed only after validation succeeds; an invalid file raises before
     anything is swapped, so the old runtime keeps serving.

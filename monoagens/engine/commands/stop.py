@@ -1,4 +1,4 @@
-"""Command /stop: cancel the turn running in this room (ADR-0013 §7.1).
+"""Command /stop: cancel the turn running in this room (ADR-0003 §7.1).
 
 `/stop` is a command, so it is read outside the per-thread lock while a turn holds it.
 It cancels only the task in this room, marks that turn `interrupted(user_stop)`, and

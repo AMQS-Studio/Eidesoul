@@ -33,7 +33,7 @@ log = logging.getLogger(__name__)
 
 
 class RouteConflict(RuntimeError):
-    """A second body claimed a thread another body already owns (ADR-0032 §4.7)."""
+    """A second body claimed a thread another body already owns (ADR-0004 §4.7)."""
 
     def __init__(self, thread: str, owner: str, claimant: str) -> None:
         super().__init__(f"thread '{thread}' is owned by '{owner}', not '{claimant}'")
@@ -58,7 +58,7 @@ class HistoryStore:
         self.workspace = workspace
         self.memories = memories or MemoryStore(db)
         self.job_sink = job_sink
-        # ADR-0014 §4.3: the message-event sink writes inside the intake transaction.
+        # ADR-0001 §4.3: the message-event sink writes inside the intake transaction.
         self.event_sink = event_sink
         self.search_config = search or SearchConfig()
         # ADR-0001 §4.2: the durable handle of every attachment, written by the same intake.
@@ -88,7 +88,7 @@ class HistoryStore:
 
     @staticmethod
     def _media_rows(thread_id: str, message: Message) -> list[dict]:
-        """The bytes that no longer live on the row (ADR-0016 §4.5), numbered per message.
+        """The bytes that no longer live on the row (ADR-0002 §4.5), numbered per message.
 
         Every attachment gets a row even when the body carried no bytes, so the row set mirrors
         the envelope and `seq` is the attachment's place in it. A quote's bytes use the next
@@ -181,7 +181,7 @@ class HistoryStore:
     def _upsert_messages(self, conn, rows: list[dict]) -> int:
         if not rows:
             return 0
-        # FK parent (ADR-0016 §4.5): every message's thread exists before its children land.
+        # FK parent (ADR-0002 §4.5): every message's thread exists before its children land.
         for thread_id in dict.fromkeys(str(row["thread_id"]) for row in rows):
             conn.execute(
                 pg_insert(threads)
@@ -278,7 +278,7 @@ class HistoryStore:
         app: str = "",
         hints: dict | None = None,
     ) -> bool:
-        """The one intake transaction (ADR-0011 §4.1): message + turn + memory journal + candidate.
+        """The one intake transaction (ADR-0001 §4.1): message + turn + memory journal + candidate.
 
         `MemoryStore.intake` writes `memory_events` + `memories(pending, level NULL)` after hard
         exclusion on the same connection; `job_sink` is the W3.2/ADR-0003 seam that inserts the
@@ -353,17 +353,17 @@ class HistoryStore:
         return True
 
     def _route(self, conn, thread_id: str, gateway: str, audience: str) -> None:
-        """ADR-0014 §4.6: the first body that sees a thread owns its durable route.
+        """ADR-0001 §4.6: the first body that sees a thread owns its durable route.
 
         A second body claiming the same thread is refused before any row is written
-        (ADR-0032 §4.7); storing the message under the wrong body is the failure this removes.
+        (ADR-0004 §4.7); storing the message under the wrong body is the failure this removes.
         """
         if gateway:
             owner = conn.execute(
                 select(threads.c.gateway).where(threads.c.thread_id == str(thread_id))
             ).scalar()
             if owner and str(owner) != str(gateway):
-                # A structured diagnostic, never a silent drop (ADR-0032 §4.7).
+                # A structured diagnostic, never a silent drop (ADR-0004 §4.7).
                 log.error(
                     "route conflict thread=%s owner=%s claimant=%s: the message is refused",
                     thread_id,
@@ -648,7 +648,7 @@ class HistoryStore:
         return self._decode_rows(self.db.fetch_all(statement))
 
     def _fts(self, query: str, clauses: list, limit: int) -> list[Message]:
-        """ADR-0026 §4.1: `websearch_to_tsquery('simple')`, ranked, deterministic tiebreak."""
+        """ADR-0002 §4.1: `websearch_to_tsquery('simple')`, ranked, deterministic tiebreak."""
         if not self.search_config.fts:
             return []
         tsquery = func.websearch_to_tsquery(self.search_config.lang, query)
@@ -662,7 +662,7 @@ class HistoryStore:
         return self._decode_rows(self.db.fetch_all(statement))
 
     def _trgm(self, query: str, clauses: list, limit: int) -> list[Message]:
-        """ADR-0026 §4.3: the second net for affixes and typos, only when FTS found nothing."""
+        """ADR-0002 §4.3: the second net for affixes and typos, only when FTS found nothing."""
         if not self.search_config.trgm:
             return []
         terms = _like_terms(query)
@@ -684,7 +684,7 @@ class HistoryStore:
         return self._decode_rows(self.db.fetch_all(statement))
 
     def _like(self, query: str, clauses: list, limit: int) -> list[Message]:
-        """Only when the operator disabled both nets (ADR-0026 §6 `search_backend=like`)."""
+        """Only when the operator disabled both nets (ADR-0002 §6 `search_backend=like`)."""
         if self.search_config.fts or self.search_config.trgm:
             return []
         terms = [f"%{term}%" for term in _like_terms(query)]
@@ -705,7 +705,7 @@ class HistoryStore:
         return self._decode_rows(self.db.fetch_all(statement))
 
     def search_backend(self) -> str:
-        """The active backend for `/status` (ADR-0026 §6); never a silent fallback."""
+        """The active backend for `/status` (ADR-0002 §6); never a silent fallback."""
         if self.search_config.fts:
             return "fts+trgm" if self.search_config.trgm else "fts"
         return "trgm" if self.search_config.trgm else "like"

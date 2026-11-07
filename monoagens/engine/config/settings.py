@@ -35,13 +35,13 @@ def parse_quiet_hours(value: object) -> tuple[int, int] | None:
 
 @dataclass(frozen=True)
 class SafetyConfig:
-    """ADR-0033 §5: a language without a pack is refused unless the operator opts in."""
+    """ADR-0001 §5: a language without a pack is refused unless the operator opts in."""
 
     allow_degraded: bool = False
 
 @dataclass(frozen=True)
 class SelfKnowledgeConfig:
-    """ADR-0015 §4.8: generated-first self knowledge, on by default, disableable."""
+    """ADR-0001 §4.8: generated-first self knowledge, on by default, disableable."""
 
     enabled: bool = True
     capability_index: bool = True
@@ -196,7 +196,7 @@ class ApprovalConfig:
 
 @dataclass(frozen=True)
 class SkillsConfig:
-    """ADR-0020 §5: procedures are retrieved, never indexed; unused ones decay."""
+    """ADR-0001 §5: procedures are retrieved, never indexed; unused ones decay."""
 
     enabled: bool = True
     task_idle_minutes: float = 10.0
@@ -205,7 +205,7 @@ class SkillsConfig:
     max_chars: int = 0  # 0 = no prompt-budget truncation
     max_body_chars: int = 18000
     use_renewal_days: float = 30.0
-    # ADR-0020 §4.6/§4.7: the efficiency comparison and the automation ladder.
+    # ADR-0001 §4.6/§4.7: the efficiency comparison and the automation ladder.
     efficiency_enabled: bool = True
     efficiency_min_evidence_episodes: int = 2
     efficiency_window_days: float = 30.0
@@ -268,14 +268,14 @@ class GatewaySettings:
 
 @dataclass(frozen=True)
 class PluginSettings:
-    """ADR-0028 §5: a plugin is off and unpinned until an operator enables it."""
+    """ADR-0005 §5: a plugin is off and unpinned until an operator enables it."""
 
     enabled: bool = False
     digest: str = ""
 
 @dataclass(frozen=True)
 class PluginConfig:
-    """ADR-0027 §5 / ADR-0028 §5: where fetched plugin code lives and whether we may fetch."""
+    """ADR-0005 §5 / ADR-0005 §5: where fetched plugin code lives and whether we may fetch."""
 
     root: Path | None = None  # unset = <workspace>/plugins
     fetch: bool = True

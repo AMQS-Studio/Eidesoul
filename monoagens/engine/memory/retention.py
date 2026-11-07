@@ -150,7 +150,7 @@ class RetentionPolicy:
 
 
 def retention_days_from(config, default: int = 90) -> int:
-    """`engine.metrics.retention_days` once W6/ADR-0019 lands the config block."""
+    """`engine.metrics.retention_days` once W6/ADR-0003 lands the config block."""
     metrics = getattr(config, "metrics", None)
     value = getattr(metrics, "retention_days", None)
     try:

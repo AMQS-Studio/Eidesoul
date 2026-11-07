@@ -1,4 +1,4 @@
-"""Plugin manifest, digest, and engine-range rules (ADR-0028).
+"""Plugin manifest, digest, and engine-range rules (ADR-0005).
 
 Everything here is data: the manifest is read and verified before any plugin code is imported.
 The digest covers the published tree (`code_digest`) or the whole installation (`tree_digest`).
@@ -51,7 +51,7 @@ class PluginError(RuntimeError):
 
 @dataclass(frozen=True)
 class Credits:
-    """The README credits row a plugin owes (ADR-0028 §4.2)."""
+    """The README credits row a plugin owes (ADR-0005 §4.2)."""
     license: str
     author: str
     source: str

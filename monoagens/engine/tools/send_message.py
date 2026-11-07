@@ -54,7 +54,7 @@ def _action(
 def _relay(ctx: ToolContext, thread_id: str, args: dict, text: str):
     """`(grant, "")` for a permitted relay, `(None, "")` for a plain send, `(None, error)`.
 
-    ADR-0023: forwarding another person's answer needs that person's grant for this scope; the
+    ADR-0004: forwarding another person's answer needs that person's grant for this scope; the
     grant is checked here, at the send, and the ledger records the grant, never the content.
     """
     task = str(args.get("relay_task") or "").strip()
@@ -90,7 +90,7 @@ def _relay(ctx: ToolContext, thread_id: str, args: dict, text: str):
 
 
 def _record_relay(ctx: ToolContext, grant, ok: bool) -> None:
-    """The ledger keeps the grant and the mode, never the message content (ADR-0023 §4.3)."""
+    """The ledger keeps the grant and the mode, never the message content (ADR-0004 §4.3)."""
     if ctx.ledger is None:
         return
     try:

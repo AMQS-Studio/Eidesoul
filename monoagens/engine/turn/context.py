@@ -284,16 +284,6 @@ class WorkingMemory:
         except Exception:
             log.exception("failed to save the chat name=%s", thread_id)
 
-    def remember_name(self, thread_id: str, name: str) -> None:
-        if not str(name or "").strip():
-            return
-        try:
-            if self.store is not None and self.store.chat_name(thread_id):
-                return
-        except Exception:
-            return
-        self.set_chat_name(thread_id, name)
-
     def mark_deleted(
         self, thread_id: str, message_id: str, by_address: str, by_name: str = ""
     ) -> bool:

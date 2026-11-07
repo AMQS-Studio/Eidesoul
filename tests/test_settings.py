@@ -204,7 +204,7 @@ def test_the_reload_command_is_private_thread_only(tmp_path, monkeypatch) -> Non
 
 
 def test_reload_reaches_each_gateway_config(tmp_path, monkeypatch) -> None:
-    """ADR-0046 §4.9: a body gates with its own config, so the swap must reach it."""
+    """ADR-0002 §4.9: a body gates with its own config, so the swap must reach it."""
     from types import SimpleNamespace
 
     env = make_runtime(tmp_path, monkeypatch, settings_approval=False)

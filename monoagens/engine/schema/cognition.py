@@ -1,4 +1,4 @@
-"""The cognition queue and the episode record (ADR-0003, ADR-0020)."""
+"""The cognition queue and the episode record (ADR-0003, ADR-0001)."""
 
 
 from sqlalchemy import (
@@ -41,7 +41,7 @@ cognition_jobs = Table(
     Column("next_attempt_at", Float, nullable=False, server_default="0"),
     Column("result_ref", Text, nullable=False, server_default=""),
     Column("idempotency_key", Text, nullable=False),
-    # ADR-0012 §4.4: the lease generation the job was claimed under; a newer generation wins.
+    # ADR-0002 §4.4: the lease generation the job was claimed under; a newer generation wins.
     Column("generation", BigInteger, nullable=False, server_default="0"),
     Column("created_at", Float, nullable=False),
     Column("updated_at", Float, nullable=False),
@@ -59,7 +59,7 @@ Index("ix_cognition_jobs_claim", cognition_jobs.c.status, cognition_jobs.c.next_
 Index("ix_cognition_jobs_kind", cognition_jobs.c.kind, cognition_jobs.c.status)
 Index("ix_cognition_jobs_scope", cognition_jobs.c.scope)
 
-# ADR-0020 §4.2: the recorded result of an episode (id = the first turn); the signals are
+# ADR-0001 §4.2: the recorded result of an episode (id = the first turn); the signals are
 # computed from `turns`/`turn_steps`/`outbound_messages`, only the closure is stored.
 EPISODE_STATUSES = ("open", "closed")
 EPISODE_SIGNALS = ("idle", "marker", "topic", "commitment", "shutdown", "artifact")

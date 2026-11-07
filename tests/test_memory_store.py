@@ -416,7 +416,7 @@ def test_supersede_is_reciprocal_and_needs_proof(tmp_path) -> None:
 
 
 def test_supersede_candidates_consolidate_across_scopes(tmp_path) -> None:
-    """A global pass still sees a marked candidate born in another scope (ADR-0051 §4.4)."""
+    """A global pass still sees a marked candidate born in another scope (ADR-0007 §4.4)."""
     memory = store(tmp_path)
     source = memory.write(
         "suka kopi pahit", scope="global", level=2, owner_id="A", subject_id="A"
@@ -606,14 +606,14 @@ def test_a_store_bound_to_a_stale_generation_refuses_canonical_writes(tmp_path) 
 
 
 def test_an_unbound_store_writes_without_a_lease(tmp_path) -> None:
-    """Admin CLI, tools, and tests write canonical rows with no live lease (ADR-0012 §4.3)."""
+    """Admin CLI, tools, and tests write canonical rows with no live lease (ADR-0002 §4.3)."""
     memory = store(tmp_path)
     memory_id = memory.write("aku suka kopi", scope="person", person_id="1", level=2)
     assert memory.get(memory_id) is not None
 
 
 def test_a_stale_worker_write_leaves_the_row_untouched(tmp_path) -> None:
-    """A replaced primary neither labels nor transitions anything (ADR-0012 §4.3)."""
+    """A replaced primary neither labels nor transitions anything (ADR-0002 §4.3)."""
     db = database()
     memory = MemoryStore(db, build_config(tmp_path))
     old = Lease(db, instance_id="old", host="host-a", pid=1)

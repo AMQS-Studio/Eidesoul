@@ -1,6 +1,6 @@
 """Installer contract: dry-run writes nothing, sudo needs consent, no secret in the log.
 
-ADR-0030 §4.1/§7: `bash install.sh --dry-run` prints the plan and leaves the filesystem
+ADR-0005 §4.1/§7: `bash install.sh --dry-run` prints the plan and leaves the filesystem
 unchanged; a normal run performs no `sudo` call; a marker password never reaches the install
 log; the pinned uv archive is checked before anything else happens.
 """

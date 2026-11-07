@@ -240,9 +240,9 @@ def add(
     *,
     name: str = "",
 ) -> str:
-    """ADR-0036 §4.6: create/link the first identity and append it to one role.
+    """ADR-0006 §4.6: create/link the first identity and append it to one role.
 
-    ADR-0046 §4.1: roles.yaml holds the definitions and the membership list; the DB keeps the
+    ADR-0002 §4.1: roles.yaml holds the definitions and the membership list; the DB keeps the
     identity/link records and a derived `role:<name>` cache row. The first-user rule is a
     deployment rule: an administrator must exist before any other role gains a user.
     """

@@ -1,4 +1,4 @@
-"""Shutdown and boot validation (ADR-0011 §4.4, ADR-0013 §9)."""
+"""Shutdown and boot validation (ADR-0001 §4.4, ADR-0003 §9)."""
 
 
 import asyncio

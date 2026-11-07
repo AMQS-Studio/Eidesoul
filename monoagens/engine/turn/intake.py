@@ -1,6 +1,6 @@
 """Intake: identity, the forget intent, and the watchdog around one turn task.
 
-ADR-0013 §7, ADR-0017 §4.3, ADR-0037 §4.3: the body hands in a percept, the core assigns the
+ADR-0003 §7, ADR-0003 §4.3, ADR-0007 §4.3: the body hands in a percept, the core assigns the
 person id, and the turn runs under a deadline. The service never imports `agent.py`; it is
 injected with the `TurnRuntime`, the `TurnCoordinator`, the runner, and the delivery path.
 """
@@ -96,7 +96,7 @@ class TurnIntake:
         *,
         claimed: dict | None = None,
     ) -> list[Action]:
-        """Intake + watchdog: the one door every body calls (ADR-0013 §7, ADR-0017 §4.3)."""
+        """Intake + watchdog: the one door every body calls (ADR-0003 §7, ADR-0003 §4.3)."""
         message = inbound.payload
         thread_id = inbound.thread
         if message.outgoing or bool(inbound.hints.get("self")):
@@ -105,7 +105,7 @@ class TurnIntake:
                 self.runtime.ambient.note(thread_id, message)
             return []
         if not self.runtime.accepting():
-            # A standby instance refuses intake and sends nothing (ADR-0017 §4.4).
+            # A standby instance refuses intake and sends nothing (ADR-0003 §4.4).
             self.runtime.facts.refuse_standby()
             log.info(
                 "intake refused chat=%s mode=%s draining=%s",
@@ -128,7 +128,7 @@ class TurnIntake:
                 inbound.actor,
                 language=str(self.runtime.soul.language),
                 audience="private" if bool(inbound.hints.get("dm")) else "group",
-                # ADR-0013 §11: the body marks a single-action turn; the backlog never folds it.
+                # ADR-0003 §11: the body marks a single-action turn; the backlog never folds it.
                 category="action" if inbound.hints.get("action") is True else "chat",
                 gateway=getattr(gateway, "name", "") or "",
                 app=str(inbound.hints.get("app") or ""),

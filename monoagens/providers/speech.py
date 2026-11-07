@@ -434,7 +434,7 @@ class DeepgramSTT(_HttpAdapter):
 
 
 class _RealtimeSkeleton:
-    """A protocol-level session: the websocket is a body concern (ADR-0044 seam only)."""
+    """A protocol-level session: the websocket is a body concern (ADR-0003 seam only)."""
 
     provider = ""
     label = "realtime"

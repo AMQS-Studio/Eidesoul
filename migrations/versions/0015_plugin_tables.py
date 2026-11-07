@@ -4,7 +4,7 @@ Revision ID: 0015
 Revises: 0014
 Create Date: 2026-11-04
 
-ADR-0033 §4.6: a plugin owns its tables. The Google plugin creates these itself on first use;
+ADR-0001 §4.6: a plugin owns its tables. The Google plugin creates these itself on first use;
 nothing in the engine defines or reads them.
 """
 

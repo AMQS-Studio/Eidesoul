@@ -1,4 +1,4 @@
-"""Document cache contract: files are authoritative, the cache is derived (ADR-0046 §4.1)."""
+"""Document cache contract: files are authoritative, the cache is derived (ADR-0002 §4.1)."""
 
 
 import yaml

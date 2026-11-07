@@ -6,7 +6,7 @@ module when the asset changes; never hand-edit the cells.
 
 Shape: a head in three-quarter profile, cropped to its non-black bounding box and
 sampled at 18 columns x 14 rows of `▀`/`▄` cells. The truecolor form is printed by
-line mode; curses parses the same cells into color pairs (ADR-0039 §4.5).
+line mode; curses parses the same cells into color pairs (ADR-0005 §4.5).
 """
 
 LOGO_WIDTH = 18

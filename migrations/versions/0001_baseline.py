@@ -1,4 +1,4 @@
-"""baseline: the schema.py state at ADR-0016 revision 1 (29 tables).
+"""baseline: the schema.py state at ADR-0002 revision 1 (29 tables).
 
 Nothing is deployed at 0.0.0.devN, so this baseline is the frozen shape of
 `monoagens/engine/schema.py` when the migration scheme landed. The rename of

@@ -4,7 +4,7 @@ Revision ID: 0016
 Revises: 0015
 Create Date: 2026-11-04
 
-ADR-0020 §4.6 / ADR-0033 §4.7: the episode signature reads the target the handler declared at
+ADR-0001 §4.6 / ADR-0001 §4.7: the episode signature reads the target the handler declared at
 execution time, so a gateway or plugin tool contributes its own target without a core table.
 """
 

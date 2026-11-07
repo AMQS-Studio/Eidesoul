@@ -2,7 +2,7 @@
 
 The values are derived from the dataclass tree in `monoagens.engine.config` and
 `monoagens.engine.soul`, and gateway blocks from each gateway's own settings dataclass
-(ADR-0031 §4.6, ADR-0046 §4.4). Only the operator surface — which key the file shows and in
+(ADR-0002 §4.6, ADR-0002 §4.4). Only the operator surface — which key the file shows and in
 which order — is declared here, so a default can never drift between code and template.
 """
 
@@ -90,7 +90,7 @@ def _section_defaults(instance: object, schema: object) -> dict:
 
 # The operator surface of `config.yaml`: the order and the keys the file shows. The values come
 # from the dataclass tree below, so a default can never drift between the code and the template
-# (ADR-0031 §4.6); a nested section the file does not expose (`web_search.fetch`) is dropped here.
+# (ADR-0002 §4.6); a nested section the file does not expose (`web_search.fetch`) is dropped here.
 HOST_KEYS: dict[str, tuple[str, ...]] = {
     "database": ("url_env", "url", "pool_size", "pool_timeout"),
     "workspace": (),
@@ -131,7 +131,7 @@ COMPOSE_SANDBOX = {"network": "monoagens-sandbox", "proxy": "http://sandbox-prox
 
 
 def host_defaults(*, compose: bool = False) -> dict:
-    """The host block of `config.yaml`, derived from the dataclass tree (ADR-0031 §4.6).
+    """The host block of `config.yaml`, derived from the dataclass tree (ADR-0002 §4.6).
 
     `compose=True` opts into the network and proxy sidecar only the compose stack ships; the
     native default keeps `sandbox.network`/`sandbox.proxy` empty so a host without that stack
@@ -354,7 +354,7 @@ CONFIG: dict = {
     "gateways": GATEWAY["gateways"],
 }
 
-# ADR-0046 §4.4: the seed matrix is data, not a runtime exception. A newer role gets the
+# ADR-0002 §4.4: the seed matrix is data, not a runtime exception. A newer role gets the
 # closed default; the owner may edit any block in roles.yaml.
 GATEWAY_POLICY: dict[str, dict[str, object]] = {
     "administrator": {"dm": True, "groups": "all", "reply_to_bot": True},
@@ -471,7 +471,7 @@ def gateway_defaults() -> dict[str, dict]:
 
 
 def seed_gateway_policies(roles: dict[str, dict], gateways) -> None:
-    """Give every role an explicit block for every selected gateway (ADR-0046 §4.4)."""
+    """Give every role an explicit block for every selected gateway (ADR-0002 §4.4)."""
     names = [str(name) for name in gateways]
     index = gateway_index_snapshot() if names else {}
     for role_name, body in roles.items():
@@ -1057,14 +1057,14 @@ ROLES_BANNER = """\
 ROLE_FIELD_COMMENTS: dict[str, str] = {
     "name": "Canonical role name; it must match the block key.",
     "label": "Optional display label for status lines and logs.",
-    "protected": "Locked role: it cannot be deleted, renamed, or merged by /link (ADR-0022).",
+    "protected": "Locked role: it cannot be deleted, renamed, or merged by /link (ADR-0006).",
     "description": "One line the operator reads in `monoagens people list`.",
     "priority": "Higher wins when one person holds several roles; ties order by name.",
     "users": "per_… person ids holding this role; `monoagens people add` fills it.",
     "tools": "Tool name patterns this role may call; '*' means every tool.",
     "commands": "Chat command patterns this role may run; '*' means every command.",
     "memory_admin": "Allow memory maintenance across scopes, not only the holder's own.",
-    "gateways": "Per-gateway access policy; each gateway owns its own keys (ADR-0046).",
+    "gateways": "Per-gateway access policy; each gateway owns its own keys (ADR-0002).",
     "context": "Extra instructions injected into the prompt when this role speaks.",
 }
 

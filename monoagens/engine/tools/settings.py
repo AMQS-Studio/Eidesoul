@@ -33,7 +33,7 @@ def _strip_userinfo(text: str) -> str:
 
 
 def _redact(value, path: str = ""):
-    """ADR-0015 §4.7: a secret key -> `***`, `database.url` -> `redact_dsn`, userinfo stripped."""
+    """ADR-0001 §4.7: a secret key -> `***`, `database.url` -> `redact_dsn`, userinfo stripped."""
     if isinstance(value, dict):
         return {
             key: (
@@ -182,7 +182,7 @@ def _current(agent, file: str, role_name: str) -> tuple[str, str]:
 
 
 def _read(agent, file: str, role_name: str) -> tuple[str, str, str]:
-    """ADR-0046 §4.1: the file is read; the cache is never the read source."""
+    """ADR-0002 §4.1: the file is read; the cache is never the read source."""
     kind, name = _current(agent, file, role_name)
     if kind == "host":
         text = agent.config.paths.config.read_text(encoding="utf-8")
@@ -322,7 +322,7 @@ def write_gateway_flag(
 
 
 async def _commit(agent, file: str, name: str, text: str, actor: str) -> None:
-    """ADR-0046 §4.1: write the operator file first, then refresh its cache row."""
+    """ADR-0002 §4.1: write the operator file first, then refresh its cache row."""
     if file == "host":
         _write_config(agent, yaml.safe_load(text) or {})
         return

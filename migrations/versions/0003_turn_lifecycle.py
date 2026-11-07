@@ -1,9 +1,9 @@
 """turn lifecycle: turns, turn_steps, outbound_messages, and the shutting_down flag.
 
-Revision 3 lands ADR-0013 §6 (with `thread_id`, the rename from ADR-0000 §4.4), the
-delivery ledger of ADR-0011 §4.3, and `engine_control.shutting_down` used by the neat
-shutdown of ADR-0011 §4.4. `turn_steps` is the canonical step log (ADR-0009/0011/0016)
-carrying the columns ADR-0013 assigns to `turn_actions`.
+Revision 3 lands ADR-0003 §6 (with `thread_id`, the rename from ADR-0000 §4.4), the
+delivery ledger of ADR-0001 §4.3, and `engine_control.shutting_down` used by the neat
+shutdown of ADR-0001 §4.4. `turn_steps` is the canonical step log (ADR-0009/0011/0016)
+carrying the columns ADR-0003 assigns to `turn_actions`.
 """
 
 

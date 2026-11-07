@@ -1,7 +1,7 @@
 """Gemini native `generateContent` wire, not the OpenAI compatibility shim.
 
 The adapter can carry `safetySettings`, `topK`, and native block reasons. Gemini category names
-stay inside the adapter, never in engine code (ADR-0044 §4.3).
+stay inside the adapter, never in engine code (ADR-0003 §4.3).
 """
 
 import json

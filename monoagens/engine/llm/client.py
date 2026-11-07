@@ -115,7 +115,7 @@ class LLM:
         return float(deadline) - time.monotonic() < float(min_call_seconds)
 
     def _system_messages(self, system) -> list[dict]:
-        """Two system messages when the prompt is sectioned and caching is on (ADR-0025 §4.1)."""
+        """Two system messages when the prompt is sectioned and caching is on (ADR-0003 §4.1)."""
         stable = getattr(system, "stable", "")
         volatile = getattr(system, "volatile", "")
         if stable and volatile and self.config.llm.prompt_cache:
@@ -140,7 +140,7 @@ class LLM:
         return False
 
     def _active_specs(self, base: list[Handler], ctx: ToolContext) -> list[Handler]:
-        """ADR-0015 §4.4: base specs plus what `info` activated this turn; additive only."""
+        """ADR-0001 §4.4: base specs plus what `info` activated this turn; additive only."""
         active = list(base)
         known = {spec.name for spec in active}
         for name in sorted(ctx.activated):
@@ -251,7 +251,7 @@ class LLM:
     ) -> None:
         if self.db is None:
             return
-        # Correlation ids default to the current context (ADR-0019 §4.2); an explicit argument
+        # Correlation ids default to the current context (ADR-0003 §4.2); an explicit argument
         # wins, and a background task never inherits a finished turn's id.
         turn_id = turn_id or observability.TURN_ID.get()
         if job_id is None:
@@ -281,7 +281,7 @@ class LLM:
             conn.execute(llm_calls.insert().values(row))
 
     def _sampling_kwargs(self, temperature: float | None, sampling=None) -> dict:
-        """Only the sampling keys the provider wire carries (ADR-0044 §4.6).
+        """Only the sampling keys the provider wire carries (ADR-0003 §4.6).
 
         A reasoning model rejects `temperature` with a 400; the capability list on the
         provider defaults is the one place that decision is made.
@@ -433,7 +433,7 @@ class LLM:
         turn_id: str = "",
     ):
         for call in calls:
-            # ADR-0044 §4.2: the loop consumes ProviderToolCall, already normalized. Parsing the
+            # ADR-0003 §4.2: the loop consumes ProviderToolCall, already normalized. Parsing the
             # raw wire shape here would blank the name and arguments.
             call_id, name = str(call.id or ""), str(call.name or "")
             raw_arguments = str(call.arguments or "{}")
@@ -465,7 +465,7 @@ class LLM:
                         "from the existing result"
                     )
                 else:
-                    # ADR-0017 §4.1: the step cache is a synchronous DB read, never inline.
+                    # ADR-0003 §4.1: the step cache is a synchronous DB read, never inline.
                     result = (
                         await io.run(lookup_step, canonical, arguments)
                         if lookup_step is not None
@@ -497,7 +497,7 @@ class LLM:
                                 reset_tool_action(token)
                         status = "failed" if str(result).startswith("error:") else "executed"
                         if on_step is not None:
-                            # ADR-0017 §4.1: the recorder finalizes `turn_steps` synchronously.
+                            # ADR-0003 §4.1: the recorder finalizes `turn_steps` synchronously.
                             await io.run(
                                 on_step,
                                 canonical,
@@ -505,7 +505,7 @@ class LLM:
                                 result,
                                 started,
                                 time.monotonic(),
-                                # ADR-0020 §4.4: a tool error is a failed step, so the episode
+                                # ADR-0001 §4.4: a tool error is a failed step, so the episode
                                 # can tell a repair from a clean run.
                                 status,
                                 target,
@@ -526,7 +526,7 @@ class LLM:
         return last_sig, repeat
 
     def _base_specs(self, specs: list[Handler]) -> list[Handler]:
-        """ADR-0015 §4.4: only hot schemas ride along; the rest is activated through info."""
+        """ADR-0001 §4.4: only hot schemas ride along; the rest is activated through info."""
         base = list(specs)
         if not self.config.tools.activate_on_demand:
             return base

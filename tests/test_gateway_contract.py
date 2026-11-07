@@ -60,7 +60,7 @@ def call_tool(env, name: str, args: dict, *, thread: str = "chat"):
 
 
 def test_gateway_tools_are_indexed_per_body(tmp_path) -> None:
-    """ADR-0032 §4.6: the same name in two bodies is not a collision, it is two tools."""
+    """ADR-0004 §4.6: the same name in two bodies is not a collision, it is two tools."""
     first = FakeGateway(name="a", tools=[handler("probe_tool")])
     second = FakeGateway(name="b", tools=[handler("probe_tool")])
     env = make_agent(tmp_path, gateways=[first, second])

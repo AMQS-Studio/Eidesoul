@@ -1,4 +1,4 @@
-"""Discord role policy: the `gateways.discord` block of one role (ADR-0046 §4.2).
+"""Discord role policy: the `gateways.discord` block of one role (ADR-0002 §4.2).
 
 Discord separates a guild text channel from a thread; the block names both, plus the DM switch
 and whether the bot has to be addressed. A malformed block denies.

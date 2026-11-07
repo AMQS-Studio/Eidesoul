@@ -1,4 +1,4 @@
-"""fetch contract: the SSRF rule cannot be loosened, redirects are revalidated (ADR-0021)."""
+"""fetch contract: the SSRF rule cannot be loosened, redirects are revalidated (ADR-0003)."""
 
 
 import asyncio

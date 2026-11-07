@@ -1,4 +1,4 @@
-"""Registration checks shared by the plugin loader and the prompt registry (ADR-0034).
+"""Registration checks shared by the plugin loader and the prompt registry (ADR-0003).
 
 The loader imports no plugin before these checks pass: a prompt part must be declared, static,
 namespaced, and under the cap; handlers must match their declaration and must not shadow a core

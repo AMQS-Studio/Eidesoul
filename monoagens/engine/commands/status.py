@@ -1,8 +1,8 @@
-"""Command /status: one operator card built from real rows (ADR-0019 §4.5).
+"""Command /status: one operator card built from real rows (ADR-0003 §4.5).
 
 Raw numbers are for the protected role only; every other role receives rough buckets. A
 counter whose table is empty or unreadable reports `0`, never an invented value. Message
-content, memory text, the DSN, and keys never appear here (ADR-0015 §4.7).
+content, memory text, the DSN, and keys never appear here (ADR-0001 §4.7).
 """
 
 
@@ -71,7 +71,7 @@ def percentile(values: list[float], share: float) -> float:
 
 
 def latency(values: list[float]) -> tuple[int, int, float]:
-    """`(p50, p95, mean)` in milliseconds from `turns` rows (ADR-0019 §4.4)."""
+    """`(p50, p95, mean)` in milliseconds from `turns` rows (ADR-0003 §4.4)."""
     if not values:
         return 0, 0, 0.0
     return (

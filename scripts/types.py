@@ -1,4 +1,4 @@
-"""Per-directory pyright ratchet (ADR-0031 §4.7).
+"""Per-directory pyright ratchet (ADR-0002 §4.7).
 
 The baseline records how many type errors each directory carries today; the gate fails only when a
 directory grows. Lowering a baseline is a commit of its own. The baseline is empty, so nothing is

@@ -78,7 +78,7 @@ from .settings import (
 log = logging.getLogger(__name__)
 
 def _validate_voice(llm: LLMConfig, soul: Soul) -> None:
-    """Reject a behavior option the selected wire cannot carry (ADR-0044 §4.6)."""
+    """Reject a behavior option the selected wire cannot carry (ADR-0003 §4.6)."""
     voice = soul.voice
     supported = set(llm.sampling_supported)
     for key in ("top_p", "top_k", "min_p"):

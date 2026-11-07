@@ -125,7 +125,7 @@ def _int(args: dict, key: str, default: int) -> int:
 
 
 def safe_chat(thread_id: str) -> str:
-    """A scratch directory name that never merges two threads (ADR-0053 §4.1.3).
+    """A scratch directory name that never merges two threads (ADR-0005 §4.1.3).
 
     The sanitized part is for humans; the digest keeps `app:user_1` and `app_user:1` apart.
     """
@@ -180,7 +180,7 @@ def resolve_for(config: Config, raw: str, roles, thread_id: str) -> Path:
         rest = text[len(SCRATCH) :].lstrip("/")
         slug = safe_chat(thread_id)
         # The model may echo the thread slug `write` reported back to it. Strip it once so a
-        # second mapping does not nest `scratch/<slug>/scratch/<slug>/…` (ADR-0053 §4.1.3).
+        # second mapping does not nest `scratch/<slug>/scratch/<slug>/…` (ADR-0005 §4.1.3).
         if rest == slug or rest.startswith(slug + "/"):
             rest = rest[len(slug) :].lstrip("/")
         target = str(Path(SCRATCH) / slug / rest)
@@ -203,7 +203,7 @@ def _resolve_write(ctx: ToolContext, raw: str) -> Path:
 
 
 def truncate(text: str, limit: int = DEFAULT_OUTPUT, *, hint: str = "") -> str:
-    """Cut to the tool's cap with an explicit marker and a continuation hint (ADR-0021 §4.1)."""
+    """Cut to the tool's cap with an explicit marker and a continuation hint (ADR-0003 §4.1)."""
     size = max(200, int(limit or DEFAULT_OUTPUT))
     body = str(text)
     if len(body) <= size:
@@ -296,7 +296,7 @@ def _object_errors(args: dict, schema: dict, *, prefix: str = "") -> list[str]:
 
 
 def argument_errors(parameters: dict, args: object, limit: int = 5) -> list[str]:
-    """ADR-0024 §4.4: deterministic, field-named, bounded; never an exception."""
+    """ADR-0003 §4.4: deterministic, field-named, bounded; never an exception."""
     if not isinstance(args, dict):
         return ["arguments must be an object"]
     if not isinstance(parameters, dict) or not parameters:
@@ -323,7 +323,7 @@ def rooms_of(ctx: ToolContext) -> set[str]:
 
 
 def _count_capability(ctx: ToolContext, counter: str) -> None:
-    """Count a body capability the request needed and the body did not have (ADR-0014 §4.5)."""
+    """Count a body capability the request needed and the body did not have (ADR-0001 §4.5)."""
     runtime = getattr(getattr(ctx, "agent", None), "runtime", None)
     method = getattr(runtime, counter, None) if runtime is not None else None
     if callable(method):
@@ -440,7 +440,7 @@ def side_effecting(spec: Handler) -> bool:
 
 
 def lease_refusal(ctx: ToolContext, name: str) -> str:
-    """Ask the live lease immediately before a side-effecting tool runs (ADR-0012 §4.3).
+    """Ask the live lease immediately before a side-effecting tool runs (ADR-0002 §4.3).
 
     `""` when the call may run; an error string when the generation moved on. A context with no
     lease (tests, fakes, an admin path) is not refused here.
@@ -572,7 +572,7 @@ REGISTRY = Registry(
 
 
 class ToolIndex:
-    """Tools keyed by body: core, plugins, and each enabled body's own (ADR-0032 §4.6).
+    """Tools keyed by body: core, plugins, and each enabled body's own (ADR-0004 §4.6).
 
     The index is rebuilt at boot from `gateway.tools()` and never stored. A name collision
     between two bodies is impossible by construction; a body tool shadows a core name with one
@@ -647,5 +647,5 @@ class ToolIndex:
         return tuple(sorted(self.specs(gateway)))
 
     def other_bodies(self, gateway: str) -> tuple[str, ...]:
-        """The other enabled bodies, for the one prompt line (ADR-0025 keeps the prefix stable)."""
+        """The other enabled bodies, for the one prompt line (ADR-0003 keeps the prefix stable)."""
         return tuple(sorted(name for name in self.body if name != str(gateway or "")))

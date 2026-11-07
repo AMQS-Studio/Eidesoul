@@ -1,6 +1,6 @@
 """Readable, admin, and context reads: the `memories_readable` path only.
 
-Functions take the facade first; no second read path exists (ADR-0001, ADR-0037 §4.4).
+Functions take the facade first; no second read path exists (ADR-0001, ADR-0007 §4.4).
 """
 
 import logging
@@ -90,7 +90,7 @@ async def search(
     scopes: tuple[str, ...] = SCOPES,
     max_level: int = 4,
 ) -> list[MemoryHit]:
-    """ADR-0051 §4.2: one hybrid retrieval for the three legal audiences."""
+    """ADR-0007 §4.2: one hybrid retrieval for the three legal audiences."""
     return await io.run(
         _hybrid, store, query, person_id, thread_id, limit, scopes, max_level
     )

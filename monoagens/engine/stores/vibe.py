@@ -249,7 +249,7 @@ class VibeRunner:
         if self._running:
             return True
         if self._classifier is None:
-            # ADR-0017 §4.1: the embedder is a synchronous model call.
+            # ADR-0003 §4.1: the embedder is a synchronous model call.
             ready = await io.run(self._source.scores, "ok")
             if not ready:
                 log.warning("vibe: embedder unavailable; vibe disabled")
@@ -320,7 +320,7 @@ class VibeRunner:
             if self._classifier is not None:
                 probs = self._classifier(text)
             else:
-                # ADR-0017 §4.1: prototype scoring embeds on a worker, never on the loop.
+                # ADR-0003 §4.1: prototype scoring embeds on a worker, never on the loop.
                 probs = await io.run(self._source.scores, text)
             target = self.vad(probs)
             if target is None:

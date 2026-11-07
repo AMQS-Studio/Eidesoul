@@ -1,4 +1,4 @@
-"""ADR-0016: the Alembic chain is the schema path, the primary is the only migrator."""
+"""ADR-0002: the Alembic chain is the schema path, the primary is the only migrator."""
 
 
 import time
@@ -20,7 +20,7 @@ def _admin_engine(test_url: str):
 
 @pytest.fixture
 def fresh_database() -> str:
-    """A throwaway database for the migration tests; dropped after (ADR-0029 §4.2)."""
+    """A throwaway database for the migration tests; dropped after (ADR-0002 §4.2)."""
     base = _dsn()
     name = f"monoagens_migration_{uuid.uuid4().hex[:12]}"
     with _admin_engine(base).connect() as conn:
@@ -99,7 +99,7 @@ def test_a_stale_lease_does_not_block(fresh_database) -> None:
 
 
 def test_revision_0013_adds_the_fence_event_and_efficiency_columns(fresh_database) -> None:
-    """ADR-0012/0010/0013/0014/0020: one revision carries every new column."""
+    """ADR-0002/0010/0013/0014/0020: one revision carries every new column."""
     db = Database(fresh_database)
     try:
         db.upgrade()
@@ -137,7 +137,7 @@ def test_revision_0013_adds_the_fence_event_and_efficiency_columns(fresh_databas
 
 
 def test_revision_0014_drops_the_person_gender_columns(fresh_database) -> None:
-    """ADR-0033 §4.8: a person's gender is never inferred or stored."""
+    """ADR-0001 §4.8: a person's gender is never inferred or stored."""
     db = Database(fresh_database)
     try:
         db.upgrade()
@@ -150,7 +150,7 @@ def test_revision_0014_drops_the_person_gender_columns(fresh_database) -> None:
 
 
 def test_revision_0017_and_0018_add_app_scope_and_privacy_evidence(fresh_database) -> None:
-    """ADR-0035/0038: one namespace column per record and one evidence column on a memory."""
+    """ADR-0005/0038: one namespace column per record and one evidence column on a memory."""
     db = Database(fresh_database)
     try:
         db.upgrade()
@@ -204,7 +204,7 @@ def _view_columns(db: Database) -> set[str]:
 
 
 def test_downgrade_to_0012_then_upgrade_restores_the_readable_view(fresh_database) -> None:
-    """ADR-0053 §4.1: the dependent view is dropped before the columns it pins."""
+    """ADR-0005 §4.1: the dependent view is dropped before the columns it pins."""
     db = Database(fresh_database)
     try:
         db.upgrade()

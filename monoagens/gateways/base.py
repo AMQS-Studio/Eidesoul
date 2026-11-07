@@ -1,4 +1,4 @@
-"""Gateway extension contract: one base class and one registration decorator (ADR-0046 §4.5).
+"""Gateway extension contract: one base class and one registration decorator (ADR-0002 §4.5).
 
 A body owns the four facts the operator surface needs from it, without the core importing a
 transport:
@@ -183,7 +183,7 @@ def attachment_path(
 def private_thread_of(db, gateway: str, person_id: str) -> str:
     """The one DM thread this body holds for a person, read from the archive.
 
-    ADR-0033 §4.5: a body reports the private thread it can prove; an ambiguous or absent DM
+    ADR-0001 §4.5: a body reports the private thread it can prove; an ambiguous or absent DM
     answers "" so the caller sends nothing rather than guessing a room.
     """
     from sqlalchemy import text

@@ -1,4 +1,4 @@
-"""Tool info: the capability manifest as data, never an instruction (ADR-0015 §4.3)."""
+"""Tool info: the capability manifest as data, never an instruction (ADR-0001 §4.3)."""
 
 
 from ..registry import Handler
@@ -18,7 +18,7 @@ KINDS = (
 
 
 def manifest(ctx: ToolContext) -> SelfKnowledge:
-    """One manifest per body, built once: the generators are cached at boot (ADR-0015 §4.8)."""
+    """One manifest per body, built once: the generators are cached at boot (ADR-0001 §4.8)."""
     agent = ctx.agent
     gateway = getattr(getattr(ctx, "gateway", None), "name", "") or ""
     cached = getattr(agent, "_self_knowledge", None) if agent is not None else None
@@ -48,7 +48,7 @@ async def _info(args: dict, ctx: ToolContext) -> str:
         return "kind must be catalog, tool, command, family, config, self, topology, or doc"
     known = manifest(ctx)
     if kind == "family" and name:
-        # ADR-0015 §4.4: asking for a family activates every member tool, not the family
+        # ADR-0001 §4.4: asking for a family activates every member tool, not the family
         # label (which is not a schema). Activation only adds schemas; the permission gate
         # stays in `execute`.
         ctx.activated.update(

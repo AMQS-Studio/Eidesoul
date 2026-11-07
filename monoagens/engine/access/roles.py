@@ -1,6 +1,6 @@
 """Modular roles: one role per YAML block; explicit permissions, no handler defaults.
 
-ADR-0022: the highest role is `administrator`, it is `protected` (the loader forces the flag and
+ADR-0006: the highest role is `administrator`, it is `protected` (the loader forces the flag and
 rejects a role named `owner`), and every role may carry an optional `label` — the address text the
 soul uses for its holder. The label is display-only: nothing compares it and it is never a key.
 """
@@ -37,7 +37,7 @@ class Role:
     memory_admin: bool = False
     label: str = ""
     protected: bool = False
-    # ADR-0046 §4.2: gateway name -> that gateway's own policy mapping. The core stores the
+    # ADR-0002 §4.2: gateway name -> that gateway's own policy mapping. The core stores the
     # mapping and never interprets a gateway name or a policy value; the gateway validates it.
     gateways: Mapping[str, Mapping[str, object]] = field(default_factory=dict)
 
@@ -78,7 +78,7 @@ class RoleRegistry:
     def policy_for(
         self, person_id: str, gateway: str
     ) -> tuple[Role, Mapping[str, object] | None]:
-        """The highest-priority role that defines this gateway's block (ADR-0046 §4.3).
+        """The highest-priority role that defines this gateway's block (ADR-0002 §4.3).
 
         A role that omits the block never silently denies a person who holds another role
         that defines it; the returned role is the one whose block applies. When no assigned
@@ -93,7 +93,7 @@ class RoleRegistry:
         return roles[0], None
 
     def require_administrator(self) -> Role:
-        """Boot gate (ADR-0022 §4.2): the protected role must exist and stay able to approve."""
+        """Boot gate (ADR-0006 §4.2): the protected role must exist and stay able to approve."""
         role = self.by_name.get(PROTECTED)
         if role is None:
             raise RoleError(f"no protected role '{PROTECTED}'; add it to roles.yaml")
@@ -109,12 +109,12 @@ class RoleRegistry:
 
 
 def privileged(role: Role) -> bool:
-    """ADR-0036 §4.3: one predicate for status, redaction, and diagnostics."""
+    """ADR-0006 §4.3: one predicate for status, redaction, and diagnostics."""
     return bool(role.protected or "*" in (role.tools or ()))
 
 
 def assert_protected_roles(before: Iterable[str], after: Iterable[str]) -> None:
-    """Refuse any write that deletes or renames the protected role (ADR-0022 §4.2).
+    """Refuse any write that deletes or renames the protected role (ADR-0006 §4.2).
 
     `before` is the current role-name set, `after` the set the write would leave behind. Only
     roles.yaml plus `monoagens config import` (or the host owner) may change the identifier.
@@ -172,7 +172,7 @@ def _users(value: object, source: str) -> tuple[str, ...]:
 
 
 def _gateways(value: object, source: str) -> dict[str, dict[str, object]]:
-    """ADR-0046 §4.2: gateway name -> opaque mapping; only the shape is the core's business."""
+    """ADR-0002 §4.2: gateway name -> opaque mapping; only the shape is the core's business."""
     if value is None:
         return {}
     if not isinstance(value, Mapping):

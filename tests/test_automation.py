@@ -1,4 +1,4 @@
-"""Automation: one declarative row, one run per occurrence, one scheduler (ADR-0014)."""
+"""Automation: one declarative row, one run per occurrence, one scheduler (ADR-0001)."""
 
 
 import asyncio
@@ -64,7 +64,7 @@ def build(tmp_path, *, tools=("*",), automations=None):
 
 
 def seed_dm(env, thread: str = OWNER) -> str:
-    """ADR-0032 §4.1: a send needs a route, so the owner has a DM thread with the fake body."""
+    """ADR-0004 §4.1: a send needs a route, so the owner has a DM thread with the fake body."""
     from sqlalchemy.dialects.postgresql import insert as pg_insert
 
     from monoagens.engine.schema import people, thread_people, threads
@@ -517,7 +517,7 @@ def message_manifest(**overrides) -> dict:
 
 
 def test_a_message_event_queues_one_run_per_matching_message(tmp_path) -> None:
-    """ADR-0014 §4.3: the intake sink writes the run, and its payload carries the message."""
+    """ADR-0001 §4.3: the intake sink writes the run, and its payload carries the message."""
     env = build(tmp_path)
     env.history.event_sink = env.store
     thread_id = "628111@s.whatsapp.net"
@@ -588,7 +588,7 @@ def test_a_message_run_reads_its_text_and_sender(tmp_path) -> None:
 
 
 def test_the_durable_route_survives_a_restart(tmp_path) -> None:
-    """ADR-0014 §4.6: the first body owns the thread; delivery follows that route."""
+    """ADR-0001 §4.6: the first body owns the thread; delivery follows that route."""
     from support import FakeGateway
 
     other = FakeGateway(name="other")
@@ -628,7 +628,7 @@ def status_of(env, run_id: int) -> str:
 
 
 def test_reap_touches_only_claimed_or_running_and_only_its_own_generation(tmp_path) -> None:
-    """ADR-0012 §4.3: a reaper never releases a queued/succeeded row nor another generation's."""
+    """ADR-0002 §4.3: a reaper never releases a queued/succeeded row nor another generation's."""
     env = build(tmp_path)
     automation_id = create(env, manifest(), now=at(9, 50))
     row = env.store.get(automation_id)

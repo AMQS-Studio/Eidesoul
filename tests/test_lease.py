@@ -310,7 +310,7 @@ def seed_run(db) -> int:
 
 
 def test_a_deposed_instance_is_rejected_by_sql_on_canonical_writes(tmp_path) -> None:
-    """ADR-0012 §4.3: the predicate rides the write, so a stale guard cannot let it pass."""
+    """ADR-0002 §4.3: the predicate rides the write, so a stale guard cannot let it pass."""
     from support import build_config
 
     from monoagens.engine.jobs.automation_store import AutomationStore
@@ -373,7 +373,7 @@ def test_a_deposed_instance_is_rejected_by_sql_on_canonical_writes(tmp_path) -> 
 
 
 def test_a_side_effecting_tool_is_refused_when_the_generation_moved(tmp_path) -> None:
-    """ADR-0012 §4.3: the fence is asked immediately before the tool touches the world."""
+    """ADR-0002 §4.3: the fence is asked immediately before the tool touches the world."""
     from support import build_config
 
     from monoagens.engine.access.roles import Role
@@ -407,7 +407,7 @@ def test_a_side_effecting_tool_is_refused_when_the_generation_moved(tmp_path) ->
 
 
 def test_the_primary_worker_binds_every_store_to_the_lease(tmp_path) -> None:
-    """ADR-0012 §4.3: one wiring point, so no store is left writing without a generation."""
+    """ADR-0002 §4.3: one wiring point, so no store is left writing without a generation."""
     from support import build_config
 
     from monoagens.engine.jobs.automation_worker import AutomationWorker

@@ -5,7 +5,7 @@ and a content digest. The id (`att_…`) is the handle a tool forwards, so a fil
 through one body can leave through another without reading the archive, and re-storing the same
 message keeps the same handle (the id is derived from the message identity and the digest).
 
-The bytes themselves stay in `message_media` (ADR-0016 §4.5); `materialize` writes them back to a
+The bytes themselves stay in `message_media` (ADR-0002 §4.5); `materialize` writes them back to a
 readable path when the original body's file is gone.
 """
 

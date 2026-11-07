@@ -1,4 +1,4 @@
-"""Explicit per-turn state (ADR-0037 §4.3).
+"""Explicit per-turn state (ADR-0007 §4.3).
 
 `TurnState` carries what belongs to one turn and nothing else: the percept the body handed in,
 the identity and role policy resolved for it, the memories the draft read, the draft itself,

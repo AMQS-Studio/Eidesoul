@@ -1,4 +1,4 @@
-"""Store-backed test harness: the real Postgres+pgvector store, migrated once (ADR-0029).
+"""Store-backed test harness: the real Postgres+pgvector store, migrated once (ADR-0002).
 
 Session: read `MONOAGENS_TEST_DATABASE_URL`, enable pgvector, run the production migration path.
 Test: truncate only the tables that hold rows (`RESTART IDENTITY CASCADE`) so no test sees
@@ -42,7 +42,7 @@ def _require_dsn() -> str:
         url = ""
     if not url:
         pytest.exit(
-            f"{ENV} is not set: the suite runs on Postgres+pgvector (ADR-0029).\n"
+            f"{ENV} is not set: the suite runs on Postgres+pgvector (ADR-0002).\n"
             f"Start a throwaway store:\n  {PODMAN}\n"
             f"then export {ENV}='{DSN}'",
             returncode=1,
@@ -114,7 +114,7 @@ def test_store() -> Iterator[Database]:
     db = Database(url)
     try:
         with db.engine.connect().execution_options(isolation_level="AUTOCOMMIT") as conn:
-            # The store is a throwaway (ADR-0029 §4.1): start from an empty schema so a
+            # The store is a throwaway (ADR-0002 §4.1): start from an empty schema so a
             # rewritten pre-release baseline cannot leave yesterday's tables behind.
             conn.execute(text("DROP SCHEMA IF EXISTS public CASCADE"))
             conn.execute(text("CREATE SCHEMA public"))

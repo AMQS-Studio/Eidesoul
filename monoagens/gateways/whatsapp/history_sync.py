@@ -5,7 +5,6 @@ import hashlib
 import logging
 
 from neonize.proto.waCompanionReg.WAWebProtobufsCompanionReg_pb2 import DeviceProps
-from neonize.proto.waE2E.WAWebProtobufsE2E_pb2 import Message as ProtoMessage
 from neonize.proto.waHistorySync.WAWebProtobufsHistorySync_pb2 import HistorySync
 
 from ...engine.turn.context import AUTHOR_UNKNOWN, DEFAULT_VISIBILITY, Message
@@ -99,15 +98,6 @@ def history_props(require_full: bool) -> DeviceProps:
     return DeviceProps.FromString(
         _replace_message_field(props.SerializeToString(), 5, raw_config)
     )
-
-
-def _decode_ref(value) -> object | None:
-    if not value:
-        return None
-    try:
-        return ProtoMessage.FromString(bytes(value))
-    except Exception:
-        return None
 
 
 def _ingest_sync_contacts(db, sync: HistorySync) -> None:

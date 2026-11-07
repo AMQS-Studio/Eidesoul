@@ -1,4 +1,4 @@
-"""The engine, mapped by domain (ADR-0031 §4.3).
+"""The engine, mapped by domain (ADR-0002 §4.3).
 
 Top level holds the handle and the seams; every other module lives in the folder that owns its
 reason to change::
@@ -23,7 +23,7 @@ reason to change::
                 lease, ambient, mcp
     memory/  stores/  tools/  commands/  guard/     fixed contracts, unchanged
 
-A module has one reason to change and stays at or below 800 lines (ADR-0031 §4.1); the growth
+A module has one reason to change and stays at or below 800 lines (ADR-0002 §4.1); the growth
 budget in §4.5 says a new engine module replaces one, splits an oversized one, or the ADR that
 introduces it names the reason.
 """

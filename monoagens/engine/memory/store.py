@@ -2,10 +2,10 @@
 
 Canonical rows live in Postgres (`memories`). Reads for prompts, recall, tools, and `/memori`
 go through the `memories_readable` view only; the worker/admin uses the base table. Retrieval
-is native: cosine over `embedding` and lexical `search_tsv`, fused by RRF (ADR-0051).
+is native: cosine over `embedding` and lexical `search_tsv`, fused by RRF (ADR-0007).
 
 The port stays one class; each behavior group lives in its own module and takes the facade as
-its first argument (ADR-0037 §4.4).
+its first argument (ADR-0007 §4.4).
 """
 
 
@@ -61,7 +61,7 @@ class MemoryStore(FencedStore):
         self.available = db is not None
         self.reason = "" if db is not None else "no database"
         self.label = "postgres"
-        # ADR-0051 §4.3: the column is fixed at 384, so another embedder is refused at load.
+        # ADR-0007 §4.3: the column is fixed at 384, so another embedder is refused at load.
         if int(EMBED_DIM or 0) != MEMORY_DIM:
             raise ConfigError(
                 f"memory embedding dimension must be {MEMORY_DIM}, got {EMBED_DIM}"
@@ -73,7 +73,7 @@ class MemoryStore(FencedStore):
         self._limits = memory
 
     def bind_guard(self, guard) -> None:
-        """ADR-0012 §4.3: the lease guard fences every canonical mutation once bound."""
+        """ADR-0002 §4.3: the lease guard fences every canonical mutation once bound."""
         self._guard = guard
         self.bind_lease(getattr(guard, "lease", None))
 
@@ -82,7 +82,7 @@ class MemoryStore(FencedStore):
         return self.fence_clause()
 
     def _fence(self, conn, operation: str) -> None:
-        """Refuse the write when the live lease generation moved on (ADR-0012 §4.3).
+        """Refuse the write when the live lease generation moved on (ADR-0002 §4.3).
 
         The guard records the refusal in the action ledger; the generation is then read on the
         writer's own connection, so the check and the write come from one snapshot. A store with
@@ -134,7 +134,7 @@ class MemoryStore(FencedStore):
         return {"global": "shared", "person": "private", "thread": "group"}[scope]
 
     def _canonical_subject(self, subject: str) -> str:
-        """ADR-0051 §4.4: the subject is the canonical `per_…`, never a gateway address."""
+        """ADR-0007 §4.4: the subject is the canonical `per_…`, never a gateway address."""
         value = str(subject or "").strip()
         if not value or value.startswith(ID_PREFIX) or self.db is None:
             return value

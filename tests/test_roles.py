@@ -1,6 +1,6 @@
 """Role contract: one roles.yaml mapping, multi-role union, closed defaults, memory_admin.
 
-Also ADR-0022: `administrator` is the protected top role (the `owner` name is gone, the loader
+Also ADR-0006: `administrator` is the protected top role (the `owner` name is gone, the loader
 rejects it), every role may carry a display-only `label`, and only `roles.yaml` + `config import`
 may change the protected role.
 """
@@ -186,7 +186,7 @@ def test_role_without_defaults_denies_tools() -> None:
     assert len(COMMANDS.by_name) > 0
 
 
-# ------------------------------------------------------------ ADR-0022
+# ------------------------------------------------------------ ADR-0006
 
 
 def test_a_missing_default_role_is_refused() -> None:

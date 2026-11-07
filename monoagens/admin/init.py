@@ -1,6 +1,6 @@
 """`monoagens init` data layer: defaults, validation, build, and atomic host-file writes.
 
-The interactive step machine lives in `admin/wizard.py` (ADR-0039 §4.6); this module owns only
+The interactive step machine lives in `admin/wizard.py` (ADR-0005 §4.6); this module owns only
 the four files, their modes, and the one source of defaults (`templates.py`). Secrets never reach
 YAML: `.env` holds the values, at `0600`.
 """

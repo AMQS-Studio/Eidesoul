@@ -1,4 +1,4 @@
-"""WhatsApp gateway policy: validate one role's `gateways.whatsapp` block (ADR-0046 §4.2).
+"""WhatsApp gateway policy: validate one role's `gateways.whatsapp` block (ADR-0002 §4.2).
 
 The block is role data, opaque to the core. This module owns the vocabulary and fails closed:
 a missing or malformed block denies the message before history, memory, and the model.

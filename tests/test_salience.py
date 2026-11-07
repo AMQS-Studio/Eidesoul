@@ -1,4 +1,4 @@
-"""Prompt block competition: pinned parts always fit, references compete when tight (ADR-0034)."""
+"""Prompt block competition: pinned parts always fit, references compete when tight (ADR-0003)."""
 
 from monoagens.engine.turn.context import keyword_set
 from monoagens.engine.turn.prompts import PromptPart

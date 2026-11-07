@@ -1,7 +1,7 @@
 """Reply text shaping: the body dialect, bubbles, chunking, and the send plan.
 
 The transport dialect stays in the body (`render`); the outbound path itself lives in
-`delivery.py` (ADR-0031 §4.2, ADR-0037 §4.3): this module only decides what the bubbles are.
+`delivery.py` (ADR-0002 §4.2, ADR-0007 §4.3): this module only decides what the bubbles are.
 """
 
 

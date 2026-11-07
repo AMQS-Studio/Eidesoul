@@ -1,4 +1,4 @@
-"""Tool relay: the content owner's grants for forwarding an answer (ADR-0023).
+"""Tool relay: the content owner's grants for forwarding an answer (ADR-0004).
 
 The tool acts only on the caller's own grants: `grant` lets one room carry the caller's answer
 for one scope, `list` shows the active ones, `revoke` stops the next report. A grant never holds

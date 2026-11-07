@@ -1,4 +1,4 @@
-"""Command /relay: the content owner manages who may forward an answer (ADR-0023 §4.5).
+"""Command /relay: the content owner manages who may forward an answer (ADR-0004 §4.5).
 
 A grant is per target scope and expires; it never carries message content, only the decision, its
 mode, and the room it covers. `/relay revoke` stops the next report; one already sent stays sent.

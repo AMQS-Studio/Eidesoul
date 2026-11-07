@@ -1,4 +1,4 @@
-"""One MetaData for all soul state; Postgres types only (ADR-0029).
+"""One MetaData for all soul state; Postgres types only (ADR-0002).
 
 The table objects live in sibling modules by domain; this module is the public surface, so
 `from .schema import <table>` keeps working exactly as it did when the definitions shared one

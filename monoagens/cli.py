@@ -183,7 +183,7 @@ async def build_runtime(
         gateways=tuple(gateways),
         documents=documents,
     )
-    # ADR-0014 §4.5: every registered gateway passed `ensure_core` in `build_gateways`.
+    # ADR-0001 §4.5: every registered gateway passed `ensure_core` in `build_gateways`.
     agent.runtime.gateways = tuple(gateway.name for gateway in gateways)
     agent.runtime.gateway_core_ok = len(gateways)
     lease = None
@@ -1046,15 +1046,6 @@ def _config_import(args: argparse.Namespace) -> int:
         db.dispose()
     print(f"config import: {count} documents from files", flush=True)
     return 0
-
-
-def _config_dispatch(args: argparse.Namespace) -> int:
-    if args.config_command in (None, "help"):
-        print("usage: monoagens config {import}")
-        return 2
-    if args.config_command == "import":
-        return _config_import(args)
-    raise ValueError(f"unknown config command '{args.config_command}'")
 
 
 def _init(args: argparse.Namespace) -> int:

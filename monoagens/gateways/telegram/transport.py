@@ -24,7 +24,7 @@ TIMEOUT = 60.0
 
 
 def _write_bytes(target: Path, content: bytes) -> None:
-    """One download's write, off the event loop (ADR-0017 §4.1)."""
+    """One download's write, off the event loop (ADR-0003 §4.1)."""
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_bytes(content)
 

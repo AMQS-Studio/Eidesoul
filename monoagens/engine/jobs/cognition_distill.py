@@ -1,4 +1,4 @@
-"""Episode distillation: one reusable procedure per admitted episode (ADR-0020)."""
+"""Episode distillation: one reusable procedure per admitted episode (ADR-0001)."""
 
 import json
 import logging

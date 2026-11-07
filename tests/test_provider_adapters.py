@@ -1,4 +1,4 @@
-"""ADR-0044: native wire request/response fixtures, no live network."""
+"""ADR-0003: native wire request/response fixtures, no live network."""
 
 import asyncio
 import json

@@ -1,8 +1,8 @@
-"""cognition queue, episodes, and derived procedures (ADR-0003, ADR-0020).
+"""cognition queue, episodes, and derived procedures (ADR-0003, ADR-0001).
 
 Revision 5 lands the batch mechanism: `cognition_jobs` (ADR-0003 §5.4, the canonical name;
-`memory_outbox` is not a second table), `episodes` (the recorded closure result of ADR-0020
-§4.2), and the procedure columns plus `skill_revisions` of ADR-0016 §4.7.
+`memory_outbox` is not a second table), `episodes` (the recorded closure result of ADR-0001
+§4.2), and the procedure columns plus `skill_revisions` of ADR-0002 §4.7.
 
 The capture gate (ADR-0002), reflection (ADR-0010), and the worker are code, not DDL; the
 dispute columns they write already exist in revision 4.
@@ -116,8 +116,8 @@ def upgrade() -> None:
     )
     op.create_index("ix_skill_revisions_skill", "skill_revisions", ["skill", "revision"])
 
-    # ADR-0020 §4.5 moved `uses`/`last_used` onto the `skills` row; the old counter table has
-    # no reader left. ADR-0016 §4.3 rule 3: this is a pre-release tree (0.0.0.devN), so the drop
+    # ADR-0001 §4.5 moved `uses`/`last_used` onto the `skills` row; the old counter table has
+    # no reader left. ADR-0002 §4.3 rule 3: this is a pre-release tree (0.0.0.devN), so the drop
     # needs no release pause; `downgrade` recreates it for a dev rollback.
     op.drop_table("skill_usage")
 

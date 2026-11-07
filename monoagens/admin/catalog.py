@@ -7,7 +7,6 @@ from `VoiceConfig`, and search backends from the search tool's backend record.
 
 import argparse
 import ast
-import importlib.util
 from dataclasses import MISSING, dataclass, field, fields, is_dataclass
 from pathlib import Path
 
@@ -184,13 +183,6 @@ def default_gateways() -> tuple[str, ...]:
     from .templates import GATEWAY
 
     return tuple(name for name, value in GATEWAY["gateways"].items() if value.get("enabled"))
-
-
-def module_available(name: str) -> bool:
-    try:
-        return importlib.util.find_spec(name) is not None
-    except (ImportError, ModuleNotFoundError, ValueError):
-        return False
 
 
 # --- install-time choices -----------------------------------------------------------------

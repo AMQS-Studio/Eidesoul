@@ -1,4 +1,4 @@
-"""Search: FTS first, trigram as the second net, scope unchanged (ADR-0026)."""
+"""Search: FTS first, trigram as the second net, scope unchanged (ADR-0002)."""
 
 
 from datetime import datetime

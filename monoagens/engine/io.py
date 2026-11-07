@@ -1,4 +1,4 @@
-"""Bounded thread executor for the synchronous seams inside the engine (ADR-0017 §4.1).
+"""Bounded thread executor for the synchronous seams inside the engine (ADR-0003 §4.1).
 
 The event loop renews the lease heartbeat; a synchronous DB query, an embedder call, or a
 blocking memory call on that loop turns latency into a takeover. Everything that blocks is

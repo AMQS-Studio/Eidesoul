@@ -1,4 +1,4 @@
-"""ADR-0020 §4.6 efficiency ladder: evidence, eligibility, actions, and the proposal cooldown."""
+"""ADR-0001 §4.6 efficiency ladder: evidence, eligibility, actions, and the proposal cooldown."""
 
 
 import asyncio

@@ -5,7 +5,7 @@ Run it from the repo root::
     python scripts/selfcheck.py --check
 
 Exit code 0 means every `behavior:<id>` resolves, every topic stays under its limit and leaks no
-runtime fact, and the engine imports no gateway (ADR-0015 §4.8). `monoagens selftest` calls the
+runtime fact, and the engine imports no gateway (ADR-0001 §4.8). `monoagens selftest` calls the
 same `check()` so a stale manifest fails the shipped smoke test too.
 """
 
@@ -34,14 +34,14 @@ from monoagens.engine.soul import Soul
 
 ENGINE = ROOT / "monoagens" / "engine"
 TOP_LEVEL_CAP = 16
-# ADR-0031 §4.1 caps. No module is allowlisted: every engine module stays under the ceiling.
+# ADR-0002 §4.1 caps. No module is allowlisted: every engine module stays under the ceiling.
 LINE_CAPS: dict[str, int] = {}
 OVER_CAP_ALLOWED: set[str] = set()
 MODULE_CAP = 800
 
 
 def size_problems() -> list[str]:
-    """ADR-0031 §6: the top level, the three concentrated modules, and the 800-line ceiling."""
+    """ADR-0002 §6: the top level, the three concentrated modules, and the 800-line ceiling."""
     problems: list[str] = []
     top = sorted(path.name for path in ENGINE.glob("*.py"))
     if len(top) > TOP_LEVEL_CAP:
@@ -51,7 +51,7 @@ def size_problems() -> list[str]:
     for relative, cap in LINE_CAPS.items():
         path = ROOT / relative
         if not path.is_file():
-            problems.append(f"{relative} is missing (ADR-0031 §4.2 target)")
+            problems.append(f"{relative} is missing (ADR-0002 §4.2 target)")
             continue
         lines = len(path.read_text(encoding="utf-8").splitlines())
         if lines > cap:
@@ -100,7 +100,7 @@ def sample_config() -> Config:
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="ADR-0015 self-knowledge guard")
+    parser = argparse.ArgumentParser(description="ADR-0001 self-knowledge guard")
     parser.add_argument(
         "--check",
         action="store_true",

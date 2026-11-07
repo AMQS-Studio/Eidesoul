@@ -1,7 +1,7 @@
 """memory core: canonical `memories`, the journal, uses, tombstones, the index map, and the view.
 
 Revision 4 lands the whole memory spine named by ADR-0001, ADR-0004, ADR-0005, and ADR-0008;
-ADR-0016 §4.2-§4.3 owns the final column shape, CHECKs, and indexes (with `thread_id` and
+ADR-0002 §4.2-§4.3 owns the final column shape, CHECKs, and indexes (with `thread_id` and
 `scope='thread'` from ADR-0000 §4.4).
 
 Nothing is deployed at 0.0.0.devN, so there is no intermediate `memories` shape to upgrade:

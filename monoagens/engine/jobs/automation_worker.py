@@ -1,4 +1,4 @@
-"""Automation worker: the one scheduler for promises (ADR-0014).
+"""Automation worker: the one scheduler for promises (ADR-0001).
 
 The loop catches up, claims due occurrences, runs the closed step pipeline, records the
 outcome, and apologizes for what the catch-up window lost. Only `collect` reads the archive,
@@ -60,7 +60,7 @@ class AutomationWorker:
         self.agent = agent
         self.config: AutomationConfig = agent.config.automations
         self.store = store or AutomationStore(agent.db, self.config)
-        # ADR-0012 §4.3: the supervisor builds this worker after attaching the lease, so this
+        # ADR-0002 §4.3: the supervisor builds this worker after attaching the lease, so this
         # is the one place every store learns the generation it must write under.
         bind = getattr(self.store, "bind_lease", None)
         if callable(bind):
@@ -320,7 +320,7 @@ class AutomationWorker:
         return evaluate_condition(condition, facts)
 
     async def _nl_condition(self, condition: dict, facts: dict, run: dict) -> bool:
-        """The opt-in ambiguity judge, bounded per day (ADR-0014 §4.3/§5)."""
+        """The opt-in ambiguity judge, bounded per day (ADR-0001 §4.3/§5)."""
         text = str(facts.get("text") or "").strip()
         if not text or self.agent.llm is None:
             return False
@@ -470,7 +470,7 @@ class AutomationWorker:
         return target
 
     def _address(self, target: str) -> Address:
-        """The routed thread, or the person's DM thread (ADR-0032 §4.1: a route or a refusal)."""
+        """The routed thread, or the person's DM thread (ADR-0004 §4.1: a route or a refusal)."""
         try:
             return self.agent.address_of(str(target))
         except GatewayError as exc:
@@ -480,7 +480,7 @@ class AutomationWorker:
             return self.agent.address_of(dm)
 
     def _route_name(self, thread_id: str) -> str:
-        """ADR-0014 §4.6: the body that first saw this thread owns its route."""
+        """ADR-0001 §4.6: the body that first saw this thread owns its route."""
         try:
             return str(self.agent.address_of(str(thread_id)).gateway or "")
         except GatewayError:

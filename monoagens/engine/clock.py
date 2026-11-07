@@ -1,4 +1,4 @@
-"""One clock (ADR-0033 §4.13): every stamp and day bucket reads through `now(tz)`.
+"""One clock (ADR-0001 §4.13): every stamp and day bucket reads through `now(tz)`.
 
 `tz` is a required soul value written by `monoagens init`; a missing or unknown zone is
 refused with the value named, never replaced by a default zone.

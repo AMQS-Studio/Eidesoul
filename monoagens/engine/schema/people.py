@@ -43,7 +43,7 @@ people = Table(
     Column("window_annoyance", Float, nullable=False, default=0.0),
     Column("notes", JSONB, nullable=False, default=list),
 )
-# ADR-0026 §4.3: the trigram net for a person's display name (the column is `name`).
+# ADR-0002 §4.3: the trigram net for a person's display name (the column is `name`).
 Index(
     "ix_people_name_trgm",
     people.c.name,
@@ -139,7 +139,7 @@ person_link_codes = Table(
     Column("used_at", Float, nullable=False, default=0.0),
 )
 
-# ADR-0020 §4.5 / ADR-0016 §4.7: a procedure carries scope, provenance, trust, and a revision.
+# ADR-0001 §4.5 / ADR-0002 §4.7: a procedure carries scope, provenance, trust, and a revision.
 skills = Table(
     "skills",
     metadata,
@@ -165,7 +165,7 @@ skills = Table(
 Index("ix_skills_scope", skills.c.scope)
 Index("ix_skills_app_scope", skills.c.app, skills.c.scope)
 
-# Append-only history (ADR-0020 §4.5): a save/merge never destroys the previous version.
+# Append-only history (ADR-0001 §4.5): a save/merge never destroys the previous version.
 skill_revisions = Table(
     "skill_revisions",
     metadata,
@@ -198,8 +198,8 @@ skill_files = Table(
     PrimaryKeyConstraint("skill", "path", name="pk_skill_files"),
 )
 
-# `skill_usage` is retired: ADR-0020 §4.5 moved `uses`/`last_used` onto the `skills` row, so the
-# old counter table has no reader. Revision 5 drops it (ADR-0016 §4.3 rule 3 note in the migration).
+# `skill_usage` is retired: ADR-0001 §4.5 moved `uses`/`last_used` onto the `skills` row, so the
+# old counter table has no reader. Revision 5 drops it (ADR-0002 §4.3 rule 3 note in the migration).
 
 recipes = Table(
     "recipes",

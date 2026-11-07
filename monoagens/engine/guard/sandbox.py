@@ -75,7 +75,7 @@ SAFE_HEADS = frozenset(
 # Heads that can execute code even when they look like plain filters.
 CODE_HEADS = frozenset({"python", "python3", "node", "nodejs", "perl", "ruby", "php", "awk"})
 # Heads whose whole output is the command; their plain path arguments are file names, so a
-# read named `shutdown.log` is not a `shutdown` call (ADR-0049 §4.1.6).
+# read named `shutdown.log` is not a `shutdown` call (ADR-0006 §4.1.6).
 READ_ONLY_HEADS = frozenset(
     {"cat", "head", "tail", "less", "wc", "stat", "file", "grep", "rg", "ls", "diff"}
 )

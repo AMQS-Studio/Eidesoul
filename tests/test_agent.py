@@ -462,7 +462,7 @@ def test_questions_per_day_two_allows_two_pairs(tmp_path) -> None:
 
 
 def test_a_body_without_rich_or_directory_is_counted(tmp_path) -> None:
-    """ADR-0014 §4.5: what a body cannot do is counted, not assumed away."""
+    """ADR-0001 §4.5: what a body cannot do is counted, not assumed away."""
     from support import FakeGateway
 
     from monoagens.engine.inbound import Directory

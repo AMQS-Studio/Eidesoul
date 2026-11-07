@@ -13,7 +13,6 @@ from sqlalchemy import text as text_
 
 from ...engine.db import Database
 from ...engine.schema import messages, person_links, threads
-from ...engine.turn.context import Message
 from .schema import wa_contacts, wa_lid_map
 
 log = logging.getLogger(__name__)
@@ -318,12 +317,8 @@ def label(thread_id: str, name: str) -> str:
     return f"{name} ({thread_id})" if name else thread_id
 
 
-def message_jid(message: Message) -> str:
-    return message.sender_address
-
-
 def private_thread(db, person_id: str) -> str:
-    """The one direct thread this person holds, or "" (ADR-0033 §4.5: a body fact)."""
+    """The one direct thread this person holds, or "" (ADR-0001 §4.5: a body fact)."""
     who = str(person_id or "").strip()
     if not who:
         return ""

@@ -2,7 +2,7 @@
 
 The product logo is `assets/logo.png`; `logo_art.py` is a generated half-block rendering of that
 same asset, not a second mark. Line mode prints its truecolor ANSI rows; curses parses the same
-cells into color pairs because `curses.addstr` does not interpret escape sequences (ADR-0039 §4.5).
+cells into color pairs because `curses.addstr` does not interpret escape sequences (ADR-0005 §4.5).
 """
 
 import re

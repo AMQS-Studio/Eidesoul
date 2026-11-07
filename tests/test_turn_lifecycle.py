@@ -1,4 +1,4 @@
-"""Turn lifecycle contract (ADR-0013, ADR-0011, ADR-0017).
+"""Turn lifecycle contract (ADR-0003, ADR-0001, ADR-0003).
 
 Every test drives the real store: `turns`, `turn_steps`, and `outbound_messages` are the
 records, not an in-memory stand-in.
@@ -449,7 +449,7 @@ def record_resumes(env) -> list[str]:
 
 
 def test_the_backlog_pass_is_paced_and_round_robin(tmp_path) -> None:
-    """ADR-0013 §11: a minute's budget, one row per chat per lap, the rest released."""
+    """ADR-0003 §11: a minute's budget, one row per chat per lap, the rest released."""
     env = make_agent(tmp_path)
     threads = ["a@s.whatsapp.net", "b@s.whatsapp.net", "c@s.whatsapp.net"]
     for thread in threads:

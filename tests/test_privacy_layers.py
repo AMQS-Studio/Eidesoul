@@ -1,4 +1,4 @@
-"""ADR-0038: evidence before level, local policy, and affect kept out of the decision."""
+"""ADR-0007: evidence before level, local policy, and affect kept out of the decision."""
 
 from monoagens.engine.memory.evidence import classify, collect, decide
 

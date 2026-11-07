@@ -2,7 +2,7 @@
 
 The engine owns the mechanisms (affect, style, character, humanize); the soul owns their
 settings. `soul.voice` is the one place where behavior is tuned, while `soul.yaml` prose and
-examples remain the only character source (ADR-0045).
+examples remain the only character source (ADR-0001).
 """
 
 
@@ -77,7 +77,7 @@ rules:
 
 @dataclass(frozen=True)
 class SamplingConfig:
-    """Behavior sampling; empty optional values mean the provider default (ADR-0044)."""
+    """Behavior sampling; empty optional values mean the provider default (ADR-0003)."""
 
     daily_temperature: float = 0.9
     professional_temperature: float = 0.3
@@ -111,7 +111,7 @@ class StyleConfig:
 
 @dataclass(frozen=True)
 class CharacterConfig:
-    """Polish only: no level table, no gender target, no second rewrite (ADR-0045)."""
+    """Polish only: no level table, no gender target, no second rewrite (ADR-0001)."""
 
     enabled: bool = False
     max_chars: int = 400

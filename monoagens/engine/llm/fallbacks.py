@@ -1,6 +1,6 @@
 """Operator-configured fallback targets: the chain tried after the primary model.
 
-ADR-0044 §4.7: the operator names every target; no field here is filled from a code default.
+ADR-0003 §4.7: the operator names every target; no field here is filled from a code default.
 """
 
 import os

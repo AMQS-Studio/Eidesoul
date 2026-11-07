@@ -16,7 +16,7 @@ log = logging.getLogger(__name__)
 
 @dataclass(frozen=True)
 class RetryConfig:
-    """Retry per path (ADR-0017 §4.6): the turn fails visibly, background work backs off."""
+    """Retry per path (ADR-0003 §4.6): the turn fails visibly, background work backs off."""
 
     turn_attempts: int = 1
     worker_attempts: int = 3
@@ -50,7 +50,7 @@ class ShutdownConfig:
     notice_per_chat: bool = True
     notice_retry: NoticeRetryConfig = field(default_factory=NoticeRetryConfig)
     resume_notice: ResumeNoticeConfig = field(default_factory=ResumeNoticeConfig)
-    stop_grace_period: float = 30.0  # the orchestrator's stopped deadline (ADR-0013 §9)
+    stop_grace_period: float = 30.0  # the orchestrator's stopped deadline (ADR-0003 §9)
 
 @dataclass(frozen=True)
 class TurnConfig:
@@ -119,7 +119,7 @@ class LLMConfig:
     safety_supported: bool = False
     run_budget_seconds: int = 240
     max_calls_per_turn: int = 0  # 0 = unlimited rounds; > 0 caps model calls per turn
-    prompt_cache: bool = True  # two system messages: stable prefix then volatile (ADR-0025 §4.1)
+    prompt_cache: bool = True  # two system messages: stable prefix then volatile (ADR-0003 §4.1)
     retry: RetryConfig = field(default_factory=RetryConfig)
     fallbacks: tuple[LLMTargetConfig, ...] = ()  # tried in order after the primary target
 
@@ -160,7 +160,7 @@ class SandboxConfig:
 
 @dataclass(frozen=True)
 class FetchConfig:
-    """ADR-0021 §4.3: `fetch` reads the public internet; the SSRF rule lives in code."""
+    """ADR-0003 §4.3: `fetch` reads the public internet; the SSRF rule lives in code."""
 
     enabled: bool = True
     max_output_chars: int = 12_000
@@ -190,7 +190,7 @@ class WebSearchConfig:
 
 @dataclass(frozen=True)
 class ResearchConfig:
-    """ADR-0043: model prior for stable facts, websearch when evidence is required."""
+    """ADR-0003: model prior for stable facts, websearch when evidence is required."""
 
     mode: str = "auto"  # off | auto | always
     require_citation: bool = True
@@ -199,7 +199,7 @@ class ResearchConfig:
 
 @dataclass(frozen=True)
 class GrepConfig:
-    """ADR-0021 §4.2: file-content search under the same roots as `read`."""
+    """ADR-0003 §4.2: file-content search under the same roots as `read`."""
 
     max_matches: int = 60
     max_output_chars: int = 4_000
@@ -211,7 +211,7 @@ class ReadConfig:
 
 @dataclass(frozen=True)
 class ToolsConfig:
-    """ADR-0024 §5: validation is not optional; only the error budget is tunable."""
+    """ADR-0003 §5: validation is not optional; only the error budget is tunable."""
 
     args: str = "strict"
     max_errors: int = 5
@@ -220,7 +220,7 @@ class ToolsConfig:
 
 @dataclass(frozen=True)
 class ShellConfig:
-    """ADR-0024 §4.6: the child sees a computed environment, never the process one."""
+    """ADR-0003 §4.6: the child sees a computed environment, never the process one."""
 
     env: tuple[str, ...] = (
         "PATH",
@@ -232,7 +232,7 @@ class ShellConfig:
 
 @dataclass(frozen=True)
 class SearchConfig:
-    """ADR-0026 §5: FTS first, trigram as the second net; scope is unchanged."""
+    """ADR-0002 §5: FTS first, trigram as the second net; scope is unchanged."""
 
     fts: bool = True
     lang: str = "simple"
@@ -243,14 +243,14 @@ class SearchConfig:
 
 @dataclass(frozen=True)
 class LoggingConfig:
-    """ADR-0019 §4.1/§5: `text` stays the default, `json` is one object per line."""
+    """ADR-0003 §4.1/§5: `text` stays the default, `json` is one object per line."""
 
     format: str = "text"
     level: str = "INFO"
 
 @dataclass(frozen=True)
 class MetricsConfig:
-    """ADR-0016 §4.6: `llm_calls` retention, removed by the ADR-0005 job."""
+    """ADR-0002 §4.6: `llm_calls` retention, removed by the ADR-0005 job."""
 
     retention_days: int = 90
     enabled: bool = True
@@ -269,7 +269,7 @@ class AlertSourcesConfig:
 
 @dataclass(frozen=True)
 class AlertsConfig:
-    """ADR-0047: consecutive failures become one admin message and one webhook POST."""
+    """ADR-0009: consecutive failures become one admin message and one webhook POST."""
 
     enabled: bool = False  # disabled by default: alerting is opt-in
     sources: AlertSourcesConfig = field(default_factory=AlertSourcesConfig)
@@ -348,20 +348,20 @@ class SpeechConfig:
 
 @dataclass(frozen=True)
 class AutomationSandboxConfig:
-    """ADR-0014 §5: a sandbox step only runs a program below this root."""
+    """ADR-0001 §5: a sandbox step only runs a program below this root."""
 
     programs_root: str = "workspace"
 
 @dataclass(frozen=True)
 class AutomationConditionConfig:
-    """ADR-0014 §4.3: natural-language criteria are opt-in per automation."""
+    """ADR-0001 §4.3: natural-language criteria are opt-in per automation."""
 
     nl_criteria: bool = True
     nl_budget_tokens_per_day: int = 20000
 
 @dataclass(frozen=True)
 class AutomationRetryConfig:
-    """ADR-0014 §4.13: transient failures only; `permanent` is never retried."""
+    """ADR-0001 §4.13: transient failures only; `permanent` is never retried."""
 
     max_attempts: int = 3
     backoff_seconds: float = 30.0
@@ -371,7 +371,7 @@ class AutomationRetryConfig:
 
 @dataclass(frozen=True)
 class AutomationResilienceConfig:
-    """ADR-0014 §4.10: a missed occurrence is recorded, apologized once, never fired stale."""
+    """ADR-0001 §4.10: a missed occurrence is recorded, apologized once, never fired stale."""
 
     catchup_minutes: int = 15
     max_stale_days: int = 7
@@ -382,7 +382,7 @@ class AutomationResilienceConfig:
 
 @dataclass(frozen=True)
 class AutomationConfig:
-    """ADR-0014 §5, one block: schedule, budget, quiet hours, kill switch, retries."""
+    """ADR-0001 §5, one block: schedule, budget, quiet hours, kill switch, retries."""
 
     enabled: bool = True
     kill_switch: bool = False

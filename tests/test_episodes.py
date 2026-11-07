@@ -1,4 +1,4 @@
-"""ADR-0020 episode contract: one closure, one distill job, one revision, scope stays put."""
+"""ADR-0001 episode contract: one closure, one distill job, one revision, scope stays put."""
 
 
 import asyncio
@@ -203,7 +203,7 @@ def test_procedure_scope_does_not_leak_to_another_thread(tmp_path) -> None:
 
 
 def test_the_signature_names_scope_tools_and_target_types() -> None:
-    """ADR-0020 §4.6: two runs compare only when the scope, tools, and target types match."""
+    """ADR-0001 §4.6: two runs compare only when the scope, tools, and target types match."""
     steps = [
         {"tool": "read", "args_hash": "a", "target": "file"},
         {"tool": "read", "args_hash": "b", "target": "file"},

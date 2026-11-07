@@ -97,7 +97,7 @@ def _lease_row(db: Database) -> dict | None:
 
 
 def lease_active(db: Database, *, ttl: float = LEASE_TTL) -> dict | None:
-    """The lease row while it is alive; freshness comes from the database clock (ADR-0012 §4.4)."""
+    """The lease row while it is alive; freshness comes from the database clock (ADR-0002 §4.4)."""
     row = db.fetch_one(
         text(
             "SELECT instance_id, host, pid, generation, heartbeat_at, "

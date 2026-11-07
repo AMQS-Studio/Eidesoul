@@ -1,4 +1,4 @@
-"""Telegram role policy: the `gateways.telegram` block of one role (ADR-0046 §4.2).
+"""Telegram role policy: the `gateways.telegram` block of one role (ADR-0002 §4.2).
 
 The vocabulary is Telegram's own: a DM, a group, a forum topic, and whether the bot has to be
 addressed. A malformed or missing block denies, exactly like every other body.

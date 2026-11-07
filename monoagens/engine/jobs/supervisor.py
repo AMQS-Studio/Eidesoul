@@ -1,9 +1,9 @@
 """Supervisor: acquire the primary lease, serve gateways, and shut down in phases.
 
-Neat exit follows ADR-0011 §4.4: `running → draining → noticed → stopped`. Intake stops
+Neat exit follows ADR-0001 §4.4: `running → draining → noticed → stopped`. Intake stops
 first, `engine_control.shutting_down` is raised for every instance, in-flight turns get
 `drain_seconds`, one notice per chat is sent inside `notice_seconds`, and only then is the
-gate lowered and the lease released (ADR-0017 §4.4: gate down before release).
+gate lowered and the lease released (ADR-0003 §4.4: gate down before release).
 """
 
 
@@ -27,14 +27,14 @@ log = logging.getLogger(__name__)
 
 TICK = 5.0
 RENEW_FAILURES = 3
-# ADR-0013 §11: the resume budget is a rolling minute, not a fixed per-pass cap.
+# ADR-0003 §11: the resume budget is a rolling minute, not a fixed per-pass cap.
 RESUME_WINDOW = 60.0
 
 # --------------------------------------------------------------- turn recovery
 
 
 def _is_action(row: dict) -> bool:
-    """`turns.category` marks a single-action turn: never consolidated away (ADR-0013 §11)."""
+    """`turns.category` marks a single-action turn: never consolidated away (ADR-0003 §11)."""
     return str(row.get("category") or "chat") == "action"
 
 def expire_consolidated(agent, thread: str, turn_ids: list[str]) -> int:
@@ -53,7 +53,7 @@ def expire_consolidated(agent, thread: str, turn_ids: list[str]) -> int:
     return expired
 
 def select_resume(agent, rows: list[dict], allowed: int) -> list[dict]:
-    """Pace, fair-share, and consolidate one backlog (ADR-0013 §11).
+    """Pace, fair-share, and consolidate one backlog (ADR-0003 §11).
 
     Selection is round-robin across chats so one busy room cannot starve the others; the
     global minute budget bounds the whole pass and the per-chat quota bounds one room. Under
@@ -145,7 +145,7 @@ def round_robin(
     return selected
 
 async def recover(agent) -> int:
-    """Recovery pass on the primary (ADR-0011 §4.5, ADR-0013 §8)."""
+    """Recovery pass on the primary (ADR-0001 §4.5, ADR-0003 §8)."""
     cfg = agent.config.turns
     if not cfg.resume or not agent._accepting():
         return 0
@@ -259,12 +259,12 @@ class Supervisor:
         self.stopping = False
         self._first = True
         self.agent.lease = lease
-        # ADR-0012 §4.3: every canonical memory write now asks this guard first. Admin/CLI
+        # ADR-0002 §4.3: every canonical memory write now asks this guard first. Admin/CLI
         # stores stay unbound, so only the live primary writes under a generation.
         bind = getattr(getattr(agent, "memory", None), "bind_guard", None)
         if bind is not None:
             bind(lease.guard)
-        # ADR-0012 §4.3: bind every fenced store now, even at generation 0, so a standby
+        # ADR-0002 §4.3: bind every fenced store now, even at generation 0, so a standby
         # refuses canonical writes instead of executing them unfenced.
         bind_stores = getattr(lease, "bind_stores", None)
         if bind_stores is not None:
@@ -293,7 +293,7 @@ class Supervisor:
             ),
         )
         self.agent.cognition = self.cognition
-        # ADR-0014 §4.3: the message-event sink shares the automations store, so a run and its
+        # ADR-0001 §4.3: the message-event sink shares the automations store, so a run and its
         # message commit in the same intake transaction.
         if self.automations is not None and hasattr(agent, "history"):
             agent.history.event_sink = self.automations.store
@@ -346,7 +346,7 @@ class Supervisor:
     async def activate(self, holder) -> None:
         self.agent.draining = False
         self.agent.mode = "primary"
-        # ADR-0012 §4.3: re-bind after the takeover so every store reads the live generation.
+        # ADR-0002 §4.3: re-bind after the takeover so every store reads the live generation.
         lease = getattr(self, "lease", None) or getattr(self.agent, "lease", None)
         if lease is not None:
             lease.bind_stores(self.agent)
@@ -434,7 +434,7 @@ class Supervisor:
             await self.agent.stop_reaper()
 
     async def shutdown(self) -> None:
-        """`running → draining → noticed → stopped` within `grace_seconds` (ADR-0011 §4.4)."""
+        """`running → draining → noticed → stopped` within `grace_seconds` (ADR-0001 §4.4)."""
         cfg = self.agent.config.turns.shutdown
         started = asyncio.get_running_loop().time()
         grace = max(0.0, float(cfg.grace_seconds))

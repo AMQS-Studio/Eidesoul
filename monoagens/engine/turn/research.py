@@ -1,4 +1,4 @@
-"""Research contract: deterministic trigger, ephemeral card, and citation verifier (ADR-0043).
+"""Research contract: deterministic trigger, ephemeral card, and citation verifier (ADR-0003).
 
 The card is a value for one turn, never a table. It carries only what the search returned:
 title, URL, timestamps, quote, and source type. A prompt instruction is not enforcement; the

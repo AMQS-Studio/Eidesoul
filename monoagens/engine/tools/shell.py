@@ -10,7 +10,7 @@ from . import ToolContext, _int
 
 
 def child_env(config: ShellConfig) -> dict[str, str]:
-    """ADR-0024 §4.6: a computed environment; the process one (keys, DSN) never travels."""
+    """ADR-0003 §4.6: a computed environment; the process one (keys, DSN) never travels."""
     return {name: os.environ[name] for name in config.env if name in os.environ}
 
 

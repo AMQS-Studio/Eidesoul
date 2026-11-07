@@ -1,7 +1,7 @@
 """Terminal primitives for `monoagens init`: curses on a TTY, numbered lines elsewhere.
 
 The renderer owns presentation only. `admin/init.py` owns the answers, validation, and file
-writes; this module never touches the host (ADR-0039 §4.2).
+writes; this module never touches the host (ADR-0005 §4.2).
 """
 
 import contextlib

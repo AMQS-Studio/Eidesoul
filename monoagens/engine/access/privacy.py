@@ -2,7 +2,7 @@
 
 All level maths and veto precedence live in `memory.privacy.PrivacyPolicy`; this module only
 drafts the question, detects mentions locally, and records the pending answer. No memory text
-is sent to an external model (ADR-0038 §4.5).
+is sent to an external model (ADR-0007 §4.5).
 """
 
 
@@ -135,7 +135,7 @@ class PrivacyService:
         return question or self._text("ask_disclosure")
 
     def _audit(self, reply: str, hits: Sequence[MemoryHit], inbound) -> AuditResult:
-        """Local mention detection: no memory text leaves the host (ADR-0038 §4.5)."""
+        """Local mention detection: no memory text leaves the host (ADR-0007 §4.5)."""
         words = set(re.findall(r"[\w]{4,}", str(reply or "").lower()))
         mentions: list[str] = []
         for hit in hits:

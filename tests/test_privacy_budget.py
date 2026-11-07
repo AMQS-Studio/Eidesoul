@@ -1,4 +1,4 @@
-"""ADR-0038 §5.1: the default privacy stack fits its memory and disk budget."""
+"""ADR-0007 §5.1: the default privacy stack fits its memory and disk budget."""
 
 import json
 import os

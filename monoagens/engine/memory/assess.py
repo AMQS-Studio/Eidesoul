@@ -37,7 +37,7 @@ Rules:
   third_party_personal | legal | health | credential.
 - "durability": core | durable | episodic | normal.
 - "worth": false items may carry empty text.
-- Do not assign a confirmation flag: a local policy owns that (ADR-0038)."""
+- Do not assign a confirmation flag: a local policy owns that (ADR-0007)."""
 
 VALID_KINDS = ("fact", "preference", "event", "note", "commitment", "rule")
 VALID_DURABILITY = ("core", "durable", "episodic", "normal")

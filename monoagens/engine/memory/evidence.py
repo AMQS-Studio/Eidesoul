@@ -1,11 +1,11 @@
-"""Local privacy evidence and deterministic policy (ADR-0038).
+"""Local privacy evidence and deterministic policy (ADR-0007).
 
 Detectors report *evidence*; only `decide()` writes a level and an action. The pattern layer
 is deterministic and versioned with the built-in English policy; the entity layer uses Presidio
 with the small multilingual spaCy model plus structural regex fallbacks; the semantic layer
 reuses the one MiniLM embedder and classifies by English label centroids. Because MiniLM maps
 50+ languages into one vector space, the English anchors serve every language. Neither layer
-sees affect: a sentiment score is not a confidentiality level (ADR-0038 §4.10).
+sees affect: a sentiment score is not a confidentiality level (ADR-0007 §4.10).
 """
 
 import hashlib
@@ -393,7 +393,7 @@ def _tree_digest(root: Path) -> str:
 
 @cache
 def verify_entities() -> str:
-    """Verify the installed model tree before the first inference (ADR-0038 §4.5)."""
+    """Verify the installed model tree before the first inference (ADR-0007 §4.5)."""
     root = _entity_model_root()
     try:
         digest = _tree_digest(root)
@@ -407,7 +407,7 @@ def verify_entities() -> str:
 
 
 class _BlockOptionalModels:
-    """Keep torch/transformers out of the privacy import (ADR-0038 §5.1)."""
+    """Keep torch/transformers out of the privacy import (ADR-0007 §5.1)."""
 
     def find_spec(self, fullname, path=None, target=None):
         if fullname.partition(".")[0] in {"torch", "transformers"}:
@@ -595,7 +595,7 @@ class SemanticDetector:
 
 DETECTORS = (PatternDetector(), EntityDetector(), SemanticDetector())
 
-# ADR-0038 §4.3: a model may raise a level or abstain. Every evidence layer contributes to the
+# ADR-0007 §4.3: a model may raise a level or abstain. Every evidence layer contributes to the
 # verdict, so a credential or a sensitive label found by the entity or encoder layer is not
 # lost when the regex layer stays silent. A layer that also reports AMBIGUOUS evidence has no
 # confident separation between two labels, so its label is audit-only: only a layer whose best
@@ -671,12 +671,3 @@ def decide(evidence: Sequence[Evidence], floor: float = 0.0) -> PrivacyDecision:
 def classify(text: str, language: str) -> tuple[list[Evidence], PrivacyDecision]:
     evidence, pack = collect(text, language)
     return evidence, decide(evidence, pack.semantic_floor + pack.semantic_margin)
-
-
-def policy_record(decision: PrivacyDecision) -> dict:
-    return {
-        "level": decision.level,
-        "action": decision.action,
-        "policy_version": decision.policy_version,
-        "policy_hash": decision.policy_hash,
-    }

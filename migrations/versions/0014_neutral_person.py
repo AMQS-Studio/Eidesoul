@@ -4,7 +4,7 @@ Revision ID: 0014_neutral_person
 Revises: 0013_fences_events_efficiency
 Create Date: 2026-11-04
 
-ADR-0033 §4.8: a person's gender is never inferred, stored, or gated. The soul's own
+ADR-0001 §4.8: a person's gender is never inferred, stored, or gated. The soul's own
 `gender` lives in the soul document and is untouched.
 """
 

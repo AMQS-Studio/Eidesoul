@@ -1,6 +1,6 @@
 """relay consent: one grant per (task, from, to) before another person's answer is forwarded.
 
-Revision 6 lands `relay_grants` exactly as ADR-0023 §4.1 / ADR-0016 §4.9: the row records the
+Revision 6 lands `relay_grants` exactly as ADR-0004 §4.1 / ADR-0002 §4.9: the row records the
 decision (`full|summary|anonymous|none`), its scope, expiry, revocation, and how it was decided.
 It never holds message content. `mode='none'` is a stored decision, not a missing row, so a
 refusal stays auditable; the unique index keeps one grant per task and pair of people.

@@ -1,9 +1,9 @@
-"""Structured log, correlation ids, and the counters `/status` reads (ADR-0019).
+"""Structured log, correlation ids, and the counters `/status` reads (ADR-0003).
 
 One log line is one event. The mandatory fields are `ts`, `level`, `event`, and `logger`; the
 optional correlation fields (`turn_id`, `thread_id`, `job_id`, `run_id`, `gateway`,
 `duration_ms`) come from `contextvars`, so a call site never has to thread an id through every
-function. The turn sets its ids once (ADR-0019 §4.2); background work sets `job_id`/`run_id`
+function. The turn sets its ids once (ADR-0003 §4.2); background work sets `job_id`/`run_id`
 and clears them again, so one task never carries another task's turn.
 
 `event` is a stable key, not a sentence: the call site may pass `extra={"event": "turn.diam"}`.
@@ -218,7 +218,7 @@ def silence_third_party(*, debug: bool = False) -> None:
 
 
 def configure(log_settings) -> logging.Handler:
-    """`engine.logging.format|level` from the loaded config (ADR-0019 §4.1)."""
+    """`engine.logging.format|level` from the loaded config (ADR-0003 §4.1)."""
     fmt = str(getattr(log_settings, "format", "text") or "text").strip().lower()
     level = str(getattr(log_settings, "level", "INFO") or "INFO").strip().upper()
     return install(fmt if fmt in FORMATS else "text", level if level in LEVELS else "INFO")

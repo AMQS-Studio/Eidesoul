@@ -1,4 +1,4 @@
-"""Alembic environment: the revision chain is the only schema-change path (ADR-0016)."""
+"""Alembic environment: the revision chain is the only schema-change path (ADR-0002)."""
 
 
 import pathlib

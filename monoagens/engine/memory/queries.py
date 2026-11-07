@@ -1,7 +1,7 @@
 """Pure SQL for canonical memory: every statement lives here, every function takes a connection.
 
 `MemoryStore` keeps the single write/readable port (ADR-0001); this module only holds the
-statements it used to carry (ADR-0031 §4.2). Policy, the fence, and the `MemoryHit` mapping stay
+statements it used to carry (ADR-0002 §4.2). Policy, the fence, and the `MemoryHit` mapping stay
 with the caller.
 """
 
@@ -119,7 +119,7 @@ def match_rows(
     return rows(conn, statement)
 
 
-# ADR-0051 §4.2: cosine and lexical arms fused by Reciprocal Rank Fusion, then importance and
+# ADR-0007 §4.2: cosine and lexical arms fused by Reciprocal Rank Fusion, then importance and
 # an exponential recency decay as tie-breakers. The weights stay far below one RRF share, so a
 # row found by both arms always outranks a row found by one.
 MEMORY_DIM = 384
@@ -229,7 +229,7 @@ def hybrid_rows(
     scopes: Sequence[str] = ("global", "person", "thread"),
     max_level: int = 4,
 ) -> list[dict]:
-    """One statement over `memories_readable`: vector + lexical fused by RRF (ADR-0051)."""
+    """One statement over `memories_readable`: vector + lexical fused by RRF (ADR-0007)."""
     scope_filter = _scope_filter(scopes, person_id, thread_id)
     if not scope_filter:
         return []
@@ -363,7 +363,7 @@ def pending_candidates(conn, scope: str, limit: int, now: float) -> list[dict]:
 def supersede_candidates(conn, scope: str, limit: int) -> list[dict]:
     """Pending `supersede:` candidates, across person/thread/global for the same subject.
 
-    The candidate and the row it replaces may live in different scopes (ADR-0051 §4.4); a
+    The candidate and the row it replaces may live in different scopes (ADR-0007 §4.4); a
     person pass therefore matches on the subject, a thread pass on the thread, and the global
     pass sees every scope.
     """
@@ -584,30 +584,12 @@ def unlink_index(conn, memory_id: str) -> None:
 # ---------------------------------------------------------------- write-path statements
 
 
-def insert_memory(conn, values: dict) -> None:
-    conn.execute(pg_insert(memories).values(**values))
-
-
 def insert_event_row(conn, values: dict) -> None:
     conn.execute(pg_insert(memory_events).values(**values))
 
 
 def insert_candidate_row(conn, values: dict) -> None:
     conn.execute(pg_insert(memories).values(**values))
-
-
-def supersede_row(conn, memory_id: str, by: str, expires_at, now: float) -> None:
-    conn.execute(
-        memories.update()
-        .where(memories.c.id == memory_id)
-        .values(
-            state="superseded",
-            superseded_by=by,
-            pinned=False,
-            expires_at=expires_at,
-            updated_at=now,
-        )
-    )
 
 
 def locked(conn, memory_id: str) -> dict | None:

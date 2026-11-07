@@ -1,4 +1,4 @@
-"""Capability manifest: generated-first self knowledge (ADR-0015 §4.8).
+"""Capability manifest: generated-first self knowledge (ADR-0001 §4.8).
 
 Four generators, one source each and no LLM:
 
@@ -8,7 +8,7 @@ Four generators, one source each and no LLM:
 * `topology` — `ast.parse` over `monoagens/engine/**`, the dependency map.
 
 `info` only looks up strings; the capability index is assembled deterministically (name order,
-stable per role) so the prompt prefix stays byte-identical (ADR-0025 §4.1). Turning the feature
+stable per role) so the prompt prefix stays byte-identical (ADR-0003 §4.1). Turning the feature
 off stops the index, the topics, `config`, and `topology`; the pinned Layer 1 block is untouched.
 """
 
@@ -78,7 +78,7 @@ TOPIC_BEHAVIORS: dict[str, tuple[str, ...]] = {
 
 
 def bucket_days(days: float) -> str:
-    """Coarse buckets only: the exact number comes from the operator (ADR-0015 §4.8 rule 2)."""
+    """Coarse buckets only: the exact number comes from the operator (ADR-0001 §4.8 rule 2)."""
     value = float(days or 0)
     if value <= 0:
         return "not configured"
@@ -148,7 +148,7 @@ def _dedupe(items: list[tuple[str, int, str]]) -> list[tuple[str, int, str]]:
 
 
 def forbidden_tokens(config: Config) -> list[str]:
-    """The runtime facts a topic or document must never repeat (ADR-0015 §4.8 guard)."""
+    """The runtime facts a topic or document must never repeat (ADR-0001 §4.8 guard)."""
     tokens = [
         str(config.paths.config),
         str(config.paths.workspace),
@@ -204,12 +204,6 @@ class SelfKnowledge:
 
             self._commands = commands
         return self._tools, self._commands
-
-    def _tools_registry(self):
-        return self.registries()[0]
-
-    def _commands_registry(self):
-        return self.registries()[1]
 
     # ------------------------------------------------------------ catalog
 
@@ -660,7 +654,7 @@ def _reference_problems(config) -> list[str]:
 
 
 def check(config) -> list[str]:
-    """ADR-0015 §4.8 guard: every reference resolves and no forbidden token leaks."""
+    """ADR-0001 §4.8 guard: every reference resolves and no forbidden token leaks."""
     manifest = SelfKnowledge(config)
     return [
         *_behavior_problems(),

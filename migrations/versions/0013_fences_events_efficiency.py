@@ -1,14 +1,14 @@
-"""Fences, events, and efficiency columns (ADR-0012 §4.4, ADR-0010 §4.7, ADR-0014 §4.3-§4.6).
+"""Fences, events, and efficiency columns (ADR-0002 §4.4, ADR-0010 §4.7, ADR-0001 §4.3-§4.6).
 
 One revision carries every column the remaining ADRs need, so the chain stays append-only:
 
-- `cognition_jobs.generation` — the lease generation a claim was made under (ADR-0012 §4.4).
+- `cognition_jobs.generation` — the lease generation a claim was made under (ADR-0002 §4.4).
 - `memories.dispute_asked_at` — the per-subject question budget (ADR-0010 §4.7).
-- `threads.gateway` — the durable route a thread was first seen on (ADR-0014 §4.6).
-- `turns.category` — `action` turns are never consolidated away (ADR-0013 §11).
-- `skills.priority` — the efficiency ladder's ordering (ADR-0020 §4.6).
-- `automation_runs.payload` — what one occurrence carries (ADR-0014 §4.4).
-- the partial index the message sink reads (ADR-0014 §4.3).
+- `threads.gateway` — the durable route a thread was first seen on (ADR-0001 §4.6).
+- `turns.category` — `action` turns are never consolidated away (ADR-0003 §11).
+- `skills.priority` — the efficiency ladder's ordering (ADR-0001 §4.6).
+- `automation_runs.payload` — what one occurrence carries (ADR-0001 §4.4).
+- the partial index the message sink reads (ADR-0001 §4.3).
 
 `memories_readable` is `SELECT *` over `memories`, so the new column is appended with
 `CREATE OR REPLACE VIEW`; without it the view would silently miss `dispute_asked_at` on an

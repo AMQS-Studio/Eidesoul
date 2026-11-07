@@ -1,4 +1,4 @@
-"""Operator files are the source of truth; DB documents are a derived cache (ADR-0046 §4.1).
+"""Operator files are the source of truth; DB documents are a derived cache (ADR-0002 §4.1).
 
 `config.yaml` (its `engine` section), `soul.yaml`, and `roles.yaml` are read, diffable, and
 recoverable. The cache is keyed by content hash, refreshed from the files on start and by
@@ -202,7 +202,7 @@ class DocumentStore:
         return 1
 
     def sync(self) -> int:
-        """Refresh the cache from the operator files; files always win (ADR-0046 §4.1)."""
+        """Refresh the cache from the operator files; files always win (ADR-0002 §4.1)."""
         if not self.enabled:
             return 0
         with self.db.engine.connect() as conn:

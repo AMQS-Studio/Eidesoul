@@ -1,13 +1,13 @@
-"""automation: `automations`, `automation_runs`, `automation_state_log` (ADR-0014 §4.1/§4.10/§4.13).
+"""automation: `automations`, `automation_runs`, `automation_state_log` (ADR-0001 §4.1/§4.10/§4.13).
 
 Revision 10 lands one declarative row per promise (`event`, `condition`, `steps`, `owner`,
 `policy`, `state`, `next_occurrence`) and one row per occurrence (`automation_runs`). The
 occurrence key is `hash(automation_id, scheduled_at_utc)` and is unique, so a duplicate tick or
-a takeover cannot double a run. `automation_state_log` records transitions only (ADR-0016 §4.9),
+a takeover cannot double a run. `automation_state_log` records transitions only (ADR-0002 §4.9),
 never a run; `automation_runs` is the run record and never holds another room's content.
 
 `quiet_hours`, `budget_per_day`, the kill switch, and the catch-up window live in the config
-block (ADR-0014 §5); the run row keeps the decision and its reason so a run can be audited.
+block (ADR-0001 §5); the run row keeps the decision and its reason so a run can be audited.
 """
 
 

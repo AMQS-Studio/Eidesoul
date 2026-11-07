@@ -1,4 +1,4 @@
-"""Turn cost: one `llm_calls` row per call, a call ceiling, and a stable prefix (ADR-0025)."""
+"""Turn cost: one `llm_calls` row per call, a call ceiling, and a stable prefix (ADR-0003)."""
 
 
 import asyncio
@@ -161,7 +161,7 @@ def test_system_prompt_keeps_date_out_of_the_stable_part(tmp_path) -> None:
 
 
 def test_normalized_tool_calls_keep_their_name_and_arguments(tmp_path, monkeypatch) -> None:
-    """ADR-0044 §4.2: the loop consumes ProviderToolCall, not the raw SDK shape."""
+    """ADR-0003 §4.2: the loop consumes ProviderToolCall, not the raw SDK shape."""
     monkeypatch.setenv("K", "x")
     config = build_config(tmp_path)
     db = database()

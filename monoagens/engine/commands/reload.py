@@ -8,7 +8,7 @@ from . import CommandContext
 
 
 async def reload(ctx: CommandContext) -> str:
-    # ADR-0046 §4.9: the highest-priority role must carry `reload`; a lower role cannot grant it.
+    # ADR-0002 §4.9: the highest-priority role must carry `reload`; a lower role cannot grant it.
     if not ctx.roles or not command_allowed(ctx.roles[:1], "reload"):
         return t("agent.command_denied", ctx.lang, name="reload", roles=ctx.role_names()).strip()
     if not ctx.direct:

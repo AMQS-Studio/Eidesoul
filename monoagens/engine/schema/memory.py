@@ -27,7 +27,7 @@ from sqlalchemy.dialects.postgresql import JSONB, TSVECTOR
 from .base import MEMORY_DIM, MEMORY_TSV, Vector, metadata
 
 # ---------------------------------------------------------------- memory
-# ADR-0016 §4.2 is the one DDL owner; ADR-0001/0004/0005/0008 own the semantics.
+# ADR-0002 §4.2 is the one DDL owner; ADR-0001/0004/0005/0008 own the semantics.
 # `deleted` rows never live here: purge removes them and leaves a content-free tombstone.
 
 memories = Table(
@@ -39,7 +39,7 @@ memories = Table(
     Column("thread_id", String(120), nullable=False, server_default=""),
     Column("kind", String(20), nullable=False, server_default="fact"),
     Column("text", Text, nullable=False),
-    # ADR-0051 §4.1: the native retrieval index is derived by Postgres, never by a writer.
+    # ADR-0007 §4.1: the native retrieval index is derived by Postgres, never by a writer.
     Column("embedding", Vector(MEMORY_DIM), nullable=True),
     Column("search_tsv", TSVECTOR, Computed(MEMORY_TSV, persisted=True)),
     Column("state", String(20), nullable=False, server_default="pending"),
@@ -107,7 +107,7 @@ Index(
     postgresql_where=memories.c.expires_at.is_not(None),
 )
 Index("memories_refs_gin", memories.c.refs, postgresql_using="gin")
-# ADR-0051 §4.1/§4.2: cosine HNSW and lexical GIN are the two arms of hybrid retrieval.
+# ADR-0007 §4.1/§4.2: cosine HNSW and lexical GIN are the two arms of hybrid retrieval.
 Index(
     "ix_memories_embedding_hnsw",
     memories.c.embedding,
@@ -126,7 +126,7 @@ Index(
     postgresql_where=memories.c.superseded_by.is_not(None),
 )
 
-# ADR-0004 §5.3/ADR-0051 §4.2: the only read path for prompts, recall, and disclosure.
+# ADR-0004 §5.3/ADR-0007 §4.2: the only read path for prompts, recall, and disclosure.
 # A row without a level or without an active state never leaves this view.
 READABLE_VIEW = "memories_readable"
 READABLE_VIEW_SQL = (

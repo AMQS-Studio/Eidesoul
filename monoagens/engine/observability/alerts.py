@@ -24,7 +24,7 @@ Notifier = Callable[[str], Awaitable[None]]
 
 
 class AlertManager:
-    """One alert per source per cooldown, after `threshold` consecutive failures (ADR-0047)."""
+    """One alert per source per cooldown, after `threshold` consecutive failures (ADR-0009)."""
 
     def __init__(self, config: Config, notify: Notifier | None = None) -> None:
         self.config = config

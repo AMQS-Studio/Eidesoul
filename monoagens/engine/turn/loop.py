@@ -1,4 +1,4 @@
-"""The turn state machine (ADR-0013, ADR-0037 §4.3): claim, decide, draft, review, send.
+"""The turn state machine (ADR-0003, ADR-0007 §4.3): claim, decide, draft, review, send.
 
 One turn per call, checkpointed by step name; a resumed turn starts from `turns.step` and takes
 the same path. The service never imports `agent.py`; it is injected with the `TurnRuntime`, the
@@ -217,7 +217,7 @@ class TurnRunner(ApprovalFlow, ResearchFlow, TurnReview):
                 emotion = None
                 if not is_command and runtime.affect is not None and not resuming:
                     try:
-                        # ADR-0017 §4.1: affect reads/writes are synchronous store calls.
+                        # ADR-0003 §4.1: affect reads/writes are synchronous store calls.
                         emotion = await io.run(
                             runtime.affect.turn_start, thread_id, message.id
                         )
@@ -302,7 +302,7 @@ class TurnRunner(ApprovalFlow, ResearchFlow, TurnReview):
                             log.debug(
                                 "failed to read annoyance chat=%s", thread_id, exc_info=True
                             )
-                    # ADR-0017 §4.1: the transcript comes from the synchronous archive.
+                    # ADR-0003 §4.1: the transcript comes from the synchronous archive.
                     transcript = await io.run(self.decision_transcript, thread_id)
                     decision = await decide_turn(
                         runtime.llm,
@@ -449,7 +449,7 @@ class TurnRunner(ApprovalFlow, ResearchFlow, TurnReview):
                                 )
                         skill_block = ""
                         # A transport hint is attacker-controlled; only the gateway's declared
-                        # app may scope skills and tool context (ADR-0053 §4.1.4).
+                        # app may scope skills and tool context (ADR-0005 §4.1.4).
                         app = ""
                         if runtime.skills is not None:
                             try:

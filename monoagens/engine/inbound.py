@@ -1,7 +1,7 @@
 """The embodiment-neutral seam: a body hands in a `Percept`, the engine emits `Action`s.
 
 A body is a package under `monoagens/gateways/<name>/`; it talks to the engine only through the
-types and protocols here (ADR-0032 §4.1-4.3). The outbound message is a Command Message: the
+types and protocols here (ADR-0004 §4.1-4.3). The outbound message is a Command Message: the
 engine addresses an `Address`, the body routes the `Action` to its own handler by
 `action.capability`, and answers with a `Receipt`.
 
@@ -20,7 +20,7 @@ a hint the body cannot supply. The known keys:
 * `group` — the thread has more than two participants.
 * `presence` — the body observed activity without a message.
 * `self` — the message came from the body's own account (never a turn).
-* `app` — the application this message belongs to (ADR-0035); optional.
+* `app` — the application this message belongs to (ADR-0005); optional.
 
 Minimal body::
 
@@ -63,11 +63,11 @@ class GatewayError(RuntimeError):
 
 
 class SendRefused(RuntimeError):
-    """The door refused the action; a caller must never retry it (ADR-0032 §4.8)."""
+    """The door refused the action; a caller must never retry it (ADR-0004 §4.8)."""
 
 
 class StandbyError(RuntimeError):
-    """A send was refused because this instance is not the primary (ADR-0017 §4.4)."""
+    """A send was refused because this instance is not the primary (ADR-0003 §4.4)."""
 
 
 # ADR-0003 §4.3: every outbound action a tool emits carries a deterministic id, so a resume
@@ -119,7 +119,7 @@ class Percept:
 
 @dataclass(frozen=True, slots=True)
 class Address:
-    """Where a message goes: the body name and its thread id, never parsed (ADR-0032 §4.1)."""
+    """Where a message goes: the body name and its thread id, never parsed (ADR-0004 §4.1)."""
 
     gateway: str
     thread: str
@@ -225,7 +225,7 @@ class CoreDefaults:
         return thread
 
     def prompt_section(self) -> str:
-        """Body-specific prompt facts; empty by default (ADR-0033 §4.5)."""
+        """Body-specific prompt facts; empty by default (ADR-0001 §4.5)."""
         return ""
 
     def normalize_address(self, raw: str) -> str:
@@ -302,7 +302,7 @@ class Rich(Protocol):
 
 @runtime_checkable
 class PrivateThread(Protocol):
-    """Optional body surface: the one private thread a person holds, or "" (ADR-0033 §4.5)."""
+    """Optional body surface: the one private thread a person holds, or "" (ADR-0001 §4.5)."""
 
     def private_thread(self, person_id: str) -> str: ...
 
@@ -391,11 +391,11 @@ def directory_refusal(gateway) -> str:
 
 
 def refusal(gateway, thread: str, requester: str, *, recorded=None) -> str:
-    """Cross-thread evidence (ADR-0018 §4.2): "" when allowed, a reason otherwise.
+    """Cross-thread evidence (ADR-0004 §4.2): "" when allowed, a reason otherwise.
 
     Fail closed: a body without `Directory`, or one that does not know the members, never gets
     permission by default. Only a participant set that names the requester allows the crossing;
-    when the body cannot prove membership, recorded presence is the second layer (ADR-0032 §4.5).
+    when the body cannot prove membership, recorded presence is the second layer (ADR-0004 §4.5).
     """
     reason = directory_refusal(gateway)
     if reason:

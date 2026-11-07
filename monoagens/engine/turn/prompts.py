@@ -17,7 +17,7 @@ MERGE_SEPARATOR = "\n\n"
 
 
 class Prompt(str):
-    """A prompt with a stable prefix and a volatile rest (ADR-0025 §4.1).
+    """A prompt with a stable prefix and a volatile rest (ADR-0003 §4.1).
 
     `str(prompt)` is the merged form, so a provider that refuses two system messages loses only
     the cache hit; `stable`/`volatile` keep the split for providers that accept both.
@@ -38,7 +38,7 @@ class Prompt(str):
 
 @dataclass(frozen=True)
 class PromptPart:
-    """One prompt block: its name, cache side, order, salience, and producer (ADR-0034)."""
+    """One prompt block: its name, cache side, order, salience, and producer (ADR-0003)."""
 
     name: str
     stable: bool
@@ -91,7 +91,7 @@ PLUGIN_NAME = re.compile(r"^plugin:[a-z0-9][a-z0-9-]{0,63}:[a-z][a-z0-9_]{0,63}$
 
 
 def _infra_visible(roles: tuple[Role, ...], mode: str) -> bool:
-    """ADR-0015 §4.5: infrastructure facts stay in the administrator context."""
+    """ADR-0001 §4.5: infrastructure facts stay in the administrator context."""
     if mode == "never":
         return False
     if mode == "always":
@@ -107,7 +107,7 @@ def _capability_index(
     commands=None,
     bodies: tuple[str, ...] = (),
 ) -> str:
-    """The Self index, scoped to this body; other bodies are one line, never a schema (ADR-0032 §4.6)."""
+    """The Self index, scoped to this body; other bodies are one line, never a schema (ADR-0004 §4.6)."""
     from ..self_knowledge import SelfKnowledge
 
     text = SelfKnowledge(config, tools, commands).index(roles)
@@ -162,7 +162,7 @@ CRISIS_SAFETY = (
 
 
 def voice_block(voice) -> str:
-    """Non-graded voice policy: profanity is an instruction, not a table (ADR-0045 §4.5)."""
+    """Non-graded voice policy: profanity is an instruction, not a table (ADR-0001 §4.5)."""
     if voice.profanity == "free":
         return (
             "Voice: you may swear when the thread already swears; never open with a curse and "

@@ -1,6 +1,6 @@
 """Interactive init contract: location, provider, credential, model, database, identity, voice.
 
-ADR-0039 §4.2/§4.3: the wizard shows the Eidos lockup, navigates menus with the line fallback in
+ADR-0005 §4.2/§4.3: the wizard shows the Eidos lockup, navigates menus with the line fallback in
 tests, reviews, then writes atomically. Piped stdin fails closed; a secret stays in `.env` and
 never reaches the review, the screen, or the log.
 """

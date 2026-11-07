@@ -1,4 +1,4 @@
-"""Frozen schema.py snapshot for the Alembic baseline (ADR-0016 revision 1) — do not edit."""
+"""Frozen schema.py snapshot for the Alembic baseline (ADR-0002 revision 1) — do not edit."""
 
 
 from sqlalchemy import (

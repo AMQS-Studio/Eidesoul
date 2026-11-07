@@ -1,1 +1,1 @@
-"""Who may do what: roles, permissions, identity, privacy, approvals, relay (ADR-0031 §4.3)."""
+"""Who may do what: roles, permissions, identity, privacy, approvals, relay (ADR-0002 §4.3)."""

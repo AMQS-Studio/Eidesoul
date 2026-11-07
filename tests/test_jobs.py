@@ -43,7 +43,7 @@ def build(tmp_path, *, confirm_tasks: bool = False, tools=("*",)):
 
 
 def seed_dm(env, thread: str = OWNER) -> str:
-    """A send needs a routed DM thread with the owner (ADR-0032 §4.1)."""
+    """A send needs a routed DM thread with the owner (ADR-0004 §4.1)."""
     from sqlalchemy.dialects.postgresql import insert as pg_insert
 
     from monoagens.engine.schema import people, thread_people, threads

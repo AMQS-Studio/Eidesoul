@@ -1,7 +1,7 @@
 """The interactive init shell: location, provider, credential, model, database, identity, voice.
 
 The writer, defaults, and validation live in `admin/init.py`; this module owns keys, frames, and
-the review only (ADR-0039 §4.2). Tests drive the numbered fallback; a real POSIX TTY gets the
+the review only (ADR-0005 §4.2). Tests drive the numbered fallback; a real POSIX TTY gets the
 curses menu.
 """
 
@@ -725,7 +725,7 @@ def wizard(
     force: bool = False,
     ask_location: bool = True,
 ) -> tuple[list[Path], list[Path]]:
-    """The interactive setup (ADR-0039 §4.2): location through review.
+    """The interactive setup (ADR-0005 §4.2): location through review.
 
     A flag pre-answers its step; a step the operator changes is asked again before the next
     review. `Ctrl-C` or Escape cancels the run and leaves nothing behind. `ask_capabilities`

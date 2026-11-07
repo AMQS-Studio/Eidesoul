@@ -1,6 +1,6 @@
 """Command dispatch preparation: the leading-mention strip, the lookup, and the context.
 
-ADR-0037 §4.3: the command door's front half moves here; the handlers themselves stay in
+ADR-0007 §4.3: the command door's front half moves here; the handlers themselves stay in
 `commands/` and the registry stays in `registry.py`. The service never imports `agent.py`; the
 host is the `Agent` it is bound to.
 """
