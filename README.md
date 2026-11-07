@@ -27,6 +27,7 @@
   <a href="#operator-cli">Operator CLI</a> ·
   <a href="#configuration">Configuration</a> ·
   <a href="#security-and-governance">Security</a> ·
+  <a href="CONTRIBUTING.md">Contributing</a> ·
   <a href="#credits">Credits</a>
 </p>
 
@@ -401,11 +402,13 @@ MonoAgens enforces defense-in-depth across three independent layers:
 3. **Disposable Container Sandbox:**
    - Untrusted code and shell tools run inside an ephemeral Podman/Docker container with dropped Linux capabilities, read-only rootfs, PID/CPU/memory limits, and a dedicated internal network behind an SSRF-blocking HTTP egress proxy.
 
+For vulnerability reporting and operator hardening guidelines, see [`SECURITY.md`](SECURITY.md).
+
 ---
 
 ## Development & Verification
 
-Tests run against a real PostgreSQL + `pgvector` instance (never SQLite mocks):
+See [`CONTRIBUTING.md`](CONTRIBUTING.md) for the full developer guide, architectural boundaries, and extension instructions. Tests run against a real PostgreSQL + `pgvector` instance (never SQLite mocks):
 
 ```bash
 # Start an isolated test database container on port 5433
