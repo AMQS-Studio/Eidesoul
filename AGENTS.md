@@ -76,10 +76,39 @@ Hard rules and timeless architectural invariants for changes in this repo.
   `thread_history`) belong to core tools. Gateway packages only hold tools specific to their own
   physical embodiment or transport actions.
 
-## 7. Verification
+## 7. Architecture and End-to-End Call-Flow Map
 
-- All changes must keep the test suite and static checks clean:
+Use this map as the primary mental model of how modules connect across a turn lifecycle:
+
+1. **Bootstrap & Process Lease (`monoagens/cli/` $\to$ `monoagens/engine/agent.py`):**
+   - `Agent.__init__` wires `Database` (`monoagens/engine/db.py`), `LeaseManager` (`monoagens/engine/jobs/lease.py`, `engine_lease` row `id = 1`), `TurnRuntime` (`monoagens/engine/runtime.py`), `ToolIndex` (`monoagens/engine/tools/__init__.py`), `PluginLoader` (`monoagens/engine/plugins/loader.py`), and `AlertManager` (`monoagens/engine/alerts.py`).
+2. **Inbound Seam (`monoagens/gateways/<body_name>/` $\to$ `monoagens/engine/inbound.py`):**
+   - Each gateway (`whatsapp`, `telegram`, `discord`, `slack`) inherits `BaseGateway` (`monoagens/gateways/base.py`), normalizes platform events in `ingress.py` into a `Percept(source, thread, actor, kind, payload=Message, hints)`, checks `access_refusal` (delegating to `agent.access_refusal`), and calls `await agent.handle(percept, gateway)`.
+3. **Access Control, Commands, & Turn Queue (`monoagens/engine/agent.py` $\to$ `monoagens/engine/turn/`):**
+   - `AccessService` (`monoagens/engine/access/service.py`) resolves `IdentityStore` (`person_id`), evaluates `roles.yaml` permissions (`monoagens/engine/access/permissions.py`), and enforces `freeze` / `away` / `rate` gates.
+   - Slash commands (`/status`, `/memory`, `/approve`, `/deny`, `/thinking`, `/steps`, `/alerts`, etc.) route directly through `monoagens/engine/commands/__init__.py` (`REGISTRY`).
+   - Normal messages enter `TurnCoordinator` (`monoagens/engine/turn/coordinator.py`), which coalesces burst messages, manages per-thread turn locks, and invokes `TurnRunner` (`monoagens/engine/turn/loop.py`).
+4. **Prompt Assembly & Hybrid Memory Retrieval (`monoagens/engine/turn/prompts.py` & `monoagens/engine/memory/`):**
+   - `system_prompt` builds a `Prompt(stable, volatile)` from `CORE_PARTS` (`soul.yaml`, active skills, affect, character, workspace, body `prompt_section`).
+   - `MemoryStore.search` (`monoagens/engine/memory/store.py`) queries `memories_readable` (PostgreSQL `pgvector` HNSW `vector(384)` + `search_tsv` GIN + recency/salience) strictly scoped to `global` + `person:<sender>` + `thread:<active_thread>`.
+5. **LLM Loop, Providers, & Tool Execution (`monoagens/engine/turn/loop.py` $\to$ `monoagens/engine/llm.py` & `monoagens/engine/tools/`):**
+   - `LLMClient` (`monoagens/engine/llm.py`) dispatches requests through `monoagens/providers/` (`openai`, `gemini`, `anthropic`) with automatic model fallback (`engine.llm.fallbacks`) and emits progress callbacks (`send_thinking`, `send_step`, `send_interim` in `monoagens/engine/turn/progress.py` with `stream_id = replace_id = "turn:<turn_id>:progress"`).
+   - Tool calls pass through the single execution door `tools.execute` (`monoagens/engine/tools/__init__.py`): schema validation $\to$ RBAC check $\to$ `SafetyPolicy.check` (`monoagens/engine/guard/policy.py`) & `SandboxGuard.check` (`monoagens/engine/guard/sandbox.py`, Podman container in `monoagens/engine/sandbox/`) $\to$ `ApprovalStore` (`monoagens/engine/stores/approvals.py`) if `pending` $\to$ tool handler `spec.fn(args, ctx)`.
+   - Cross-room reads (`thread_history` in `monoagens/engine/tools/thread_history.py`) enforce `cross_refusal` / `inbound.refusal` (verifying `gateway.participants(thread_id)` or `history.rooms_of(requester)`) and record read spans in `ctx.cross_reads`.
+6. **Review Pipeline & Privacy Guard (`monoagens/engine/turn/review.py`):**
+   - Every draft reply runs through `TurnReview._review`: `character.polish` $\to$ `PrivacyService.review` (`monoagens/engine/access/privacy.py`, enforcing L0–L4 rules and parking L4 consent approvals in the subject's private thread) $\to$ `guard.cross_chat_leak` (`monoagens/engine/guard/patterns.py`, blocking verbatim cross-room leaks).
+7. **Single Outbound Door & Boundary Prompt Options (`monoagens/engine/turn/delivery.py` $\to$ `monoagens/gateways/base.py`):**
+   - `Delivery` chunks and checkpoints outbound actions (`OutboxStore` in `monoagens/engine/stores/outbox.py`) and calls `Agent.dispatch(action, subject=..., origin=...)` (`monoagens/engine/agent_guard.py`).
+   - `BaseGateway.prompt_options(action)` (`monoagens/gateways/base.py`) resolves interactive buttons/choices at the gateway boundary from `action.meta["options"]` or synthesizes localized `Approve` / `Deny` buttons from `/approve #<id>` badges without polluting `monoagens/engine/` with UI code.
+
+## 8. Fast Exploration (CodeGraph) and Verification
+
+- **Use CodeGraph First:** Before running multi-step `grep` / `read_file` loops to locate symbols, trace call paths, or check blast radius, query `.codegraph/` in one call:
+  - MCP tool: `codegraph_explore` with symbol names, file names, or flow questions.
+  - Shell CLI: `codegraph explore "<symbol names or flow>"`
+- **Verification Gate:** All changes must keep the test suite and static checks clean:
   - `pytest -q`
   - `ruff check monoagens scripts tests plugins migrations`
+  - `python -P scripts/selfcheck.py --check`
   - `python -P scripts/types.py --check`
   - `python -P scripts/adr.py --check`
