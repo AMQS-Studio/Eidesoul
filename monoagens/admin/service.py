@@ -519,6 +519,10 @@ def compose_update(service: Service) -> int:
     code = _run([*argv, *profiles, "build", CONTAINER_NAME], service.root)
     if code:
         return code
+    # The migration refuses to run beside a live primary, so the old container stops first.
+    code = _run([*argv, "stop", CONTAINER_NAME], service.root)
+    if code:
+        return code
     code = _run(
         [*argv, "run", "--rm", CONTAINER_NAME, "monoagens", "db", "upgrade"], service.root
     )
