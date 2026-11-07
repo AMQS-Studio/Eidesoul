@@ -91,12 +91,22 @@ Timeless architectural principles, system boundaries, and high-level invariants 
    review, and cross-room leak checks before chunked, outbox-checkpointed dispatch through
    `Agent.dispatch()` back to the target gateway.
 
-## 7. Code Exploration and Verification
+## 7. Code Exploration, Sync Discipline, and Verification
 
 - **CodeGraph First:** Because implementation details evolve, do not rely on hardcoded file lists.
   When `.codegraph/` is present, use `codegraph_explore` (MCP) or `codegraph explore "<query>"`
   (CLI) first to inspect current symbol definitions, call paths, and blast radius in one call.
+- **Lockfile, Template, and Plugin Digest Synchronization:**
+  - Whenever `pyproject.toml` dependencies or `[project.optional-dependencies]` change, always run
+    `uv lock` so `uv.lock` remains in sync (`uv sync --locked` in `install.sh` and `Dockerfile`
+    fails if `uv.lock` is stale).
+  - Whenever configuration dataclasses (`monoagens/engine/config/`, `monoagens/engine/soul.py`,
+    `monoagens/engine/access/roles.py`) or `monoagens/admin/templates.py` change, regenerate root
+    `config.yaml`, `roles.yaml`, and `soul.yaml` from `templates.py`.
+  - Whenever files inside `plugins/<name>/` change, update `digest:` in `plugins/<name>/plugin.yaml`
+    via `.venv/bin/python -m monoagens plugins digest plugins/<name>`.
 - **Verification Gate:** Keep the test suite and static checks clean after changes:
+  - `uv lock --check`
   - `.venv/bin/ruff check monoagens scripts tests plugins migrations`
   - `.venv/bin/python -P scripts/selfcheck.py --check`
   - `.venv/bin/python -P scripts/types.py --check`

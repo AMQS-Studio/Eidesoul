@@ -117,6 +117,9 @@ For full normative specifications, read the **[Gateway, Plugin, and MCP Contract
 Before submitting a pull request, run the full verification suite locally—every check must pass with zero errors:
 
 ```bash
+# 0. Verify uv.lock matches pyproject.toml (run `uv lock` if dependencies changed)
+uv lock --check
+
 # 1. Linter & formatting check
 .venv/bin/ruff check monoagens scripts tests plugins migrations
 

@@ -11,6 +11,8 @@ same `check()` so a stale manifest fails the shipped smoke test too.
 
 
 import argparse
+import shutil
+import subprocess
 import sys
 from pathlib import Path
 
@@ -66,6 +68,24 @@ def size_problems() -> list[str]:
     return problems
 
 
+def lockfile_problems() -> list[str]:
+    """Ensure `uv.lock` stays in sync with `pyproject.toml` so `uv sync --locked` never fails."""
+    uv = shutil.which("uv")
+    if not uv or not (ROOT / "uv.lock").is_file():
+        return []
+    proc = subprocess.run(
+        [uv, "lock", "--check"],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if proc.returncode != 0:
+        detail = (proc.stderr or proc.stdout or "uv.lock is out of sync").strip().splitlines()[0]
+        return [f"uv.lock out of sync with pyproject.toml (run `uv lock`): {detail}"]
+    return []
+
+
 def sample_config() -> Config:
     """A default Config with no real secret: enough for the generators and the token scan."""
     return Config(
@@ -111,7 +131,7 @@ def main(argv: list[str] | None = None) -> int:
         parser.print_help()
         return 0
     config = sample_config()
-    problems = [*check(config), *size_problems()]
+    problems = [*check(config), *size_problems(), *lockfile_problems()]
     manifest = SelfKnowledge(config)
     topics = ", ".join(manifest.topics())
     if problems:
