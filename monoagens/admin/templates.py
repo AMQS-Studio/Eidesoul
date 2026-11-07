@@ -9,6 +9,8 @@ which order — is declared here, so a default can never drift between code and 
 
 import copy
 import importlib
+import logging
+import os
 from collections.abc import Callable, Mapping
 from dataclasses import MISSING, fields, is_dataclass
 from pathlib import Path
@@ -50,6 +52,9 @@ from ..engine.config import (
 )
 from ..engine.soul import DEFAULT_SOUL_YAML, VoiceConfig
 from ..providers import PROVIDERS
+from . import yaml_io
+
+log = logging.getLogger(__name__)
 
 
 def _tree(value: object) -> Any:
@@ -1444,3 +1449,172 @@ def files(
         ),
         ".env": env_file(provider, selected, llm["api_key_env"]),
     }
+
+
+def _fill_missing(body: Mapping, defaults: Mapping) -> dict:
+    """The operator's mapping with every absent default key added; values never change."""
+    found = dict(body)
+    for key, value in defaults.items():
+        if key not in found:
+            found[key] = copy.deepcopy(value)
+        elif isinstance(found[key], dict) and isinstance(value, Mapping):
+            found[key] = _fill_missing(found[key], value)
+    return found
+
+
+def _probe_roles(folder: Path) -> dict:
+    """The sibling roles mapping when it reads, the shipped seed roles otherwise.
+
+    Each host file is proved on its own: a broken roles.yaml is reported by its own branch and
+    must not block the config refresh.
+    """
+    try:
+        raw = yaml.safe_load((folder / "roles.yaml").read_text(encoding="utf-8")) or {}
+        found = raw.get("roles") if isinstance(raw, dict) else None
+        if isinstance(found, dict) and found:
+            return found
+    except Exception:
+        log.debug("host files: roles probe unreadable", exc_info=True)
+    return role_defaults()
+
+
+def _prove_config(folder: Path) -> Callable[[str], None]:
+    """Load the refreshed text through the real loader before it replaces the file."""
+    from ..engine.config import load_config
+
+    def load(text: str) -> None:
+        probe = folder / f".config.{os.getpid()}.probe"
+        probe.write_text(text, encoding="utf-8")
+        try:
+            load_config(
+                probe,
+                require_key=False,
+                require_model=False,
+                roles_override=_probe_roles(folder),
+            )
+        finally:
+            probe.unlink(missing_ok=True)
+
+    return load
+
+
+def _prove_roles(default: str) -> Callable[[str], Mapping]:
+    """Load the refreshed text through the real role loader before it replaces the file."""
+    from ..engine.access.roles import load_roles
+
+    def load(text: str) -> Mapping:
+        body = yaml.safe_load(text) or {}
+        load_roles(body.get("roles") or {}, default)
+        return body
+
+    return load
+
+
+def _prove_soul() -> Callable[[str], Mapping]:
+    """Load the refreshed text through the real soul loader before it replaces the file."""
+    from ..engine.soul import load_soul
+
+    def load(text: str) -> Mapping:
+        body = yaml.safe_load(text) or {}
+        load_soul(body)
+        return body
+
+    return load
+
+
+def _refresh_config(path: Path) -> tuple[dict, bool]:
+    """Re-render config.yaml; the operator's body and whether the text changed."""
+    if not path.is_file():
+        return {}, False
+    try:
+        raw = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+        if not isinstance(raw, dict):
+            raise ValueError("config.yaml is not a mapping")
+        text = dump_config(_fill_missing(raw, CONFIG))
+        if text != path.read_text(encoding="utf-8"):
+            yaml_io.write_text(path, text, validate=_prove_config(path.parent))
+            return raw, True
+        return raw, False
+    except Exception as exc:
+        log.warning("host files: config.yaml skipped: %s", exc)
+        return {}, False
+
+
+def _default_role(filled: Mapping, config_body: Mapping) -> str:
+    """The role `roles.yaml` is loaded with: the operator's default, else the first block."""
+    default = str((config_body.get("engine") or {}).get("default_role") or "").strip()
+    return default if default in filled else next(iter(filled), default_role_name())
+
+
+def _refresh_roles(path: Path, config_body: Mapping) -> bool:
+    """Re-render roles.yaml with the current comments and any missing field."""
+    if not path.is_file():
+        return False
+    try:
+        raw = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+        roles = raw.get("roles") if isinstance(raw, dict) else None
+        if not isinstance(roles, dict):
+            raise ValueError("roles.yaml has no 'roles' mapping")
+        filled: dict = {}
+        for name, block in roles.items():
+            if not isinstance(block, dict):
+                raise ValueError(f"role '{name}' is not a mapping")
+            filled[str(name)] = _fill_missing(block, _role_block(Role(name=str(name))))
+        text = dump_roles(filled)
+        if text == path.read_text(encoding="utf-8"):
+            return False
+        yaml_io.write_text(
+            path, text, validate=_prove_roles(_default_role(filled, config_body))
+        )
+        return True
+    except Exception as exc:
+        log.warning("host files: roles.yaml skipped: %s", exc)
+        return False
+
+
+def _refresh_soul(path: Path) -> bool:
+    """Re-render soul.yaml against the seed for the operator's own language and zone."""
+    if not path.is_file():
+        return False
+    try:
+        raw = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+        if not isinstance(raw, dict):
+            raise ValueError("soul.yaml is not a mapping")
+        seed = yaml.safe_load(
+            soul_yaml(
+                str(raw.get("language") or "en"),
+                str(raw.get("locale") or "en-US"),
+                str(raw.get("timezone") or "UTC"),
+            )
+        ) or {}
+        text = dump_soul(_fill_missing(raw, seed))
+        if text == path.read_text(encoding="utf-8"):
+            return False
+        yaml_io.write_text(path, text, validate=_prove_soul())
+        return True
+    except Exception as exc:
+        log.warning("host files: soul.yaml skipped: %s", exc)
+        return False
+
+
+def refresh_host_files(paths) -> list[Path]:
+    """Re-render the operator's three host files with current comments and new default keys.
+
+    Every value the operator wrote stays exactly as it is; only absent keys and comments move.
+    A file that does not load, or a roles block that is not a mapping, is skipped and reported
+    in the log. The write goes through `yaml_io.write_text`, so a bind-mounted file keeps its
+    inode on `EBUSY` and `/reload` sees the change. Returns the files whose text actually
+    changed.
+    """
+    config_path, roles_path, soul_path = (
+        Path(paths.config),
+        Path(paths.roles),
+        Path(paths.soul_yaml),
+    )
+    config_body, config_changed = _refresh_config(config_path)
+    changed = [config_path] if config_changed else []
+    if _refresh_roles(roles_path, config_body):
+        changed.append(roles_path)
+    if _refresh_soul(soul_path):
+        changed.append(soul_path)
+    return changed

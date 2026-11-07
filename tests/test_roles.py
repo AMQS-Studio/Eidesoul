@@ -123,6 +123,29 @@ def test_a_denying_block_on_the_highest_role_still_wins() -> None:
     assert block == {"dm": False}
 
 
+def test_policy_for_accepts_the_room_membership_proof() -> None:
+    source = {
+        "administrator": ADMIN,
+        "member": (
+            "name: member\npriority: 10\nrooms: ['whatsapp:1@g.us']\n"
+            "gateways:\n  whatsapp:\n    dm: true\n    groups: all\n    reply_to_bot: true\n"
+        ),
+        "guest": "name: guest\n",
+    }
+    registry = load_roles(source, "guest")
+    role, block = registry.policy_for(
+        OTHER,
+        "whatsapp",
+        room="whatsapp:628111@s.whatsapp.net",
+        participants=lambda gateway, thread: {OTHER},
+    )
+    assert role.name == "member"
+    assert block == {"dm": True, "groups": "all", "reply_to_bot": True}
+    bare, denied = registry.policy_for(OTHER, "whatsapp", room="whatsapp:628111@s.whatsapp.net")
+    assert bare.name == "guest"
+    assert denied is None
+
+
 def test_unlinked_sender_uses_the_default_role_policy() -> None:
     source = {
         "guest": (

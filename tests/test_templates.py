@@ -13,6 +13,7 @@ from monoagens.engine.config import (
     ENGINE_SCHEMA,
     ApprovalConfig,
     MemoryConfig,
+    Paths,
     PromptConfig,
     SkillsConfig,
     load_config,
@@ -402,3 +403,107 @@ def test_no_rendered_config_key_falls_back_to_a_generic_comment() -> None:
     for line in rendered.splitlines():
         if "— operator" in line:
             raise AssertionError(line)
+
+
+def host_files(tmp_path) -> Paths:
+    """A deployment folder holding the three generated host files."""
+    files = templates.files(
+        provider="openai",
+        model="m",
+        language="id",
+        locale="id-ID",
+        timezone="Asia/Jakarta",
+    )
+    for name, text in files.items():
+        (tmp_path / name).write_text(text, encoding="utf-8")
+    return Paths(
+        config=tmp_path / "config.yaml",
+        roles=tmp_path / "roles.yaml",
+        soul_yaml=tmp_path / "soul.yaml",
+        workspace=tmp_path / "ws",
+    )
+
+
+def test_refresh_host_files_keeps_values_and_restores_keys_and_comments(
+    tmp_path, monkeypatch
+) -> None:
+    monkeypatch.setenv("MONOAGENS_DATABASE_URL", DSN)
+    paths = host_files(tmp_path)
+    roles = yaml.safe_load(paths.roles.read_text(encoding="utf-8"))
+    for block in roles["roles"].values():
+        block.pop("rooms", None)
+    roles["roles"]["guest"]["users"] = ["per_aaaaaaaaaa"]
+    paths.roles.write_text(templates.dump_roles(roles["roles"]), encoding="utf-8")
+    config = yaml.safe_load(paths.config.read_text(encoding="utf-8"))
+    config["sandbox"].pop("cpus", None)
+    config["engine"]["llm"]["model"] = "kept-model"
+    paths.config.write_text(templates.dump_config(config), encoding="utf-8")
+    soul = [
+        line
+        for line in paths.soul_yaml.read_text(encoding="utf-8").splitlines(True)
+        if "Optional second LLM pass" not in line
+    ]
+    paths.soul_yaml.write_text("".join(soul), encoding="utf-8")
+
+    changed = templates.refresh_host_files(paths)
+
+    assert sorted(path.name for path in changed) == [
+        "config.yaml",
+        "roles.yaml",
+        "soul.yaml",
+    ]
+    refreshed = yaml.safe_load(paths.roles.read_text(encoding="utf-8"))["roles"]
+    assert [block["rooms"] for block in refreshed.values()] == [[], [], []]
+    assert refreshed["guest"]["users"] == ["per_aaaaaaaaaa"]
+    kept = yaml.safe_load(paths.config.read_text(encoding="utf-8"))
+    assert kept["engine"]["llm"]["model"] == "kept-model"
+    assert "cpus" in kept["sandbox"]
+    assert (
+        "# gateway:thread ids whose members hold this role"
+        in paths.roles.read_text(encoding="utf-8")
+    )
+    assert "# Container runtime" in paths.config.read_text(encoding="utf-8")
+    soul_text = paths.soul_yaml.read_text(encoding="utf-8")
+    assert "Optional second LLM pass" in soul_text
+    assert yaml.safe_load(soul_text)["language"] == "id"
+
+
+def test_refresh_host_files_is_idempotent_and_keeps_the_inode_on_ebusy(
+    tmp_path, monkeypatch
+) -> None:
+    monkeypatch.setenv("MONOAGENS_DATABASE_URL", DSN)
+    paths = host_files(tmp_path)
+    assert templates.refresh_host_files(paths) == []
+
+    def busy(_source, _target):
+        raise OSError(errno.EBUSY, "Device or resource busy")
+
+    monkeypatch.setattr(yaml_io.os, "replace", busy)
+    roles = yaml.safe_load(paths.roles.read_text(encoding="utf-8"))
+    for block in roles["roles"].values():
+        block.pop("rooms", None)
+    paths.roles.write_text(templates.dump_roles(roles["roles"]), encoding="utf-8")
+    inode = paths.roles.stat().st_ino
+
+    assert [path.name for path in templates.refresh_host_files(paths)] == ["roles.yaml"]
+    assert paths.roles.stat().st_ino == inode
+    assert templates.refresh_host_files(paths) == []
+
+
+def test_refresh_host_files_skips_a_broken_roles_file(tmp_path, monkeypatch) -> None:
+    monkeypatch.setenv("MONOAGENS_DATABASE_URL", DSN)
+    paths = host_files(tmp_path)
+    broken = "roles: [oops]\n"
+    paths.roles.write_text(broken, encoding="utf-8")
+    config = yaml.safe_load(paths.config.read_text(encoding="utf-8"))
+    config["sandbox"].pop("cpus", None)
+    config["engine"]["llm"]["model"] = "kept-model"
+    paths.config.write_text(templates.dump_config(config), encoding="utf-8")
+
+    changed = templates.refresh_host_files(paths)
+
+    assert paths.roles.read_text(encoding="utf-8") == broken
+    assert [path.name for path in changed] == ["config.yaml"]
+    kept = yaml.safe_load(paths.config.read_text(encoding="utf-8"))
+    assert kept["engine"]["llm"]["model"] == "kept-model"
+    assert "cpus" in kept["sandbox"]

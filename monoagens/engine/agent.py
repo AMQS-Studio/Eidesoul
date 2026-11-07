@@ -719,6 +719,10 @@ class Agent(DeliveryFacade, CrossRoomGuard):
             reason = "check_failed"
         if not reason:
             return False
+        if not bool(inbound.hints.get("dm")):
+            # A shared room never hears a refusal; the gate keeps its conversation silent.
+            self.intake.observe_group(inbound, gateway, reason)
+            return True
         try:
             await self.delivery.text(
                 inbound.thread,

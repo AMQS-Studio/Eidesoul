@@ -309,8 +309,12 @@ def test_core_gateway_meets_only_core() -> None:
 class RefusingGateway(FakeGateway):
     """A body whose policy says no; the refusal reply must come from the core."""
 
+    def __init__(self, *, name: str = "fake", reason: str = "denied") -> None:
+        super().__init__(name=name)
+        self.reason = reason
+
     def access_refusal(self, inbound) -> str:
-        return "denied"
+        return self.reason
 
 
 def test_a_refused_percept_gets_the_localized_refusal_from_core(tmp_path) -> None:
@@ -327,6 +331,48 @@ def test_a_refused_percept_gets_the_localized_refusal_from_core(tmp_path) -> Non
     assert gateway.sent == [
         ("chat", t("agent.access_refused", env.config.soul.language), None)
     ]
+
+
+def test_a_shared_room_never_receives_the_refusal_notice(tmp_path) -> None:
+    gateway = RefusingGateway(name="fake")
+    env = make_agent(tmp_path, gateway=gateway)
+    inbound = inbound_message("halo", message_id="g0", thread="111@g.us", dm=False)
+
+    actions = asyncio.run(env.agent.handle(inbound, gateway))
+
+    assert actions == []
+    assert gateway.sent == []
+    assert env.agent.turns.get("g0") is None
+
+
+def test_an_unaddressed_group_message_is_kept_for_a_later_mention(tmp_path) -> None:
+    from sqlalchemy import select
+
+    from monoagens.engine.schema import threads
+
+    gateway = RefusingGateway(name="fake", reason="group_mention")
+    env = make_agent(tmp_path, gateway=gateway)
+    inbound = inbound_message("halo", message_id="g1", thread="111@g.us", dm=False)
+
+    actions = asyncio.run(env.agent.handle(inbound, gateway))
+
+    assert actions == []
+    assert gateway.sent == []
+    assert [message.text for message in env.history.recent("111@g.us", 5)] == ["halo"]
+    row = env.db.fetch_one(select(threads).where(threads.c.thread_id == "111@g.us"))
+    assert row["kind"] == "group"
+    assert row["gateway"] == "fake"
+
+
+def test_a_group_denial_that_is_not_an_address_gate_is_not_stored(tmp_path) -> None:
+    gateway = RefusingGateway(name="fake", reason="group_none")
+    env = make_agent(tmp_path, gateway=gateway)
+    inbound = inbound_message("halo", message_id="g2", thread="111@g.us", dm=False)
+
+    asyncio.run(env.agent.handle(inbound, gateway))
+
+    assert gateway.sent == []
+    assert env.history.recent("111@g.us", 5) == []
 
 
 def test_a_permitted_command_bypasses_the_gateway_refusal(tmp_path) -> None:

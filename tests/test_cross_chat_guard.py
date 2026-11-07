@@ -9,6 +9,7 @@ from test_whatsapp_gateway import make_gateway
 
 from monoagens.engine import guard
 from monoagens.engine.i18n import t
+from monoagens.engine.stores import rooms
 from monoagens.engine.tools import execute
 from monoagens.engine.turn.context import Message
 from monoagens.gateways.whatsapp import directory
@@ -162,6 +163,66 @@ def test_another_persons_private_chat_stays_guarded(tmp_path) -> None:
     assert text == "denied: room"
     assert SPAN not in text
     assert ctx.cross_reads == []
+
+
+def member_env(tmp_path):
+    """The sender is provably a member of the group they ask about from their own chat."""
+    gateway = make_gateway(tmp_path)
+    gateway.participants = lambda thread: {"628111"} if thread == "111@g.us" else None
+    env = make_agent(
+        tmp_path,
+        gateway=gateway,
+        roles={"owner": role("owner", tools=("thread_history",), commands=("*",))},
+        default_role="owner",
+    )
+    rooms.ensure_thread(env.db, "111@g.us", gateway="whatsapp", kind="group")
+    env.history.add(
+        "111@g.us",
+        Message(
+            id="m1",
+            sender_name="Budi",
+            sender_id="628222222222",
+            when=datetime(2026, 1, 1, 10),
+            text=SPAN,
+        ),
+    )
+    return env
+
+
+def test_a_member_reading_their_group_from_a_dm_is_not_a_cross_leak(tmp_path) -> None:
+    env = member_env(tmp_path)
+    ctx = env.agent.tool_context(
+        "628111@s.whatsapp.net",
+        "628111",
+        (env.config.roles.get("owner"),),
+        env.gateway,
+        direct=True,
+    )
+
+    text = asyncio.run(execute(specs(env), "thread_history", {"chat": "111@g.us"}, ctx))
+
+    assert SPAN in text
+    assert "a room the sender is a member of" in text
+    assert "never leak it" not in text
+    assert ctx.cross_reads == []
+    assert ctx.reads == {"111@g.us"}
+
+
+def test_the_same_group_read_from_another_group_stays_cross(tmp_path) -> None:
+    env = member_env(tmp_path)
+    ctx = env.agent.tool_context(
+        "222@g.us",
+        "628111",
+        (env.config.roles.get("owner"),),
+        env.gateway,
+        direct=False,
+    )
+
+    text = asyncio.run(execute(specs(env), "thread_history", {"chat": "111@g.us"}, ctx))
+
+    assert SPAN in text
+    assert "never leak it" in text
+    assert any(SPAN in item for item in ctx.cross_reads)
 
 
 def test_the_turn_frame_carries_the_senders_linked_surfaces() -> None:

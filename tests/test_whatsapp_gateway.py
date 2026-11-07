@@ -625,6 +625,37 @@ def test_access_refusal_allows_a_dm_and_denies_guest(tmp_path, caplog) -> None:
     assert "gateway_policy_missing" in caplog.text
 
 
+def test_access_refusal_honours_a_role_matched_by_its_rooms(tmp_path) -> None:
+    from dataclasses import replace
+
+    from monoagens.engine.access.identity import IdentityStore
+    from monoagens.engine.access.roles import load_roles
+
+    gateway = make_gateway(tmp_path)
+    inbound = ingress.event_to_inbound(
+        group_event("halo", chat="628222222222@s.whatsapp.net"), gateway
+    )
+    person = IdentityStore(gateway.db).resolve("whatsapp", inbound.actor)
+    registry = load_roles(
+        {
+            "administrator": (
+                "name: administrator\nusers: []\ntools: ['*']\ncommands: ['*']\n"
+            ),
+            "member": (
+                "name: member\npriority: 10\n"
+                "rooms: ['whatsapp:111@g.us']\n"
+                "gateways:\n  whatsapp:\n    dm: true\n    groups: all\n    reply_to_bot: true\n"
+            ),
+            "guest": "name: guest\n",
+        },
+        "guest",
+    )
+    gateway.config = replace(gateway.config, roles=registry)
+    assert gateway.access_refusal(inbound) == "policy_missing"
+    gateway.participants = lambda thread: {person} if thread == "111@g.us" else None
+    assert gateway.access_refusal(inbound) == ""
+
+
 def test_transport_config_rejects_authorization_keys() -> None:
     from monoagens.gateways.whatsapp.config import WhatsAppSettings
 

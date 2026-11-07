@@ -279,3 +279,17 @@ def test_the_rule_allows_the_senders_own_private_chats(tmp_path) -> None:
     assert "/link" in system
     assert "thread_history" in system
     assert "you do not discuss other threads" in system
+
+
+def test_the_rule_scopes_secrecy_to_non_members(tmp_path) -> None:
+    case = CASES[0]
+    config = build_config(tmp_path, soul=_soul(case))
+    context = PromptContext(
+        config=config, roles=(Role("member"),), language=case["language"], query="halo"
+    )
+    system = system_prompt(config, (Role("member"),), context=context).stable
+    assert "never hint at who asked for an action" not in system
+    assert "never reveal who requested an action" not in system
+    assert "The rule is membership, not secrecy" in system
+    assert "answer normally" in system
+    assert "you do not discuss other threads" in system

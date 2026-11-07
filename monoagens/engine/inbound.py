@@ -408,3 +408,12 @@ def refusal(gateway, thread: str, requester: str, *, recorded=None) -> str:
     if requester and requester not in members:
         return "the sender is not a participant of that thread"
     return ""
+
+
+# The address gates every body uses for its shared rooms.
+MESSAGE_GATE_SUFFIXES = ("_mention", "_reply", "_both")
+
+
+def awaiting_address(reason: str) -> bool:
+    """True when the refusal only means the bot was not addressed in a shared room."""
+    return str(reason or "").endswith(MESSAGE_GATE_SUFFIXES)

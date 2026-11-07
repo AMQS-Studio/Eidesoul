@@ -504,6 +504,12 @@ class BaseGateway(CoreDefaults):
         """Person ids the archive proves spoke in that thread of this body."""
         return thread_participants(self.db, self.name, thread)
 
+    def room_participants(self, gateway: str, thread: str) -> set[str] | None:
+        """The `Participants` shape roles use: this body's own proof for one room."""
+        if gateway and gateway != self.name:
+            return None
+        return self.participants(thread)
+
     async def abort(self, thread: str) -> None:
         """Stop whatever this body is still streaming in one thread.
 

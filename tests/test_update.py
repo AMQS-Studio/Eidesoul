@@ -196,3 +196,36 @@ def test_update_core_keeps_the_local_tree_when_the_download_fails(tmp_path, monk
     assert cli._update_core(tmp_path) == 0
     assert synced
     assert synced[0][-3:] == ["sync", "--locked", "--no-dev"]
+
+
+def test_update_refreshes_host_files_before_reading_the_service(tmp_path, monkeypatch) -> None:
+    from types import SimpleNamespace
+
+    from monoagens import cli
+    from monoagens.admin import service as admin_service
+    from monoagens.admin import templates as admin_templates
+
+    order: list[str] = []
+    paths = SimpleNamespace(config=tmp_path / "config.yaml")
+    monkeypatch.setattr(cli, "load_host", lambda config: (SimpleNamespace(), paths))
+    monkeypatch.setattr(cli, "_update_core", lambda root: order.append("core") or 0)
+    monkeypatch.setattr(
+        admin_templates,
+        "refresh_host_files",
+        lambda target: order.append("refresh") or [target.config],
+    )
+    monkeypatch.setattr(
+        admin_service,
+        "load",
+        lambda config: order.append("load")
+        or SimpleNamespace(mode=admin_service.NATIVE, root=tmp_path),
+    )
+    monkeypatch.setattr(admin_service, "read_pid", lambda service: None)
+    monkeypatch.setattr(admin_service, "reload", lambda config, reason="": 0)
+    monkeypatch.setattr(
+        "monoagens.admin.database.upgrade", lambda config: order.append("db")
+    )
+
+    args = SimpleNamespace(config=str(tmp_path / "config.yaml"), core=True)
+    assert cli._update(args) == 0
+    assert order == ["core", "refresh", "load", "db"]

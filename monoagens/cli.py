@@ -32,6 +32,7 @@ from .admin import extensions as admin_extensions
 from .admin import gateway as admin_gateway
 from .admin import service as admin_service
 from .admin import setting as admin_setting
+from .admin import templates as admin_templates
 from .engine.config import (
     Config,
     ConfigError,
@@ -550,6 +551,8 @@ def _update_core(root: Path, source: str = "") -> int:
 def _update(args: argparse.Namespace) -> int:
     paths = load_host(args.config)[1]
     code = _update_core(paths.config.parent)
+    for changed in admin_templates.refresh_host_files(paths):
+        print(f"host files: refreshed {changed}", flush=True)
     if not args.core:
         code = admin_extensions.upgrade_extras(args.config) or code
         code = admin_extensions.update_plugins(args.config) or code

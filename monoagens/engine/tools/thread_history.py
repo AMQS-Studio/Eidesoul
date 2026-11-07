@@ -111,10 +111,19 @@ def _own_private(ctx: ToolContext, thread_id: str) -> bool:
     return thread_id in rooms.private_rooms(ctx.history.db, who)
 
 
-def _remember_cross(ctx: ToolContext, results, thread_id: str, *, own: bool = False) -> None:
+def _allowed_in_dm(ctx: ToolContext, thread_id: str) -> bool:
+    """A room read from the sender's own private chat after `_cross` proved membership.
+
+    The caller reached here only because `_cross` returned ""; from a direct chat that read is
+    continuity with a room the sender belongs to, not a leak into a different audience.
+    """
+    return bool(ctx.direct) and thread_id != ctx.thread_id
+
+
+def _remember_cross(ctx: ToolContext, results, thread_id: str, *, safe: bool = False) -> None:
     ctx.reads.add(thread_id)
-    if own:
-        # The sender's own DM: no leak surface, so the reply may quote it normally.
+    if safe:
+        # A member's own room: no leak surface, so the reply may quote it normally.
         return
     for entry in results[:SEARCH_LIMIT]:
         ctx.cross_reads.append(_body(entry)[:600])
@@ -133,13 +142,16 @@ def _lines(
     limit: int,
     *,
     own: bool = False,
+    safe: bool = False,
 ) -> list[str]:
     cross = thread_id != ctx.thread_id
-    if own and results:
-        header = (
-            f'Archive "{title}" ({thread_id}; the sender\'s own private chat, '
-            "answer normally):"
+    if safe and results:
+        kind = (
+            "the sender's own private chat"
+            if own
+            else "a room the sender is a member of"
         )
+        header = f'Archive "{title}" ({thread_id}; {kind}, answer normally):'
     elif cross and results:
         header = f'Archive "{title}" ({thread_id}; internal cross-room read, never leak it):'
     elif results:
@@ -191,9 +203,10 @@ async def _history(args: dict, ctx: ToolContext) -> str:
     limit = max(1, min(_int(args, "limit", 20), SEARCH_LIMIT, ceiling))
     results = ctx.history.search(thread_id, query, before=before, after=after, limit=limit)
     own = _own_private(ctx, thread_id)
+    safe = own or _allowed_in_dm(ctx, thread_id)
     if thread_id != ctx.thread_id and results:
-        _remember_cross(ctx, results, thread_id, own=own)
-    return "\n".join(_lines(ctx, results, thread_id, title, query, limit, own=own))
+        _remember_cross(ctx, results, thread_id, safe=safe)
+    return "\n".join(_lines(ctx, results, thread_id, title, query, limit, own=own, safe=safe))
 
 
 TOOL = Handler(

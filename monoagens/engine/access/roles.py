@@ -105,7 +105,12 @@ class RoleRegistry:
         return tuple(sorted(matched, key=lambda role: (-role.priority, role.name)))
 
     def policy_for(
-        self, person_id: str, gateway: str, *, room: str = ""
+        self,
+        person_id: str,
+        gateway: str,
+        *,
+        room: str = "",
+        participants: Participants | None = None,
     ) -> tuple[Role, Mapping[str, object] | None]:
         """The highest-priority role that defines this gateway's block (ADR-0002 §4.3).
 
@@ -114,7 +119,7 @@ class RoleRegistry:
         role defines the block the highest-priority role is returned with `None`, which stays
         a denial.
         """
-        roles = self.for_person(person_id, room=room)
+        roles = self.for_person(person_id, room=room, participants=participants)
         for role in roles:
             found = role.gateways.get(str(gateway or ""))
             if found is not None:

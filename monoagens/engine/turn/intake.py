@@ -14,9 +14,10 @@ from collections.abc import Callable
 from dataclasses import replace
 
 from .. import io
-from ..inbound import Action, GatewayCore, Percept
+from ..inbound import Action, GatewayCore, Percept, awaiting_address
 from ..llm import DeadlineExceeded
 from ..memory import intent
+from ..stores import rooms
 from ..stores.history import RouteConflict
 from ..stores.turns import turn_identity
 from .commands import command_body
@@ -53,6 +54,33 @@ class TurnIntake:
         except Exception:
             log.exception("identity resolve failed source=%s", source)
             return replace(inbound, actor=inbound.actor or raw)
+
+    def observe_group(self, inbound: Percept, gateway: GatewayCore, reason: str) -> bool:
+        """Archive a shared-room message the policy gate rejected; never reply to it.
+
+        Only a mention/reply gate failure is kept: it is the room's own conversation and a
+        later mention needs it. A room the role may not enter at all is not stored, and an
+        observed message creates no turn and no memory candidate.
+        """
+        if not awaiting_address(reason):
+            return False
+        message = inbound.payload
+        thread_id = inbound.thread
+        try:
+            rooms.ensure_thread(
+                self.runtime.history.db,
+                thread_id,
+                gateway=str(getattr(gateway, "name", "") or ""),
+                kind="group",
+            )
+            self.runtime.history.add(thread_id, message)
+        except Exception:
+            log.warning("group observation failed chat=%s", thread_id, exc_info=True)
+            return False
+        self.runtime.windows.append(thread_id, message, persist=False)
+        if self.runtime.ambient is not None:
+            self.runtime.ambient.note(thread_id, message)
+        return True
 
     async def forget_intent(self, inbound: Percept, message) -> None:
         """ADR-0005 §4.6: a "forget that …" turn removes the one entry it can mean.
