@@ -322,3 +322,83 @@ def test_update_config_proves_the_result_with_the_real_loader(tmp_path, monkeypa
 
     assert "# ===" in changed
     assert load_config(path, require_key=False).llm.model == "second-model"
+
+
+def test_role_gateway_options_say_what_they_accept() -> None:
+    comments = templates.ROLE_GATEWAY_COMMENTS
+    assert "true | false" in templates._role_comment("roles.member.gateways.whatsapp.dm", True)
+    for option in ("groups", "channels", "threads"):
+        text = templates._role_comment(f"roles.member.gateways.discord.{option}", "all")
+        assert "'all'" in text
+        assert "'mention'" in text
+        assert "'none'" in text
+    assert "reply_to_bot" in comments
+    assert "true | false" in comments["reply_to_bot"]
+    rendered = templates.dump_roles(
+        {
+            "member": {
+                "name": "member",
+                "gateways": {
+                    "whatsapp": {"dm": True, "groups": "all", "reply_to_bot": True},
+                    "slack": {"dm": True, "channels": "mention", "threads": "none"},
+                },
+            }
+        }
+    )
+    assert "# Allow 1-on-1 direct messages" in rendered
+    assert "# Channel trigger for this role" in rendered
+    assert "owns its meaning and default" not in rendered
+
+
+def test_gateway_option_comments_name_choices_and_defaults() -> None:
+    from monoagens.gateways import gateway_index
+
+    pages = gateway_index()
+    for name, info in pages.items():
+        for option, value in info.default_config().items():
+            comment = templates.comment_for(f"gateways.{name}.{option}", value)
+            assert "operator setting" not in comment
+            assert "operator section" not in comment
+            assert "that gateway's own settings dataclass" not in comment
+            assert "own meaning" not in comment or option not in templates.GATEWAY_OPTION_COMMENTS
+    assert "'polling' | 'webhook'" in templates.comment_for("gateways.telegram.mode", "polling")
+    assert "'socket' | 'events'" in templates.comment_for("gateways.slack.mode", "socket")
+    assert "Default: polling." in templates.comment_for("gateways.telegram.mode", "polling")
+    for option in ("show_thinking", "show_steps", "interim_updates", "sync_commands"):
+        assert "true | false" in templates.GATEWAY_OPTION_COMMENTS[option]
+
+
+def test_soul_comments_match_the_validators_and_explain_the_layers() -> None:
+    from monoagens.engine.soul import PROFANITY, SAFETY
+    from monoagens.engine.stores.affect import VOLATILITY
+
+    volatility = templates.SOUL_COMMENTS["voice.affect.volatility"]
+    for value in VOLATILITY:
+        assert f"'{value}'" in volatility
+    profanity = templates.SOUL_COMMENTS["voice.profanity"]
+    for value in PROFANITY:
+        assert f"'{value}'" in profanity
+    safety = templates.SOUL_COMMENTS["voice.safety"]
+    for value in SAFETY:
+        assert f"'{value}'" in safety
+
+    assert "PAD" in templates.SOUL_COMMENTS["voice.affect"]
+    assert "writing style" in templates.SOUL_COMMENTS["voice.style"]
+    assert "examples" in templates.SOUL_COMMENTS["voice.character"]
+    assert "bubbles" in templates.SOUL_COMMENTS["voice.humanize"]
+    assert "modes" in templates.SOUL_COMMENTS["mode"]
+
+
+def test_no_rendered_config_key_falls_back_to_a_generic_comment() -> None:
+    from monoagens.gateways import gateway_index
+
+    body = {
+        **templates.CONFIG,
+        "gateways": {name: info.default_config() for name, info in gateway_index().items()},
+    }
+    rendered = templates.dump_config(body)
+    for marker in ("· section.", "· bool setting", "· str setting", "· int setting"):
+        assert marker not in rendered, marker
+    for line in rendered.splitlines():
+        if "— operator" in line:
+            raise AssertionError(line)

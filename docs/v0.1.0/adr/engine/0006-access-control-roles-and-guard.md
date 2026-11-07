@@ -128,6 +128,17 @@ and latency; deterministic token/AST screening must enforce hard boundaries firs
   known gateway name (e.g. `matrix`, `signal`, `wechat`) *before* testing the 6-character code regex.
 - **Revocation on `/unlink`:** Unlinking an address revokes that person's active `relay_grants` and
   pending `approvals` and records an audit entry in `actions`.
+- **Cross-Surface Continuity:** One person keeps one identity across the surfaces they linked. The
+  prompt's cross-thread rule forbids moving content between *people* and into shared rooms, but the
+  sender's own private chats are continuity: `thread_history` reads the person's own DM (`threads.kind
+  = 'dm'` plus their own recorded message) without tagging it `never leak it` and without adding it to
+  the cross-read list the guard scans, so the soul can answer "what did we discuss on Telegram?" from
+  WhatsApp. Another person's DM and every group stay fail-closed.
+- **Linked Surface Index:** The prompt's `surfaces` block lists the sender's `person_links` rows —
+  gateway plus DM address in a direct thread, gateway names only in a shared room — so the soul never
+  guesses which accounts belong to the sender and calls `thread_history` with a real target.
+- **Telegram `/start`:** The body normalizes the platform's mandatory opening message to `/help`
+  (`ingress.normalize_start`), so a fresh chat gets the command list instead of "unknown command".
 
 ### 4.4 Central Gateway Screening, Sandbox Guard, and Egress Proxy
 

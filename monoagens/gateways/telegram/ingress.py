@@ -5,6 +5,7 @@ a bot token, a network, or the SDK, and it keeps every transport name in this pa
 """
 
 
+import re
 from collections.abc import Mapping
 from datetime import UTC, datetime
 from pathlib import Path
@@ -48,8 +49,17 @@ def when_of(message: Mapping) -> datetime:
     return datetime.fromtimestamp(raw, UTC).astimezone()
 
 
+START_TEXT = re.compile(r"^/start(?:@[A-Za-z0-9_]+)?(?:\s.*)?$", re.DOTALL)
+
+
+def normalize_start(text: str) -> str:
+    """Telegram's mandatory opening `/start` reads as `/help`, never an unknown command."""
+    value = str(text or "")
+    return "/help" if START_TEXT.fullmatch(value.strip()) else value
+
+
 def _text_of(message: Mapping) -> str:
-    return str(message.get("text") or message.get("caption") or "")
+    return normalize_start(str(message.get("text") or message.get("caption") or ""))
 
 
 def _entities(message: Mapping) -> list[Mapping]:

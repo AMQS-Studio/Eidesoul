@@ -29,7 +29,14 @@ from .context import (
 from .decision import Appraisal, Decision, RelationshipDelta, decide_turn, decision_from_row
 from .delivery import bind_origin, reset_origin
 from .progress import _progress_callbacks
-from .prompts import CORE_PARTS, CRISIS_SAFETY, PromptContext, away_block, system_prompt
+from .prompts import (
+    CORE_PARTS,
+    CRISIS_SAFETY,
+    PromptContext,
+    away_block,
+    linked_surfaces,
+    system_prompt,
+)
 from .reply import plan_chunks
 from .research_flow import ResearchFlow
 from .review import DECISION_LINE_CHARS, TurnReview
@@ -39,14 +46,14 @@ from .steps import SideEffectAlreadyRan
 log = logging.getLogger(__name__)
 
 
-
-
-
-
-
-
-
-
+def _surfaces(runtime, inbound: Percept) -> str:
+    """The sender's linked accounts for the prompt; a lookup failure never blocks a turn."""
+    try:
+        links = runtime.identity.links(inbound.actor)
+    except Exception:
+        log.debug("linked surfaces lookup failed actor=%s", inbound.actor, exc_info=True)
+        return ""
+    return linked_surfaces(links, direct=bool(inbound.hints.get("dm")))
 
 
 
@@ -605,6 +612,7 @@ class TurnRunner(ApprovalFlow, ResearchFlow, TurnReview):
                             research=research_text,
                             research_trigger=trigger,
                             person_style=person_style,
+                            surfaces=_surfaces(runtime, inbound),
                             bonuses=bonuses,
                         )
                         answer = await runtime.llm.run(

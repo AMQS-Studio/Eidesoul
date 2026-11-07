@@ -2,6 +2,14 @@
 
 Engineering log for MonoAgens. Short entries, newest first, decisions and behaviour only.
 
+## 2026-11-07 — Cross-Surface Continuity, Archive Updates, and Human-Readable YAML
+- Continuity (`note.md` §6): the prompt's cross-thread rule now guards *people*, not the sender's own history — a linked person asking about their own DM on another surface gets an answer. `HistoryStore.private_rooms_of` proves the room is theirs (`kind='dm'` + their own message), `thread_history` stops tagging such a read `never leak it` and keeps it out of the `cross_reads` list the guard scans; another person's DM and every group stay fail-closed.
+- Linked surfaces (`§6`): `PromptContext.surfaces` renders `IdentityStore.links(person_id)` through `prompts.linked_surfaces` — gateway + address in a DM, gateway names only in a shared room — so the soul knows its accounts and can call `thread_history(gateway=…, chat=…)` without guessing.
+- Telegram (`§6`): `ingress.normalize_start` maps the mandatory `/start` (with deep-link payload or `@mention`) to `/help` instead of "unknown command".
+- `monoagens update` (`§7`): `admin.service.fetch_archive`/`apply_archive` refresh the code from `main.tar.gz` via `urllib.request` + `tarfile` (no `git`), skipping `config.yaml`, `roles.yaml`, `soul.yaml`, `.env`, `.monoagens`, `.venv`, and `plugins`; `_update_core` then runs `uv sync --locked --no-dev` and keeps the local tree when the download fails.
+- Compose lifecycle (`§7`): lifecycle verbs (`update`/`upgrade`, `start`, `stop`, `restart`, `status`, `logs`, `uninstall`) run on the host in the launcher; `compose_update` writes `EXTRAS`, builds the image, runs `db upgrade` in the stack, then `up -d --force-recreate monoagens` (a failed build stops the sequence).
+- YAML comments (`§8`): `ROLE_GATEWAY_COMMENTS` spells out `dm`/`groups`/`channels`/`threads`/`topics`/`reply_to_bot`, `GATEWAY_OPTION_COMMENTS` lists choices plus each body's own default (no more "that gateway's own settings dataclass"), the config fallback never says "operator setting", and `SOUL_COMMENTS` explains affect/style/character/humanize with the validators' real values (`volatility`, `profanity`, `safety`). Root `config.yaml` and `soul.yaml` regenerated; `roles.yaml` verified byte-identical.
+
 ## 2026-11-07 — Setup Ergonomics, Tool Inheritance, `rooms`, Console Operator, and Gateway Crash Isolation
 - Wizard menu: `catalog.role_tools()` offers parents only (`read (+grep)`, `write (+sed)`, `web_search (+fetch)`, `send_message (+send_file)`) and every detail is trimmed to one ≤80-character clause (`catalog._short`); voice parts carry their own one-line explanations.
 - Permissions: `PARENT_TOOLS` makes a parent grant its child at the single `tool_patterns` seam, so the model's tool list, `/tools`, self-knowledge, and approvals agree; a child listed alone still grants only itself. The shipped `member` role now receives every isolated tool and keeps `settings`, `shell`, and `mcp` out.

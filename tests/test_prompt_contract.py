@@ -232,3 +232,50 @@ def test_a_block_named_in_pinned_blocks_defeats_the_budget(tmp_path) -> None:
 
     assert "MEMORY" not in loose
     assert "MEMORY" in tight
+
+
+def test_linked_surfaces_list_addresses_only_in_a_direct_thread() -> None:
+    from monoagens.engine.turn.prompts import linked_surfaces
+
+    links = [
+        {"gateway": "console", "address": "local"},
+        {"gateway": "telegram", "address": "12345"},
+    ]
+    direct = linked_surfaces(links, direct=True)
+    assert "console (local)" in direct
+    assert "telegram (12345)" in direct
+    assert "thread_history" in direct
+
+    shared = linked_surfaces(links, direct=False)
+    assert "console, telegram" in shared
+    assert "local" not in shared
+    assert "12345" not in shared
+    assert linked_surfaces([], direct=True) == ""
+
+
+def test_the_rendered_prompt_names_the_linked_surfaces(tmp_path) -> None:
+    case = CASES[0]
+    config = build_config(tmp_path, soul=_soul(case))
+    context = PromptContext(
+        config=config,
+        roles=(Role("member"),),
+        language=case["language"],
+        query="gateway apa saja yang terhubung?",
+        surfaces="Linked surfaces for this sender: console (local), telegram (12345).\n",
+    )
+    prompt = system_prompt(config, (Role("member"),), context=context)
+    assert "Linked surfaces for this sender: console (local), telegram (12345)." in (
+        prompt.stable + "\n" + prompt.volatile
+    )
+
+
+def test_the_rule_allows_the_senders_own_private_chats(tmp_path) -> None:
+    case = CASES[0]
+    config = build_config(tmp_path, soul=_soul(case))
+    context = PromptContext(
+        config=config, roles=(Role("member"),), language=case["language"], query="halo"
+    )
+    system = system_prompt(config, (Role("member"),), context=context).stable
+    assert "/link" in system
+    assert "thread_history" in system
+    assert "you do not discuss other threads" in system

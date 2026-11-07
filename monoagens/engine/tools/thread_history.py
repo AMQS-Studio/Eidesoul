@@ -10,6 +10,7 @@ from datetime import datetime, timedelta
 
 from ..inbound import refusal
 from ..registry import Handler
+from ..stores import rooms
 from ..turn.context import body_note, entry_tag
 from . import ToolContext, _count_capability, _int, body_of, cross_refusal, resolve_address
 
@@ -96,8 +97,25 @@ def _target(ctx: ToolContext, body, raw_chat: str) -> tuple[str, str, str]:
     return "", "", why
 
 
-def _remember_cross(ctx: ToolContext, results, thread_id: str) -> None:
+def _own_private(ctx: ToolContext, thread_id: str) -> bool:
+    """True when the target is a private room the requester themselves wrote in.
+
+    Continuity across a linked identity (ADR-0006 §4.4): a person asking about their own DM on
+    another surface is reading their own conversation, not somebody else's room.
+    """
+    if not thread_id or thread_id == ctx.thread_id or ctx.history is None:
+        return False
+    who = str(ctx.person_id or ctx.sender or "").strip()
+    if not who:
+        return False
+    return thread_id in rooms.private_rooms(ctx.history.db, who)
+
+
+def _remember_cross(ctx: ToolContext, results, thread_id: str, *, own: bool = False) -> None:
     ctx.reads.add(thread_id)
+    if own:
+        # The sender's own DM: no leak surface, so the reply may quote it normally.
+        return
     for entry in results[:SEARCH_LIMIT]:
         ctx.cross_reads.append(_body(entry)[:600])
         if entry.quote is not None:
@@ -107,10 +125,22 @@ def _remember_cross(ctx: ToolContext, results, thread_id: str) -> None:
 
 
 def _lines(
-    ctx: ToolContext, results, thread_id: str, title: str, query: str, limit: int
+    ctx: ToolContext,
+    results,
+    thread_id: str,
+    title: str,
+    query: str,
+    limit: int,
+    *,
+    own: bool = False,
 ) -> list[str]:
     cross = thread_id != ctx.thread_id
-    if cross and results:
+    if own and results:
+        header = (
+            f'Archive "{title}" ({thread_id}; the sender\'s own private chat, '
+            "answer normally):"
+        )
+    elif cross and results:
         header = f'Archive "{title}" ({thread_id}; internal cross-room read, never leak it):'
     elif results:
         label = f' "{title}"' if title and title != thread_id else " this chat"
@@ -160,9 +190,10 @@ async def _history(args: dict, ctx: ToolContext) -> str:
     ceiling = int(ctx.config.memory.rooms.max_messages)
     limit = max(1, min(_int(args, "limit", 20), SEARCH_LIMIT, ceiling))
     results = ctx.history.search(thread_id, query, before=before, after=after, limit=limit)
+    own = _own_private(ctx, thread_id)
     if thread_id != ctx.thread_id and results:
-        _remember_cross(ctx, results, thread_id)
-    return "\n".join(_lines(ctx, results, thread_id, title, query, limit))
+        _remember_cross(ctx, results, thread_id, own=own)
+    return "\n".join(_lines(ctx, results, thread_id, title, query, limit, own=own))
 
 
 TOOL = Handler(

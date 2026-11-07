@@ -536,13 +536,18 @@ COMMENTS: dict[str, str] = {
     "soul_file": "Soul mirror and seed. Default: soul.yaml.",
     "sync_documents": "Apply changed host files on start; DB wins conflicts. Default: true.",
     "sandbox": "Sandbox runtime and resource limits.",
-    "sandbox.runtime": "Container runtime; empty autodetects podman then docker.",
+    "sandbox.runtime": (
+        "Container runtime: podman | docker; empty autodetects podman then docker."
+    ),
     "sandbox.image": "Container image for the sandbox.",
     "sandbox.timeout_seconds": "Sandbox command timeout. Default: 120.",
-    "sandbox.network": "Dedicated sandbox network; bridge, none, and host are rejected.",
+    "sandbox.network": (
+        "Dedicated internal network name (for example monoagens-sandbox); bridge, none, "
+        "and host are rejected. Default: none."
+    ),
     "sandbox.host_workspace": "Host path mounted into the sandbox; empty uses the workspace.",
     "sandbox.env": "Extra environment variables allowed into the container.",
-    "sandbox.proxy": "HTTP proxy for the sandbox network.",
+    "sandbox.proxy": "HTTP proxy URL for the sandbox network (http://host:port); empty = none.",
     "sandbox.pids_limit": "Process limit inside the sandbox.",
     "sandbox.memory": "Memory limit for the sandbox.",
     "sandbox.cpus": "CPU limit for the sandbox.",
@@ -554,7 +559,10 @@ COMMENTS: dict[str, str] = {
     "web_search.base_url": "SearXNG JSON endpoint; empty means that provider cannot run.",
     "web_search.api_key_env": "Environment variable that holds the search key; never the key.",
     "web_search.engine_id_env": "Environment variable holding the Google CSE engine id.",
-    "web_search.ddgs_backend": "ddgs backend selection; auto lets the library choose.",
+    "web_search.ddgs_backend": (
+        "ddgs backend: auto (library choice) | html | lite | bing | brave | duckduckgo | "
+        "google | mojeek | startpage | yahoo | yandex | wikipedia."
+    ),
     "web_search.region": "Search region hint; empty means no region bias.",
     "web_search.timeout_seconds": "Search timeout. Default: 10.",
     "mcp": "MCP servers available to the engine.",
@@ -652,7 +660,9 @@ COMMENTS: dict[str, str] = {
     "engine.memory.auto_capture": "Capture durable facts automatically. Default: true.",
     "engine.memory.max_items": "Memory items per prompt. Default: 12.",
     "engine.memory.max_chars": "Memory prompt budget; 0 = unlimited. Default: 0.",
-    "engine.memory.collection": "Memory collection label.",
+    "engine.memory.collection": (
+        "Memory collection label; keep the default unless you migrate data."
+    ),
     "engine.memory.extraction_model": "Extraction model; empty uses engine.llm.model.",
     "engine.memory.telemetry": "Send memory telemetry. Default: false.",
     "engine.memory.capture": "Deterministic capture gate.",
@@ -668,7 +678,9 @@ COMMENTS: dict[str, str] = {
     "engine.memory.privacy.auditor": "Run the disclosure auditor. Default: true.",
     "engine.memory.privacy.group_capture": "What may be captured in a group.",
     "engine.memory.privacy.group_capture.self_only": "Only the speaker's own words. Default: true.",
-    "engine.memory.privacy.group_capture.third_party": "drop or deny third-party facts.",
+    "engine.memory.privacy.group_capture.third_party": (
+        "Third-party facts in a group: drop | deny. Default: drop."
+    ),
     "engine.memory.privacy.group_capture.ask_in_group": "Ask before group capture. Default: false.",
     "engine.memory.worker": "Cognition queue worker.",
     "engine.memory.worker.tick_seconds": "Queue poll interval. Default: 1.",
@@ -880,6 +892,50 @@ def _gateway_note(name: str) -> str:
     return f" ({'; '.join(detail)})" if detail else ""
 
 
+# Every option a gateway's own `default_config()` may write; the body still validates the value.
+GATEWAY_OPTION_COMMENTS: dict[str, str] = {
+    "enabled": "Turn this gateway on (true) or off (false).",
+    "bot_token_env": (
+        "environment variable holding the bot token; the token itself never lives in YAML."
+    ),
+    "app_token_env": "environment variable holding the Slack app-level token.",
+    "signing_secret_env": "environment variable holding the Slack signing secret.",
+    "webhook_secret_env": "environment variable holding the webhook secret token.",
+    "bot_token": "inline bot token; prefer `bot_token_env` so the secret stays in .env.",
+    "app_token": "inline Slack app token; prefer `app_token_env`.",
+    "signing_secret": "inline Slack signing secret; prefer `signing_secret_env`.",
+    "webhook_secret": "inline webhook secret; prefer `webhook_secret_env`.",
+    "mode": (
+        "transport mode, 'polling' | 'webhook' (telegram) or 'socket' | 'events' (slack); "
+        "empty uses the gateway default."
+    ),
+    "webhook_url": "public HTTPS URL Telegram posts to; required when mode is 'webhook'.",
+    "webhook_host": "bind address for the local webhook listener (for example 127.0.0.1).",
+    "webhook_port": "bind port for the local webhook listener, 1-65535.",
+    "poll_timeout": "long-poll seconds per getUpdates call.",
+    "sync_commands": "publish this body's commands as the native platform menu (true | false).",
+    "show_thinking": "stream the model's raw thinking to the chat (true | false).",
+    "show_steps": "stream tool steps as progress lines (true | false).",
+    "interim_updates": "stream interim narration before the final reply (true | false).",
+    "message_limit": "hard cap on one outbound message; the body chunks above it.",
+    "session_db": "path of this body's own session/state database.",
+    "backlog_seconds": "how far back a fresh session replays missed messages.",
+}
+
+
+def _gateway_default(name: str, option: str) -> str:
+    """The body's own default for one option; empty when that body cannot be imported."""
+    info = gateway_index_snapshot().get(name)
+    hook = getattr(info, "default_config", None)
+    if not callable(hook):
+        return ""
+    try:
+        values = hook()
+    except Exception:
+        return ""
+    return _scalar(values[option]) if isinstance(values, dict) and option in values else ""
+
+
 def comment_for(path: str, value: object) -> str:
     """One comment per key; the fallback still names the path and default."""
     found = COMMENTS.get(path)
@@ -893,12 +949,19 @@ def comment_for(path: str, value: object) -> str:
                 f"'{name}' gateway{_gateway_note(name)}; opt in with "
                 f"`monoagens gateway enable {name}`."
             )
-        if len(parts) == 3 and parts[2] == "enabled":
-            return f"Turn the '{name}' gateway on or off."
-        return f"'{name}' setting; that gateway's own settings dataclass owns its default."
+        option = parts[2]
+        default = _gateway_default(name, option)
+        tail = f" Default: {default}." if default else ""
+        note = GATEWAY_OPTION_COMMENTS.get(option)
+        if note:
+            return f"'{name}' {option}: {note}{tail}"
+        return (
+            f"'{name}' setting '{option}'; the '{name}' gateway owns its meaning and "
+            f"validates the value.{tail}"
+        )
     if isinstance(value, dict):
-        return f"{path} — operator section."
-    return f"{path} — operator setting. Default: {_scalar(value)}"
+        return f"{path} · section."
+    return f"{path} · {type(value).__name__} setting. Default: {_scalar(value)}"
 
 
 # Section banners in the order the file shows them (docs/note-post-adr0008.md).
@@ -1093,6 +1156,21 @@ ROLE_FIELD_COMMENTS: dict[str, str] = {
 }
 
 
+TRIGGER_CHOICES = "'all' (every message), 'mention' (only when addressed), or 'none' (ignore)"
+
+# The role-policy vocabulary every body shares; the gateway validates the value it receives.
+ROLE_GATEWAY_COMMENTS: dict[str, str] = {
+    "dm": "Allow 1-on-1 direct messages from this role (true | false).",
+    "groups": f"Group chat trigger for this role: {TRIGGER_CHOICES}.",
+    "channels": f"Channel trigger for this role: {TRIGGER_CHOICES}.",
+    "threads": f"Thread trigger for this role: {TRIGGER_CHOICES}.",
+    "topics": f"Forum-topic trigger for this role: {TRIGGER_CHOICES}.",
+    "reply_to_bot": (
+        "Respond in shared chats when someone replies to or quotes the bot (true | false)."
+    ),
+}
+
+
 def _role_comment(path: str, value: object) -> str:
     parts = path.split(".")
     if path == "roles":
@@ -1104,8 +1182,10 @@ def _role_comment(path: str, value: object) -> str:
         if len(parts) == 3:
             return ROLE_FIELD_COMMENTS["gateways"]
         if len(parts) == 4:
-            return f"'{parts[3]}' policy; keys and values are validated by that gateway."
-        return f"Gateway option '{parts[-1]}'; the gateway owns its meaning and default."
+            return f"'{parts[3]}' policy for this role; each option below names its values."
+        option = parts[-1]
+        found = ROLE_GATEWAY_COMMENTS.get(option)
+        return found or f"'{option}' is in this body's own vocabulary; the body validates it."
     found = ROLE_FIELD_COMMENTS.get(field)
     if found:
         return found
@@ -1145,8 +1225,11 @@ SOUL_COMMENTS: dict[str, str] = {
     "locale": "Regional format hint for dates, numbers, and weekdays.",
     "timezone": "IANA timezone used by schedules, quiet hours, and clock awareness.",
     "pronouns": "First-person pronoun the agent uses for itself.",
-    "mode": "Active persona mode; changing it never changes permissions.",
-    "modes": "Persona modes this soul may switch between.",
+    "mode": (
+        "Active persona mode; it must be one of the keys under `modes` (for example 'assistant'). "
+        "Changing it never changes permissions."
+    ),
+    "modes": "Persona modes this soul may switch between; `mode` selects exactly one of them.",
     "background": "Standing context about the agent's existence and role.",
     "persona": "Character and communication guidance for the model.",
     "examples": "Optional example exchanges that demonstrate the voice.",
@@ -1158,9 +1241,15 @@ SOUL_COMMENTS: dict[str, str] = {
     "voice.sampling.top_p": "Nucleus sampling ceiling; null uses the provider default.",
     "voice.sampling.top_k": "Top-token candidates; null uses the provider default.",
     "voice.sampling.min_p": "Minimum token probability; null leaves it unused.",
-    "voice.affect": "PAD emotion state and per-person relations.",
+    "voice.affect": (
+        "Internal mood (PAD: pleasure-arousal-dominance) plus per-person bonds (trust, warmth, "
+        "familiarity, grudge) that evolve as people talk to it."
+    ),
     "voice.affect.enabled": "Run the affect engine. Default: true.",
-    "voice.affect.volatility": "How quickly affect moves. Default: expressive.",
+    "voice.affect.volatility": (
+        "How quickly mood shifts: 'steady' (calm, slow), 'expressive' (lively, responsive), or "
+        "'dramatic_test' (exaggerated, for testing). Default: expressive."
+    ),
     "voice.affect.grudge_half_life_hours": "Half-life of a grudge. Default: 1.5.",
     "voice.affect.vibe": "Short-lived energy modulation.",
     "voice.affect.vibe.enabled": "Apply the vibe layer. Default: true.",
@@ -1168,15 +1257,24 @@ SOUL_COMMENTS: dict[str, str] = {
     "voice.affect.vibe.baseline_influence": "Baseline pull. Default: 0.05.",
     "voice.affect.vibe.hold_seconds": "Hold time. Default: 1.2.",
     "voice.affect.vibe.tick_seconds": "Decay tick. Default: 1.0.",
-    "voice.style": "Per-room and per-person writing style adaptation.",
+    "voice.style": (
+        "Learns the room's and each person's writing style (sentence length, rhythm, words) and "
+        "asks the reply to match it."
+    ),
     "voice.style.enabled": "Run the style engine. Default: true.",
     "voice.style.max_chars": "Style prompt budget. Default: 800.",
-    "voice.character": "Character polish pass over the final draft.",
+    "voice.character": (
+        "Optional second LLM pass that rewrites the finished draft so it sounds like the "
+        "`examples` in this file."
+    ),
     "voice.character.enabled": "Polish replies. Default: false.",
     "voice.character.max_chars": "Draft budget. Default: 400.",
     "voice.character.max_tokens": "Polish output cap. Default: 500.",
     "voice.character.temperature": "Polish temperature. Default: 0.7.",
-    "voice.humanize": "Outgoing text normalization for chat delivery.",
+    "voice.humanize": (
+        "Sending behaviour that feels human: split a reply into short chat bubbles and add "
+        "typing pauses."
+    ),
     "voice.humanize.enabled": "Humanize outgoing text. Default: true.",
     "voice.humanize.cpms": "Typing speed estimate. Default: 25.",
     "voice.humanize.min_delay": "Shortest typing pause. Default: 0.5.",
@@ -1184,8 +1282,14 @@ SOUL_COMMENTS: dict[str, str] = {
     "voice.humanize.between_delay": "Pause between bubbles. Default: 0.7.",
     "voice.humanize.max_bubbles": "Bubbles per reply. Default: 3.",
     "voice.humanize.reaction_stickers": "Sticker reactions allowed for this soul.",
-    "voice.profanity": "avoid, mirror, or allow. Default: avoid.",
-    "voice.safety": "inherit or relaxed. Default: inherit.",
+    "voice.profanity": (
+        "Swearing policy: 'avoid' (never swear) or 'free' (swear naturally when the moment fits). "
+        "Default: avoid."
+    ),
+    "voice.safety": (
+        "Safety tone filters: 'inherit' (keep the standard guardrails) or 'off' (relax persona "
+        "tone filters where the provider allows). Default: inherit."
+    ),
     "voice.speech": "Spoken voice preferences (STT/TTS) for this soul.",
     "voice.speech.enabled": (
         "Allow spoken replies when a TTS provider is configured. Default: false."

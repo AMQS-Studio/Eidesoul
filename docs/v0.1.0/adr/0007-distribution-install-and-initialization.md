@@ -180,6 +180,18 @@ the terminal wizard is self-contained.
     container can read a `0600 roles.yaml` and write `.monoagens`; Docker never loads that file.
   - `install.sh` writes the enabled gateways' `EXTRAS` into `.env`, so the compose image installs the
     same extras the host venv did.
+  - `monoagens update` refreshes the code from the published archive
+    (`.../archive/refs/heads/main.tar.gz`) with `urllib.request` + `tarfile`, needs no `git`, keeps
+    `config.yaml`, `roles.yaml`, `soul.yaml`, `.env`, `.monoagens`, `.venv`, and `plugins` untouched,
+    then runs `uv sync --locked --no-dev`. On a compose stack it also writes `EXTRAS`, builds the
+    image, runs `db upgrade` inside the stack, and recreates the service
+    (`up -d --force-recreate monoagens`).
+  - Lifecycle verbs (`update`/`upgrade`, `start`, `stop`, `restart`, `status`, `logs`, `uninstall`)
+    run on the host: the compose launcher routes only interactive commands into the container.
+  - Every generated comment names the operator's choices: role policies spell out
+    `dm`/`groups`/`channels`/`threads`/`reply_to_bot`, gateway options list their values and the body's
+    own default, and soul voice comments match the validators (`volatility`, `profanity`, `safety`)
+    while explaining what each of `affect`, `style`, `character`, and `humanize` actually does.
   - All references to a root `panel/` directory are removed from active documentation.
 
 ### 4.3 CLI and Console Administration Fixes

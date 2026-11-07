@@ -15,9 +15,9 @@ locale: id-ID
 timezone: Asia/Jakarta
 # First-person pronoun the agent uses for itself.
 pronouns: ''
-# Active persona mode; changing it never changes permissions.
+# Active persona mode; it must be one of the keys under `modes` (for example 'assistant'). Changing it never changes permissions.
 mode: assistant
-# Persona modes this soul may switch between.
+# Persona modes this soul may switch between; `mode` selects exactly one of them.
 modes:
   - assistant
   - companion
@@ -47,11 +47,11 @@ voice:
     top_k: null
     # Minimum token probability; null leaves it unused.
     min_p: null
-  # PAD emotion state and per-person relations.
+  # Internal mood (PAD: pleasure-arousal-dominance) plus per-person bonds (trust, warmth, familiarity, grudge) that evolve as people talk to it.
   affect:
     # Run the affect engine. Default: true.
     enabled: true
-    # How quickly affect moves. Default: expressive.
+    # How quickly mood shifts: 'steady' (calm, slow), 'expressive' (lively, responsive), or 'dramatic_test' (exaggerated, for testing). Default: expressive.
     volatility: expressive
     # Half-life of a grudge. Default: 1.5.
     grudge_half_life_hours: 1.5
@@ -67,13 +67,13 @@ voice:
       hold_seconds: 1.2
       # Decay tick. Default: 1.0.
       tick_seconds: 1
-  # Per-room and per-person writing style adaptation.
+  # Learns the room's and each person's writing style (sentence length, rhythm, words) and asks the reply to match it.
   style:
     # Run the style engine. Default: true.
     enabled: true
     # Style prompt budget. Default: 800.
     max_chars: 800
-  # Character polish pass over the final draft.
+  # Optional second LLM pass that rewrites the finished draft so it sounds like the `examples` in this file.
   character:
     # Polish replies. Default: false.
     enabled: false
@@ -83,7 +83,7 @@ voice:
     max_tokens: 500
     # Polish temperature. Default: 0.7.
     temperature: 0.7
-  # Outgoing text normalization for chat delivery.
+  # Sending behaviour that feels human: split a reply into short chat bubbles and add typing pauses.
   humanize:
     # Humanize outgoing text. Default: true.
     enabled: true
@@ -99,9 +99,9 @@ voice:
     max_bubbles: 3
     # Sticker reactions allowed for this soul.
     reaction_stickers: []
-  # avoid, mirror, or allow. Default: avoid.
+  # Swearing policy: 'avoid' (never swear) or 'free' (swear naturally when the moment fits). Default: avoid.
   profanity: avoid
-  # inherit or relaxed. Default: inherit.
+  # Safety tone filters: 'inherit' (keep the standard guardrails) or 'off' (relax persona tone filters where the provider allows). Default: inherit.
   safety: inherit
   # Spoken voice preferences (STT/TTS) for this soul.
   speech:

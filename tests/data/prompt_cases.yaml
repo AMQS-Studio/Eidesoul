@@ -6,7 +6,7 @@ cases:
     locale: en-US
     timezone: UTC
     section: ""
-    stable_prefix_hash: b035e3b6461e39e9
+    stable_prefix_hash: ea75ac3dcdde64ff
     expect_contains:
       - "Voice: avoid swearing"
       - "Hard floor"
@@ -22,7 +22,7 @@ cases:
     locale: en-US
     timezone: UTC
     section_from: console
-    stable_prefix_hash: 0e0a08c7025e0ff4
+    stable_prefix_hash: 64f30e3ee7ad44c7
     expect_contains:
       - "## Console interface"
     expect_absent:
@@ -33,7 +33,7 @@ cases:
     locale: en-US
     timezone: UTC
     section: "## Room\nThis thread is shared with other people; another person may be addressed."
-    stable_prefix_hash: 676b83e56c5bc7c3
+    stable_prefix_hash: 7c8300b3d8dbff2e
     expect_contains:
       - "This thread is shared"
     expect_absent:

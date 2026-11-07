@@ -1501,6 +1501,16 @@ if [[ "${COMPOSE[0]}" == podman* && -f compose.podman.yaml ]]; then
     FILES+=(-f compose.podman.yaml)
 fi
 COMPOSE+=("${FILES[@]}")
+# Lifecycle verbs belong to the host: it owns the checkout, the venv, and the engine. Running
+# them inside the container would update code the host never sees and hide the stack from them.
+case "${1:-}" in
+    update|upgrade|start|stop|restart|status|logs|uninstall)
+        if [[ -x .venv/bin/python ]]; then
+            exec .venv/bin/python -m monoagens "$@"
+        fi
+        exec uv run --no-dev python -m monoagens "$@"
+        ;;
+esac
 tty=()
 if [[ ! -t 0 ]]; then
     tty=(-T)

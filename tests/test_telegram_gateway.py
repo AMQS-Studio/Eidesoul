@@ -448,3 +448,23 @@ def test_the_webhook_request_is_parsed_and_the_secret_is_enforced() -> None:
     assert webhook.parse_request(head, body, "other") is None
     assert webhook.parse_request(b"GET / HTTP/1.1\r\n\r\n", b"", "") is None
     assert webhook.parse_request(head, b"not json", "s3") is None
+
+
+def test_the_opening_start_command_answers_like_help() -> None:
+    message = {
+        "message_id": 1,
+        "date": 1767225600,
+        "chat": {"id": 42, "type": "private"},
+        "from": {"id": 42, "first_name": "Budi"},
+        "text": "/start",
+    }
+    percept = ingress.message_percept(message, self_id="9", username="bot")
+    assert percept is not None
+    assert percept.payload.text == "/help"
+
+
+def test_start_with_a_deep_link_payload_or_mention_still_maps_to_help() -> None:
+    assert ingress.normalize_start("/start abc123") == "/help"
+    assert ingress.normalize_start("/start@MonoAgens_bot") == "/help"
+    assert ingress.normalize_start("/startx") == "/startx"
+    assert ingress.normalize_start("halo /start") == "halo /start"

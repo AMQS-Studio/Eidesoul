@@ -518,14 +518,29 @@ def _tools(args: argparse.Namespace) -> int:
     raise ValueError(f"unknown tools command '{command}'")
 
 
-def _update_core(root: Path) -> int:
+def _update_core(root: Path, source: str = "") -> int:
+    """Refresh the code from the published archive, then sync the lockfile.
+
+    The archive needs no `git` and never touches an operator file; a failed download keeps the
+    local tree and reports it, because an update must not leave a half-upgraded deployment.
+    """
     uv = shutil.which("uv")
-    if uv is None or not (root / "pyproject.toml").is_file():
+    if not (root / "pyproject.toml").is_file():
         print(
             "core: no checkout here; upgrade the installed package, then rerun "
             "`monoagens update`"
         )
         return 0
+    url = source or admin_service.UPDATE_ARCHIVE
+    try:
+        written = admin_service.fetch_archive(root, url)
+    except Exception as exc:
+        print(f"core: archive fetch failed ({exc}); syncing the local tree", file=sys.stderr)
+    else:
+        print(f"core: refreshed {len(written)} files from {url}", flush=True)
+    if uv is None:
+        print("core: uv is not on PATH; install it, then rerun `monoagens update`", file=sys.stderr)
+        return 2
     print(f"core: {uv} sync --locked --no-dev", flush=True)
     return int(
         subprocess.run([uv, "sync", "--locked", "--no-dev"], cwd=root, check=False).returncode
@@ -538,6 +553,12 @@ def _update(args: argparse.Namespace) -> int:
     if not args.core:
         code = admin_extensions.upgrade_extras(args.config) or code
         code = admin_extensions.update_plugins(args.config) or code
+    current = admin_service.load(args.config)
+    if current.mode == admin_service.COMPOSE:
+        # The stack owns the database host name and the image: build, migrate inside the
+        # network, then recreate the service so it runs the code just synced on the host.
+        code = admin_service.compose_update(current) or code
+        return code
     from .admin import database as admin_db
 
     try:
@@ -545,16 +566,7 @@ def _update(args: argparse.Namespace) -> int:
     except ConfigError as exc:
         print(f"db upgrade: {exc}", file=sys.stderr, flush=True)
         code = code or 2
-    current = admin_service.load(args.config)
-    if current.mode == admin_service.COMPOSE:
-        argv = admin_service.compose_argv(current)
-        if argv is not None:
-            build = admin_service._run(
-                [*argv, "build", admin_service.CONTAINER_NAME], current.root
-            )
-            code = build or code
-        code = admin_service.restart(current) or code
-    elif admin_service.read_pid(current) is not None:
+    if admin_service.read_pid(current) is not None:
         code = admin_service.restart(current) or code
     else:
         admin_service.reload(args.config, reason="update")

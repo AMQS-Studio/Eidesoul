@@ -369,6 +369,129 @@ def restart(service: Service) -> int:
     return start(service)
 
 
+# The published bundle: `monoagens update` refreshes the code from this archive, so a host
+# without `git` upgrades exactly like a checkout (ADR-0007 §4.2).
+UPDATE_ARCHIVE = "https://github.com/AMQStudio/MonoAgens/archive/refs/heads/main.tar.gz"
+# Operator-owned paths an update never writes over, whatever the archive carries.
+KEEP_ON_UPDATE = frozenset(
+    {"config.yaml", "roles.yaml", "soul.yaml", ".env", ".monoagens", ".venv", "plugins", ".git"}
+)
+
+
+def apply_archive(root: Path, payload: bytes) -> list[str]:
+    """Replace the code tree from one archive payload; operator-owned paths stay untouched.
+
+    Every member must sit under the archive's single top directory, so a crafted `..` entry
+    can never escape `root`. Files are written byte for byte; removed upstream files are left
+    behind because an update never deletes an operator's copy of anything.
+    """
+    import io as _io
+    import tarfile
+
+    written: list[str] = []
+    with tarfile.open(fileobj=_io.BytesIO(payload), mode="r:gz") as archive:
+        for member in archive.getmembers():
+            if not member.isfile():
+                continue
+            parts = Path(member.name).parts
+            if len(parts) < 2 or any(part in ("", ".", "..") for part in parts):
+                continue
+            relative = Path(*parts[1:])
+            if relative.parts[0] in KEEP_ON_UPDATE:
+                continue
+            target = root / relative
+            if root not in target.resolve().parents and target.resolve() != root:
+                continue
+            handle = archive.extractfile(member)
+            if handle is None:
+                continue
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_bytes(handle.read())
+            written.append(relative.as_posix())
+    return written
+
+
+def fetch_archive(root: Path, url: str = UPDATE_ARCHIVE, timeout: float = 60.0) -> list[str]:
+    """Download the published archive and apply it to `root`; raises on a network failure."""
+    import urllib.request
+
+    request = urllib.request.Request(url, headers={"User-Agent": f"monoagens/{version()}"})
+    with urllib.request.urlopen(request, timeout=timeout) as response:  # pinned https URL
+        payload = response.read()
+    return apply_archive(root, payload)
+
+
+def enabled_extras(root: Path) -> list[str]:
+    """Gateway extras enabled in `config.yaml` that the project declares."""
+    import tomllib
+
+    import yaml
+
+    base = Path(root)
+    config_path = base / "config.yaml"
+    project = base / "pyproject.toml"
+    if not config_path.is_file() or not project.is_file():
+        return []
+    try:
+        raw = yaml.safe_load(config_path.read_text(encoding="utf-8")) or {}
+        extras = set(
+            (tomllib.loads(project.read_text(encoding="utf-8")).get("project") or {}).get(
+                "optional-dependencies"
+            )
+            or {}
+        )
+    except Exception:
+        log.debug("extras lookup failed", exc_info=True)
+        return []
+    found = [
+        str(name)
+        for name, value in (raw.get("gateways") or {}).items()
+        if isinstance(value, dict) and value.get("enabled") is True and str(name) in extras
+    ]
+    return sorted(found)
+
+
+def write_extras(root: Path) -> str:
+    """Keep `.env`'s `EXTRAS` in step with the enabled gateways; the image build reads it."""
+    base = Path(root)
+    value = " ".join(f"--extra {name}" for name in enabled_extras(base))
+    path = base / ".env"
+    if not path.is_file() and not value:
+        return value
+    lines = path.read_text(encoding="utf-8").splitlines() if path.is_file() else []
+    for index, line in enumerate(lines):
+        if line.partition("=")[0].strip() == "EXTRAS" and "=" in line:
+            lines[index] = f"EXTRAS={value}"
+            break
+    else:
+        lines.append(f"EXTRAS={value}")
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    os.chmod(path, 0o600)
+    return value
+
+
+def compose_update(service: Service) -> int:
+    """Rebuild, migrate, and recreate the stack after the host code changed."""
+    argv = compose_argv(service)
+    if argv is None:
+        raise ConfigError("stack is compose but no podman/docker binary was found")
+    extras = write_extras(service.root)
+    if extras:
+        print(f"monoagens: EXTRAS={extras}", flush=True)
+    profiles = _compose_profiles(service)
+    code = _run([*argv, *profiles, "build", CONTAINER_NAME], service.root)
+    if code:
+        return code
+    code = _run(
+        [*argv, "run", "--rm", CONTAINER_NAME, "monoagens", "db upgrade"], service.root
+    )
+    if code:
+        return code
+    return _run(
+        [*argv, *profiles, "up", "-d", "--force-recreate", CONTAINER_NAME], service.root
+    )
+
+
 def level_from_args(args) -> str:
     """One verbosity contract for `run` and `logs`; `--level` wins over the shorthands."""
     explicit = str(getattr(args, "level", "") or "").strip().upper()

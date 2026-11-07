@@ -29,19 +29,19 @@ sync_documents: true
 # --- 3. SANDBOX CONTAINER ---
 # Sandbox runtime and resource limits.
 sandbox:
-  # Container runtime; empty autodetects podman then docker.
+  # Container runtime: podman | docker; empty autodetects podman then docker.
   runtime: ''
   # Container image for the sandbox.
   image: docker.io/library/python:3.12-slim
   # Sandbox command timeout. Default: 120.
   timeout_seconds: 120
-  # Dedicated sandbox network; bridge, none, and host are rejected.
+  # Dedicated internal network name (for example monoagens-sandbox); bridge, none, and host are rejected. Default: none.
   network: monoagens-sandbox
   # Host path mounted into the sandbox; empty uses the workspace.
   host_workspace: null
   # Extra environment variables allowed into the container.
   env: []
-  # HTTP proxy for the sandbox network.
+  # HTTP proxy URL for the sandbox network (http://host:port); empty = none.
   proxy: http://sandbox-proxy:3128
   # Process limit inside the sandbox.
   pids_limit: 256
@@ -63,7 +63,7 @@ web_search:
   api_key_env: ''
   # Environment variable holding the Google CSE engine id.
   engine_id_env: ''
-  # ddgs backend selection; auto lets the library choose.
+  # ddgs backend: auto (library choice) | html | lite | bing | brave | duckduckgo | google | mojeek | startpage | yahoo | yandex | wikipedia.
   ddgs_backend: auto
   # Search region hint; empty means no region bias.
   region: ''
@@ -260,7 +260,7 @@ engine:
     max_items: 12
     # Memory prompt budget; 0 = unlimited. Default: 0.
     max_chars: 0
-    # Memory collection label.
+    # Memory collection label; keep the default unless you migrate data.
     collection: monoagens_memories
     # Extraction model; empty uses engine.llm.model.
     extraction_model: ''
@@ -284,7 +284,7 @@ engine:
       group_capture:
         # Only the speaker's own words. Default: true.
         self_only: true
-        # drop or deny third-party facts.
+        # Third-party facts in a group: drop | deny. Default: drop.
         third_party: drop
         # Ask before group capture. Default: false.
         ask_in_group: false
