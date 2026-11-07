@@ -180,13 +180,36 @@ def _lines(
     return lines
 
 
+def _other_bodies(ctx: ToolContext, current) -> list:
+    """Every other running body, in a stable order, for a thread the current one cannot name."""
+    bodies = getattr(getattr(ctx, "agent", None), "gateways", None) or []
+    return [item for item in bodies if item is not current]
+
+
+def _find_elsewhere(ctx: ToolContext, current, chat: str) -> tuple[object | None, str, str]:
+    """`(body, thread_id, title)` when exactly one other body knows the named chat."""
+    found: list[tuple[object, str, str]] = []
+    for other in _other_bodies(ctx, current):
+        thread_id, title, _why = _target(ctx, other, chat)
+        if thread_id:
+            found.append((other, thread_id, title))
+    return found[0] if len(found) == 1 else (None, "", "")
+
+
 async def _history(args: dict, ctx: ToolContext) -> str:
     if ctx.history is None:
         return "error: the history archive is unavailable"
-    body = body_of(ctx, str(args.get("gateway") or ""))
+    named = str(args.get("gateway") or "").strip()
+    body = body_of(ctx, named)
     if body is None:
         return "error: the requested body is not available"
-    thread_id, title, why = _target(ctx, body, str(args.get("chat") or ""))
+    chat = str(args.get("chat") or "")
+    thread_id, title, why = _target(ctx, body, chat)
+    if not thread_id and chat.strip() and not named and not why.startswith("error: several"):
+        # The model rarely names a body: a chat the current one cannot name may live on another.
+        other, thread_id, title = _find_elsewhere(ctx, body, chat)
+        if thread_id and other is not None:
+            body = other
     if not thread_id:
         return why
     denial = _cross(ctx, body, thread_id)
@@ -217,9 +240,10 @@ TOOL = Handler(
     scan=("query", "chat"),
     description=(
         "Search an archived thread, newest first. Default: this thread's archive (outside the "
-        "20-message payload). chat=<thread name or id> reads another archived thread; gateway="
-        "<body name> reads a thread another body owns. Read the target here before sending "
-        "anything to it; attachment handles (`att_…`) are listed with their messages."
+        "20-message payload). chat=<thread name or id> reads another archived thread, on any "
+        "surface: when this body does not know the name, the other bodies are tried "
+        "automatically (set gateway=<body name> to be explicit). Read the target here before "
+        "sending anything to it; attachment handles (`att_…`) are listed with their messages."
     ),
     fn=_history,
     aliases=("chat_history", "history", "search_history"),
