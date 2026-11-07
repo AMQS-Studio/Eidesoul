@@ -267,7 +267,8 @@ def upgrade_extras(config_path: str | None, name: str | None = None) -> int:
             print(f"monoagens: unknown gateway '{gateway}'", file=sys.stderr, flush=True)
             return 2
         extra = getattr(getattr(info, "descriptor", None), "extra", "") or gateway
-        if shutil.which("uv") is None or not pyproject.is_file():
+        uv = service.find_uv(shutil.which("uv"), paths.config.parent)
+        if uv is None or not pyproject.is_file():
             print(f"{gateway}: install its dependency with uv sync --extra {extra}", flush=True)
             continue
         result = admin_gateway.install_extra(extra, paths.config.parent)

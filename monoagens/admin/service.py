@@ -90,6 +90,22 @@ def container_engine() -> str | None:
     return None
 
 
+def find_uv(preferred: str | None = None, root: Path | None = None) -> str | None:
+    """Locate `uv` on PATH or at the installer's pinned `~/.monoagens/bin/uv` path."""
+    if preferred:
+        return preferred
+    candidates = [
+        Path.home() / ".monoagens" / "bin" / "uv",
+        Path.home() / ".local" / "bin" / "uv",
+    ]
+    if root is not None:
+        candidates.insert(0, Path(root).parent / "bin" / "uv")
+    for candidate in candidates:
+        if candidate.is_file() and os.access(candidate, os.X_OK):
+            return str(candidate)
+    return None
+
+
 def _stack_marker(state: Path) -> str:
     try:
         return (state / STACK_NAME).read_text(encoding="utf-8").strip().lower()
@@ -187,7 +203,14 @@ def compose_argv(service: Service) -> list[str] | None:
     engine = container_engine()
     if service.mode != COMPOSE or engine is None:
         return None
-    return [engine, "compose"]
+    argv = [engine, "compose"]
+    if (
+        Path(engine).name.startswith("podman")
+        and (service.root / "compose.yaml").is_file()
+        and (service.root / "compose.podman.yaml").is_file()
+    ):
+        argv.extend(["-f", "compose.yaml", "-f", "compose.podman.yaml"])
+    return argv
 
 
 def version() -> str:

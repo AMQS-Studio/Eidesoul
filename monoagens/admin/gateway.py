@@ -272,7 +272,7 @@ def install_extra(extra: str, root: Path) -> int:
     if not (root / "pyproject.toml").is_file():
         print(f"install its dependency: uv sync --no-dev --extra {extra}", flush=True)
         return 0
-    uv = shutil.which("uv")
+    uv = service.find_uv(shutil.which("uv"), root)
     if uv is None:
         print(f"install its dependency: uv sync --locked --no-dev --extra {extra}", flush=True)
         return 0

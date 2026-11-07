@@ -1480,6 +1480,8 @@ wrapper_script() {
     printf '%s\n' '#!/usr/bin/env bash'
     printf '%s\n' "# MonoAgens launcher, written by install.sh (stack: $stack; do not hand-edit)."
     printf '%s\n' 'set -euo pipefail'
+    printf 'export PATH=%q:"$HOME/.local/bin:$PATH"\n' "$monoagens_home/bin"
+    printf 'export MONOAGENS_STACK=%q\n' "$stack"
     printf 'cd -- %q\n' "$dir"
     if [[ "$stack" == "compose" ]]; then
         printf 'COMPOSE=(%q compose)\n' "$engine"

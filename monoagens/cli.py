@@ -525,7 +525,7 @@ def _update_core(root: Path, source: str = "") -> int:
     The archive needs no `git` and never touches an operator file; a failed download keeps the
     local tree and reports it, because an update must not leave a half-upgraded deployment.
     """
-    uv = shutil.which("uv")
+    uv = admin_service.find_uv(shutil.which("uv"), root)
     if not (root / "pyproject.toml").is_file():
         print(
             "core: no checkout here; upgrade the installed package, then rerun "
