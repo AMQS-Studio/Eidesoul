@@ -24,6 +24,7 @@ DEFAULT_SEARCH = "ddgs"
 ALWAYS_ON = (
     ("read", "read files under the workspace roots"),
     ("write", "write files under the workspace roots"),
+    ("sed", "surgical edits: exact snippet or anchor-verified line range"),
     ("grep", "search file contents"),
     ("fetch", "fetch a public page"),
     ("shell", "bounded shell command"),

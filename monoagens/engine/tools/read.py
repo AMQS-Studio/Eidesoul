@@ -12,17 +12,17 @@ SECRET_FILE = re.compile(r"(^|/)(\.env(\.[^/]*)?|[^/]*\.env|[^/]*\.pem|[^/]*\.ke
 CONFIG_FILES = frozenset({"config.yaml", "roles.yaml", "soul.yaml"})
 
 
-def _refusal(path, ctx: ToolContext) -> str:
+def _refusal(path, ctx: ToolContext, tool: str = "read") -> str:
     if SECRET_FILE.search(str(path)):
         return (
-            "error: secret files are not readable through read; ask the operator "
+            f"error: secret files are closed to {tool}; ask the operator "
             "(environment variables and credentials stay closed)"
         )
     name = path.name.lower()
     if name in CONFIG_FILES or path == ctx.config.paths.config:
         return (
             "error: host configuration is read through the settings tool "
-            "(settings get/schema), not read"
+            f"(settings get/schema), not {tool}"
         )
     return ""
 

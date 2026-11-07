@@ -65,6 +65,7 @@ def test_builtin_handlers_discovered() -> None:
         "recipe",
         "relay",
         "sandbox",
+        "sed",
         "send_file",
         "send_message",
         "settings",
