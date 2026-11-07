@@ -70,7 +70,7 @@ async def _run(ctx: CommandContext, lang: str) -> None:
         connected = True
         secure_db(session)
         try:
-            named = await directory.sync_group_names(accepted, gateway.db)
+            named = await directory.sync_groups(accepted, gateway.db)
             log.info("backfill: group names synced: %d", named)
         except Exception:
             log.exception("backfill failed to sync group names")

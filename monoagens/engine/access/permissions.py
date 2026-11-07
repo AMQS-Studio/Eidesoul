@@ -4,6 +4,7 @@
 from ..registry import Handler, Registry, allows
 
 __all__ = [
+    "PARENT_TOOLS",
     "allows",
     "command_allowed",
     "command_patterns",
@@ -32,8 +33,24 @@ def _patterns(roles, attribute: str) -> tuple[str, ...]:
     return tuple(dict.fromkeys(found))
 
 
+# A tool that only makes sense beside its parent: granting the parent grants the child, and
+# listing a child on its own still grants nothing else.
+PARENT_TOOLS: dict[str, tuple[str, ...]] = {
+    "read": ("grep",),
+    "write": ("sed",),
+    "web_search": ("fetch",),
+    "send_message": ("send_file",),
+}
+
+
 def tool_patterns(roles) -> tuple[str, ...]:
-    return _patterns(_as_roles(roles), "tools")
+    """Declared patterns plus the children every matched parent implies."""
+    declared = _patterns(_as_roles(roles), "tools")
+    found = list(declared)
+    for parent, children in PARENT_TOOLS.items():
+        if allows(declared, parent):
+            found.extend(children)
+    return tuple(dict.fromkeys(found))
 
 
 def command_patterns(roles) -> tuple[str, ...]:

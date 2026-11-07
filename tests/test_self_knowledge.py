@@ -71,7 +71,9 @@ def test_catalog_marks_allowed_and_locked(tmp_path) -> None:
     catalog = found.catalog((role("member", tools=("read", "info"), commands=("help",)),))
 
     assert "tool read [allowed]" in catalog
-    assert "tool grep [locked]" in catalog
+    # a parent grants its child, so `grep` is allowed wherever `read` is
+    assert "tool grep [allowed]" in catalog
+    assert "tool sed [locked]" in catalog
     assert "command approve [locked]" in catalog
 
 

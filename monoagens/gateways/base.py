@@ -6,7 +6,9 @@ transport:
 * `default_settings` — the `gateways.<name>` options, including the progress flags;
 * `default_role_policy` — one role's block, written in the body's own vocabulary;
 * `validate_role_policy` — refuse a block the body cannot interpret;
-* `check_access` — the one decision the core asks before a turn starts.
+* `check_access` — the one decision the core asks before a turn starts;
+* `resolve_target` / `participants` — the archive this body already owns answers the optional
+  `Directory` surface.
 
 `register_gateway` maps a name and its install extra to the class, so `gateway_index()` can offer
 that metadata before a transport extra is imported. Importing this module imports no transport.
@@ -172,12 +174,100 @@ def safe_name(value: str, limit: int = 60) -> str:
     return cleaned.strip("._-")[:limit] or "x"
 
 
+def clean_token(value: object) -> str:
+    """A transport token with every whitespace character removed.
+
+    A bot token is one opaque run of characters; a newline or a space from a copy-paste becomes
+    `%20` in the request path (Telegram answers 404 instead of authenticating).
+    """
+    return "".join(str(value or "").split())
+
+
 def attachment_path(
     config, thread_id: str, message_id: str, filename: str
 ) -> Path:
     """Where a body stores one downloaded attachment: inside the workspace, never beside it."""
     folder = Path(config.workspace) / ATTACHMENT_ROOT / safe_name(thread_id, 40)
     return folder / f"{safe_name(message_id, 60)}-{safe_name(filename, 80)}"
+
+
+LIST_LIMIT = 20
+
+
+def match_target(
+    targets: list[tuple[str, str]], raw: str
+) -> tuple[tuple[str, str] | None, list[tuple[str, str]]]:
+    """Match an id, then an exact name, then a unique fragment; never a single-target fallback."""
+    value = str(raw or "").strip()
+    if not value:
+        return None, []
+    for item in targets:
+        if item[0] == value:
+            return item, []
+    folded = value.casefold()
+    exact = [item for item in targets if item[1].strip().casefold() == folded]
+    if len(exact) == 1:
+        return exact[0], []
+    partial = [
+        item for item in targets if folded in item[1].casefold() or folded in item[0].casefold()
+    ]
+    if len(partial) == 1:
+        return partial[0], []
+    return None, exact or partial
+
+
+def thread_targets(
+    db, gateway: str, query: str = "", limit: int = LIST_LIMIT
+) -> list[tuple[str, str]]:
+    """Threads this body owns in the archive, newest activity first, filtered by `query`."""
+    from sqlalchemy import text
+
+    limit = max(1, min(int(limit or LIST_LIMIT), 50))
+    if db is None:
+        return []
+    try:
+        rows = db.fetch_all(
+            text(
+                "SELECT t.thread_id, t.name, "
+                "coalesce((SELECT max(m.ts) FROM messages AS m "
+                "          WHERE m.thread_id = t.thread_id), 0) AS last "
+                "FROM threads AS t WHERE t.gateway = :gateway "
+                "ORDER BY last DESC, t.thread_id"
+            ).bindparams(gateway=str(gateway or ""))
+        )
+    except Exception:
+        log.debug("thread directory lookup failed gateway=%s", gateway, exc_info=True)
+        return []
+    term = str(query or "").strip().casefold()
+    found = [
+        (str(row["thread_id"]), str(row["name"] or ""))
+        for row in rows
+        if not term
+        or term in str(row["name"] or "").casefold()
+        or term in str(row["thread_id"]).casefold()
+    ]
+    return found[:limit]
+
+
+def thread_participants(db, gateway: str, thread: str) -> set[str] | None:
+    """Person ids the archive proves spoke in that thread of this body; `None` when unknown."""
+    from sqlalchemy import text
+
+    if db is None or not thread:
+        return None
+    try:
+        rows = db.fetch_all(
+            text(
+                "SELECT p.person_id FROM thread_people AS p "
+                "JOIN threads AS t ON t.thread_id = p.thread_id "
+                "WHERE t.thread_id = :thread AND t.gateway = :gateway"
+            ).bindparams(thread=str(thread), gateway=str(gateway or ""))
+        )
+    except Exception:
+        log.debug("participants lookup failed gateway=%s", gateway, exc_info=True)
+        return None
+    found = {str(row["person_id"]) for row in rows}
+    return found or None
 
 
 def private_thread_of(db, gateway: str, person_id: str) -> str:
@@ -256,6 +346,9 @@ class BaseGateway(CoreDefaults):
     # base reads the three progress flags and the reply language from them and nothing else.
     settings: Any = None
     config: Any = None
+    # The body's own archive handle, set by its implementation; the directory defaults read it
+    # and answer "unknown" when it is absent.
+    db: Any = None
 
     @classmethod
     def default_settings(cls) -> dict[str, object]:
@@ -400,6 +493,16 @@ class BaseGateway(CoreDefaults):
             found = EditDebouncer(EDIT_DEBOUNCE_SECONDS)
             self.__dict__["_edits"] = found
         return found
+
+    def resolve_target(
+        self, query: str
+    ) -> tuple[tuple[str, str] | None, list[tuple[str, str]]]:
+        """Threads this body has seen in the archive, matched by id, name, or a fragment."""
+        return match_target(thread_targets(self.db, self.name, query), query)
+
+    def participants(self, thread: str) -> set[str] | None:
+        """Person ids the archive proves spoke in that thread of this body."""
+        return thread_participants(self.db, self.name, thread)
 
     async def abort(self, thread: str) -> None:
         """Stop whatever this body is still streaming in one thread.

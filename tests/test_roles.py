@@ -18,6 +18,7 @@ from monoagens.admin import templates
 from monoagens.engine.access.permissions import (
     command_allowed,
     command_patterns,
+    tool_allowed,
     tool_patterns,
     tools_for,
 )
@@ -55,7 +56,8 @@ def test_load_role_mapping_and_union() -> None:
     assert registry.names() == ["administrator", "guest", "panitia"]
     roles = registry.for_person(PERSON)
     assert [role.name for role in roles] == ["panitia", "administrator"]
-    assert tool_patterns(roles) == ("read", "*")
+    # declared patterns first, then the children every matched parent implies
+    assert tool_patterns(roles) == ("read", "*", "grep", "sed", "fetch", "send_file")
     assert command_patterns(roles) == ("help", "*")
     assert registry.for_person(OTHER)[0].name == "guest"
     # the core compares canonical identities only; a raw address is not a person id
@@ -300,6 +302,8 @@ def test_whoami_help_and_guard_agree_on_the_name(tmp_path) -> None:
 
     assert "/approve" in run("help", (administrator,))
     assert "/approve" not in run("help", (member,))
+    assert "fake:console:local" in whoami
+    assert "628111@s.whatsapp.net" in whoami
 
     # the guard's sandbox path asks exactly this question (tools/__init__.py: can_approve)
     assert command_allowed((administrator,), "approve") is True
@@ -394,3 +398,148 @@ def test_people_add_refuses_a_non_administrator_first_user(tmp_path) -> None:
 
     with pytest.raises(ValueError, match="first user"):
         admin_people.add(db, config.paths, "console", "local", "member")
+
+
+def test_a_parent_tool_grants_its_child() -> None:
+    source = {
+        "member": (
+            f'name: member\npriority: 10\nusers: ["{PERSON}"]\n'
+            'tools: ["read", "write", "web_search", "send_message"]\n'
+        ),
+        "guest": "name: guest\n",
+    }
+    roles = load_roles(source, "guest").for_person(PERSON)
+    assert tool_patterns(roles) == (
+        "read",
+        "write",
+        "web_search",
+        "send_message",
+        "grep",
+        "sed",
+        "fetch",
+        "send_file",
+    )
+    assert {item.name for item in tools_for(TOOLS, roles)} >= {
+        "read",
+        "grep",
+        "write",
+        "sed",
+        "web_search",
+        "fetch",
+        "send_message",
+        "send_file",
+    }
+
+
+def test_a_child_tool_alone_grants_nothing_else() -> None:
+    source = {"guest": "name: guest\ntools: ['grep']\n"}
+    roles = load_roles(source, "guest").for_person(OTHER)
+    assert tool_patterns(roles) == ("grep",)
+    assert tool_allowed(roles, "read") is False
+
+
+def test_a_listed_room_grants_the_role() -> None:
+    source = {
+        "administrator": ADMIN,
+        "member": (
+            "name: member\npriority: 10\ntools: ['read']\n"
+            "rooms: ['whatsapp:12036304@g.us', 'telegram:-1001234567890:42']\n"
+        ),
+        "guest": "name: guest\n",
+    }
+    registry = load_roles(source, "guest")
+    assert registry.for_person(OTHER, room="whatsapp:12036304@g.us")[0].name == "member"
+    assert registry.for_person(OTHER, room="telegram:-1001234567890:42")[0].name == "member"
+    assert registry.for_person(OTHER, room="whatsapp:999@g.us")[0].name == "guest"
+    assert registry.for_person(OTHER)[0].name == "guest"
+
+
+def test_a_room_member_holds_the_role_from_a_dm() -> None:
+    source = {
+        "administrator": ADMIN,
+        "member": (
+            "name: member\npriority: 10\ntools: ['read']\n"
+            "rooms: ['whatsapp:12036304@g.us']\n"
+        ),
+        "guest": "name: guest\n",
+    }
+    registry = load_roles(source, "guest")
+    seen: list[tuple[str, str]] = []
+
+    def participants(gateway: str, thread: str):
+        seen.append((gateway, thread))
+        return {OTHER} if thread == "12036304@g.us" else None
+
+    roles = registry.for_person(
+        OTHER, room="whatsapp:628111@s.whatsapp.net", participants=participants
+    )
+    assert roles[0].name == "member"
+    assert seen == [("whatsapp", "12036304@g.us")]
+
+
+def test_a_room_entry_needs_a_gateway_and_a_thread() -> None:
+    with pytest.raises(RoleError, match="gateway:thread"):
+        load_roles({"guest": "name: guest\nrooms: ['12036304@g.us']\n"}, "guest")
+
+
+def test_the_member_role_ships_every_isolated_tool() -> None:
+    shipped = templates.ROLES["member"]["tools"]
+    assert shipped == [
+        "read",
+        "write",
+        "web_search",
+        "memory",
+        "info",
+        "thread_history",
+        "send_message",
+        "task",
+        "recipe",
+        "relay",
+        "sandbox",
+    ]
+    assert "settings" not in shipped
+    assert "shell" not in shipped
+    assert all(role["rooms"] == [] for role in templates.ROLES.values())
+    root = yaml.safe_load((ROOT / "roles.yaml").read_text(encoding="utf-8"))["roles"]
+    assert root["member"]["tools"] == shipped
+    assert all(body["rooms"] == [] for body in root.values())
+
+
+def test_the_console_identity_joins_administrator_once(tmp_path) -> None:
+    from monoagens.admin import people as admin_people
+
+    config = build_config(tmp_path)
+    db = database()
+    config.paths.roles.parent.mkdir(parents=True, exist_ok=True)
+    config.paths.roles.write_text(
+        "roles:\n"
+        "  administrator:\n"
+        "    name: administrator\n"
+        "    users: []\n"
+        "    tools: ['*']\n"
+        "    commands: ['*']\n"
+        "    memory_admin: true\n"
+        "  guest:\n"
+        "    name: guest\n",
+        encoding="utf-8",
+    )
+
+    person = admin_people.ensure_console_administrator(db, config.paths)
+    assert person.startswith("per_")
+    mirror = yaml.safe_load(config.paths.roles.read_text(encoding="utf-8"))
+    assert mirror["roles"]["administrator"]["users"] == [person]
+    roles = load_roles(mirror["roles"], "guest")
+    assert roles.for_person(person)[0].name == "administrator"
+
+    # the second call is a no-op: same person, no duplicate entry, no rewrite
+    before = config.paths.roles.read_text(encoding="utf-8")
+    assert admin_people.ensure_console_administrator(db, config.paths) == ""
+    assert config.paths.roles.read_text(encoding="utf-8") == before
+
+
+def test_the_console_identity_skips_a_missing_roles_file(tmp_path) -> None:
+    from monoagens.admin import people as admin_people
+
+    config = build_config(tmp_path)
+    config.paths.roles.unlink(missing_ok=True)
+    assert admin_people.ensure_console_administrator(database(), config.paths) == ""

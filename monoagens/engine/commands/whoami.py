@@ -34,11 +34,27 @@ async def whoami(ctx: CommandContext) -> str:
         ),
         t("command.whoami.chat", lang, chat=_chat_label(ctx, lang)),
         t(
+            "command.whoami.room",
+            lang,
+            room=(
+                f"{ctx.gateway.name}:{ctx.thread_id}"
+                if ctx.gateway is not None
+                else ctx.thread_id
+            ),
+        ),
+        t(
             "command.whoami.surface",
             lang,
             surface=ctx.gateway.name if ctx.gateway is not None else "-",
         ),
     ]
+    address = (
+        str(getattr(ctx.inbound.payload, "sender_address", "") or "")
+        if ctx.inbound is not None
+        else ""
+    )
+    if address:
+        lines.append(t("command.whoami.address", lang, address=address))
     handles = sorted(ctx.gateway.self_handles()) if ctx.gateway is not None else []
     if handles:
         lines.append(

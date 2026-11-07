@@ -6,8 +6,9 @@ soul uses for its holder. The label is display-only: nothing compares it and it 
 """
 
 
+import logging
 import re
-from collections.abc import Iterable, Mapping
+from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass, field
 
 import yaml
@@ -15,10 +16,15 @@ import yaml
 from ..registry import allows
 from .identity import is_person_id
 
+log = logging.getLogger(__name__)
+
 NAME = re.compile(r"^[a-z][a-z0-9_-]{0,31}$")
 
 PROTECTED = "administrator"
 LABEL_MAX = 40
+
+# (gateway, thread) -> the person ids the body can prove are in that room.
+Participants = Callable[[str, str], set[str] | None]
 
 
 class RoleError(ValueError):
@@ -30,6 +36,7 @@ class Role:
     name: str
     description: str = ""
     users: tuple[str, ...] = ()
+    rooms: tuple[str, ...] = ()
     tools: tuple[str, ...] = ()
     commands: tuple[str, ...] = ()
     context: str = ""
@@ -61,22 +68,44 @@ class RoleRegistry:
             raise RoleError("no roles loaded")
         return self.by_name[self.names()[0]]
 
-    def for_person(self, person_id: str) -> tuple[Role, ...]:
-        """Every role that lists this person id, ordered by priority desc then name."""
+    def for_person(
+        self,
+        person_id: str,
+        *,
+        room: str = "",
+        participants: Participants | None = None,
+    ) -> tuple[Role, ...]:
+        """Every role this person holds, ordered by priority desc then name.
+
+        A role matches when it lists the person, when `room` (`gateway:thread`) is one of its
+        `rooms`, or — with `participants` — when the body proves the person is in one of them.
+        """
         from .permissions import normalize  # local: permissions imports this module
 
         who = normalize(str(person_id or ""))
-        matched = [
-            role
-            for role in self.by_name.values()
-            if who and any(normalize(user) == who for user in role.users)
-        ]
+        key = normalize(str(room or ""))
+        cache: dict[tuple[str, str], set[str] | None] = {}
+        matched: list[Role] = []
+        for role in self.by_name.values():
+            if who and any(normalize(user) == who for user in role.users):
+                matched.append(role)
+                continue
+            if key and any(normalize(entry) == key for entry in role.rooms):
+                matched.append(role)
+                continue
+            if (
+                participants is not None
+                and who
+                and role.rooms
+                and _member_of(role, who, participants, cache)
+            ):
+                matched.append(role)
         if not matched:
             return (self.default_role(),)
         return tuple(sorted(matched, key=lambda role: (-role.priority, role.name)))
 
     def policy_for(
-        self, person_id: str, gateway: str
+        self, person_id: str, gateway: str, *, room: str = ""
     ) -> tuple[Role, Mapping[str, object] | None]:
         """The highest-priority role that defines this gateway's block (ADR-0002 §4.3).
 
@@ -85,7 +114,7 @@ class RoleRegistry:
         role defines the block the highest-priority role is returned with `None`, which stays
         a denial.
         """
-        roles = self.for_person(person_id)
+        roles = self.for_person(person_id, room=room)
         for role in roles:
             found = role.gateways.get(str(gateway or ""))
             if found is not None:
@@ -111,6 +140,32 @@ class RoleRegistry:
 def privileged(role: Role) -> bool:
     """ADR-0006 §4.3: one predicate for status, redaction, and diagnostics."""
     return bool(role.protected or "*" in (role.tools or ()))
+
+
+def _member_of(
+    role: Role,
+    who: str,
+    participants: Participants,
+    cache: dict[tuple[str, str], set[str] | None],
+) -> bool:
+    """Whether the body proves `who` sits in one of the role's `rooms`."""
+    from .permissions import normalize  # local: permissions imports this module
+
+    for entry in role.rooms:
+        gateway, _, thread = entry.partition(":")
+        key = (gateway.strip().lower(), thread.strip())
+        if not key[0] or not key[1]:
+            continue
+        if key not in cache:
+            try:
+                cache[key] = participants(*key)
+            except Exception:
+                log.warning("participants lookup failed gateway=%s", key[0], exc_info=True)
+                cache[key] = None
+        members = cache[key]
+        if members and who in {normalize(str(item)) for item in members}:
+            return True
+    return False
 
 
 def assert_protected_roles(before: Iterable[str], after: Iterable[str]) -> None:
@@ -169,6 +224,18 @@ def _users(value: object, source: str) -> tuple[str, ...]:
                 f"{source}: 'users' must contain per_… person ids, not {person!r}"
             )
     return users
+
+
+def _rooms(value: object, source: str) -> tuple[str, ...]:
+    """`gateway:thread` entries, exactly as `/whoami` prints them; no bare thread ids."""
+    rooms = _str_tuple(value, "rooms", source)
+    for entry in rooms:
+        gateway, _, thread = entry.partition(":")
+        if not gateway.strip() or not thread.strip():
+            raise RoleError(
+                f"{source}: 'rooms' entries must be gateway:thread, not {entry!r}"
+            )
+    return rooms
 
 
 def _gateways(value: object, source: str) -> dict[str, dict[str, object]]:
@@ -231,6 +298,7 @@ def parse_role(name: str, body: object, source: str) -> Role:
         name=declared,
         description=str(body.get("description") or "").strip(),
         users=users,
+        rooms=_rooms(body.get("rooms"), source),
         tools=tools,
         commands=commands,
         context=str(body.get("context") or "").strip(),

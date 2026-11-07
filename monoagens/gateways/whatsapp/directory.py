@@ -13,7 +13,8 @@ from sqlalchemy import text as text_
 
 from ...engine.db import Database
 from ...engine.schema import messages, person_links, threads
-from .schema import wa_contacts, wa_lid_map
+from .identity import normalize_jid
+from .schema import wa_contacts, wa_group_members, wa_lid_map
 
 log = logging.getLogger(__name__)
 
@@ -247,17 +248,136 @@ def targets(db: Database, query: str = "", limit: int = LIST_LIMIT) -> list[tupl
     return [*groups(db, query, limit), *contacts(db, query, limit)]
 
 
+def _jid_digits(db: Database, jid) -> str:
+    """Digits of a neonize JID, through `wa_lid_map` when it is a LID; "" when unusable."""
+    user = str(getattr(jid, "User", "") or "")
+    if not user:
+        return ""
+    server = str(getattr(jid, "Server", "") or "")
+    raw = f"{user}@{server}" if server else user
+    if raw.endswith("@lid"):
+        mapped = pn_jid(db, raw)
+        if mapped:
+            return normalize_jid(mapped)
+    return normalize_jid(raw)
+
+
+def _member_digits(db: Database, item) -> str:
+    """The canonical digits of one `GroupParticipant`: PN first, then JID, then LID."""
+    phone = getattr(item, "PhoneNumber", None)
+    digits = _jid_digits(db, phone) if phone is not None else ""
+    for field_name in ("JID", "LID"):
+        if digits:
+            break
+        value = getattr(item, field_name, None)
+        digits = _jid_digits(db, value) if value is not None else ""
+    return digits
+
+
+def store_group(db: Database, thread_id: str, members) -> int:
+    """Replace the cached membership of one group from `GroupInfo.Participants`.
+
+    An empty or unresolvable list writes nothing: a partial transport answer never wipes a
+    cache that a previous full answer filled.
+    """
+    thread = str(thread_id or "")
+    if not thread:
+        return 0
+    rows: list[dict] = []
+    seen: set[str] = set()
+    for item in members or ():
+        digits = _member_digits(db, item)
+        if not digits or digits in seen:
+            continue
+        seen.add(digits)
+        name = " ".join(str(getattr(item, "DisplayName", "") or "").split())[:200]
+        rows.append(
+            {
+                "thread_id": thread,
+                "member": digits,
+                "name": name,
+                "updated_at": time.time(),
+            }
+        )
+    if not rows:
+        return 0
+
+    def merge(stmt):
+        return {
+            "name": func.coalesce(
+                func.nullif(stmt.excluded.name, ""), wa_group_members.c.name
+            ),
+            "updated_at": time.time(),
+        }
+
+    with db.connect() as conn:
+        conn.execute(
+            wa_group_members.delete().where(wa_group_members.c.thread_id == thread)
+        )
+        db.upsert(conn, wa_group_members, rows, ["thread_id", "member"], update=merge)
+    return len(rows)
+
+
+def apply_group_event(db: Database, thread_id: str, *, joined=(), left=()) -> None:
+    """Apply `GroupInfoEvent.Join` / `.Leave` deltas to the cached membership."""
+    thread = str(thread_id or "")
+    if not thread:
+        return
+    leave = [digits for digits in (_jid_digits(db, jid) for jid in left) if digits]
+    join = [
+        {"thread_id": thread, "member": digits, "name": "", "updated_at": time.time()}
+        for digits in dict.fromkeys(_jid_digits(db, jid) for jid in joined)
+        if digits
+    ]
+    with db.connect() as conn:
+        if leave:
+            conn.execute(
+                wa_group_members.delete().where(
+                    and_(
+                        wa_group_members.c.thread_id == thread,
+                        wa_group_members.c.member.in_(leave),
+                    )
+                )
+            )
+        if join:
+            db.upsert(
+                conn,
+                wa_group_members,
+                join,
+                ["thread_id", "member"],
+                update={
+                    "name": wa_group_members.c.name,
+                    "updated_at": join[0]["updated_at"],
+                },
+            )
+
+
 def participants(db: Database, thread_id: str) -> set[str] | None:
     """Person ids the transport can prove are in the thread; `None` when it cannot.
 
-    A group's membership lives on the transport, not in the archive, so the gateway answers
-    `None` and the core fails closed. A direct conversation has exactly the two accounts; the
-    person linked to the thread's address is the one the transport can prove.
+    A direct conversation proves the person linked to the thread's address. A group proves the
+    people linked to the members the transport reported (`wa_group_members`); a group with no
+    cached membership stays `None`, so the core fails closed.
     """
-    if not thread_id or thread_id.endswith("@g.us"):
+    if not thread_id:
         return None
-    digits = thread_id.partition("@")[0]
     rows = db.fetch_all(select(person_links).where(person_links.c.gateway == "whatsapp"))
+    if thread_id.endswith("@g.us"):
+        cached = db.fetch_all(
+            select(wa_group_members.c.member).where(
+                wa_group_members.c.thread_id == thread_id
+            )
+        )
+        if not cached:
+            return None
+        members = {str(row["member"]) for row in cached}
+        found = {
+            str(row["person_id"])
+            for row in rows
+            if normalize_jid(str(row["address"] or "")) in members
+        }
+        return found or None
+    digits = thread_id.partition("@")[0]
     found = {
         str(row["person_id"])
         for row in rows
@@ -266,35 +386,14 @@ def participants(db: Database, thread_id: str) -> set[str] | None:
     return found if found else None
 
 
-def resolve_target(
-    targets: list[tuple[str, str]], raw: str
-) -> tuple[tuple[str, str] | None, list[tuple[str, str]]]:
-    """Match JID, then an exact name, then a unique fragment; never a single-contact fallback."""
-    value = str(raw or "").strip()
-    if not value:
-        return None, []
-    for item in targets:
-        if item[0] == value:
-            return item, []
-    folded = value.casefold()
-    exact = [item for item in targets if item[1].strip().casefold() == folded]
-    if len(exact) == 1:
-        return exact[0], []
-    partial = [
-        item for item in targets if folded in item[1].casefold() or folded in item[0].casefold()
-    ]
-    if len(partial) == 1:
-        return partial[0], []
-    return None, exact or partial
-
-
 def group_name(info) -> str:
     return " ".join(str(getattr(getattr(info, "GroupName", None), "Name", "") or "").split())
 
 
-async def sync_group_names(
+async def sync_groups(
     client, db: Database, timeout_seconds: float = GROUP_LIST_TIMEOUT
 ) -> int:
+    """Cache every joined group's name and membership; returns the named-group count."""
     getter: Callable[[], Awaitable[list]] | None = getattr(client, "get_joined_groups", None)
     if not callable(getter):
         return 0
@@ -305,11 +404,14 @@ async def sync_group_names(
         return 0
     saved = 0
     for info in found:
-        name = group_name(info)
-        if not getattr(info.JID, "User", "") or not name:
+        if not getattr(info.JID, "User", ""):
             continue
-        set_chat_name(db, f"{info.JID.User}@{info.JID.Server}", name)
-        saved += 1
+        thread = f"{info.JID.User}@{info.JID.Server}"
+        name = group_name(info)
+        if name:
+            set_chat_name(db, thread, name)
+            saved += 1
+        store_group(db, thread, getattr(info, "Participants", ()))
     return saved
 
 

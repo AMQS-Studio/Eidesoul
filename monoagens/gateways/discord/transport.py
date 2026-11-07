@@ -6,6 +6,7 @@ and routes them through the same handlers a test fake calls directly.
 """
 
 
+import importlib
 import logging
 from collections.abc import Awaitable, Callable, Mapping, Sequence
 from dataclasses import dataclass
@@ -54,6 +55,9 @@ class DiscordTransport(Protocol):
 def _sdk() -> Any:
     try:
         import discord  # pyright: ignore[reportMissingImports]
+
+        importlib.import_module("discord.app_commands")
+        importlib.import_module("discord.ext.commands")
     except ImportError as exc:  # the extra is optional; the boot message names it
         raise GatewayError(
             "gateway 'discord' needs its extra: install monoagens[discord]"

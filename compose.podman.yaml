@@ -1,0 +1,14 @@
+# Rootless Podman override: `podman compose -f compose.yaml -f compose.podman.yaml up -d`.
+#
+# Under rootless Podman the container's uid 0 IS the invoking host user, so running the process
+# as 0 lets it read roles.yaml (0600) and write .monoagens on the bind mounts, with no UID
+# remapping. `:z` relabels the mounts for SELinux on Rocky/RHEL/Fedora and is a no-op elsewhere.
+# Docker never loads this file: there the container must keep its own uid 1000.
+services:
+  monoagens:
+    user: "0:0"
+    volumes:
+      - ./config.yaml:/app/config.yaml:z
+      - ./roles.yaml:/app/roles.yaml:z
+      - ./soul.yaml:/app/soul.yaml:z
+      - ./.monoagens:/app/.monoagens:z

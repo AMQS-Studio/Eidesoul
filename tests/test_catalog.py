@@ -253,3 +253,25 @@ def test_multi_choose_keeps_defaults_or_reads_numbers():
         selected=("read",),
     )
     assert picked == ["read", "web"]
+
+
+def test_tool_details_are_one_short_line():
+    for item in catalog.tools():
+        assert item.detail
+        assert len(item.detail) <= catalog.DETAIL_MAX
+    items = {item.name: item for item in catalog.tools()}
+    assert items["thread_history"].detail == "Search an archived thread, newest first."
+
+
+def test_voice_parts_explain_themselves():
+    assert all(item.detail for item in catalog.voice_parts())
+
+
+def test_role_tools_hide_the_implied_children():
+    offered = {item.name for item in catalog.role_tools()}
+    assert {"grep", "sed", "fetch", "send_file"}.isdisjoint(offered)
+    assert {"read", "write", "web_search", "send_message"} <= offered
+    labels = {item.name: item.label for item in catalog.role_tools()}
+    assert labels["read"] == "read (+grep)"
+    assert labels["send_message"] == "send_message (+send_file)"
+    assert set(catalog.default_tools()) <= offered

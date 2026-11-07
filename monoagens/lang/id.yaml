@@ -259,6 +259,8 @@ messages:
   command.whoami.group: "group"
   command.whoami.identity: "🪪 Identitas: {name} ({id})"
   command.whoami.role: "🎭 Peran: {roles}"
+  command.whoami.room: "🚪 Room: {room}"
+  command.whoami.address: "📇 Alamat: {address}"
   command.whoami.surface: "📡 Surface: {surface}"
   command.whoami.user: "👤 Kamu: {who}"
   gateway.backfill.connected: "Perangkat sementara tersambung. Menunggu history sync dari ponsel..."

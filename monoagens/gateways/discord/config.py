@@ -8,6 +8,8 @@ at boot with a clear message instead of a half-started client.
 from collections.abc import Mapping
 from dataclasses import dataclass
 
+from ..base import clean_token
+
 
 @dataclass(frozen=True)
 class DiscordSettings:
@@ -24,16 +26,16 @@ class DiscordSettings:
         cls, enabled: bool, options: Mapping[str, object], environ: Mapping[str, str]
     ) -> DiscordSettings:
         env_name = str(options.get("bot_token_env") or "DISCORD_BOT_TOKEN").strip()
-        token = str(options.get("bot_token") or "").strip() or str(
-            environ.get(env_name) or ""
-        ).strip()
+        bot_token = clean_token(
+            str(options.get("bot_token") or "") or str(environ.get(env_name) or "")
+        )
         try:
             limit = int(str(options.get("message_limit") or 2000))
         except (TypeError, ValueError):
             limit = 2000
         return cls(
             enabled=bool(enabled),
-            bot_token=token,
+            bot_token=bot_token,
             sync_commands=bool(options.get("sync_commands", True)),
             show_thinking=bool(options.get("show_thinking", False)),
             show_steps=bool(options.get("show_steps", True)),

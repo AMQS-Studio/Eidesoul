@@ -4,7 +4,6 @@
 .venv
 .monoagens
 .env
-config.yaml
 __pycache__
 *.py[cod]
 .pytest_cache
@@ -13,7 +12,12 @@ __pycache__
 tests
 *.db
 *.log
-# the host soul stays outside the image; mount it at run time
-soul.yaml
 compose.yaml
+# Host files are mounted at run time and never copied into the image; a 0600 roles.yaml also
+# breaks `docker compose build` under rootless Podman.
+config.yaml
 config.yaml.bak-*
+roles.yaml
+roles.yaml.bak-*
+soul.yaml
+soul.yaml.bak-*

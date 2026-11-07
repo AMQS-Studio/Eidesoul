@@ -115,6 +115,13 @@ def test_settings_read_the_token_from_the_environment_variable() -> None:
     assert settings.interim_updates is True
 
 
+def test_a_token_with_inner_whitespace_is_cleaned() -> None:
+    settings = TelegramSettings.from_mapping(
+        True, {}, {"TELEGRAM_BOT_TOKEN": "123:AA\n bb\tcc "}
+    )
+    assert settings.bot_token == "123:AAbbcc"
+
+
 def test_an_unknown_mode_is_refused() -> None:
     with pytest.raises(ValueError, match="mode must be one of"):
         TelegramSettings.from_mapping(True, {"mode": "carrier-pigeon"}, {})

@@ -22,6 +22,8 @@ roles:
     priority: 100
     # per_… person ids holding this role; `monoagens people add` fills it.
     users: []
+    # gateway:thread ids whose members hold this role; `/whoami` prints the exact string.
+    rooms: []
     # Tool name patterns this role may call; '*' means every tool.
     tools:
       - '*'
@@ -50,15 +52,21 @@ roles:
     priority: 10
     # per_… person ids holding this role; `monoagens people add` fills it.
     users: []
+    # gateway:thread ids whose members hold this role; `/whoami` prints the exact string.
+    rooms: []
     # Tool name patterns this role may call; '*' means every tool.
     tools:
       - read
-      - grep
-      - fetch
+      - write
       - web_search
-      - thread_history
       - memory
       - info
+      - thread_history
+      - send_message
+      - task
+      - recipe
+      - relay
+      - sandbox
     # Chat command patterns this role may run; '*' means every command.
     commands:
       - help
@@ -89,6 +97,8 @@ roles:
     priority: 0
     # per_… person ids holding this role; `monoagens people add` fills it.
     users: []
+    # gateway:thread ids whose members hold this role; `/whoami` prints the exact string.
+    rooms: []
     # Tool name patterns this role may call; '*' means every tool.
     tools: []
     # Chat command patterns this role may run; '*' means every command.

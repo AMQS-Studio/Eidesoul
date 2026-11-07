@@ -9,6 +9,8 @@ half-configured body.
 from collections.abc import Mapping
 from dataclasses import dataclass
 
+from ..base import clean_token
+
 MODES = frozenset({"polling", "webhook"})
 
 
@@ -33,9 +35,9 @@ class TelegramSettings:
     ) -> TelegramSettings:
         """Build the settings; the token comes from the environment variable it names."""
         env_name = str(options.get("bot_token_env") or "TELEGRAM_BOT_TOKEN").strip()
-        token = str(options.get("bot_token") or "").strip() or str(
-            environ.get(env_name) or ""
-        ).strip()
+        bot_token = clean_token(
+            str(options.get("bot_token") or "") or str(environ.get(env_name) or "")
+        )
         mode = str(options.get("mode") or "polling").strip().lower()
         if mode not in MODES:
             raise ValueError(f"gateway 'telegram': mode must be one of {sorted(MODES)}")
@@ -51,7 +53,7 @@ class TelegramSettings:
             timeout = 25.0
         return cls(
             enabled=bool(enabled),
-            bot_token=token,
+            bot_token=bot_token,
             mode=mode,
             webhook_url=str(options.get("webhook_url") or "").strip(),
             webhook_secret=secret,

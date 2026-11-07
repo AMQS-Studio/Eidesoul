@@ -19,6 +19,27 @@ class CatalogItem:
     parameters: dict = field(default_factory=dict)
 
 
+DETAIL_MAX = 80
+
+
+def _short(text: str, limit: int = DETAIL_MAX) -> str:
+    """One menu line: the first clause of a description, capped at `limit` characters."""
+    value = " ".join(str(text or "").split())
+    if not value:
+        return ""
+    cut = len(value)
+    for mark in (". ", "; ", " — "):
+        found = value.find(mark)
+        if found != -1:
+            cut = min(cut, found + (1 if mark == ". " else 0))
+    first = value[:cut].strip()
+    if first and first[-1] not in ".!?":
+        first += "."
+    if len(first) <= limit:
+        return first
+    return f"{first[: limit - 1].rstrip(' .,;:`…')}…"
+
+
 def _literal(call: ast.Call, key: str):
     for keyword in call.keywords:
         if keyword.arg != key:
@@ -53,13 +74,16 @@ def _gateway_tools() -> list[CatalogItem]:
                     continue
                 description = _literal(node.value, "description")
                 parameters = _literal(node.value, "parameters")
+                detail = (
+                    _short(description)
+                    if isinstance(description, str) and description.strip()
+                    else f"gateway:{folder.name}"
+                )
                 found.append(
                     CatalogItem(
                         name,
                         name,
-                        description
-                        if isinstance(description, str) and description.strip()
-                        else f"gateway:{folder.name}",
+                        detail,
                         parameters if isinstance(parameters, dict) else {},
                     )
                 )
@@ -71,7 +95,7 @@ def tools() -> list[CatalogItem]:
     from ..engine.tools import REGISTRY
 
     found = [
-        CatalogItem(handler.name, handler.name, handler.description)
+        CatalogItem(handler.name, handler.name, _short(handler.description))
         for handler in REGISTRY.by_name.values()
         if not handler.hidden
     ]
@@ -85,6 +109,21 @@ def tools() -> list[CatalogItem]:
 
 def tool_names() -> set[str]:
     return {item.name for item in tools()}
+
+
+def role_tools() -> list[CatalogItem]:
+    """The tools the wizard offers for a role; a child tool is implied by its parent."""
+    from ..engine.access.permissions import PARENT_TOOLS
+
+    implied = {child for children in PARENT_TOOLS.values() for child in children}
+    found: list[CatalogItem] = []
+    for item in tools():
+        if item.name in implied:
+            continue
+        children = PARENT_TOOLS.get(item.name, ())
+        label = f"{item.name} (+{', '.join(children)})" if children else item.name
+        found.append(CatalogItem(item.name, label, item.detail, item.parameters))
+    return found
 
 
 def default_tools() -> tuple[str, ...]:
@@ -108,6 +147,14 @@ def gateways() -> list[CatalogItem]:
     ]
 
 
+VOICE_PART_DETAILS: dict[str, str] = {
+    "affect": "Mood and per-person relations that colour the reply.",
+    "style": "Learns each room's and person's writing style.",
+    "character": "Extra polish pass that rewrites the final draft.",
+    "humanize": "Typing pauses, bubble splitting, and sticker reactions.",
+}
+
+
 def voice_parts() -> list[CatalogItem]:
     """Voice sub-sections that expose their own `enabled` switch, indexed from `VoiceConfig`."""
     from ..engine.soul import VoiceConfig
@@ -119,7 +166,9 @@ def voice_parts() -> list[CatalogItem]:
             continue
         value = factory()
         if is_dataclass(value) and "enabled" in getattr(value, "__dataclass_fields__", {}):
-            found.append(CatalogItem(item.name, item.name, ""))
+            found.append(
+                CatalogItem(item.name, item.name, VOICE_PART_DETAILS.get(item.name, ""))
+            )
     return found
 
 

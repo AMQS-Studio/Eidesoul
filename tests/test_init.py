@@ -764,3 +764,35 @@ def test_generated_config_comments_every_key() -> None:
     assert "# Temperature for decisions" in text
     assert "# off, auto, or always" in text
     assert "# Connection pool size" in text
+
+
+def test_a_shipped_scaffold_without_env_is_replaced_without_asking(tmp_path):
+    from monoagens.admin import init, templates
+
+    (tmp_path / "config.yaml").write_text(
+        templates.dump_config(
+            {
+                **templates.CONFIG,
+                "engine": {
+                    **templates.CONFIG["engine"],
+                    "llm": {**templates.CONFIG["engine"]["llm"], "provider": ""},
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    (tmp_path / "roles.yaml").write_text(templates.dump_roles(templates.ROLES), encoding="utf-8")
+    (tmp_path / "soul.yaml").write_text(templates.soul_yaml("en", "en", "UTC"), encoding="utf-8")
+
+    assert init.unconfigured(tmp_path) is True
+    _written, skipped = init.init(
+        tmp_path,
+        provider="openai",
+        language="en",
+        locale="en-US",
+        timezone="UTC",
+    )
+    assert not skipped
+    assert (tmp_path / ".env").exists()
+    body = yaml.safe_load((tmp_path / "config.yaml").read_text(encoding="utf-8"))
+    assert body["engine"]["llm"]["provider"] == "openai"

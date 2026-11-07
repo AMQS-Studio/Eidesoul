@@ -520,15 +520,53 @@ def test_the_whatsapp_gateway_is_core_rich_and_directory(tmp_path) -> None:
     assert isinstance(gateway, Directory)
 
 
-def test_participants_proves_a_linked_dm_and_refuses_a_group(tmp_path) -> None:
+def test_participants_proves_a_linked_dm_and_a_cached_group(tmp_path) -> None:
     from monoagens.engine.access.identity import IdentityStore
 
     gateway = make_gateway(tmp_path)
     person = IdentityStore(gateway.db).resolve("whatsapp", "628999999999")
+    member = SimpleNamespace(
+        PhoneNumber=SimpleNamespace(User="628999999999", Server="s.whatsapp.net"),
+        JID=SimpleNamespace(User="628999999999", Server="s.whatsapp.net"),
+        LID=SimpleNamespace(User="", Server=""),
+        DisplayName="Budi",
+    )
 
     assert gateway.participants("628999999999@s.whatsapp.net") == {person}
     assert gateway.participants("628111@s.whatsapp.net") is None
+    # a group with no cached membership stays unknown: the core fails closed
     assert gateway.participants("111@g.us") is None
+    assert directory.store_group(gateway.db, "111@g.us", [member]) == 1
+    assert gateway.participants("111@g.us") == {person}
+
+
+def test_a_group_event_adds_and_removes_members(tmp_path) -> None:
+    from monoagens.engine.access.identity import IdentityStore
+
+    gateway = make_gateway(tmp_path)
+    person = IdentityStore(gateway.db).resolve("whatsapp", "628999999999")
+    jid = SimpleNamespace(User="628999999999", Server="s.whatsapp.net")
+
+    directory.apply_group_event(gateway.db, "222@g.us", joined=[jid])
+    assert gateway.participants("222@g.us") == {person}
+
+    directory.apply_group_event(gateway.db, "222@g.us", left=[jid])
+    assert gateway.participants("222@g.us") is None
+
+
+def test_store_group_never_wipes_a_cache_with_an_empty_answer(tmp_path) -> None:
+    from sqlalchemy import select
+
+    from monoagens.gateways.whatsapp.schema import wa_group_members
+
+    gateway = make_gateway(tmp_path)
+    jid = SimpleNamespace(User="628999999999", Server="s.whatsapp.net")
+    directory.apply_group_event(gateway.db, "333@g.us", joined=[jid])
+
+    assert directory.store_group(gateway.db, "333@g.us", []) == 0
+    assert directory.store_group(gateway.db, "333@g.us", None) == 0
+    rows = gateway.db.fetch_all(select(wa_group_members))
+    assert len(rows) == 1
 
 
 def test_policy_matrix_reads_only_its_own_vocabulary() -> None:

@@ -147,6 +147,9 @@ def upgrade(config_path=None) -> dict:
         from ..gateways import ensure_schemas
 
         gateways = ensure_schemas(db)
+        from .people import ensure_console_administrator
+
+        ensure_console_administrator(db, paths)
         docs = DocumentStore(db, paths, sync=host.sync_documents)
         seeded = docs.seed()
         docs.sync()

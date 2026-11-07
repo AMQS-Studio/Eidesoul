@@ -78,6 +78,7 @@ PROVIDER_CHOICES=()
 WEBSEARCH_CHOICES=()
 GATEWAY_CHOICES=()
 COMPOSE=()
+COMPOSE_FILES=()
 TMP_DIRS=()
 
 # --- output ---------------------------------------------------------------------------
@@ -940,6 +941,7 @@ prepare_dir() {
         tar -C "$source_root" \
             --exclude=.git --exclude=.venv --exclude=__pycache__ \
             --exclude=.env --exclude=.monoagens --exclude='*.egg-info' \
+            --exclude=config.yaml --exclude=roles.yaml --exclude=soul.yaml \
             -cf - . | tar -C "$dir" -xf - || die "cannot copy the checkout into $dir"
         return 0
     fi
@@ -949,7 +951,8 @@ prepare_dir() {
         (( dry_run )) && return 0
         mkdir -p -- "$dir"
         if curl -fsSL --retry 3 --proto '=https' --proto-redir '=https' "$archive_url" \
-            | tar -xz --strip-components=1 -C "$dir"; then
+            | tar -xz --strip-components=1 -C "$dir" \
+                --exclude='*/config.yaml' --exclude='*/roles.yaml' --exclude='*/soul.yaml'; then
             return 0
         fi
         warn "archive download failed; leaving $dir untouched"
@@ -976,6 +979,9 @@ run_logged() {
     local label="$1" display="$2" code=0
     shift 2
     stage "$label"
+    if [[ -n "${STAGE_NOTE:-}" ]]; then
+        detail "$STAGE_NOTE"
+    fi
     log "\$ $display"
     if (( dry_run )); then
         detail "would run: $display"
@@ -1052,6 +1058,25 @@ sync_gateway_extras() {
         run_logged "install the $extra gateway extra" "uv sync --locked --no-dev --extra $extra" \
             uv_sync_extra "$extra"
     done
+}
+
+# compose.yaml builds the image with `--build-arg EXTRAS` read from `.env`; the image needs the
+# same gateway extras the host venv got, or the container starts without its transport.
+write_compose_extras() {
+    [[ "$stack" == "compose" ]] || return 0
+    if (( dry_run )); then
+        detail "would write EXTRAS (the enabled gateway extras) into .env for the image build"
+        return 0
+    fi
+    local found=() extra value=""
+    mapfile -t found < <(enabled_gateways 2>/dev/null || true)
+    for extra in "${found[@]}"; do
+        value+="${value:+ }--extra $extra"
+    done
+    set_env_key EXTRAS "$value"
+    if [[ -n "$value" ]]; then
+        detail "EXTRAS=\"$value\" (the compose image installs these gateway extras)"
+    fi
 }
 
 uv_run_in_dir() {
@@ -1327,6 +1352,28 @@ env_value() {
     awk -F= -v key="$name" '$1 == key { sub(/^[^=]*=/, ""); print; exit }' "$path"
 }
 
+# Set one key in `.env`, keeping every other line; the file stays 0600.
+set_env_key() {
+    local name="$1" value="$2" path="${3:-$dir/.env}"
+    "$python_bin" - "$path" "$name" "$value" <<'PY'
+import os
+import sys
+from pathlib import Path
+
+path, name, value = Path(sys.argv[1]), sys.argv[2], sys.argv[3]
+lines = path.read_text(encoding="utf-8").splitlines() if path.exists() else []
+for index, line in enumerate(lines):
+    if line.partition("=")[0].strip() == name and "=" in line:
+        lines[index] = f"{name}={value}"
+        break
+else:
+    lines.append(f"{name}={value}")
+path.parent.mkdir(parents=True, exist_ok=True)
+path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+os.chmod(path, 0o600)
+PY
+}
+
 database_env_mode() {
     if [[ "$stack" == "compose" ]]; then
         printf 'compose'
@@ -1363,13 +1410,6 @@ prepare_database_after_init() {
     [[ "$database_mode" == "external" ]] && return 0
     # A `replace` decision for .env must not drop the generated container password.
     prepare_database_env "$(database_env_mode)" >/dev/null
-}
-
-bootstrap_identity() {
-    (( dry_run )) || database_configured || return 0
-    run_logged "register the local administrator" \
-        "monoagens people add console local --role administrator" \
-        uv_run_in_dir people add console local --role administrator
 }
 
 stage_database() {
@@ -1456,6 +1496,11 @@ if ! command -v "${COMPOSE[0]}" >/dev/null 2>&1; then
     printf 'monoagens: no Podman or Docker compose command on PATH\n' >&2
     exit 1
 fi
+FILES=(-f compose.yaml)
+if [[ "${COMPOSE[0]}" == podman* && -f compose.podman.yaml ]]; then
+    FILES+=(-f compose.podman.yaml)
+fi
+COMPOSE+=("${FILES[@]}")
 tty=()
 if [[ ! -t 0 ]]; then
     tty=(-T)
@@ -1566,6 +1611,11 @@ compose_command() {
             ;;
         *) return 1 ;;
     esac
+    COMPOSE_FILES=(-f compose.yaml)
+    if [[ "$engine" == "podman" && -f "$dir/compose.podman.yaml" ]]; then
+        COMPOSE_FILES+=(-f compose.podman.yaml)
+    fi
+    COMPOSE+=("${COMPOSE_FILES[@]}")
     return 0
 }
 
@@ -1583,7 +1633,11 @@ compose_label() {
         printf '%s' "${COMPOSE[*]}"
         return 0
     fi
-    printf '%s compose' "${container_engine:-podman}"
+    local files=" -f compose.yaml"
+    if [[ "${container_engine:-podman}" == "podman" && -f "$dir/compose.podman.yaml" ]]; then
+        files+=" -f compose.podman.yaml"
+    fi
+    printf '%s compose%s' "${container_engine:-podman}" "$files"
 }
 
 engine_running() {
@@ -1727,7 +1781,7 @@ compose_up() {
 }
 
 # A short-lived container for setup commands; it starts dependencies (Postgres) but never the
-# long-running `monoagens` service, so `db upgrade` and `people add` finish before the daemon.
+# long-running `monoagens` service, so `db upgrade` finishes before the daemon.
 compose_one_off() {
     ( cd -- "$dir" && exec "${COMPOSE[@]}" run --rm monoagens monoagens "$@" )
 }
@@ -1827,8 +1881,6 @@ native_plan() {
     index=$((index + 1))
     detail "$index) monoagens db upgrade"
     index=$((index + 1))
-    detail "$index) monoagens people add console local --role administrator"
-    index=$((index + 1))
     for name in "${selected[@]:-}"; do
         [[ -n "$name" ]] || continue
         detail "$index) monoagens gateway add $name --connect (on this terminal)"
@@ -1850,7 +1902,6 @@ stage_native_database() {
     fi
     if [[ "$database_mode" == "external" ]]; then
         stage_database
-        bootstrap_identity
         connect_gateways
         stage_selftest
         return 0
@@ -1860,7 +1911,6 @@ stage_native_database() {
         stage_postgres
     fi
     stage_database
-    bootstrap_identity
     connect_gateways
     stage_selftest
 }
@@ -1874,8 +1924,6 @@ compose_plan() {
     detail "$index) wait until pg_isready answers"
     index=$((index + 1))
     detail "$index) $runner run --rm monoagens monoagens db upgrade"
-    index=$((index + 1))
-    detail "$index) $runner run --rm monoagens monoagens people add console local --role administrator"
     index=$((index + 1))
     for name in "${selected[@]:-}"; do
         [[ -n "$name" ]] || continue
@@ -1929,12 +1977,10 @@ stage_compose() {
         "$(compose_label) up -d postgres" compose_up postgres
     run_logged "wait for Postgres" "compose exec postgres pg_isready" wait_for_postgres
     check_database_credentials
+    STAGE_NOTE="the first run builds the monoagens image and prepares the embedding model (~470 MB); this can take several minutes" \
     run_logged "publish the schema before the daemon starts (one-off container)" \
         "$(compose_label) run --rm monoagens monoagens db upgrade" \
         compose_one_off db upgrade
-    run_logged "register the local administrator before the daemon starts" \
-        "$(compose_label) run --rm monoagens monoagens people add console local --role administrator" \
-        compose_one_off people add console local --role administrator
     compose_pair_gateways
     run_logged "start the daemon only after setup finished" \
         "$(compose_label) up -d monoagens" compose_up monoagens
@@ -2129,6 +2175,7 @@ main() {
     run_init
     run_post_init_settings
     sync_gateway_extras
+    write_compose_extras
     prepare_database_after_init
     if [[ "$stack" == "compose" ]]; then
         stage_compose

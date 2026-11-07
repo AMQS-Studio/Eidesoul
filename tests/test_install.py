@@ -832,10 +832,9 @@ def test_compose_setup_runs_before_the_daemon_starts(tmp_path):
     output = result.stdout
     assert result.returncode == 0, result.stderr
     upgrade = output.index("monoagens db upgrade")
-    people = output.index("monoagens people add console local")
     pair = output.index("monoagens gateway pair whatsapp")
     daemon = output.index("up -d monoagens")
-    assert upgrade < people < pair < daemon
+    assert upgrade < pair < daemon
     assert "docker compose" in output
 
 
@@ -959,3 +958,39 @@ def test_the_catalog_command_lists_what_the_shell_validates(tmp_path):
     assert "tavily" in kinds["websearch"].split(",")
     assert "off" in kinds["websearch"].split(",")
     assert "whatsapp" in kinds["gateways"].split(",")
+
+
+def test_the_installer_copy_leaves_the_host_files_behind():
+    text = SCRIPT.read_text(encoding="utf-8")
+    local_copy = text[text.index('tar -C "$source_root"') : text.index("cannot copy the checkout")]
+    for name in ("config.yaml", "roles.yaml", "soul.yaml"):
+        assert f"--exclude={name}" in local_copy
+    archive = text[text.index("--strip-components=1 -C \"$dir\"") :]
+    for name in ("config.yaml", "roles.yaml", "soul.yaml"):
+        assert f"--exclude='*/{name}'" in archive[:300]
+
+
+def test_a_podman_stack_carries_the_rootless_override():
+    import yaml
+
+    base = yaml.safe_load((ROOT / "compose.yaml").read_text(encoding="utf-8"))
+    override = yaml.safe_load((ROOT / "compose.podman.yaml").read_text(encoding="utf-8"))
+    assert base["services"]["monoagens"]["volumes"] == [
+        "./config.yaml:/app/config.yaml",
+        "./roles.yaml:/app/roles.yaml",
+        "./soul.yaml:/app/soul.yaml",
+        "./.monoagens:/app/.monoagens",
+    ]
+    service = override["services"]["monoagens"]
+    assert service["user"] == "0:0"
+    assert service["volumes"] == [
+        "./config.yaml:/app/config.yaml:z",
+        "./roles.yaml:/app/roles.yaml:z",
+        "./soul.yaml:/app/soul.yaml:z",
+        "./.monoagens:/app/.monoagens:z",
+    ]
+    text = SCRIPT.read_text(encoding="utf-8")
+    assert text.count("compose.podman.yaml") >= 4
+    assert "STAGE_NOTE" in text
+    assert "write_compose_extras" in text
+    assert "people add console" not in text

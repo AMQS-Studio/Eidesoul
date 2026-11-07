@@ -396,6 +396,23 @@ def mode_of(name: str) -> int:
     return 0o600 if name in PRIVATE_FILES else 0o644
 
 
+def unconfigured(base: str | Path) -> bool:
+    """A scaffold the operator never finished: no `.env` and no provider in config.yaml."""
+    folder = Path(base).expanduser().resolve()
+    if (folder / ".env").exists():
+        return False
+    path = folder / "config.yaml"
+    if not path.is_file():
+        return False
+    try:
+        body = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    except (OSError, yaml.YAMLError):
+        return False
+    engine = body.get("engine") if isinstance(body, dict) else None
+    llm = engine.get("llm") if isinstance(engine, dict) else None
+    return not str((llm or {}).get("provider") or "").strip()
+
+
 def _atomic_write(path: Path, text: str, mode: int) -> None:
     """Write a sibling temp file, fsync, then rename: a reader never sees a partial file."""
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -554,7 +571,8 @@ def init(
         base_url=base_url,
         api_key_env=api_key_env,
     )
-    decisions: dict[str, str] = dict.fromkeys(HOST_FILES, "replace" if force else "new")
+    fresh = force or unconfigured(folder)
+    decisions: dict[str, str] = dict.fromkeys(HOST_FILES, "replace" if fresh else "new")
     return write_files(folder, contents, decisions)
 
 
@@ -590,7 +608,6 @@ def report(
     steps.extend(
         [
             "monoagens db upgrade",
-            "monoagens people add console local --role administrator",
             "monoagens console",
             "monoagens run",
         ]

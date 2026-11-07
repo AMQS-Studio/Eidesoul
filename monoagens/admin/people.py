@@ -19,6 +19,7 @@ from ..engine.db import Database
 from ..engine.memory.ledger import ActionLedger
 from ..engine.schema import config_changes, people, person_links, thread_people
 from ..engine.stores.documents import DocumentStore
+from .console import ADDRESS as CONSOLE
 from .gateway import normalize_address, update_document
 
 log = logging.getLogger(__name__)
@@ -239,6 +240,7 @@ def add(
     role: str,
     *,
     name: str = "",
+    notify: bool = True,
 ) -> str:
     """ADR-0006 §4.6: create/link the first identity and append it to one role.
 
@@ -315,8 +317,40 @@ def add(
     ActionLedger(db).log_action(
         "person", person_id, "config", f"people add {gateway}:{address} role={role_name}"
     )
-    _notify(paths, f"people add {role_name}")
+    if notify:
+        _notify(paths, f"people add {role_name}")
     return person_id
+
+
+def ensure_console_administrator(db: Database, paths) -> str:
+    """Link `console:local` to `administrator` once; "" when it is already there.
+
+    Whoever can run `monoagens console` already owns the host and its files, so the local
+    terminal is the operator. The membership still lives in roles.yaml (ADR-0006 §4.6), never
+    in a code-level exception. A missing or invalid roles.yaml is left to the boot gate, which
+    reports it with its own message.
+    """
+    if paths is None:
+        return ""
+    if not Path(paths.roles).is_file():
+        return ""
+    try:
+        roles = _read_roles(paths)
+    except ValueError as exc:
+        log.warning("console administrator skipped: %s", exc)
+        return ""
+    if not isinstance(roles.get(PROTECTED), dict):
+        return ""
+    existing = db.fetch_one(
+        select(person_links.c.person_id).where(
+            person_links.c.gateway == CONSOLE.gateway,
+            person_links.c.address == CONSOLE.thread,
+        )
+    )
+    person = str((existing or {}).get("person_id") or "")
+    if person and person in _administrator_users(roles):
+        return ""
+    return add(db, paths, CONSOLE.gateway, CONSOLE.thread, PROTECTED, notify=False)
 
 
 def adopt(db: Database, paths) -> list[tuple[str, str]]:

@@ -175,3 +175,45 @@ def test_whatsapp_check_access_answers_from_the_block_and_the_hints() -> None:
     assert gateway.check_access(block, percept(group=True)) is False
     assert gateway.check_access(block, percept(group=True, mention=True)) is True
     assert gateway.check_access(None, percept(dm=True)) is False
+
+
+def test_the_base_gateway_answers_the_directory_from_the_archive() -> None:
+    from sqlalchemy import insert
+    from support import database
+
+    from monoagens.engine.access.identity import IdentityStore
+    from monoagens.engine.inbound import Directory
+    from monoagens.engine.schema import thread_people, threads
+
+    class ArchiveGateway(BaseGateway):
+        name = "archive"
+
+        def __init__(self, db):
+            self.db = db
+
+    db = database()
+    gateway = ArchiveGateway(db)
+    assert isinstance(gateway, Directory)
+
+    person = IdentityStore(db).resolve("archive", "u-1")
+    with db.connect() as conn:
+        conn.execute(
+            insert(threads).values(
+                thread_id="chan-1",
+                name="Logistik",
+                reset_ts=0.0,
+                kind="group",
+                gateway="archive",
+            )
+        )
+        conn.execute(
+            insert(thread_people).values(
+                thread_id="chan-1", person_id=person, last_seen=0.0, interactions=1
+            )
+        )
+
+    assert gateway.participants("chan-1") == {person}
+    assert gateway.participants("chan-2") is None
+    assert gateway.resolve_target("chan-1")[0] == ("chan-1", "Logistik")
+    assert gateway.resolve_target("logistik")[0] == ("chan-1", "Logistik")
+    assert gateway.resolve_target("nothing") == (None, [])

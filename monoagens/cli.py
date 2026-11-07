@@ -108,6 +108,11 @@ async def build_runtime(
     )
     db.ensure()
     admin_gateway.ensure_schemas(db)
+    if console:
+        # The console is the local operator: link it once before the administrator boot gate.
+        from .admin.people import ensure_console_administrator
+
+        ensure_console_administrator(db, paths)
     documents = DocumentStore(db, paths, sync=host.sync_documents)
     documents.seed()
     documents.sync()

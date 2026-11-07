@@ -2,6 +2,15 @@
 
 Engineering log for MonoAgens. Short entries, newest first, decisions and behaviour only.
 
+## 2026-11-07 — Setup Ergonomics, Tool Inheritance, `rooms`, Console Operator, and Gateway Crash Isolation
+- Wizard menu: `catalog.role_tools()` offers parents only (`read (+grep)`, `write (+sed)`, `web_search (+fetch)`, `send_message (+send_file)`) and every detail is trimmed to one ≤80-character clause (`catalog._short`); voice parts carry their own one-line explanations.
+- Permissions: `PARENT_TOOLS` makes a parent grant its child at the single `tool_patterns` seam, so the model's tool list, `/tools`, self-knowledge, and approvals agree; a child listed alone still grants only itself. The shipped `member` role now receives every isolated tool and keeps `settings`, `shell`, and `mcp` out.
+- `roles.yaml` gains `rooms: ["gateway:thread"]`; `RoleRegistry.for_person`/`policy_for` accept a room and an optional body-provided `participants` proof, and `/whoami` prints `Room:` (the exact string to paste) and `Address:`. WhatsApp caches per-group membership in `wa_group_members` (full sync, join/leave deltas, no wipe on an empty answer).
+- Every gateway answers the optional `Directory` protocol from its own archive (`base.match_target`/`thread_targets`/`thread_participants`), so the core never imports a transport to resolve a room.
+- Installer: a first install replaces an unfinished scaffold without asking (`init.unconfigured`), checkout copies skip the three host files, `compose.podman.yaml` (`user: "0:0"`, `:z` mounts) is loaded for Podman only, `.dockerignore` excludes a `0600` `roles.yaml`, enabled gateways' `EXTRAS` land in `.env`, and the schema step says it may take several minutes (`STAGE_NOTE`).
+- Console identity: `db upgrade` (and a `console` boot) links `console:local` to `administrator` once through `ensure_console_administrator`; the installer and the init receipt no longer run `people add console local --role administrator`.
+- Gateways: `_sdk()` imports `discord.app_commands`/`discord.ext.commands`, `clean_token` strips inner whitespace from Telegram/Discord tokens, and `Supervisor.serve()` restarts a crashed body alone after a capped `5s → 15s → 60s → 300s` backoff while its siblings keep serving.
+
 ## 2026-11-07 — Deep Native Gateways, Language-Agnostic Routing, `sed` Tool, & Live E2E Verification (ADR-0009..0010)
 - ADR-0009: retired static per-language JSON wordlists (`monoagens/lang/library/`) in favor of structural/centroid/NER evidence and single-pass LLM extraction; unified `grep` tool with workspace-scoped regex search and secret-path refusal.
 - ADR-0010: kept `monoagens/engine/**` 100% UI-free while adding boundary prompt option resolution (`BaseGateway.prompt_options` / `ui_of`) and `EditDebouncer` (`1.5s`); shipped pure-Python `asyncio` **Telegram**, **Discord**, and **Slack** gateways alongside completed **WhatsApp** (`whatsapp_reaction`, `whatsapp_poll`, `whatsapp_group_info`, `whatsapp_presence`, `/pair`, `/unpair`, `/group`), plus `/thinking [on|off]` and `/steps [on|off]` live progress toggles.

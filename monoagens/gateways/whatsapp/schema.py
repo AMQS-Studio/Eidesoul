@@ -21,6 +21,15 @@ wa_lid_map = Table(
     Column("pn", String(160), nullable=False, default=""),
 )
 
+wa_group_members = Table(
+    "wa_group_members",
+    metadata,
+    Column("thread_id", String(160), primary_key=True),
+    Column("member", String(160), primary_key=True),  # digits of the PN, JID, or LID
+    Column("name", String(200), nullable=False, default=""),
+    Column("updated_at", Float, nullable=False, default=0.0),
+)
+
 
 def ensure_schema(db) -> None:
     metadata.create_all(db.engine)

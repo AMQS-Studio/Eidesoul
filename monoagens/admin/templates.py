@@ -282,12 +282,16 @@ _SEED_ROLES: tuple[Role, ...] = (
         priority=10,
         tools=(
             "read",
-            "grep",
-            "fetch",
+            "write",
             "web_search",
-            "thread_history",
             "memory",
             "info",
+            "thread_history",
+            "send_message",
+            "task",
+            "recipe",
+            "relay",
+            "sandbox",
         ),
         commands=("help", "ping", "link", "unlink", "whoami", "status", "tools"),
         context=(
@@ -322,6 +326,7 @@ def _role_block(role: Role) -> dict:
             "description": role.description,
             "priority": role.priority,
             "users": list(role.users),
+            "rooms": list(role.rooms),
             "tools": list(role.tools),
             "commands": list(role.commands),
             "memory_admin": role.memory_admin,
@@ -1077,6 +1082,9 @@ ROLE_FIELD_COMMENTS: dict[str, str] = {
     "description": "One line the operator reads in `monoagens people list`.",
     "priority": "Higher wins when one person holds several roles; ties order by name.",
     "users": "per_… person ids holding this role; `monoagens people add` fills it.",
+    "rooms": (
+        "gateway:thread ids whose members hold this role; `/whoami` prints the exact string."
+    ),
     "tools": "Tool name patterns this role may call; '*' means every tool.",
     "commands": "Chat command patterns this role may run; '*' means every command.",
     "memory_admin": "Allow memory maintenance across scopes, not only the holder's own.",

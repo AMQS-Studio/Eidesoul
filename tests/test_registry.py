@@ -148,7 +148,8 @@ def test_role_permissions_are_explicit_only() -> None:
     assert tools_for(TOOLS, (bare,)) == []
 
     allowed = Role("member", tools=("read", "mcp__*"), commands=("help", "ping"))
-    assert set(tool_patterns((allowed,))) == {"read", "mcp__*"}
-    assert {handler.name for handler in tools_for(TOOLS, (allowed,))} == {"read"}
+    # `read` is a declared parent, so its child `grep` is implied (never a default).
+    assert set(tool_patterns((allowed,))) == {"read", "grep", "mcp__*"}
+    assert {handler.name for handler in tools_for(TOOLS, (allowed,))} == {"read", "grep"}
     assert {handler.name for handler in commands_for(COMMANDS, (allowed,))} == {"help", "ping"}
     assert COMMANDS.patterns(allowed.commands) == ("help", "ping")

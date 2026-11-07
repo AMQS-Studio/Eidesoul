@@ -27,6 +27,8 @@ log = logging.getLogger(__name__)
 
 TICK = 5.0
 RENEW_FAILURES = 3
+# A crashed body restarts alone; the delay grows so a broken transport never hot-loops.
+GATEWAY_BACKOFF = (5.0, 15.0, 60.0, 300.0)
 # ADR-0003 §11: the resume budget is a rolling minute, not a fixed per-pass cap.
 RESUME_WINDOW = 60.0
 
@@ -256,6 +258,7 @@ class Supervisor:
         self.gateways = gateways
         self.takeover = takeover
         self.tick = float(tick)
+        self.backoff: tuple[float, ...] = GATEWAY_BACKOFF
         self.stopping = False
         self._first = True
         self.agent.lease = lease
@@ -383,30 +386,66 @@ class Supervisor:
             self.automations.start()
         runtime.cognition = self.cognition.status()
 
+    def _start_gateway(self, tasks: dict, gateway) -> None:
+        """Run one body under a named task; the mapping keeps its gateway for the crash log."""
+        task = asyncio.create_task(gateway.run(self.agent), name=f"gw-{gateway.name}")
+        tasks[task] = gateway
+
+    async def _collect_crashes(
+        self, tasks: dict, attempts: dict, retry_at: dict, now: float
+    ) -> None:
+        """Reap finished bodies: a clean stop is logged, a crash is alerted and rescheduled."""
+        for task in [item for item in tasks if item.done()]:
+            gateway = tasks.pop(task)
+            error = None if task.cancelled() else task.exception()
+            if error is None:
+                alerts.clear("gateway")
+                log.info("gateway %s stopped", gateway.name)
+                continue
+            log.error("gateway %s crashed", gateway.name, exc_info=error)
+            await alerts.emit(
+                "gateway", f"{gateway.name}: {type(error).__name__}: {error}"
+            )
+            attempt = attempts.get(gateway.name, 0)
+            attempts[gateway.name] = attempt + 1
+            delay = self.backoff[min(attempt, len(self.backoff) - 1)]
+            retry_at[gateway.name] = now + delay
+            log.warning("gateway %s restarts in %.0fs", gateway.name, delay)
+
+    def _restart_due(self, tasks: dict, retry_at: dict, now: float) -> None:
+        """Start every crashed body whose backoff elapsed; a running body is never doubled."""
+        running = {gateway.name for gateway in tasks.values()}
+        for gateway in list(self.gateways):
+            due = retry_at.get(gateway.name)
+            if due is None or due > now or gateway.name in running:
+                continue
+            retry_at.pop(gateway.name, None)
+            log.info("gateway %s restarting", gateway.name)
+            self._start_gateway(tasks, gateway)
+            running.add(gateway.name)
+
     async def serve(self) -> None:
-        tasks = {
-            asyncio.create_task(gateway.run(self.agent), name=f"gw-{gateway.name}"): gateway
-            for gateway in self.gateways
-        }
+        """Serve every body; one crashed transport never takes its siblings down.
+
+        A finished body is reaped alone: a clean stop is logged, a crash is alerted and
+        restarted after a capped backoff, and the other bodies keep serving. The loop ends
+        when no body runs and none waits to restart, or on freeze, lease loss, or shutdown.
+        """
+        tasks: dict = {}
+        attempts: dict[str, int] = {}
+        retry_at: dict[str, float] = {}
+        for gateway in self.gateways:
+            self._start_gateway(tasks, gateway)
         self.agent.start_reaper()
         failures = 0
         try:
             while not self.stopping:
                 await asyncio.sleep(self.tick)
-                done = [task for task in tasks if task.done()]
-                if done:
-                    for task in done:
-                        gateway = tasks.pop(task)
-                        error = None if task.cancelled() else task.exception()
-                        if error is None:
-                            alerts.clear("gateway")
-                            log.info("gateway %s stopped", gateway.name)
-                            continue
-                        log.error("gateway %s crashed", gateway.name, exc_info=error)
-                        await alerts.emit(
-                            "gateway", f"{gateway.name}: {type(error).__name__}: {error}"
-                        )
-                    self.stopping = True
+                now = asyncio.get_running_loop().time()
+                await self._collect_crashes(tasks, attempts, retry_at, now)
+                self._restart_due(tasks, retry_at, now)
+                if not tasks and not retry_at:
+                    log.info("every gateway stopped; the process exits")
                     break
                 if self.lease.frozen():
                     log.info("freeze: stopping gateways until re-activated")

@@ -94,9 +94,19 @@ and latency; deterministic token/AST screening must enforce hard boundaries firs
   - `guest`: Untrusted/unknown sender role (`priority: 0`). In the default seed template, `guest` is
     restricted to `help`, `ping`, and `whoami` (losing `read`, `grep`, `fetch`, `chat_history`, `link`,
     and `unlink`; `link` is enabled for `guest` only when explicitly configured by the operator).
-- `RoleRegistry.policy_for(person_id, gateway)` iterates assigned roles in priority order and returns
-  the first role that defines a policy block for `gateway` (with an explicit documented tiebreak when
-  priorities are equal).
+- `RoleRegistry.policy_for(person_id, gateway, room=...)` iterates assigned roles in priority order and
+  returns the first role that defines a policy block for `gateway` (with an explicit documented tiebreak
+  when priorities are equal).
+- **Room Membership (`rooms: ["gateway:thread"]`):** A role block may list rooms whose members hold the
+  role. `/whoami` prints the exact `gateway:thread` string to copy; membership comes from the body's own
+  `Directory.participants` proof when it can answer, and an unknown membership denies (fail closed).
+  A listed string matches by itself; the interactive lookup is what admits a member from a DM.
+- **Parent Tools:** A small, explicit table (`read → grep`, `write → sed`, `web_search → fetch`,
+  `send_message → send_file`) makes a parent grant its children. Listing a child alone still grants only
+  that child, and no other default is implied. The wizard therefore offers parents only and names the
+  implied children in the label (`read (+grep)`).
+- **`member` Seed:** The shipped `member` role receives every isolated tool (files, search, memory,
+  thread history, messaging, tasks, recipes, relay, sandbox) and keeps `settings`, `shell`, and `mcp` out.
 - The dead `people.role` column is dropped via migration, and `monoagens people list` displays actual
   assigned roles from `RoleRegistry`.
 

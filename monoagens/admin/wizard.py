@@ -25,6 +25,7 @@ from .init import (
     mode_of,
     model_ids,
     report,
+    unconfigured,
     validate_credential,
     validate_database_url,
     validate_model,
@@ -461,7 +462,8 @@ def _ask_capabilities(state: Answers, stdin: TextIO, stdout: TextIO, color: bool
             state.gateways = ()
     if state.tools is None:
         choices = [
-            terminal.Choice(item.name, item.detail, item.name) for item in catalog.tools()
+            terminal.Choice(item.label, item.detail, item.name)
+            for item in catalog.role_tools()
         ]
         if choices:
             picked = terminal.multi_choose(
@@ -573,12 +575,13 @@ def _decide(
     stdout: TextIO,
 ) -> dict[str, str]:
     """Existing files are `keep` / `change` / `replace`; nothing is overwritten silently."""
+    fresh = unconfigured(base)
     decisions: dict[str, str] = {}
     for name in HOST_FILES:
         if not (base / name).exists():
             decisions[name] = "new"
             continue
-        if force:
+        if force or fresh:
             decisions[name] = "replace"
             continue
         _say(stdout, "")

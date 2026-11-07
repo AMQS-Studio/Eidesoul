@@ -12,7 +12,13 @@ from pathlib import Path
 from typing import cast
 
 from neonize.aioze.client import NewAClient
-from neonize.aioze.events import ConnectedEv, GroupInfoEv, HistorySyncEv, MessageEv
+from neonize.aioze.events import (
+    ConnectedEv,
+    GroupInfoEv,
+    HistorySyncEv,
+    JoinedGroupEv,
+    MessageEv,
+)
 from neonize.exc import SendMessageError
 from neonize.proto.Neonize_pb2 import JID
 from neonize.proto.Neonize_pb2 import UndecryptableMessage as UndecryptableMessageEv
@@ -28,7 +34,13 @@ from ...engine.inbound import Action, GatewayError, Percept
 from ...engine.registry import Handler, discover
 from ...engine.turn.context import Message, human_size
 from ...engine.turn.reply import FENCE, clean_prose, strip_blocks
-from ..base import BaseGateway, progress_text, register_gateway, transcribe_media
+from ..base import (
+    BaseGateway,
+    match_target,
+    progress_text,
+    register_gateway,
+    transcribe_media,
+)
 from . import directory, history_sync, ingress, policy
 from .config import WhatsAppSettings
 from .identity import normalize_jid
@@ -169,7 +181,9 @@ class WhatsAppGateway(BaseGateway):
     def access_refusal(self, inbound: Percept) -> str:
         """ADR-0002 §4.3: the highest-priority role decides; no lower role can grant access."""
         person = IdentityStore(self.db).resolve(self.name, inbound.actor)
-        role, block = self.config.roles.policy_for(person, self.name)
+        role, block = self.config.roles.policy_for(
+            person, self.name, room=f"{self.name}:{inbound.thread}"
+        )
         access = policy.Access.parse(block)
         if access is None:
             log.info(
@@ -281,9 +295,22 @@ class WhatsAppGateway(BaseGateway):
         async def on_group_info(accepted: NewAClient, ev) -> None:
             if not ev.JID.User:
                 return
+            thread = f"{ev.JID.User}@{ev.JID.Server}"
             name = getattr(ev.Name, "Name", "").strip()
             if name:
-                directory.set_chat_name(self.db, f"{ev.JID.User}@{ev.JID.Server}", name)
+                directory.set_chat_name(self.db, thread, name)
+            directory.apply_group_event(self.db, thread, joined=ev.Join, left=ev.Leave)
+
+        @client.event(JoinedGroupEv)
+        async def on_joined_group(accepted: NewAClient, ev) -> None:
+            info = ev.GroupInfo
+            if not info.JID.User:
+                return
+            thread = f"{info.JID.User}@{info.JID.Server}"
+            name = directory.group_name(info)
+            if name:
+                directory.set_chat_name(self.db, thread, name)
+            directory.store_group(self.db, thread, info.Participants)
 
         @client.event(ConnectedEv)
         async def on_connected(accepted: NewAClient, ev) -> None:
@@ -299,7 +326,7 @@ class WhatsAppGateway(BaseGateway):
             except Exception:
                 log.exception("failed to refresh contacts")
             try:
-                named = await directory.sync_group_names(accepted, self.db)
+                named = await directory.sync_groups(accepted, self.db)
                 if named:
                     log.info("group names synced: %d", named)
             except Exception:
@@ -706,8 +733,7 @@ class WhatsAppGateway(BaseGateway):
             directory.set_chat_name(self.db, thread, name)
 
     def resolve_target(self, query: str):
-        targets = directory.targets(self.db, query, 50)
-        return directory.resolve_target(targets, query)
+        return match_target(directory.targets(self.db, query, 50), query)
 
     def participants(self, thread: str) -> set[str] | None:
         return directory.participants(self.db, thread)

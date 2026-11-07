@@ -107,7 +107,7 @@ async def backfill(config_path: str | None) -> int:
         nonlocal paired
         paired = True
         secure_db(session)
-        named = await directory.sync_group_names(accepted, db)
+        named = await directory.sync_groups(accepted, db)
         log.info("backfill: synced group names: %d", named)
         log.info("backfill connected; waiting for history sync from the phone")
 

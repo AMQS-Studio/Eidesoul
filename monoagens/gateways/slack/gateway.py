@@ -118,7 +118,9 @@ class SlackGateway(BaseGateway):
     def access_refusal(self, inbound: Percept) -> str:
         """ADR-0002 §4.3: the highest-priority role decides; no lower role can grant access."""
         person = IdentityStore(self.db).resolve(self.name, inbound.actor)
-        role, block = self.config.roles.policy_for(person, self.name)
+        role, block = self.config.roles.policy_for(
+            person, self.name, room=f"{self.name}:{inbound.thread}"
+        )
         access = policy.Access.parse(block)
         if access is None:
             log.info(

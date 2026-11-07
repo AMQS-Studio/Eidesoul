@@ -366,3 +366,10 @@ def test_run_installs_the_handlers_and_stop_closes_the_transport(tmp_path) -> No
 
     assert transport.handlers is not None
     assert transport.closed is True
+
+
+def test_settings_clean_the_token() -> None:
+    from monoagens.gateways.discord.config import DiscordSettings
+
+    settings = DiscordSettings.from_mapping(True, {}, {"DISCORD_BOT_TOKEN": " a b c "})
+    assert settings.bot_token == "abc"

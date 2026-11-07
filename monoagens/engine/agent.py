@@ -39,6 +39,7 @@ from .inbound import (
     CONSENT,
     Action,
     Address,
+    Directory,
     GatewayCore,
     GatewayError,
     Percept,
@@ -552,7 +553,18 @@ class Agent(DeliveryFacade, CrossRoomGuard):
 
     def _role_set(self, inbound: Percept) -> tuple[Role, ...]:
         """ADR-0006 §4.4: identity selects roles; a body may never name one."""
-        return self.config.roles.for_person(inbound.actor)
+        return self.config.roles.for_person(
+            inbound.actor,
+            room=f"{inbound.source or ''}:{inbound.thread}",
+            participants=self._room_participants,
+        )
+
+    def _room_participants(self, gateway: str, thread: str) -> set[str] | None:
+        """The body's own proof of who is in a room; `None` when it cannot answer."""
+        body = self.body(gateway)
+        if not isinstance(body, Directory):
+            return None
+        return body.participants(thread)
 
     @staticmethod
     def _sender(inbound: Percept) -> str:
@@ -669,7 +681,11 @@ class Agent(DeliveryFacade, CrossRoomGuard):
                 "identity resolve failed source=%s", inbound.source or gateway.name
             )
             return False
-        roles = self.config.roles.for_person(person)
+        roles = self.config.roles.for_person(
+            person,
+            room=f"{inbound.source or gateway.name}:{inbound.thread}",
+            participants=self._room_participants,
+        )
         handler = self.commands.get(name)
         if handler is not None and command_allowed(roles, handler.name):
             return True
