@@ -100,7 +100,7 @@ without polluting `monoagens/engine/**` with UI state; ADR-0010 §4.1).
 - **In.** One body event becomes one `Percept`: `source`, `thread`, `actor`, `kind`, `payload:
   Message`, `hints`, and optionally `raw` (transport-only; never stored as truth).
 - **Hints are facts the body can prove.** Known keys (`HINT_KEYS`): `dm`, `mention`, `reply`,
-  `group`, `presence`, `self`, `roles`, `app`, `voice_call`. A body never invents a hint it cannot
+  `group`, `presence`, `self`, `roles`, `app`. A body never invents a hint it cannot
   prove and never omits one a decision requires. The engine never requires a hint the body cannot
   supply.
 - **Out.** The engine addresses an `Address(gateway, thread, proof)` and emits an `Action`

@@ -1178,7 +1178,7 @@ SOUL_COMMENTS: dict[str, str] = {
     "voice.humanize.reaction_stickers": "Sticker reactions allowed for this soul.",
     "voice.profanity": "avoid, mirror, or allow. Default: avoid.",
     "voice.safety": "inherit or relaxed. Default: inherit.",
-    "voice.speech": "Spoken voice preferences for this soul across voice notes and calls.",
+    "voice.speech": "Spoken voice preferences (STT/TTS) for this soul.",
     "voice.speech.enabled": (
         "Allow spoken replies when a TTS provider is configured. Default: false."
     ),

@@ -1,6 +1,6 @@
 # Security Policy
 
-MonoAgens is designed to run as a persistent sovereign agent across personal terminals, multi-user messaging rooms, voice calls, and physical embodiments. Because a single deployment can serve both an administrator and untrusted or semi-trusted participants across DMs and group chats, security and privacy boundaries are treated as core architectural invariants.
+MonoAgens is designed to run as a persistent sovereign agent across personal terminals, multi-user messaging rooms, voice notes, and extensible embodiments. Because a single deployment can serve both an administrator and untrusted or semi-trusted participants across DMs and group chats, security and privacy boundaries are treated as core architectural invariants.
 
 ---
 

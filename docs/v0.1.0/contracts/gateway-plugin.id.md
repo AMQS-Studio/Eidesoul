@@ -102,7 +102,7 @@ dari store tanpa mengotori `monoagens/engine/**` dengan state UI; ADR-0010 §4.1
 - **Masuk.** Satu event body menjadi satu `Percept`: `source`, `thread`, `actor`, `kind`, `payload:
   Message`, `hints`, dan opsional `raw` (khusus transport; tidak pernah disimpan sebagai kebenaran).
 - **Hint adalah fakta yang dapat dibuktikan body.** Key yang dikenal (`HINT_KEYS`): `dm`, `mention`,
-  `reply`, `group`, `presence`, `self`, `roles`, `app`, `voice_call`. Body tidak pernah mengarang
+  `reply`, `group`, `presence`, `self`, `roles`, `app`. Body tidak pernah mengarang
   hint yang tidak dapat ia buktikan dan tidak pernah menghilangkan hint yang dibutuhkan keputusan.
   Engine tidak pernah mewajibkan hint yang tidak dapat disediakan body.
 - **Keluar.** Engine mengalamatkan `Address(gateway, thread, proof)` dan mengeluarkan `Action`

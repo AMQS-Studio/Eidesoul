@@ -103,7 +103,7 @@ voice:
   profanity: avoid
   # inherit or relaxed. Default: inherit.
   safety: inherit
-  # Spoken voice preferences for this soul across voice notes and calls.
+  # Spoken voice preferences (STT/TTS) for this soul.
   speech:
     # Allow spoken replies when a TTS provider is configured. Default: false.
     enabled: false

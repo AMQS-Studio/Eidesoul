@@ -6,7 +6,7 @@
 
 <p align="center">
   <em>persistent mono agent — always remembering, always learning, the same person wherever it lives.</em><br>
-  <sub>One continuous Soul, native hybrid memory, and deterministic authority across text, voice calls, and physical embodiments.</sub>
+  <sub>One continuous Soul, native hybrid memory, and deterministic authority across terminals, messaging apps, voice notes, and extensible embodiments.</sub>
 </p>
 
 <p align="center">
@@ -42,7 +42,7 @@ Most agent frameworks treat state as a disposable chat session and personality a
 - **One self** — one identity and one memory per Soul, never an ephemeral session. Restart the process or switch surfaces: the exact same self continues.
 - **Always remembering** — facts about people, episodes, and decisions are persisted in PostgreSQL (`pgvector` + `tsvector`) with layered privacy (`L0–L4`) and subject veto. Forgetting is a governed retention policy, never a context-window accident.
 - **Always learning** — finished episodes distill into reusable procedural memories and per-person relationship/style adaptation, while never mutating core behavioral rules, persona, or permissions.
-- **The same person wherever it lives** — a terminal, a messaging app, a live voice call, or a physical robot is a body that carries the turn. A body adds a transport or actuator, never a separate personality.
+- **The same person wherever it lives** — a terminal, a messaging app, a voice interface, or a physical robot is a body that carries the turn. A body adds a transport or actuator, never a separate personality.
 
 <table>
 <tr>
@@ -81,7 +81,7 @@ Most agent frameworks treat state as a disposable chat session and personality a
   - **You (`administrator`):** Full access to `shell`, `sandbox`, `write`, `sed`, `setting`, and private `L3–L4` memories in DM.
   - **Teammates or Family (`member` / custom roles):** Can chat with the same Soul in group rooms or DMs using safe tools (`web_search`, `read`, `grep` on shared folders) without ever being able to run your shell tools, read your scratch files, or leak your private `L3–L4` memories into a group chat.
 
-### 2. Switching Surfaces Mid-Workflow (Terminal $\rightarrow$ WhatsApp $\rightarrow$ Voice Call $\rightarrow$ Robot)
+### 2. Switching Surfaces Mid-Workflow (Terminal $\rightarrow$ WhatsApp $\rightarrow$ Discord $\rightarrow$ Telegram)
 - **The Problem:** Conventional harnesses bind state to a local session transcript. If you brainstorm a deployment plan in your terminal CLI, leave your desk, and message your bot on WhatsApp, you are talking to a separate session that lacks context.
 - **In MonoAgens:** Your CLI console, WhatsApp account, Telegram/Discord/Slack handle, and phone number map to one canonical identity (`per_…`). Start an investigation in `monoagens cli` on your laptop, walk out the door, and send a WhatsApp voice note: *"Send the summary PDF we just drafted to the engineering group."* The same Soul recalls the turn, asks naturally in chat (*"Ready to send `infra-summary.pdf` to Engineering Group—should I proceed?"*), and dispatches it when you reply *"Yes, send it"* or tap an interactive **Approve** button.
 
@@ -105,7 +105,7 @@ Modern AI agent harnesses generally fall into three architectural categories:
 
 1. **Developer & Repository Harnesses** — Engineered for single-developer software engineering inside a local git repository and terminal session.
 2. **Single-Operator Autonomous Session Agents** — Persistent personal agents built around session transcripts, keyword search (`FTS5`) with LLM session summarization, and curated workspace notes. While effective for one owner on one system, their memory is session-bound rather than native hybrid vector-relational, and they lack multi-user role isolation—meaning anyone allowed to message the agent shares the same tool authority and memory pool.
-3. **MonoAgens (Sovereign Persistent Mono-Agent Harness)** — Engineered from the ground up for a **single continuous Soul** that can safely serve **one operator or many people simultaneously across apps, voice calls, and physical bodies**, backed by native semantic + lexical PostgreSQL storage, strict RBAC (`roles.yaml`), and row-level privacy (`L0–L4`).
+3. **MonoAgens (Sovereign Persistent Mono-Agent Harness)** — Engineered from the ground up for a **single continuous Soul** that can safely serve **one operator or many people simultaneously across messaging apps, voice notes, and custom bodies**, backed by native semantic + lexical PostgreSQL storage, strict RBAC (`roles.yaml`), and row-level privacy (`L0–L4`).
 
 | Capability / Architecture | Developer & Repo Harnesses | Single-Operator Session Agents | **MonoAgens** |
 | :--- | :--- | :--- | :--- |
@@ -115,9 +115,9 @@ Modern AI agent harnesses generally fall into three architectural categories:
 | **Multi-User & Role System (`RBAC`)** | Single local developer (none) | **Single-owner trust model:** Shared agent means shared tools, files, and credentials across callers | **Strict `roles.yaml` RBAC:** Per-role tools, commands, workspace mounts (`shared`/`scratch`), and gateway policies |
 | **Group Chat & Multi-Party Privacy** | N/A (local terminal) | Shared global memory notes; risk of cross-room context bleed | **Row-level `L0–L4` privacy**, `L5` secret refusal, room caps, and **subject veto** enforced in SQL/Python before LLM calls |
 | **Rule & Memory Integrity** | Static project instructions | Agent-editable workspace notes susceptible to prompt poisoning | **Host-authoritative rules (`soul.yaml`)**, quarantined memory corroboration, and cited `ResearchCard` web evidence |
-| **Cross-Surface Identity** | Terminal / IDE only | Per-channel session or single owner profile | **Unified `per_…` identity** linking CLI, WhatsApp, Discord, Voice Calls, and Robotics |
+| **Cross-Surface Identity** | Terminal / IDE only | Per-channel session or single owner profile | **Unified `per_…` identity** linking CLI, WhatsApp, Telegram, Discord, Slack, and custom bodies |
 | **Autonomous Scheduling** | Manual interactive loop | Cron triggers running scheduled prompts | **Condition-aware routines (`cron`/`at`) & `goal` loops** (*"check first, notify only if X"*), `quiet_hours`, & budgets |
-| **Affect, Pacing, & Voice** | None | Static text persona prompt | **Continuous PAD affect engine**, per-person style adaptation, bubble pacing, and unified Cloud/Local voice seam |
+| **Affect, Pacing, & Voice** | None | Static text persona prompt | **Continuous PAD affect engine**, per-person style adaptation, bubble pacing, and unified Cloud/Local STT/TTS seam |
 | **Turn Durability & High Availability** | Process-bound terminal | Local process + session log | **PostgreSQL single-primary lease (`engine_lease`)** + step-level ACID checkpoints (zero duplicate side effects on crash) |
 
 ---
@@ -125,10 +125,10 @@ Modern AI agent harnesses generally fall into three architectural categories:
 ## Key Capabilities
 
 ### 1. One Continuous Soul (`soul.yaml`)
-- **Declarative Identity:** Define name, pronouns, active roles, background, behavioral rules, and few-shot dialogue anchors in `soul.yaml`.
+- **Declarative Identity:** Define name, pronouns, active persona modes, background, behavioral rules, and few-shot dialogue anchors in `soul.yaml`.
 - **Affect & Relationship Dynamics:** Built-in Pleasure-Arousal-Dominance (PAD) emotional state with personality baselines, natural decay between turns, and per-person relationship progression.
 - **Humanized Delivery:** Configurable typing cadence, multi-bubble splitting, transitional thoughts/progress updates, and adaptive communication style per interlocutor.
-- **Unified Voice & Embodiment Seam:** Vocal identity (`voice.speech`) belongs to the Soul, while STT, TTS, and real-time full-duplex audio adapters live in core—allowing you to mix cloud APIs (ElevenLabs, OpenAI, Deepgram, Gemini Live) or self-hosted/custom voice models (GPT-SoVITS, F5-TTS, Kokoro, Piper, Faster-Whisper) across voice notes, live phone calls, and robots.
+- **Unified Speech & Embodiment Seam:** Vocal identity (`voice.speech`) belongs to the Soul, while STT and TTS HTTP adapters live in core (`monoagens/providers/speech.py`)—allowing gateways to transcribe voice notes and synthesize speech across cloud APIs (OpenAI, ElevenLabs, Deepgram) or self-hosted models (GPT-SoVITS, F5-TTS, Kokoro, Piper, Faster-Whisper), alongside an extensible realtime/embodiment seam for custom voice or robotic bodies.
 
 ### 2. Native Hybrid Memory & Layered Privacy
 - **Single System of Record:** Powered by PostgreSQL + `pgvector` (`paraphrase-multilingual-MiniLM-L12-v2` 384-d embeddings with HNSW index and PostgreSQL `tsvector` GIN index).
@@ -139,8 +139,8 @@ Modern AI agent harnesses generally fall into three architectural categories:
 
 ### 3. Autonomous Routines, Goals, & Cross-Gateway Tools
 - **Core Capabilities:** `read`, `grep`, `write`, `sed` (surgical exact-snippet or anchor-verified line-range editing), `shell`, `sandbox`, `web_search` (pluggable across DuckDuckGo, SearXNG, Tavily, Brave, Exa, Serper, and Google CSE with automatic fallbacks), `memory`, `skill`, `task`, `relay`, `setting`, `send_message`, `send_file`, `thread_history`, and `mcp`.
-- **Deep Native Messaging Gateways:** Built-in pure-Python `asyncio` gateways for **WhatsApp**, **Telegram**, **Discord**, and **Slack**—complete with boundary-resolved interactive approval buttons (`Approve` / `Deny`), debounced live progress editing (`/thinking [on|off]`, `/steps [on|off]`), voice-note transcription/synthesis, and operator failure notifications (`/alerts [on|off|test]`).
-- **Cross-Room & Cross-Gateway Dispatch:** Ask the agent from the CLI console or a voice call to research a topic and deliver a document to a WhatsApp group, Telegram supergroup, Discord channel, or Slack workspace—routed through a single outbound authorization door (`Agent.dispatch()`).
+- **Deep Native Messaging Gateways:** Built-in pure-Python `asyncio` gateways for **WhatsApp**, **Telegram**, **Discord**, and **Slack**—complete with boundary-resolved interactive approval buttons (`Approve` / `Deny`), debounced live progress editing (`/thinking [on|off]`, `/steps [on|off]`), voice-note transcription (`STT`), and operator failure notifications (`/alerts [on|off|test]`).
+- **Cross-Room & Cross-Gateway Dispatch:** Ask the agent from the CLI console or a DM to research a topic and deliver a document to a WhatsApp group, Telegram supergroup, Discord channel, or Slack workspace—routed through a single outbound authorization door (`Agent.dispatch()`).
 - **Unified Job Engine:** Schedule recurring routines (`cron`), one-shot reminders (`at`), and autonomous multi-step goals (`goal`) with quiet hours, daily run budgets, and automatic lease recovery.
 
 ### 4. On-Demand Extensions (Clean by Default)
@@ -155,8 +155,8 @@ Modern AI agent harnesses generally fall into three architectural categories:
 flowchart LR
   CLI["Operator Console<br/>(monoagens cli)"] -->|Percept| CORE
   WA["Messaging Gateways<br/>(WhatsApp, Telegram, Discord, Slack)"] -->|Percept| CORE
-  VOICE["Voice & Telephony<br/>(Voice Notes, SIP/WebRTC Calls)"] -->|Percept / Audio| CORE
-  ROBOT["Physical Embodiment<br/>(Robotics / IoT / Sensors)"] -->|Percept / Telemetry| CORE
+  VOICE["Speech & Audio Seam<br/>(Voice Notes STT/TTS)"] -->|Percept / Audio| CORE
+  ROBOT["Custom Embodiment Seam<br/>(Plugins / Robotics / IoT)"] -->|Percept / Telemetry| CORE
 
   subgraph CORE["MonoAgens Core Engine"]
     COORD["Turn Coordinator<br/>(Single-Primary Lease & Checkpoints)"]
