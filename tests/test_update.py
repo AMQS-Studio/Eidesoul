@@ -104,7 +104,7 @@ def test_the_compose_update_builds_migrates_and_recreates(tmp_path, monkeypatch)
     assert admin_service.compose_update(service) == 0
     assert calls == [
         ["podman", "compose", "build", "monoagens"],
-        ["podman", "compose", "run", "--rm", "monoagens", "monoagens", "db upgrade"],
+        ["podman", "compose", "run", "--rm", "monoagens", "monoagens", "db", "upgrade"],
         ["podman", "compose", "up", "-d", "--force-recreate", "monoagens"],
     ]
 

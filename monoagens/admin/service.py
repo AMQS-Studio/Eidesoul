@@ -483,7 +483,7 @@ def compose_update(service: Service) -> int:
     if code:
         return code
     code = _run(
-        [*argv, "run", "--rm", CONTAINER_NAME, "monoagens", "db upgrade"], service.root
+        [*argv, "run", "--rm", CONTAINER_NAME, "monoagens", "db", "upgrade"], service.root
     )
     if code:
         return code
